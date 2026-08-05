@@ -57,14 +57,28 @@ static void applyCopilotCSS() {
     g_object_unref(provider);
 }
 
+// RB-SEG-04: Navigation and Timing modes share the same 3200 Hz sine pitch
+// -- close to the peak of human hearing sensitivity (ear-canal resonance),
+// well clear of age-related high-frequency hearing loss (presbycusis,
+// usually starting above ~4 kHz) -- and are differentiated instead by
+// repeat count (double vs. single beep) and duration (Timing's single beep
+// is 2.5x as long as each Navigation beep).
+static constexpr double BEEP_ASSIST_NAV_FREQ_HZ = 3200.0;
+static constexpr ToneWaveform BEEP_ASSIST_NAV_WAVE = ToneWaveform::Sine;
+static constexpr double BEEP_ASSIST_TIMING_FREQ_HZ = 3200.0;
+static constexpr ToneWaveform BEEP_ASSIST_TIMING_WAVE = ToneWaveform::Sine;
+// Own durations, independent of ToneGenerator::playBeep()'s 50ms default
+// used elsewhere for the generic button-click feedback beep.
+static constexpr int BEEP_ASSIST_NAV_DURATION_MS = 100;
+static constexpr int BEEP_ASSIST_TIMING_DURATION_MS = 250;
+
 // Plays and reports one beep -- shared by the independent navigation and
 // timing checks in updateCopilotDisplay() so a tick where both are due
 // fires both, back to back, rather than one silently eating the other's
 // beep for the same waypoint.
 static void fireBeepAssist(AppData* data, double waypoint_m, double travelled_m, bool navigation) {
-    // Navigation mode plays the existing one-shot beep twice in quick
-    // succession ("bing bong"), Timing mode plays it once. Both reuse
-    // ToneGenerator::playBeep() unchanged -- no new tone code.
+    // Navigation mode plays its tone twice in quick succession ("bing
+    // bong"), Timing mode plays it once.
     // No audio device in the sandbox (Docker/Xvfb) means playBeep() is
     // silently a no-op there -- this is the only visible confirmation
     // that the waypoint logic itself fired.
@@ -74,12 +88,16 @@ static void fireBeepAssist(AppData* data, double waypoint_m, double travelled_m,
               << std::endl;
     flashBeepWarning(data, navigation);
     if (data->toneGen) {
-        data->toneGen->playBeep();
+        double freq_hz = navigation ? BEEP_ASSIST_NAV_FREQ_HZ : BEEP_ASSIST_TIMING_FREQ_HZ;
+        ToneWaveform wave = navigation ? BEEP_ASSIST_NAV_WAVE : BEEP_ASSIST_TIMING_WAVE;
+        int duration_ms = navigation ? BEEP_ASSIST_NAV_DURATION_MS : BEEP_ASSIST_TIMING_DURATION_MS;
+        data->toneGen->playBeep(freq_hz, wave, duration_ms);
         if (navigation) {
             // g_timeout_add, not a blocking sleep -- this runs on the GTK
             // main thread and must not stall the UI for 150ms.
             g_timeout_add(150, [](gpointer d) -> gboolean {
-                static_cast<AppData*>(d)->toneGen->playBeep();
+                static_cast<AppData*>(d)->toneGen->playBeep(BEEP_ASSIST_NAV_FREQ_HZ, BEEP_ASSIST_NAV_WAVE,
+                                                             BEEP_ASSIST_NAV_DURATION_MS);
                 return G_SOURCE_REMOVE;
             }, data);
         }

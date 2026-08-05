@@ -48,7 +48,10 @@ void ToneGenerator::setCadence(int tone_ms, int silence_ms, double freq_hz, Tone
     wave_ = wave;
 }
 
-void ToneGenerator::playBeep() {
+void ToneGenerator::playBeep(double freq_hz, ToneWaveform wave, int duration_ms) {
+    beep_freq_hz_ = freq_hz;
+    beep_wave_ = wave;
+    beep_duration_ms_ = duration_ms;
     beep_requested_ = true;
 }
 
@@ -79,24 +82,39 @@ void ToneGenerator::threadFunc() {
     // Envelope: 0.0 = silent, 1.0 = full volume; ramps smoothly between states
     double envelope = 0.0;
 
-    static constexpr double BEEP_FREQ = 1200.0;
-    static constexpr unsigned BEEP_FRAMES = SAMPLE_RATE * 50 / 1000;  // 50ms
-    static constexpr double BEEP_AMP = 0.20;
+    static constexpr double BEEP_AMP = 0.45;
+
+    // Silent bracket written before and after every one-shot beep. Splicing
+    // the beep straight into the stream (no gap) can hit the ahead/behind
+    // cadence tone mid-cycle at non-zero amplitude, producing an audible
+    // click at the boundary; padding with true silence on both sides always
+    // splices at zero, so it's click-free regardless of what's playing. It
+    // also gives the beep a perceptual "onset/offset" flag that separates
+    // it from a concurrent cadence tone -- most noticeable when the two are
+    // close in pitch, e.g. Timing's 3200 Hz beep against simple-tone-mode's
+    // near-3500 Hz "behind" ramp approaching -3s.
+    static constexpr unsigned BEEP_SILENCE_FRAMES = SAMPLE_RATE * 50 / 1000;  // 50ms
+    const std::vector<int16_t> beep_silence_buf(BEEP_SILENCE_FRAMES, 0);
 
     while (running_) {
         // Handle one-shot beep request
         if (beep_requested_.exchange(false)) {
-            std::vector<int16_t> beep_buf(BEEP_FRAMES);
+            const double beep_freq = beep_freq_hz_;
+            const ToneWaveform beep_wave = beep_wave_;
+            const unsigned beep_frames = SAMPLE_RATE * static_cast<unsigned>(beep_duration_ms_) / 1000;
+            std::vector<int16_t> beep_buf(beep_frames);
             double bp = 0.0;
-            const double bp_inc = 2.0 * M_PI * BEEP_FREQ / SAMPLE_RATE;
-            for (unsigned i = 0; i < BEEP_FRAMES; i++) {
+            const double bp_inc = 2.0 * M_PI * beep_freq / SAMPLE_RATE;
+            for (unsigned i = 0; i < beep_frames; i++) {
                 double env = 1.0;
                 if (i < FADE_FRAMES) env = static_cast<double>(i) / FADE_FRAMES;
-                if (i > BEEP_FRAMES - FADE_FRAMES) env = static_cast<double>(BEEP_FRAMES - i) / FADE_FRAMES;
-                beep_buf[i] = static_cast<int16_t>(BEEP_AMP * 32767.0 * env * std::sin(bp));
+                if (i > beep_frames - FADE_FRAMES) env = static_cast<double>(beep_frames - i) / FADE_FRAMES;
+                beep_buf[i] = static_cast<int16_t>(BEEP_AMP * 32767.0 * env * waveSample(bp, beep_wave));
                 bp += bp_inc;
             }
-            snd_pcm_writei(pcm, beep_buf.data(), BEEP_FRAMES);
+            snd_pcm_writei(pcm, beep_silence_buf.data(), BEEP_SILENCE_FRAMES);
+            snd_pcm_writei(pcm, beep_buf.data(), beep_frames);
+            snd_pcm_writei(pcm, beep_silence_buf.data(), BEEP_SILENCE_FRAMES);
         }
 
         int cur_tone, cur_silence;
