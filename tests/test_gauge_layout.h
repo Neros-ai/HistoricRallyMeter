@@ -271,6 +271,49 @@ public:
             return std::abs(three_sec_needle.angle - tick_three_angle) < 1e-9;
         });
 
+        suite->addTest("a reading parked on a boundary does not flicker the zone", []() {
+            // gaugeZone() alone is recomputed every frame, so a value sitting
+            // on 10.0 alternated the arc colour, the digital format, the
+            // chevrons and the numerals on every 10ms redraw.
+            ASSERT_EQ(gaugeZoneHysteretic(29.98, 2), 2);
+            ASSERT_EQ(gaugeZoneHysteretic(29.0, 2), 1);
+            ASSERT_EQ(gaugeZoneHysteretic(9.98, 1), 1);
+            ASSERT_EQ(gaugeZoneHysteretic(9.0, 1), 0);
+            return true;
+        });
+
+        suite->addTest("entering a zone is instant, only leaving is damped", []() {
+            // A genuine crossing must show at once; it is the way back that
+            // needs to clear the boundary by the dead band.
+            ASSERT_EQ(gaugeZoneHysteretic(10.0, 0), 1);
+            ASSERT_EQ(gaugeZoneHysteretic(30.0, 1), 2);
+            ASSERT_EQ(gaugeZoneHysteretic(-10.0, 0), 1);
+            ASSERT_EQ(gaugeZoneHysteretic(-29.98, 2), 2);
+            return true;
+        });
+
+        suite->addTest("an out-of-range previous zone falls back to the plain zone", []() {
+            ASSERT_EQ(gaugeZoneHysteretic(29.98, 99), gaugeZone(29.98));
+            ASSERT_EQ(gaugeZoneHysteretic(5.0, -1), gaugeZone(5.0));
+            return true;
+        });
+
+        suite->addTest("tick labels follow the hysteretic zone, not the raw reading", []() {
+            // The gauge draws its arc, digits and chevrons from the damped
+            // zone, so the numerals must come from the same one. Taking them
+            // from the raw reading left 9.5-10.0 on the way down out of amber
+            // showing green numerals against an amber arc.
+            ASSERT_TRUE(gaugeTickLabelsVisibleInZone(0));
+            ASSERT_FALSE(gaugeTickLabelsVisibleInZone(1));
+            ASSERT_FALSE(gaugeTickLabelsVisibleInZone(2));
+            ASSERT_FALSE(gaugeTickLabelsVisibleInZone(gaugeZoneHysteretic(9.7, 1)));
+            ASSERT_TRUE(gaugeTickLabelsVisibleInZone(gaugeZoneHysteretic(9.3, 1)));
+            // The raw form still agrees with the plain zone.
+            ASSERT_TRUE(gaugeTickLabelsVisible(5.0)
+                        == gaugeTickLabelsVisibleInZone(gaugeZone(5.0)));
+            return true;
+        });
+
         return suite;
     }
 };

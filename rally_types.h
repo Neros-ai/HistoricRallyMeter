@@ -63,6 +63,8 @@ struct AppData {
     // Rally gauge
     GtkWidget* rallyGaugeDrawingArea;
     double aheadBehindSeconds = 0.0;
+    // Zone currently shown by the gauge, for gaugeZoneHysteretic().
+    int gaugeZoneShown = 0;
     double smoothedSpeed = -1.0;      // EMA-filtered current speed for display
     double segmentProgress = 0.0;     // fraction (0..1) of the current segment driven
     bool inSegment = false;           // true while within the current segment's distance

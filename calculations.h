@@ -277,6 +277,24 @@ std::string gaugeTickLabel(int index);
 // the needle position no longer carries.
 bool gaugeTickLabelsVisible(double seconds);
 
+// How far a reading must clear a zone boundary before the gauge leaves the
+// zone it is already showing. Entering is instant; only leaving is damped.
+constexpr double GAUGE_ZONE_DEAD_BAND_S = 0.5;
+
+// gaugeZone() with hysteresis, given the zone currently being displayed.
+// gaugeZone() alone is recomputed every frame from the raw reading and
+// drives the digital format, arc colour, chevron count and tick labels, so a
+// reading sitting on 10.0 or 30.0 flickers all four on every redraw. An
+// out-of-range previous_zone falls back to the plain zone.
+int gaugeZoneHysteretic(double seconds, int previous_zone);
+
+// The tick-label decision taken from an already-resolved zone. The gauge
+// draws from the hysteretic zone, so it must ask this rather than the
+// raw-reading form above -- otherwise the numerals still flicker on a
+// reading parked at 10.0, and a reading between 9.5 and 10.0 on the way down
+// out of amber shows green numerals against an amber arc.
+bool gaugeTickLabelsVisibleInZone(int zone);
+
 // Angle (Cairo convention, same as NeedleGeometry::angle) for the major tick
 // labelled `index` seconds, given the gauge's current effective sweep
 // max_val (see gaugeEffectiveMaxSeconds). Uses the same seconds/max_val

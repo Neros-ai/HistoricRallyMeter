@@ -70,7 +70,11 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // debounce or switch between any more.
     double seconds = data->aheadBehindSeconds;
     double max_val = gaugeEffectiveMaxSeconds(seconds);
-    int zone = gaugeZone(seconds);
+    // Hysteretic: gaugeZone() alone is recomputed every frame and drives the
+    // arc colour, the digital format, the chevron count and the tick labels,
+    // so a reading parked on a boundary flickered all four on every redraw.
+    int zone = gaugeZoneHysteretic(seconds, data->gaugeZoneShown);
+    data->gaugeZoneShown = zone;
     GaugeArcColor arc = gaugeArcColor(zone);
 
     // Needle bar half-width, declared here so the ticks can match it.
@@ -118,7 +122,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // defines); pristine's separate, thinner "minor tick" category is gone.
     // Numerals are drawn only in the green zone -- past that the arc
     // colour is the at-a-glance signal instead.
-    bool labels_visible = gaugeTickLabelsVisible(seconds);
+    bool labels_visible = gaugeTickLabelsVisibleInZone(zone);
     int tick_count = static_cast<int>(max_val);
     for (int i = -tick_count; i <= tick_count; i++) {
         // gaugeTickAngle() uses max_val (the true sweep end), matching
