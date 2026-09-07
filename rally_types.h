@@ -1,6 +1,7 @@
 #ifndef RALLY_TYPES_H
 #define RALLY_TYPES_H
 
+#include <string>
 #include <cstdint>
 #include <vector>
 
@@ -145,6 +146,11 @@ struct AppData {
     // Driver countdown overlay
     GtkWidget* countdownOverlay;
     GtkLabel* countdownLabel;
+    // Read-only stage panel on the main navigator screen, and the text it is
+    // currently showing -- compared each tick so the label is only touched
+    // when something actually changed, rather than 100 times a second.
+    GtkLabel* stageStatusLabel = nullptr;
+    std::string stageStatusShown;
     // "Early Departure: ENABLED/DISABLED", under the countdown box.
     GtkLabel* earlyDepartureLabel = nullptr;
     bool autoStartTriggered = false;

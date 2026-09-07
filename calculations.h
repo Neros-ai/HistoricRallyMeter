@@ -93,6 +93,41 @@ std::string stageSummary(const std::vector<Segment>& segments);
 // longer the one the crew are working to.
 bool stageDistanceComplete(const std::vector<Segment>& segs, int64_t stage_counts);
 
+// ---- Read-only stage panel ------------------------------------------------
+
+// Caption colour for the status panel -- a label as against a value.
+constexpr const char* STAGE_STATUS_CAPTION_COLOR = "#FFA500";
+
+// Segment rows the panel has room for beneath the distance-adjust buttons on
+// a 1280x400 co-pilot display, at 22px monospace (see the .stage-status rule
+// in ui_copilot.cpp -- keep the two in step). Worst case is nine lines: the
+// autostart line, the heading, and seven segments under the "one over the
+// limit is shown rather than summarised" rule.
+constexpr size_t STAGE_STATUS_MAX_ROWS = 6;
+
+// The armed autostart as the panel shows it: "none" when nothing is armed,
+// otherwise the wall-clock time it fires. Says nothing about which kind it
+// is -- the driver panel's countdown already carries that -- but keeps
+// `early_departure` in the signature so a caller cannot silently start
+// passing the wrong thing if it comes back.
+std::string formatAutoStartStatus(uint64_t auto_start_rally_time_s,
+                                  bool early_departure, int64_t epoch_ms);
+
+// The read-only stage panel on the main co-pilot screen: when the autostart
+// fires, then one line per segment -- target speed, that segment's length,
+// and the distance from the stage start to the end of it. The cumulative
+// column is what the crew read against the odometer, since the roadbook
+// gives each segment's own length but the box counts from the start.
+//
+// Returned as one monospace block of PANGO MARKUP (captions coloured, values
+// plain) rather than built as a widget grid, so the whole layout is a pure
+// function and testable without GTK -- the caller must render it with
+// gtk_label_set_markup, not set_text. `max_rows` caps the segment lines to
+// what the panel has room for; the rest are summarised.
+std::string formatStageStatusTable(const std::vector<Segment>& segs, bool units,
+                                   const std::string& autostart_text,
+                                   size_t max_rows);
+
 // ---- Autostart -------------------------------------------------------------
 
 // The stored autostart target, converted to and from a wall-clock instant.

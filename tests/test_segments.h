@@ -2,6 +2,7 @@
 #define TEST_SEGMENTS_H
 
 #include "test_framework.h"
+#include <algorithm>
 #include "../rally_state.h"
 #include "../calculations.h"
 
@@ -224,6 +225,77 @@ public:
             // straight away rather than waiting for a distance that will
             // never be covered.
             ASSERT_TRUE(stageDistanceComplete({}, 0));
+            return true;
+        });
+
+        suite->addTest("the panel leads with the autostart and the two distances", []() {
+            Segment a{}; a.target_speed_kph = 40.0; a.distance_m = 148.0;
+            std::string panel = formatStageStatusTable({ a }, false, "none", 6);
+            ASSERT_TRUE(panel.find("Autostart:</span> none") != std::string::npos);
+            ASSERT_TRUE(panel.find("KPH") != std::string::npos);
+            ASSERT_TRUE(panel.find("Distance (m)") != std::string::npos);
+            ASSERT_TRUE(panel.find("40.00") != std::string::npos);
+            // One line per segment, never wrapped into a second column.
+            ASSERT_EQ(std::count(panel.begin(), panel.end(), '\n'), 2);
+            return true;
+        });
+
+        suite->addTest("the cumulative column runs from the stage start", []() {
+            // The roadbook gives each segment's own length; the box counts
+            // from the stage start, so the crew need the running total to
+            // check the odometer against.
+            std::vector<Segment> segs;
+            for (double d : {148.0, 500.0, 500.0}) {
+                Segment s{}; s.target_speed_kph = 40.0; s.distance_m = d;
+                segs.push_back(s);
+            }
+            std::string panel = formatStageStatusTable(segs, false, "none", 6);
+            ASSERT_TRUE(panel.find("148") != std::string::npos);
+            ASSERT_TRUE(panel.find("648") != std::string::npos);
+            ASSERT_TRUE(panel.find("1148") != std::string::npos);
+            return true;
+        });
+
+        suite->addTest("the panel converts speed with the display units", []() {
+            Segment a{}; a.target_speed_kph = 100.0; a.distance_m = 1000.0;
+            std::string mph = formatStageStatusTable({ a }, true, "none", 6);
+            ASSERT_TRUE(mph.find("MPH") != std::string::npos);
+            ASSERT_TRUE(mph.find("62.14") != std::string::npos);
+            ASSERT_TRUE(mph.find("KPH") == std::string::npos);
+            return true;
+        });
+
+        suite->addTest("one segment over the limit is shown, not summarised", []() {
+            // "+1 more" costs exactly the row it replaces, so it earns
+            // nothing; the summary starts at two.
+            std::vector<Segment> segs;
+            for (int i = 0; i < 7; i++) {
+                Segment s{}; s.target_speed_kph = 40.0; s.distance_m = 100.0;
+                segs.push_back(s);
+            }
+            ASSERT_TRUE(formatStageStatusTable(segs, false, "none", 6).find("more")
+                        == std::string::npos);
+            Segment extra{}; extra.target_speed_kph = 40.0; extra.distance_m = 100.0;
+            segs.push_back(extra);
+            ASSERT_TRUE(formatStageStatusTable(segs, false, "none", 6).find("+2 more")
+                        != std::string::npos);
+            return true;
+        });
+
+        suite->addTest("an empty roadbook says so instead of heading nothing", []() {
+            std::string empty = formatStageStatusTable({}, false, "none", 6);
+            ASSERT_TRUE(empty.find("(no segments set)") != std::string::npos);
+            ASSERT_TRUE(empty.find("KPH") == std::string::npos);
+            return true;
+        });
+
+        suite->addTest("the autostart status is the fire time alone", []() {
+            int64_t epoch_ms = 1000000000000LL;
+            ASSERT_TRUE(formatAutoStartStatus(0, false, epoch_ms) == "none");
+            std::string early = formatAutoStartStatus(45, true, epoch_ms);
+            std::string ordinary = formatAutoStartStatus(45, false, epoch_ms);
+            ASSERT_TRUE(early == ordinary);
+            ASSERT_EQ(early.size(), 8u);
             return true;
         });
 

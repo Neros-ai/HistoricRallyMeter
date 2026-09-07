@@ -4,6 +4,7 @@
 #include <ctime>
 #include <chrono>
 #include <iomanip>
+#include <algorithm>
 #include <sstream>
 
 int64_t calculateDistanceCounts(const RallyState& state, uint64_t cntr1, uint64_t cntr2,
@@ -310,4 +311,68 @@ bool stageDistanceComplete(const std::vector<Segment>& segs, int64_t stage_count
     double total = 0.0;
     for (const auto& seg : segs) total += seg.distance_counts;
     return static_cast<double>(stage_counts) >= total;
+}
+
+std::string formatAutoStartStatus(uint64_t auto_start_rally_time_s,
+                                  bool early_departure, int64_t epoch_ms) {
+    (void)early_departure;
+    if (auto_start_rally_time_s == 0) return "none";
+    int64_t target_ms = autoStartTargetMsFromSeconds(auto_start_rally_time_s, epoch_ms);
+    time_t target_s = target_ms / 1000;
+    struct tm* t = localtime(&target_s);
+    // auto_start_rally_time_s is a uint64_t read from a hand-editable config,
+    // so an out-of-range value can overflow target_s and return null here --
+    // and this runs on every co-pilot tick, with no operator action needed.
+    if (!t) return "none";
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%02d:%02d:%02d", t->tm_hour, t->tm_min, t->tm_sec);
+    return std::string(buf);
+}
+
+std::string formatStageStatusTable(const std::vector<Segment>& segs, bool units,
+                                   const std::string& autostart_text,
+                                   size_t max_rows) {
+    std::ostringstream out;
+    // Captions orange and values white, the same split the rest of the box
+    // uses, so the eye lands on the figures. Pango markup rather than
+    // separate widgets: the columns only line up because the whole block is
+    // one monospace run, and markup does not disturb that.
+    out << "<span foreground=\"" << STAGE_STATUS_CAPTION_COLOR
+        << "\">Autostart:</span> " << autostart_text << "\n";
+
+    if (segs.empty()) {
+        out << "  (no segments set)";
+        return out.str();
+    }
+
+    // One "Distance (m)" heading over both distance columns rather than a
+    // caption each: they are the same quantity measured from two points.
+    const std::string dist_head = "Distance (m)";
+    const size_t dist_span = 18;   // the two numeric columns and the gap
+    const size_t pad = (dist_span - dist_head.size()) / 2 + 2;
+    char head[96];
+    snprintf(head, sizeof(head), "%6s %*s%s", units ? "MPH" : "KPH",
+             static_cast<int>(pad), "", dist_head.c_str());
+    out << "<span foreground=\"" << STAGE_STATUS_CAPTION_COLOR << "\">"
+        << head << "</span>";
+
+    size_t shown = std::min(max_rows, segs.size());
+    // A single segment over the limit is shown rather than summarised: the
+    // "+1 more" line costs exactly the row it would be replacing.
+    if (max_rows > 0 && segs.size() == max_rows + 1) shown = segs.size();
+    double cumulative_m = 0.0;
+    for (size_t i = 0; i < shown; i++) {
+        double kph = segs[i].target_speed_kph;
+        double display_speed = units ? kph * 0.621371 : kph;
+        cumulative_m += segs[i].distance_m;
+        char row[96];
+        snprintf(row, sizeof(row), "\n%6.2f %10ld %7ld",
+                 display_speed, static_cast<long>(segs[i].distance_m + 0.5),
+                 static_cast<long>(cumulative_m + 0.5));
+        out << row;
+    }
+    if (segs.size() > shown) {
+        out << "\n   +" << (segs.size() - shown) << " more";
+    }
+    return out.str();
 }
