@@ -115,8 +115,16 @@ size_t beepCursorFor(const std::vector<double>& waypoints_m, double travelled_m)
 // segment's calibration-independent distance_m/target_speed_kph -- distance
 // actually travelled never enters this calculation, only the roadbook's own
 // numbers do. Returns -1 if the target lies beyond the distance the loaded
-// segments cover.
+// segments cover, or if reaching it would require passing a segment that has
+// a distance but no target speed (an incomplete roadbook: the time is
+// genuinely unknown, and assuming otherwise fires later beeps early).
 double idealSecondsToReachDistance(const std::vector<Segment>& segments, double target_distance_m);
+// Index of the first waypoint whose scheduled (roadbook) time has not yet
+// arrived. The timing-mode counterpart to beepCursorFor: timing beeps are
+// ordered by TIME, so deriving their cursor from distance travelled steps
+// past waypoints the car has reached early and drops their beeps.
+size_t beepTimingCursorFor(const std::vector<double>& waypoints_m, double elapsed_stage_s,
+                           const std::vector<Segment>& segments, double advance_s);
 
 // Navigation mode due-check: true once the Total distance is within
 // advance_m of the waypoint. Pure distance -- current speed plays no part.

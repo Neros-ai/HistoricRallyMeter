@@ -329,7 +329,14 @@ double idealSecondsToReachDistance(const std::vector<Segment>& segments, double 
     double cumulative_m = 0.0;
     double cumulative_s = 0.0;
     for (const auto& seg : segments) {
-        if (seg.target_speed_kph <= 0.0 || seg.distance_m <= 0.0) continue;  // skip invalid segments
+        // A zero-LENGTH segment contributes nothing either way, so skip it.
+        if (seg.distance_m <= 0.0) continue;
+        // A segment with real distance but no target speed is an incomplete
+        // roadbook, not an empty one. Skipping it would drop its DISTANCE as
+        // well as its time, shortening the roadbook and firing every later
+        // timing beep early by the missing segment's duration. Everything at
+        // or beyond it is genuinely undefined.
+        if (seg.target_speed_kph <= 0.0) return -1.0;
         double speed_m_per_s = seg.target_speed_kph * (1000.0 / 3600.0);
         double segment_time_s = seg.distance_m / speed_m_per_s;
         if (cumulative_m + seg.distance_m >= target_distance_m) {
@@ -340,6 +347,14 @@ double idealSecondsToReachDistance(const std::vector<Segment>& segments, double 
         cumulative_s += segment_time_s;
     }
     return -1.0;  // the waypoint lies beyond what the loaded segments cover
+}
+
+size_t beepTimingCursorFor(const std::vector<double>& waypoints_m, double elapsed_stage_s,
+                           const std::vector<Segment>& segments, double advance_s) {
+    size_t i = 0;
+    while (i < waypoints_m.size()
+           && timingBeepDue(waypoints_m[i], elapsed_stage_s, segments, advance_s)) i++;
+    return i;
 }
 
 bool navigationBeepDue(double waypoint_m, double travelled_m, double advance_m) {

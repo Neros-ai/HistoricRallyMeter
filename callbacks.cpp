@@ -54,6 +54,7 @@ void on_total_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     // puts every waypoint back in front of the car.
     data->beepNextNavIndex = 0;
     data->beepNextTimingIndex = 0;
+    data->beepCursorsStale = true;
     ConfigFile::save(*data->state);
     notifyWebState(data);
 }
@@ -231,6 +232,7 @@ void performStageGo(AppData* data) {
     // puts every waypoint back in front of the car.
     data->beepNextNavIndex = 0;
     data->beepNextTimingIndex = 0;
+    data->beepCursorsStale = true;
 
     if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
     
@@ -507,6 +509,7 @@ gboolean update_display(gpointer user_data) {
 // Screen navigation callbacks
 void on_show_segments(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    releaseKeypadTarget(data);
     gtk_stack_set_visible_child_name(data->copilotStack, "stagesetup");
     // Refresh segment list
     refreshSegmentList(data);
@@ -514,6 +517,7 @@ void on_show_segments(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 
 void on_show_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    releaseKeypadTarget(data);
     gtk_stack_set_visible_child_name(data->copilotStack, "calibration");
     
     // Reset calibration state when entering screen
@@ -526,11 +530,13 @@ void on_show_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 
 void on_show_twinmaster(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    releaseKeypadTarget(data);
     gtk_stack_set_visible_child_name(data->copilotStack, "twinmaster");
 }
 
 void on_show_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    releaseKeypadTarget(data);
     gtk_stack_set_visible_child_name(data->copilotStack, "datetime");
     updateDateTimeDisplay(data);
 
@@ -669,7 +675,27 @@ gboolean on_textview_focus(GtkWidget* widget, G_GNUC_UNUSED GdkEvent* event, gpo
     AppData* data = static_cast<AppData*>(user_data);
     data->activeEntry = nullptr;   // exactly one keypad target at a time
     data->activeBuffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(widget));
+    // The keypad starts hidden and is the only way to type on the box, so it
+    // must be raised here exactly as on_entry_focus does -- without this,
+    // tapping the waypoint list produced no keypad at all until some
+    // unrelated entry had been focused first.
+    if (data->numericKeypad) gtk_widget_show(data->numericKeypad);
     return FALSE;
+}
+
+// Commit any pending waypoint edit and drop the keypad's target. Called when
+// leaving a screen: the keypad target is process-wide (the date/time screen
+// builds its own keypad on the same handlers and the same AppData), so a
+// stale target let a keypress on one screen edit a widget on another -- and
+// the keypad's "C" silently wipe it.
+void releaseKeypadTarget(AppData* data) {
+    if (data->beepWaypointCommitTimer) {
+        g_source_remove(data->beepWaypointCommitTimer);
+        data->beepWaypointCommitTimer = 0;
+        commitBeepWaypoints(data);
+    }
+    data->activeEntry = nullptr;
+    data->activeBuffer = nullptr;
 }
 
 // Callback for when segment entry value changes
@@ -1313,6 +1339,7 @@ static int64_t getAutoStartEpochMs() {
 
 void on_show_autostart(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    releaseKeypadTarget(data);
     gtk_stack_set_visible_child_name(data->copilotStack, "autostart");
     data->activeEntry = data->autoStartTimeEntry;
     
@@ -1405,33 +1432,49 @@ void on_autostart_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     updateAutoStartDisplay(data);
 }
 
-// Re-parse the waypoint list on every edit. Parsing is cheap and forgiving
-// (a malformed token is skipped, not fatal), so there is no need to make the
-// operator confirm -- and no half-entered state to get stuck in.
-void on_beep_waypoints_changed(GtkTextBuffer* buffer, gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
+// Parse the waypoint list out of the buffer and persist it. Parsing is cheap
+// and forgiving (a malformed token is skipped, not fatal), so the operator is
+// never made to confirm -- but it runs on a debounce, not per keystroke, for
+// two reasons: a half-typed number is briefly a real waypoint ("3" en route
+// to "30" is 3 km, which at 2.6 km travelled is immediately due and beeps),
+// and committing per character rewrote the whole config JSON to the Pi's SD
+// card on every key.
+void commitBeepWaypoints(AppData* data) {
+    if (!data->beepWaypointBuffer) return;
     GtkTextIter start, end;
-    gtk_text_buffer_get_bounds(buffer, &start, &end);
-    gchar* text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+    gtk_text_buffer_get_bounds(data->beepWaypointBuffer, &start, &end);
+    gchar* text = gtk_text_buffer_get_text(data->beepWaypointBuffer, &start, &end, FALSE);
     data->state->beep_waypoints_m = parseBeepWaypointsKm(text ? text : "");
     g_free(text);
 
-    // The list changed under the cursor, so the cursor is meaningless; rebuild
-    // it from where the car actually is.
-    auto poll = data->poller->getMostRecent();
-    int64_t counts = calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
-                                             data->state->total_start_cntr1,
-                                             data->state->total_start_cntr2);
-    double travelled_m = countsToMeters(counts, data->state->calibration);
-    data->beepNextNavIndex = beepCursorFor(data->state->beep_waypoints_m, travelled_m);
-    data->beepNextTimingIndex = beepCursorFor(data->state->beep_waypoints_m, travelled_m);
+    // The list changed under the cursors, so they no longer mean anything;
+    // the next display tick rebuilds them from where the car actually is.
+    data->beepCursorsStale = true;
 
     ConfigFile::save(*data->state);
+}
+
+static gboolean on_beep_waypoints_commit_timeout(gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->beepWaypointCommitTimer = 0;
+    commitBeepWaypoints(data);
+    return G_SOURCE_REMOVE;
+}
+
+void on_beep_waypoints_changed(G_GNUC_UNUSED GtkTextBuffer* buffer, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (data->beepWaypointCommitTimer) g_source_remove(data->beepWaypointCommitTimer);
+    data->beepWaypointCommitTimer =
+        g_timeout_add(BEEP_WAYPOINT_COMMIT_MS, on_beep_waypoints_commit_timeout, data);
 }
 
 gboolean on_beep_enable_toggled(G_GNUC_UNUSED GtkWidget* widget, gboolean state, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     data->state->beep_assist_enabled = state;
+    // While Beep Assist was off the cursors stood still, so they now point at
+    // waypoints the car passed long ago. Without this, switching on at 40 km
+    // with waypoints at 5/10/15/20 km fires all four back to back.
+    data->beepCursorsStale = true;
     ConfigFile::save(*data->state);
     return FALSE;  // let the switch draw the new state
 }
@@ -1443,6 +1486,8 @@ void on_beep_mode_toggled(GtkWidget* widget, gpointer user_data) {
         data->state->beep_timing_mode = active;
     else
         data->state->beep_navigation_mode = active;
+    // A mode that was off never advanced its cursor either -- same replay.
+    if (active) data->beepCursorsStale = true;
     ConfigFile::save(*data->state);
 }
 

@@ -56,8 +56,20 @@ void on_memory_set(GtkWidget* widget, gpointer user_data);
 void on_memory_recall(GtkWidget* widget, gpointer user_data);
 void on_memory_clear(GtkWidget* widget, gpointer user_data);
 
+// How long the waypoint list must sit unedited before it is parsed and
+// saved. Long enough that a multi-digit number is never committed
+// half-typed, short enough that leaving the screen straight after typing
+// still catches it (releaseKeypadTarget flushes it anyway).
+constexpr unsigned BEEP_WAYPOINT_COMMIT_MS = 800;
+
 // Beep Assist controls on the stage-setup screen.
 void on_beep_waypoints_changed(GtkTextBuffer* buffer, gpointer user_data);
+// Parse and persist the waypoint list now, cancelling nothing. Called by the
+// debounce timeout and by releaseKeypadTarget when leaving the screen.
+void commitBeepWaypoints(AppData* data);
+// Clear the keypad's target and flush any pending waypoint edit. Called on
+// every screen switch -- the keypad target is shared process-wide.
+void releaseKeypadTarget(AppData* data);
 gboolean on_beep_enable_toggled(GtkWidget* widget, gboolean state, gpointer user_data);
 void on_beep_mode_toggled(GtkWidget* widget, gpointer user_data);
 void on_beep_advance_changed(GtkWidget* widget, gpointer user_data);

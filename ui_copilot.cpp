@@ -76,28 +76,38 @@ static constexpr int BEEP_ASSIST_TIMING_DURATION_MS = 250;
 // timing checks in updateCopilotDisplay() so a tick where both are due
 // fires both, back to back, rather than one silently eating the other's
 // beep for the same waypoint.
+// Louder than the button-click beep, which keeps ToneGenerator's 0.20
+// default. Raising that default instead would have made every button click
+// on the box louder too, since the global click hook shares playBeep().
+static constexpr double BEEP_ASSIST_AMP = 0.45;
+
 static void fireBeepAssist(AppData* data, double waypoint_m, double travelled_m, bool navigation) {
     // Navigation mode plays its tone twice in quick succession ("bing
     // bong"), Timing mode plays it once.
-    // No audio device in the sandbox (Docker/Xvfb) means playBeep() is
-    // silently a no-op there -- this is the only visible confirmation
-    // that the waypoint logic itself fired.
-    std::cerr << "Beep Assist fired: waypoint " << waypoint_m
-              << "m, travelled " << travelled_m << "m"
-              << (navigation ? " (navigation, double beep)" : " (timing, single beep)")
-              << std::endl;
+    // Logged only under RALLY_DEBUG: this is the display hot path, and an
+    // unconditional line per beep grows app.log all rally long. The on-screen
+    // flash below is the always-available confirmation that the waypoint
+    // logic fired, including in the sandbox.
+    static const bool debug_beeps = (getenv("RALLY_DEBUG") != nullptr);
+    if (debug_beeps) {
+        std::cerr << "Beep Assist fired: waypoint " << waypoint_m
+                  << "m, travelled " << travelled_m << "m"
+                  << (navigation ? " (navigation, double beep)" : " (timing, single beep)")
+                  << std::endl;
+    }
     flashBeepWarning(data, navigation);
     if (data->toneGen) {
         double freq_hz = navigation ? BEEP_ASSIST_NAV_FREQ_HZ : BEEP_ASSIST_TIMING_FREQ_HZ;
         ToneWaveform wave = navigation ? BEEP_ASSIST_NAV_WAVE : BEEP_ASSIST_TIMING_WAVE;
         int duration_ms = navigation ? BEEP_ASSIST_NAV_DURATION_MS : BEEP_ASSIST_TIMING_DURATION_MS;
-        data->toneGen->playBeep(freq_hz, wave, duration_ms);
+        data->toneGen->playBeep(freq_hz, wave, duration_ms, BEEP_ASSIST_AMP);
         if (navigation) {
             // g_timeout_add, not a blocking sleep -- this runs on the GTK
             // main thread and must not stall the UI for 150ms.
             g_timeout_add(150, [](gpointer d) -> gboolean {
-                static_cast<AppData*>(d)->toneGen->playBeep(BEEP_ASSIST_NAV_FREQ_HZ, BEEP_ASSIST_NAV_WAVE,
-                                                             BEEP_ASSIST_NAV_DURATION_MS);
+                static_cast<AppData*>(d)->toneGen->playBeep(
+                    BEEP_ASSIST_NAV_FREQ_HZ, BEEP_ASSIST_NAV_WAVE,
+                    BEEP_ASSIST_NAV_DURATION_MS, BEEP_ASSIST_AMP);
                 return G_SOURCE_REMOVE;
             }, data);
         }
@@ -133,6 +143,26 @@ void updateCopilotDisplay(AppData* data) {
         double travelled_m = countsToMeters(total_count_diff, data->state->calibration);
         bool stage_active = data->state->segment_current_number >= 0;
         double elapsed_stage_s = (current_time_ms - data->state->total_start_time_ms) / 1000.0;
+
+        // Re-derive the cursors whenever they have been marked stale: at
+        // startup, after an edit to the list, and when Beep Assist or one of
+        // its modes is switched on. Done here rather than at the point the
+        // flag is set because this is the first place the counter is known to
+        // have been polled -- deriving at window-construction time read a
+        // counter that had never been polled, giving a negative travelled
+        // distance and replaying every waypoint already behind the car.
+        if (data->beepCursorsStale) {
+            data->beepNextNavIndex = beepCursorFor(data->state->beep_waypoints_m, travelled_m);
+            // Timing mode is ordered by scheduled time, not distance: a car
+            // running ahead of schedule has reached waypoints whose roadbook
+            // time has not arrived, and a distance-derived cursor would step
+            // past them and drop their beeps.
+            data->beepNextTimingIndex = stage_active
+                ? beepTimingCursorFor(data->state->beep_waypoints_m, elapsed_stage_s,
+                                      data->state->segments, data->state->beep_advance_s)
+                : 0;
+            data->beepCursorsStale = false;
+        }
 
         // Navigation and timing are independent warnings, each checked
         // against its own cursor. A single shared cursor (the old design)
@@ -723,19 +753,15 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_text_buffer_set_text(data->beepWaypointBuffer,
         formatBeepWaypointsKm(data->state->beep_waypoints_m).c_str(), -1);
 
-    // Re-derive the runtime cursor from the distance already travelled so
-    // restarting the app mid-stage does not replay every waypoint already
-    // passed. Mirrors the recompute in on_beep_waypoints_changed, which only
-    // fires on operator edits and never runs at startup since the buffer is
-    // populated before that signal is connected (deliberately, to avoid a
-    // spurious save-on-load).
-    auto initPoll = data->poller->getMostRecent();
-    int64_t initCounts = calculateDistanceCounts(*data->state, initPoll.cntr1, initPoll.cntr2,
-                                                 data->state->total_start_cntr1,
-                                                 data->state->total_start_cntr2);
-    double initTravelled_m = countsToMeters(initCounts, data->state->calibration);
-    data->beepNextNavIndex = beepCursorFor(data->state->beep_waypoints_m, initTravelled_m);
-    data->beepNextTimingIndex = beepCursorFor(data->state->beep_waypoints_m, initTravelled_m);
+    // The cursors must skip waypoints already behind the car, or restarting
+    // mid-stage replays every one of them. They are NOT derived here: this
+    // runs during window construction, before the first poller->poll(), so
+    // the counter still reads zero while total_start_cntr1/2 are loaded
+    // non-zero from config -- a large negative travelled distance, a cursor
+    // of 0, and exactly the replay this is meant to prevent. Flagging them
+    // stale defers the derivation to the first display tick, which has real
+    // counter data.
+    data->beepCursorsStale = true;
 
     g_signal_connect(data->beepWaypointBuffer, "changed",
                      G_CALLBACK(on_beep_waypoints_changed), data);
@@ -840,6 +866,10 @@ GtkWidget* createStageSetupScreen(AppData* data) {
         if (li.mode == 1) data->beepAdvanceSecondsEntry = entry;
         else              data->beepAdvanceMetresEntry = entry;
     }
+
+    // gtk_size_group_new returns a full reference; its members hold their own,
+    // so drop ours rather than leaking the group.
+    g_object_unref(beepRowWidth);
 
     // Add new segment row (30% larger fonts and buttons)
     GtkWidget* addBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);

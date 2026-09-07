@@ -137,6 +137,18 @@ struct AppData {
     // every waypoint the car has already passed.
     size_t beepNextNavIndex = 0;
     size_t beepNextTimingIndex = 0;
+    // Set whenever the cursors no longer describe where the car is: at
+    // startup, on an edit to the waypoint list, and when Beep Assist or one
+    // of its modes is switched on. They are re-derived on the next display
+    // tick rather than on the spot, because the counter has not necessarily
+    // been polled yet at window-construction time -- deriving from an
+    // unpolled counter yields a negative travelled distance, a cursor of 0,
+    // and a replay of every waypoint already behind the car.
+    bool beepCursorsStale = true;
+    // Debounce for waypoint-list edits: the buffer's "changed" signal fires
+    // per keystroke, and committing on each one both saved the whole config
+    // to the SD card per character and could beep on a half-typed number.
+    guint beepWaypointCommitTimer = 0;
     GtkTextBuffer* beepWaypointBuffer = nullptr;
     GtkEntry* beepAdvanceMetresEntry = nullptr;
     GtkEntry* beepAdvanceSecondsEntry = nullptr;

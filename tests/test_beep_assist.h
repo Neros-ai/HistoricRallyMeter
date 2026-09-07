@@ -118,14 +118,83 @@ public:
             return idealSecondsToReachDistance(segs, 100.0) < 0.0;
         });
 
-        suite->addTest("a zero-speed segment is skipped, not divided by zero", []() {
+        suite->addTest("a target past a zero-speed segment is undefined, not silently early", []() {
+            // A segment with a real distance but no target speed is an
+            // incomplete roadbook, not a zero-length one. Skipping it would
+            // drop its DISTANCE as well as its time, shortening the roadbook
+            // and firing every later timing beep early by the missing
+            // segment's duration. Undefined is the honest answer.
             std::vector<Segment> segs;
             Segment bad{}; bad.target_speed_kph = 0.0; bad.distance_m = 500.0;
             Segment good{}; good.target_speed_kph = 36.0; good.distance_m = 1000.0;  // 10 m/s
             segs.push_back(bad); segs.push_back(good);
-            // The bad segment contributes no distance or time; 300 m into
-            // "good" at 10 m/s = 30 s.
+            return idealSecondsToReachDistance(segs, 300.0) < 0.0;
+        });
+
+        suite->addTest("a target before a zero-speed segment still resolves", []() {
+            // The incomplete segment only poisons distances at or beyond it.
+            std::vector<Segment> segs;
+            Segment good{}; good.target_speed_kph = 36.0; good.distance_m = 1000.0;  // 10 m/s
+            Segment bad{}; bad.target_speed_kph = 0.0; bad.distance_m = 500.0;
+            segs.push_back(good); segs.push_back(bad);
+            return std::abs(idealSecondsToReachDistance(segs, 500.0) - 50.0) < 0.01;
+        });
+
+        suite->addTest("a zero-LENGTH segment is skipped rather than poisoning the roadbook", []() {
+            // distance_m == 0 genuinely contributes nothing, whatever its
+            // speed says; it must not be confused with the case above.
+            std::vector<Segment> segs;
+            Segment empty{}; empty.target_speed_kph = 0.0; empty.distance_m = 0.0;
+            Segment good{}; good.target_speed_kph = 36.0; good.distance_m = 1000.0;  // 10 m/s
+            segs.push_back(empty); segs.push_back(good);
             return std::abs(idealSecondsToReachDistance(segs, 300.0) - 30.0) < 0.01;
+        });
+
+        // ---- the timing cursor ----
+        // Timing mode is ordered by SCHEDULED time, not by distance, so its
+        // cursor cannot be derived with beepCursorFor. Running ahead of
+        // schedule, a distance-derived cursor steps past waypoints whose
+        // roadbook time has not arrived and drops their beep entirely.
+
+        suite->addTest("timing cursor stops at the first waypoint whose time has not come", []() {
+            std::vector<double> w = { 1000.0, 2000.0, 3000.0 };
+            std::vector<Segment> segs;
+            Segment s{}; s.target_speed_kph = 36.0; s.distance_m = 5000.0;  // 10 m/s
+            segs.push_back(s);
+            // Scheduled times: 100 s, 200 s, 300 s. At 150 s elapsed only the
+            // first waypoint is behind us.
+            return beepTimingCursorFor(w, 150.0, segs, 0.0) == 1;
+        });
+
+        suite->addTest("timing cursor ignores distance already travelled", []() {
+            // The regression: the car is 2500 m along but only 50 s into the
+            // stage. A distance-derived cursor would return 2 and silently
+            // eat the 1000 m and 2000 m timing beeps.
+            std::vector<double> w = { 1000.0, 2000.0, 3000.0 };
+            std::vector<Segment> segs;
+            Segment s{}; s.target_speed_kph = 36.0; s.distance_m = 5000.0;  // 10 m/s
+            segs.push_back(s);
+            return beepTimingCursorFor(w, 50.0, segs, 0.0) == 0;
+        });
+
+        suite->addTest("timing cursor honours the lead-in", []() {
+            std::vector<double> w = { 1000.0, 2000.0 };
+            std::vector<Segment> segs;
+            Segment s{}; s.target_speed_kph = 36.0; s.distance_m = 5000.0;  // 10 m/s
+            segs.push_back(s);
+            // 1000 m is due at 100 s; with a 30 s lead-in it is already due
+            // at 80 s, so the cursor has moved past it.
+            return beepTimingCursorFor(w, 80.0, segs, 30.0) == 1;
+        });
+
+        suite->addTest("timing cursor stops at a waypoint the segments do not reach", []() {
+            // Undefined scheduled time means not yet due, so the cursor holds
+            // there rather than stepping over it.
+            std::vector<double> w = { 1000.0, 9000.0 };
+            std::vector<Segment> segs;
+            Segment s{}; s.target_speed_kph = 36.0; s.distance_m = 5000.0;  // 10 m/s
+            segs.push_back(s);
+            return beepTimingCursorFor(w, 100000.0, segs, 0.0) == 1;
         });
 
         // ---- navigationBeepDue ----
