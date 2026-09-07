@@ -88,8 +88,16 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
     std::istringstream stream(content);
     std::string line;
     
+    // load() only assigns keys the file actually contains, so the snapshot
+    // is cleared up front and seeded below if the file predates it.
+    state.stage_segments.clear();
+    state.stage_segments_recorded = false;
+
     while (std::getline(stream, line)) {
-        if (line.find("\"segments\"") != std::string::npos && line.find("\"memory_") == std::string::npos) {
+        if (line.find("\"stage_segments\"") != std::string::npos) {
+            parseSegmentArray(stream, state.stage_segments, state.calibration);
+            state.stage_segments_recorded = true;
+        } else if (line.find("\"segments\"") != std::string::npos && line.find("\"memory_") == std::string::npos) {
             parseSegmentArray(stream, state.segments, state.calibration);
         } else if (line.find("\"memory_1\"") != std::string::npos) {
             parseSegmentArray(stream, state.memory_slots[0], state.calibration);
@@ -143,6 +151,8 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             }
         } else if (line.find("\"auto_start_early_departure\"") != std::string::npos) {
             state.auto_start_early_departure = extractBool(line);
+        } else if (line.find("\"stage_complete\"") != std::string::npos) {
+            state.stage_complete = extractBool(line);
         } else if (line.find("\"driver_window_x\"") != std::string::npos) {
             state.driver_window_x = static_cast<int>(extractLong(line));
         } else if (line.find("\"driver_window_y\"") != std::string::npos) {
@@ -164,6 +174,18 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
         } else if (line.find("\"web_port\"") != std::string::npos) {
             state.web_port = static_cast<int>(extractLong(line));
         }
+    }
+
+    // A config written before stage_segments existed has one roadbook and a
+    // segment_current_number indexing it: that IS what the stage was running
+    // on. Seed the snapshot from it, and the freeze with it -- stage_complete
+    // has no key in such a file either, so it would default to "nothing under
+    // way" and the first edit after the restart would replace the snapshot
+    // this line just restored.
+    if (!state.stage_segments_recorded) {
+        state.stage_segments = state.segments;
+        state.stage_segments_recorded = true;
+        if (state.segment_current_number >= 0) state.stage_complete = false;
     }
 }
 
@@ -212,6 +234,8 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"auto_start_rally_time_s\": " << state.auto_start_rally_time_s << ",\n";
     file << "  \"auto_start_early_departure\": "
          << (state.auto_start_early_departure ? "true" : "false") << ",\n";
+    file << "  \"stage_complete\": "
+         << (state.stage_complete ? "true" : "false") << ",\n";
     file << "  \"driver_window_x\": " << state.driver_window_x << ",\n";
     file << "  \"driver_window_y\": " << state.driver_window_y << ",\n";
     file << "  \"driver_window_width\": " << state.driver_window_width << ",\n";
@@ -229,6 +253,7 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
         if (!state.memory_slots[i].empty()) { has_memory = true; break; }
     }
     
+    writeSegmentArray(file, "stage_segments", state.stage_segments, true);
     writeSegmentArray(file, "segments", state.segments, has_memory);
     
     if (has_memory) {

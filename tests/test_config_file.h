@@ -241,6 +241,59 @@ public:
             return true;
         });
 
+        suite->addTest("the stage snapshot round-trips separately from the roadbook", []() {
+            // The running stage must survive a restart still judged against
+            // the segments it started on, not against whatever the roadbook
+            // has been edited to since.
+            RallyState state;
+            state.calibration = 600000;
+            Segment running{}; running.target_speed_kph = 40.0; running.distance_m = 1000.0;
+            Segment edited{};  edited.target_speed_kph = 90.0;  edited.distance_m = 2000.0;
+            state.stage_segments = { running };
+            state.segments = { edited };
+            std::string path = "/tmp/rb_test_stage_snapshot.json";
+            ConfigFile::save(state, path);
+
+            RallyState loaded;
+            ConfigFile::load(loaded, path);
+            ASSERT_EQ(loaded.stage_segments.size(), 1u);
+            ASSERT_NEAR(loaded.stage_segments[0].target_speed_kph, 40.0, 0.001);
+            ASSERT_EQ(loaded.segments.size(), 1u);
+            ASSERT_NEAR(loaded.segments[0].target_speed_kph, 90.0, 0.001);
+            std::remove(path.c_str());
+            return true;
+        });
+
+        suite->addTest("a config predating the snapshot seeds it from the roadbook", []() {
+            // Upgrading mid-stage must not blank the stage: with no
+            // stage_segments key, the one roadbook the file has is what the
+            // stage was running on -- and the freeze must come with it, or
+            // the first edit after the restart replaces it.
+            RallyState state;
+            std::string path = "/tmp/rb_test_no_snapshot.json";
+            std::ofstream f(path);
+            f << "{\n";
+            f << "  \"calibration\": 600000,\n";
+            f << "  \"segment_current_number\": 0,\n";
+            f << "  \"segments\": [\n";
+            f << "    {\n";
+            f << "      \"target_speed_kph\": 40.000000,\n";
+            f << "      \"target_speed_counts_per_hour\": 24000000.000000,\n";
+            f << "      \"distance_m\": 1000.000000,\n";
+            f << "      \"distance_counts\": 1666.666667,\n";
+            f << "      \"autoNext\": true\n";
+            f << "    }\n";
+            f << "  ]\n";
+            f << "}\n";
+            f.close();
+            ConfigFile::load(state, path);
+            ASSERT_EQ(state.stage_segments.size(), 1u);
+            ASSERT_NEAR(state.stage_segments[0].target_speed_kph, 40.0, 0.001);
+            ASSERT_FALSE(state.stage_complete);
+            std::remove(path.c_str());
+            return true;
+        });
+
         
         return suite;
     }

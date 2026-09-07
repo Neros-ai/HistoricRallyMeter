@@ -35,7 +35,33 @@ public:
     // together when it fires. Persisted, so an app restart between arming
     // and the minute still starts the right way.
     bool auto_start_early_departure = false;
+    // The roadbook as EDITED: what the stage-setup screen shows, what a
+    // memory slot stores and recalls. Nothing here affects a stage that is
+    // already running.
     std::vector<Segment> segments;
+
+    // The roadbook the running stage is actually judged against -- a
+    // snapshot of `segments` taken when the stage STARTS (its clock zeroes),
+    // and the vector `segment_current_number` indexes.
+    //
+    // Two vectors rather than one because the ideal-position maths
+    // re-integrates the whole roadbook from segment 0 on every frame. With a
+    // single shared list, editing a segment or recalling a memory slot to
+    // prepare the NEXT stage rewrote the running stage's history: the crew
+    // drove twenty minutes against one set of targets and the box then
+    // insisted they should have been driving another.
+    std::vector<Segment> stage_segments;
+    // False when the config file that was loaded predates stage_segments, so
+    // load() can seed the snapshot from `segments`. Not persisted.
+    bool stage_segments_recorded = true;
+
+    // False only while a stage is genuinely under way -- started, and not
+    // yet driven past the end of its last segment. While it is false the
+    // snapshot is frozen; once true an edit or a recall is adopted straight
+    // away, so the crew see what they have just set instead of the stage
+    // they have already finished. Starts true: nothing is under way until
+    // something starts.
+    bool stage_complete = true;
     
     // Up to 5 memory slots for storing/recalling segment setups
     static constexpr int MAX_MEMORY_SLOTS = 5;

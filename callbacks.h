@@ -56,6 +56,10 @@ void zeroTimeBaselines(AppData* data);
 // Fires a pending autostart, branching on which kind it is.
 void performAutoStart(AppData* data);
 
+// Adopts the edited roadbook as the stage roadbook, but only when no stage is
+// under way. Call after any change to state->segments.
+void adoptRoadbookIfIdle(AppData* data);
+
 // Replaces the armed autostart wholesale (see AutoStartArming). Every
 // arming, re-arming and clearing path goes through here, so a press always
 // overrules whatever was pending rather than merging with it.

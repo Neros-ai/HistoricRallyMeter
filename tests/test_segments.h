@@ -186,6 +186,47 @@ public:
             return true;
         });
         
+        suite->addTest("editing the roadbook does not touch the running stage", []() {
+            // The stage is judged against the snapshot taken when it started.
+            // Editing segments, or recalling a memory slot over them, is
+            // preparation for the NEXT stage and must leave this one alone.
+            RallyState state;
+            state.calibration = 1000000;   // 1 count per metre
+            Segment slow{}; slow.target_speed_counts_per_hour = 3600000.0;
+            slow.distance_counts = 10000.0;
+            state.stage_segments = { slow };
+            state.segments = { slow };
+            state.segment_current_number = 0;
+
+            double before = calculateIdealCountsFromStageStart(state, 10000);
+
+            // The crew load a completely different roadbook for the next stage.
+            Segment fast{}; fast.target_speed_counts_per_hour = 36000000.0;
+            fast.distance_counts = 10000.0;
+            state.segments = { fast };
+
+            ASSERT_NEAR(calculateIdealCountsFromStageStart(state, 10000), before, 0.001);
+            return true;
+        });
+
+        suite->addTest("a stage is complete once its own distance is driven out", []() {
+            Segment a{}; a.distance_counts = 1000.0;
+            Segment b{}; b.distance_counts = 2000.0;
+            std::vector<Segment> stage = { a, b };
+            ASSERT_FALSE(stageDistanceComplete(stage, 0));
+            ASSERT_FALSE(stageDistanceComplete(stage, 2999));
+            ASSERT_TRUE(stageDistanceComplete(stage, 3000));
+            return true;
+        });
+
+        suite->addTest("a stage with no segments is complete before it begins", []() {
+            // Nothing to drive out, so nothing to protect: an edit is adopted
+            // straight away rather than waiting for a distance that will
+            // never be covered.
+            ASSERT_TRUE(stageDistanceComplete({}, 0));
+            return true;
+        });
+
         return suite;
     }
 };

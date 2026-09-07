@@ -209,8 +209,8 @@ void updateCopilotDisplay(AppData* data) {
     
     // Next segment info: distance remaining in current segment + speed of next segment
     if (data->state->segment_current_number >= 0 &&
-        data->state->segment_current_number < static_cast<long>(data->state->segments.size())) {
-        const Segment& cur_seg = data->state->segments[data->state->segment_current_number];
+        data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
+        const Segment& cur_seg = data->state->stage_segments[data->state->segment_current_number];
         int64_t seg_count_diff = calculateDistanceCounts(*data->state,
             current_poll.cntr1, current_poll.cntr2,
             data->state->segment_start_cntr1, data->state->segment_start_cntr2);
@@ -225,8 +225,8 @@ void updateCopilotDisplay(AppData* data) {
         gtk_label_set_text(data->nextUnitLabel, next_unit);
         
         long next_seg_idx = data->state->segment_current_number + 1;
-        if (next_seg_idx < static_cast<long>(data->state->segments.size())) {
-            const Segment& next_seg = data->state->segments[next_seg_idx];
+        if (next_seg_idx < static_cast<long>(data->state->stage_segments.size())) {
+            const Segment& next_seg = data->state->stage_segments[next_seg_idx];
             ss.str("");
             ss << std::fixed << std::setprecision(0) << next_seg.target_speed_kph << " kph";
             gtk_label_set_text(data->nextSpeedLabel, ss.str().c_str());
@@ -236,7 +236,7 @@ void updateCopilotDisplay(AppData* data) {
         
         // next/prev button: active within 500m of segment end or start
         bool near_end = (remaining_m >= 0 && remaining_m <= 500) &&
-                        (next_seg_idx < static_cast<long>(data->state->segments.size()));
+                        (next_seg_idx < static_cast<long>(data->state->stage_segments.size()));
         bool near_start = (travelled_m >= 0 && travelled_m <= 500) &&
                           (data->state->segment_current_number > 0);
         if (near_end) {
@@ -249,7 +249,7 @@ void updateCopilotDisplay(AppData* data) {
             gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "--->");
             gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
         }
-    } else if (data->state->segments.empty()) {
+    } else if (data->state->stage_segments.empty()) {
         gtk_label_set_text(data->nextDistLabel, "---.---");
         gtk_label_set_text(data->nextUnitLabel, "m");
         gtk_label_set_text(data->nextSpeedLabel, "---");

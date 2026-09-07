@@ -520,8 +520,8 @@ void updateDriverDisplay(AppData* data) {
     
     // Target speed and ahead/behind
     if (data->state->segment_current_number >= 0 && 
-        data->state->segment_current_number < static_cast<long>(data->state->segments.size())) {
-        const Segment& seg = data->state->segments[data->state->segment_current_number];
+        data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
+        const Segment& seg = data->state->stage_segments[data->state->segment_current_number];
         double target_kph = countsPerHourToKPH(seg.target_speed_counts_per_hour, data->state->calibration);
         if (data->state->units) {
             target_kph = target_kph * 0.621371;  // Convert to MPH
@@ -633,7 +633,7 @@ void updateDriverDisplay(AppData* data) {
             if (data->toneGen) {
                 double stage_dist_m = countsToMeters(total_count_diff_ab, data->state->calibration);
                 double total_stage_counts = 0.0;
-                for (const auto& s : data->state->segments)
+                for (const auto& s : data->state->stage_segments)
                     total_stage_counts += s.distance_counts;
                 bool past_stage_end = (static_cast<double>(total_count_diff_ab) >= total_stage_counts);
                 bool in_tone_zone = (stage_dist_m >= 250.0) && !past_stage_end;
@@ -682,8 +682,8 @@ void updateDriverDisplay(AppData* data) {
     
     // Next segment info
     if (data->state->segment_current_number >= 0 && 
-        data->state->segment_current_number < static_cast<long>(data->state->segments.size()) - 1) {
-        const Segment& current_seg = data->state->segments[data->state->segment_current_number];
+        data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size()) - 1) {
+        const Segment& current_seg = data->state->stage_segments[data->state->segment_current_number];
         int64_t seg_count_diff = calculateDistanceCounts(*data->state,
             current_poll.cntr1, current_poll.cntr2,
             data->state->segment_start_cntr1, data->state->segment_start_cntr2);
@@ -691,7 +691,7 @@ void updateDriverDisplay(AppData* data) {
         double remaining_counts = current_seg.distance_counts - static_cast<double>(seg_count_diff);
         double remaining_m = countsToMeters(static_cast<int64_t>(remaining_counts), data->state->calibration);
         
-        const Segment& next_seg = data->state->segments[data->state->segment_current_number + 1];
+        const Segment& next_seg = data->state->stage_segments[data->state->segment_current_number + 1];
         double next_target = countsPerHourToKPH(next_seg.target_speed_counts_per_hour, data->state->calibration);
         if (data->state->units) {
             next_target = next_target * 0.621371;

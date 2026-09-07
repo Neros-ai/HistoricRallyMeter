@@ -60,6 +60,12 @@ double calculateAheadBehindFromStageStart(const RallyState& state, int64_t curre
 // a number the operator does not already recognise from the segments page.
 std::string stageSummary(const std::vector<Segment>& segments);
 
+// True once the car has covered the whole of `segs` -- the stage's own
+// distance, summed from its segments, against the counts driven since the
+// stage started. The point at which the stage is over and its roadbook is no
+// longer the one the crew are working to.
+bool stageDistanceComplete(const std::vector<Segment>& segs, int64_t stage_counts);
+
 // ---- Autostart -------------------------------------------------------------
 
 // The stored autostart target, converted to and from a wall-clock instant.

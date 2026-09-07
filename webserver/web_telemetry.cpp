@@ -15,12 +15,12 @@ NextPrevState computeNextPrevState(AppData* data) {
     if (!data || !data->state || !data->poller) return out;
 
     if (data->state->segment_current_number < 0 ||
-        data->state->segment_current_number >= static_cast<long>(data->state->segments.size())) {
+        data->state->segment_current_number >= static_cast<long>(data->state->stage_segments.size())) {
         return out;
     }
 
     auto current_poll = data->poller->getMostRecent();
-    const Segment& cur_seg = data->state->segments[data->state->segment_current_number];
+    const Segment& cur_seg = data->state->stage_segments[data->state->segment_current_number];
     int64_t seg_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
         data->state->segment_start_cntr1, data->state->segment_start_cntr2);
@@ -30,7 +30,7 @@ NextPrevState computeNextPrevState(AppData* data) {
 
     long next_seg_idx = data->state->segment_current_number + 1;
     bool near_end = (remaining_m >= 0 && remaining_m <= 500) &&
-                    (next_seg_idx < static_cast<long>(data->state->segments.size()));
+                    (next_seg_idx < static_cast<long>(data->state->stage_segments.size()));
     bool near_start = (travelled_m >= 0 && travelled_m <= 500) &&
                       (data->state->segment_current_number > 0);
 
@@ -77,8 +77,8 @@ std::string buildTelemetryJson(AppData* data) {
     double target_kph = 0.0;
     double ahead_behind_s = 0.0;
     if (data->state->segment_current_number >= 0 &&
-        data->state->segment_current_number < static_cast<long>(data->state->segments.size())) {
-        const Segment& seg = data->state->segments[data->state->segment_current_number];
+        data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
+        const Segment& seg = data->state->stage_segments[data->state->segment_current_number];
         target_kph = countsPerHourToKPH(seg.target_speed_counts_per_hour, data->state->calibration);
         ahead_behind_s = calculateAheadBehindFromStageStart(*data->state, current_time_ms, total_count_diff);
         ahead_behind_s += data->state->ahead_behind_zero_offset_ms / 1000.0;
@@ -112,7 +112,7 @@ std::string buildTelemetryJson(AppData* data) {
         displayKph(data, target_kph),
         ahead_behind_s,
         data->state->segment_current_number >= 0 ? data->state->segment_current_number + 1 : 0,
-        data->state->segments.size(),
+        data->state->stage_segments.size(),
         np.label,
         np.enabled ? "true" : "false",
         data->state->units ? "mph" : "kph");

@@ -48,7 +48,12 @@ test: $(TEST_TARGET)
 $(TEST_TARGET): $(TEST_OBJECTS)
 	$(CXX) $(CXXFLAGS_TEST) -o $(TEST_TARGET) $(TEST_OBJECTS)
 
-tests/test_main.o: tests/test_main.cpp tests/*.h
+# $(HEADERS) as well as the test headers: without it a change to rally_state.h
+# rebuilt config_file_test.o but NOT this object, leaving two translation units
+# with different ideas of RallyState's layout linked together -- which shows up
+# as a segfault or "free(): invalid pointer" in an unrelated test rather than
+# as a build error.
+tests/test_main.o: tests/test_main.cpp tests/*.h $(HEADERS)
 	$(CXX) $(CXXFLAGS_TEST) -c tests/test_main.cpp -o tests/test_main.o
 
 calculations_test.o: calculations.cpp calculations.h rally_state.h rally_types.h
