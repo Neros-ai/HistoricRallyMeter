@@ -163,8 +163,16 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.total_distance_adjust_cm = static_cast<long>(extractLong(line));
         } else if (line.find("\"trip_distance_adjust_cm\"") != std::string::npos) {
             state.trip_distance_adjust_cm = static_cast<long>(extractLong(line));
+        } else if (line.find("\"auto_start_rally_time_s\"") != std::string::npos) {
+            state.auto_start_rally_time_s = static_cast<uint64_t>(extractLong(line));
         } else if (line.find("\"auto_start_rally_time_minutes\"") != std::string::npos) {
-            state.auto_start_rally_time_minutes = static_cast<uint64_t>(extractLong(line));
+            // Pre-seconds config: carry a pending autostart across the upgrade
+            // rather than silently dropping it. Only honoured if the seconds
+            // key has not already been read.
+            if (state.auto_start_rally_time_s == 0) {
+                state.auto_start_rally_time_s =
+                    static_cast<uint64_t>(extractLong(line)) * 60;
+            }
         } else if (line.find("\"driver_window_x\"") != std::string::npos) {
             state.driver_window_x = static_cast<int>(extractLong(line));
         } else if (line.find("\"driver_window_y\"") != std::string::npos) {
@@ -274,7 +282,7 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"ahead_behind_zero_offset_ms\": " << state.ahead_behind_zero_offset_ms << ",\n";
     file << "  \"total_distance_adjust_cm\": " << state.total_distance_adjust_cm << ",\n";
     file << "  \"trip_distance_adjust_cm\": " << state.trip_distance_adjust_cm << ",\n";
-    file << "  \"auto_start_rally_time_minutes\": " << state.auto_start_rally_time_minutes << ",\n";
+    file << "  \"auto_start_rally_time_s\": " << state.auto_start_rally_time_s << ",\n";
     file << "  \"driver_window_x\": " << state.driver_window_x << ",\n";
     file << "  \"driver_window_y\": " << state.driver_window_y << ",\n";
     file << "  \"driver_window_width\": " << state.driver_window_width << ",\n";

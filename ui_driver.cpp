@@ -805,14 +805,14 @@ void updateDriverDisplay(AppData* data) {
     }
     
     // Auto-start countdown overlay
-    if (data->state->auto_start_rally_time_minutes > 0 && !data->autoStartTriggered) {
+    if (data->state->auto_start_rally_time_s > 0 && !data->autoStartTriggered) {
         struct tm epoch_tm = {};
         epoch_tm.tm_year = 120;
         epoch_tm.tm_mon = 0;
         epoch_tm.tm_mday = 1;
         int64_t epoch_ms = static_cast<int64_t>(mktime(&epoch_tm)) * 1000;
-        int64_t target_ms = epoch_ms + 
-            static_cast<int64_t>(data->state->auto_start_rally_time_minutes) * 60000;
+        int64_t target_ms = autoStartTargetMsFromSeconds(
+            data->state->auto_start_rally_time_s, epoch_ms);
         int64_t diff_ms = target_ms - current_time_ms;
         
         if (diff_ms > 0 && diff_ms <= 24LL * 3600 * 1000) {

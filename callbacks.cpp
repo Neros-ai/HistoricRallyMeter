@@ -301,8 +301,8 @@ static std::string formatHms(int64_t epoch_ms) {
 static void setAutoStartToNextRoundMinute(AppData* data) {
     int64_t target_ms = nextRoundMinute_ms(getRallyTime_ms(*data->state));
     int64_t epoch_ms = getAutoStartEpochMs();
-    data->state->auto_start_rally_time_minutes =
-        static_cast<uint64_t>((target_ms - epoch_ms) / 60000);
+    data->state->auto_start_rally_time_s =
+        autoStartSecondsFromTargetMs(target_ms, epoch_ms);
     data->autoStartTriggered = false;
 
     // Early departure: distance zeroes NOW, the clock zeroes at the minute.
@@ -1403,9 +1403,9 @@ void on_show_autostart(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     gtk_stack_set_visible_child_name(data->copilotStack, "autostart");
     data->activeEntry = data->autoStartTimeEntry;
     
-    if (data->state->auto_start_rally_time_minutes > 0) {
-        int64_t target_ms = getAutoStartEpochMs() + 
-            static_cast<int64_t>(data->state->auto_start_rally_time_minutes) * 60000;
+    if (data->state->auto_start_rally_time_s > 0) {
+        int64_t target_ms = autoStartTargetMsFromSeconds(
+            data->state->auto_start_rally_time_s, getAutoStartEpochMs());
         time_t target_s = target_ms / 1000;
         struct tm* t = localtime(&target_s);
         char buf[16];
@@ -1429,9 +1429,9 @@ void updateAutoStartDisplay(AppData* data) {
              rally_tm->tm_hour, rally_tm->tm_min, rally_tm->tm_sec);
     gtk_label_set_text(data->autoStartRallyClockLabel, buf);
     
-    if (data->state->auto_start_rally_time_minutes > 0) {
-        int64_t target_ms = getAutoStartEpochMs() + 
-            static_cast<int64_t>(data->state->auto_start_rally_time_minutes) * 60000;
+    if (data->state->auto_start_rally_time_s > 0) {
+        int64_t target_ms = autoStartTargetMsFromSeconds(
+            data->state->auto_start_rally_time_s, getAutoStartEpochMs());
         time_t target_s = target_ms / 1000;
         struct tm* t = localtime(&target_s);
         snprintf(buf, sizeof(buf), "%04d/%02d/%02d  %02d:%02d:%02d",
@@ -1476,8 +1476,8 @@ void on_autostart_set(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     
     int64_t epoch_ms = getAutoStartEpochMs();
     data->state->auto_start_early_departure = false;
-    data->state->auto_start_rally_time_minutes = 
-        static_cast<uint64_t>((target_ms - epoch_ms) / 60000);
+    data->state->auto_start_rally_time_s =
+        autoStartSecondsFromTargetMs(target_ms, epoch_ms);
     data->autoStartTriggered = false;
     
     ConfigFile::save(*data->state);
@@ -1486,7 +1486,7 @@ void on_autostart_set(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 
 void on_autostart_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
-    data->state->auto_start_rally_time_minutes = 0;
+    data->state->auto_start_rally_time_s = 0;
     data->state->auto_start_early_departure = false;
     data->autoStartTriggered = false;
     ConfigFile::save(*data->state);

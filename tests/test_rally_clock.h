@@ -195,6 +195,43 @@ public:
             return true;
         });
         
+        // ---- autostart target storage ----
+        // The target was stored as MINUTES since the epoch, so on_autostart_set
+        // parsed and validated HH:MM:SS and then truncated the seconds away --
+        // an autostart set for 10:30:45 fired at 10:30:00, 45 seconds early.
+
+        suite->addTest("an autostart target keeps its seconds", []() {
+            int64_t epoch_ms = 1000000000000LL;
+            int64_t target_ms = epoch_ms + (10 * 3600 + 30 * 60 + 45) * 1000LL;
+            uint64_t stored = autoStartSecondsFromTargetMs(target_ms, epoch_ms);
+            ASSERT_EQ(autoStartTargetMsFromSeconds(stored, epoch_ms), target_ms);
+            return true;
+        });
+
+        suite->addTest("an autostart target on a whole minute round-trips too", []() {
+            int64_t epoch_ms = 1000000000000LL;
+            int64_t target_ms = epoch_ms + (10 * 3600 + 30 * 60) * 1000LL;
+            uint64_t stored = autoStartSecondsFromTargetMs(target_ms, epoch_ms);
+            ASSERT_EQ(autoStartTargetMsFromSeconds(stored, epoch_ms), target_ms);
+            return true;
+        });
+
+        suite->addTest("sub-second precision is not claimed", []() {
+            // Seconds are the stored resolution: a target 400ms past the second
+            // lands on that second, not the next one.
+            int64_t epoch_ms = 1000000000000LL;
+            int64_t target_ms = epoch_ms + 45 * 1000LL + 400;
+            uint64_t stored = autoStartSecondsFromTargetMs(target_ms, epoch_ms);
+            ASSERT_EQ(autoStartTargetMsFromSeconds(stored, epoch_ms), epoch_ms + 45000);
+            return true;
+        });
+
+        suite->addTest("a target at the epoch stores as zero, meaning not set", []() {
+            int64_t epoch_ms = 1000000000000LL;
+            ASSERT_EQ(autoStartSecondsFromTargetMs(epoch_ms, epoch_ms), 0u);
+            return true;
+        });
+
         return suite;
     }
 };

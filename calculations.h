@@ -55,6 +55,14 @@ double calculateAverageSpeed(const RallyState& state, int64_t start_time_ms,
 // cannot disagree about what is coming.
 bool nextSegmentTargetKph(const RallyState& state, double* kph);
 
+// Autostart target <-> stored form. The target is stored as SECONDS since the
+// autostart epoch. It used to be minutes, which silently truncated: the setup
+// screen parsed and validated HH:MM:SS and then dropped the seconds, so an
+// autostart set for 10:30:45 fired at 10:30:00 -- 45 seconds early, on a
+// screen whose whole purpose is starting at an exact time.
+uint64_t autoStartSecondsFromTargetMs(int64_t target_ms, int64_t epoch_ms);
+int64_t autoStartTargetMsFromSeconds(uint64_t seconds, int64_t epoch_ms);
+
 // Calculate seconds ahead/behind target (high precision) - single segment
 double calculateAheadBehind(const RallyState& state, int64_t current_time_ms,
                           int64_t segment_start_time, double target_counts_per_hour,

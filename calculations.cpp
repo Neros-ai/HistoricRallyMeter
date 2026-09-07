@@ -388,6 +388,16 @@ bool nextSegmentTargetKph(const RallyState& state, double* kph) {
     return true;
 }
 
+uint64_t autoStartSecondsFromTargetMs(int64_t target_ms, int64_t epoch_ms) {
+    int64_t delta_ms = target_ms - epoch_ms;
+    if (delta_ms < 0) return 0;
+    return static_cast<uint64_t>(delta_ms / 1000);
+}
+
+int64_t autoStartTargetMsFromSeconds(uint64_t seconds, int64_t epoch_ms) {
+    return epoch_ms + static_cast<int64_t>(seconds) * 1000;
+}
+
 bool navigationBeepDue(double waypoint_m, double travelled_m, double advance_m) {
     return travelled_m >= waypoint_m - advance_m;
 }

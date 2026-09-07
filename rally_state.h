@@ -34,7 +34,11 @@ public:
     long total_distance_adjust_cm = 0;
     long trip_distance_adjust_cm = 0;
 
-    uint64_t auto_start_rally_time_minutes = 0;  // minutes since 1/1/2020, 0 = not set
+    // Seconds since 1/1/2020, 0 = not set. Seconds, not minutes: the setup
+    // screen accepts HH:MM:SS and a minute-resolution store threw the seconds
+    // away, firing early by up to 59s on the one screen that exists to start
+    // at an exact time.
+    uint64_t auto_start_rally_time_s = 0;
     // True when the pending autostart was armed by "Autostart at next minute",
     // which zeroes DISTANCE at the moment it is armed and the CLOCK at the
     // appointed minute -- so distance covered before the due time still counts

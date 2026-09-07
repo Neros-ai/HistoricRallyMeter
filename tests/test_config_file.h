@@ -371,6 +371,32 @@ public:
             return true;
         });
 
+        suite->addTest("a pre-seconds config still arms its autostart", []() {
+            // The field was minutes since the epoch; a config written by an
+            // older build must not silently lose a pending autostart.
+            RallyState state;
+            std::string path = "/tmp/rb_test_autostart_legacy.json";
+            std::ofstream f(path);
+            f << "{\n  \"auto_start_rally_time_minutes\": 600\n}\n";
+            f.close();
+            ConfigFile::load(state, path);
+            ASSERT_EQ(state.auto_start_rally_time_s, 36000u);  // 600 min = 36000 s
+            std::remove(path.c_str());
+            return true;
+        });
+
+        suite->addTest("autostart seconds survive a save/load round trip", []() {
+            RallyState state;
+            state.auto_start_rally_time_s = 37845;  // 10:30:45 past the epoch
+            std::string path = "/tmp/rb_test_autostart_s.json";
+            ConfigFile::save(state, path);
+            RallyState loaded;
+            ConfigFile::load(loaded, path);
+            ASSERT_EQ(loaded.auto_start_rally_time_s, 37845u);
+            std::remove(path.c_str());
+            return true;
+        });
+
         return suite;
     }
 };
