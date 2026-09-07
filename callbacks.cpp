@@ -90,22 +90,31 @@ static void applyDialogStyle(GtkWidget* dialog) {
     }
 }
 
-void performStageGo(AppData* data) {
+// Distance and clock are zeroed separately so an early departure can zero
+// one without the other: the pair used to be a single "start the stage"
+// step, which is why there was no way to arm a start that had already begun
+// measuring distance.
+void zeroDistanceBaselines(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
-    int64_t current_time = getRallyTime_ms(*data->state);
 
     data->state->total_start_cntr1 = current_poll.cntr1;
     data->state->total_start_cntr2 = current_poll.cntr2;
-    data->state->total_start_time_ms = current_time;
-
     data->state->trip_start_cntr1 = current_poll.cntr1;
     data->state->trip_start_cntr2 = current_poll.cntr2;
-    data->state->trip_start_time_ms = current_time;
-
     data->state->segment_start_cntr1 = current_poll.cntr1;
     data->state->segment_start_cntr2 = current_poll.cntr2;
+}
+
+void zeroTimeBaselines(AppData* data) {
+    int64_t current_time = getRallyTime_ms(*data->state);
+
+    data->state->total_start_time_ms = current_time;
+    data->state->trip_start_time_ms = current_time;
     data->state->segment_start_time_ms = current_time;
 
+    // The stage becomes active with the CLOCK, not with the distance, so an
+    // early departure stays off schedule until the appointed minute even
+    // though it is already accumulating distance.
     if (!data->state->segments.empty()) {
         data->state->segment_current_number = 0;
     }
@@ -115,12 +124,71 @@ void performStageGo(AppData* data) {
     data->aheadBehindSeconds = 0.0;
     data->smoothedSpeed = -1.0;
     data->state->ahead_behind_zero_offset_ms = 0;
-    data->autoStartTriggered = false;
-    
+
     if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
-    
+}
+
+// Replaces the armed autostart wholesale (see AutoStartArming), so a press
+// always overrules whatever was pending rather than merging with it.
+void applyAutoStartArming(AppData* data, const AutoStartArming& arming) {
+    data->state->auto_start_rally_time_s = arming.rally_time_s;
+    data->state->auto_start_early_departure = arming.early_departure;
+    data->autoStartTriggered = arming.triggered;
+    if (arming.zero_distance_now) zeroDistanceBaselines(data);
+
     ConfigFile::save(*data->state);
     notifyWebState(data);
+}
+
+void performStageGo(AppData* data) {
+    zeroDistanceBaselines(data);
+    zeroTimeBaselines(data);
+
+    // The pending autostart is cancelled outright. Reached two ways, and
+    // both want that: an autostart that has just fired is spent, and a
+    // manual "Now" must not leave a target armed to silently re-zero the
+    // stage a minute after the crew started it by hand.
+    //
+    // Deliberately does NOT clear autoStartTriggered, which the driver
+    // display sets just before calling this on the autostart tick: clearing
+    // it would let the same 2-second trigger window re-enter on every 10ms
+    // frame, re-zeroing the baselines and rewriting the config file a couple
+    // of hundred times.
+    data->state->auto_start_rally_time_s = 0;
+    data->state->auto_start_early_departure = false;
+
+    ConfigFile::save(*data->state);
+    notifyWebState(data);
+}
+
+void performAutoStart(AppData* data) {
+    if (data->state->auto_start_early_departure) {
+        // Distance was zeroed when the operator armed this, so only the
+        // clock starts now and everything rolled on the way to the line
+        // counts toward the stage distance -- and therefore toward its
+        // average speed.
+        zeroTimeBaselines(data);
+        data->state->auto_start_rally_time_s = 0;
+        data->state->auto_start_early_departure = false;
+        ConfigFile::save(*data->state);
+        notifyWebState(data);
+        return;
+    }
+    performStageGo(data);
+}
+
+int64_t autoStartRemaining_ms(const AppData* data) {
+    if (data->state->auto_start_rally_time_s == 0) return 0;
+    return autoStartTargetMsFromSeconds(data->state->auto_start_rally_time_s,
+                                        getAutoStartEpochMs())
+           - getRallyTime_ms(*data->state);
+}
+
+bool autoStartHoldActive(const AppData* data) {
+    return autoStartHoldsTimeError(data->state->auto_start_rally_time_s,
+                                   data->state->auto_start_early_departure,
+                                   data->autoStartTriggered,
+                                   autoStartRemaining_ms(data));
 }
 
 static const int RESPONSE_AUTO_START = 99;
@@ -128,7 +196,7 @@ static const int RESPONSE_AUTO_START_NEXT_MINUTE = 98;
 
 // Defined further down (used by on_show_autostart/on_autostart_set); forward
 // declared here so the quick-set button below can share the same epoch.
-static int64_t getAutoStartEpochMs();
+int64_t getAutoStartEpochMs();
 
 // Always the *next* minute boundary, even if rally_ms already sits exactly on
 // one -- the quick-set button's printed time must still be ahead when pressed.
@@ -147,12 +215,12 @@ static std::string formatHms(int64_t epoch_ms) {
 // Commits the autostart time directly (no manual entry needed), reusing the
 // same state field and epoch as the "Set Autostart" screen.
 static void setAutoStartToNextRoundMinute(AppData* data) {
+    // Early departure: distance zeroes NOW, the clock zeroes at the minute.
+    // Anything rolled between the two counts toward the stage distance and
+    // so toward the average speed, which is the point -- the car leaves
+    // before its due time and the roadbook still starts at the minute.
     int64_t target_ms = nextRoundMinute_ms(getRallyTime_ms(*data->state));
-    int64_t epoch_ms = getAutoStartEpochMs();
-    data->state->auto_start_rally_time_minutes =
-        static_cast<uint64_t>((target_ms - epoch_ms) / 60000);
-    data->autoStartTriggered = false;
-    ConfigFile::save(*data->state);
+    applyAutoStartArming(data, autoStartArming(target_ms, getAutoStartEpochMs(), true));
 }
 
 void on_stage_go(GtkWidget* widget, gpointer user_data) {
@@ -1091,7 +1159,7 @@ void on_save_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 }
 
 // Epoch for auto_start: 2020-01-01 00:00:00 local time
-static int64_t getAutoStartEpochMs() {
+int64_t getAutoStartEpochMs() {
     struct tm epoch_tm = {};
     epoch_tm.tm_year = 120;  // 2020
     epoch_tm.tm_mon = 0;
@@ -1104,9 +1172,9 @@ void on_show_autostart(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     gtk_stack_set_visible_child_name(data->copilotStack, "autostart");
     data->activeEntry = data->autoStartTimeEntry;
     
-    if (data->state->auto_start_rally_time_minutes > 0) {
-        int64_t target_ms = getAutoStartEpochMs() + 
-            static_cast<int64_t>(data->state->auto_start_rally_time_minutes) * 60000;
+    if (data->state->auto_start_rally_time_s > 0) {
+        int64_t target_ms = autoStartTargetMsFromSeconds(
+            data->state->auto_start_rally_time_s, getAutoStartEpochMs());
         time_t target_s = target_ms / 1000;
         struct tm* t = localtime(&target_s);
         char buf[16];
@@ -1130,9 +1198,9 @@ void updateAutoStartDisplay(AppData* data) {
              rally_tm->tm_hour, rally_tm->tm_min, rally_tm->tm_sec);
     gtk_label_set_text(data->autoStartRallyClockLabel, buf);
     
-    if (data->state->auto_start_rally_time_minutes > 0) {
-        int64_t target_ms = getAutoStartEpochMs() + 
-            static_cast<int64_t>(data->state->auto_start_rally_time_minutes) * 60000;
+    if (data->state->auto_start_rally_time_s > 0) {
+        int64_t target_ms = autoStartTargetMsFromSeconds(
+            data->state->auto_start_rally_time_s, getAutoStartEpochMs());
         time_t target_s = target_ms / 1000;
         struct tm* t = localtime(&target_s);
         snprintf(buf, sizeof(buf), "%04d/%02d/%02d  %02d:%02d:%02d",
@@ -1175,20 +1243,15 @@ void on_autostart_set(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         return;
     }
     
-    int64_t epoch_ms = getAutoStartEpochMs();
-    data->state->auto_start_rally_time_minutes = 
-        static_cast<uint64_t>((target_ms - epoch_ms) / 60000);
-    data->autoStartTriggered = false;
-    
-    ConfigFile::save(*data->state);
+    // Supersedes an early-departure autostart if one is armed, kind and all
+    // -- this one arms nothing and zeroes nothing until it fires.
+    applyAutoStartArming(data, autoStartArming(target_ms, getAutoStartEpochMs(), false));
     updateAutoStartDisplay(data);
 }
 
 void on_autostart_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
-    data->state->auto_start_rally_time_minutes = 0;
-    data->autoStartTriggered = false;
-    ConfigFile::save(*data->state);
+    applyAutoStartArming(data, autoStartDisarmed());
     gtk_entry_set_text(data->autoStartTimeEntry, "");
     updateAutoStartDisplay(data);
 }

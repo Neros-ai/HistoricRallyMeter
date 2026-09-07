@@ -195,6 +195,111 @@ public:
             return true;
         });
         
+        suite->addTest("an autostart target round-trips through seconds", []() {
+            // Seconds are the stored resolution: a target 400ms past the
+            // second lands on that second, not the next one -- and not on
+            // the next MINUTE, which is what minute-resolution storage did.
+            int64_t epoch_ms = 1000000000000LL;
+            int64_t target_ms = epoch_ms + 45 * 1000LL + 400;
+            uint64_t stored = autoStartSecondsFromTargetMs(target_ms, epoch_ms);
+            ASSERT_EQ(autoStartTargetMsFromSeconds(stored, epoch_ms), epoch_ms + 45000);
+            return true;
+        });
+
+        suite->addTest("a target at the epoch stores as zero, meaning not set", []() {
+            int64_t epoch_ms = 1000000000000LL;
+            ASSERT_EQ(autoStartSecondsFromTargetMs(epoch_ms, epoch_ms), 0u);
+            return true;
+        });
+
+        suite->addTest("an arming press overrules whatever was armed before", []() {
+            // The whole point of AutoStartArming being assigned wholesale:
+            // no field of the previous arming survives into the new one.
+            int64_t epoch_ms = 1000000000000LL;
+            AutoStartArming existing = autoStartArming(epoch_ms + 600000, epoch_ms, true);
+            existing.triggered = true;
+
+            existing = autoStartArming(epoch_ms + 120000, epoch_ms, false);
+            ASSERT_EQ(existing.rally_time_s, 120u);
+            ASSERT_FALSE(existing.early_departure);
+            ASSERT_FALSE(existing.triggered);
+            ASSERT_FALSE(existing.zero_distance_now);
+            return true;
+        });
+
+        suite->addTest("re-arming on the same target time still fully re-arms", []() {
+            // Pressing the minute button twice inside the same minute gives
+            // the same target. It must still come out a complete, fresh
+            // arming rather than be treated as a no-op because nothing moved.
+            int64_t epoch_ms = 1000000000000LL;
+            int64_t target_ms = epoch_ms + 60000;
+            AutoStartArming first = autoStartArming(target_ms, epoch_ms, true);
+            first.triggered = true;
+            AutoStartArming second = autoStartArming(target_ms, epoch_ms, true);
+            ASSERT_EQ(second.rally_time_s, first.rally_time_s);
+            ASSERT_TRUE(second.early_departure);
+            ASSERT_FALSE(second.triggered);
+            ASSERT_TRUE(second.zero_distance_now);
+            return true;
+        });
+
+        suite->addTest("only the early-departure kind zeroes distance at arming", []() {
+            int64_t epoch_ms = 1000000000000LL;
+            ASSERT_TRUE(autoStartArming(epoch_ms + 60000, epoch_ms, true).zero_distance_now);
+            ASSERT_FALSE(autoStartArming(epoch_ms + 60000, epoch_ms, false).zero_distance_now);
+            return true;
+        });
+
+        suite->addTest("disarming leaves nothing armed", []() {
+            AutoStartArming off = autoStartDisarmed();
+            ASSERT_EQ(off.rally_time_s, 0u);
+            ASSERT_FALSE(off.early_departure);
+            ASSERT_FALSE(off.triggered);
+            ASSERT_FALSE(off.zero_distance_now);
+            ASSERT_FALSE(autoStartHoldsTimeError(off.rally_time_s, off.early_departure,
+                                                 off.triggered, 16000));
+            return true;
+        });
+
+        suite->addTest("an early departure holds the stage readouts at zero", []() {
+            ASSERT_TRUE(autoStartHoldsTimeError(45, true, false, 16000));
+            ASSERT_TRUE(autoStartHoldsTimeError(45, true, false, 1));
+            return true;
+        });
+
+        suite->addTest("the hold releases the moment the autostart fires", []() {
+            ASSERT_FALSE(autoStartHoldsTimeError(45, true, false, 0));
+            ASSERT_FALSE(autoStartHoldsTimeError(45, true, true, 16000));
+            return true;
+        });
+
+        suite->addTest("only the early-departure kind holds the readouts", []() {
+            // A target set on the Set Autostart screen arms nothing and
+            // zeroes nothing until it fires, so a stage already under way
+            // keeps its real figures while that one counts down.
+            ASSERT_FALSE(autoStartHoldsTimeError(45, false, false, 16000));
+            ASSERT_FALSE(autoStartHoldsTimeError(0, true, false, 16000));
+            return true;
+        });
+
+        suite->addTest("a stale autostart target does not hold anything at zero", []() {
+            // A target left in a config file from a previous rally never
+            // fires, so a hold keyed only on "armed and not triggered" would
+            // peg the readouts for the whole of the next one.
+            ASSERT_FALSE(autoStartHoldsTimeError(45, true, false, -90000));
+            ASSERT_FALSE(autoStartHoldsTimeError(45, true, false, 25LL * 3600 * 1000));
+            return true;
+        });
+
+        suite->addTest("the average speed is held at zero while the autostart holds", []() {
+            // The distance baselines are zeroed at arming but the clock keeps
+            // running, so an unheld average reads as road speed the moment
+            // the car creeps toward the line.
+            ASSERT_NEAR(averageSpeedForDisplay(42.5, true), 0.0, 0.0001);
+            ASSERT_NEAR(averageSpeedForDisplay(42.5, false), 42.5, 0.0001);
+            return true;
+        });
+
         return suite;
     }
 };

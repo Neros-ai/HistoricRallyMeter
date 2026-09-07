@@ -208,6 +208,39 @@ public:
             ASSERT_EQ(state.segment_current_number, -1);
             return true;
         });
+        suite->addTest("the autostart target round-trips in seconds", []() {
+            RallyState state;
+            state.auto_start_rally_time_s = 45296;
+            state.auto_start_early_departure = true;
+            std::string path = "/tmp/rb_test_autostart_seconds.json";
+            ConfigFile::save(state, path);
+
+            RallyState loaded;
+            ConfigFile::load(loaded, path);
+            ASSERT_EQ(loaded.auto_start_rally_time_s, 45296u);
+            ASSERT_TRUE(loaded.auto_start_early_departure);
+            std::remove(path.c_str());
+            return true;
+        });
+
+        suite->addTest("a pre-seconds config still arms its autostart", []() {
+            // The field was minutes since the epoch; a config written by an
+            // older build must still fire at the same wall-clock time rather
+            // than 60x too early.
+            RallyState state;
+            std::string path = "/tmp/rb_test_autostart_minutes.json";
+            std::ofstream f(path);
+            f << "{\n";
+            f << "  \"auto_start_rally_time_minutes\": 754,\n";
+            f << "  \"calibration\": 600000\n";
+            f << "}\n";
+            f.close();
+            ConfigFile::load(state, path);
+            ASSERT_EQ(state.auto_start_rally_time_s, 754u * 60u);
+            std::remove(path.c_str());
+            return true;
+        });
+
         
         return suite;
     }

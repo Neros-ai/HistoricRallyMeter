@@ -3,6 +3,7 @@
 
 #include <gtk/gtk.h>
 #include "rally_types.h"
+#include "calculations.h"   // AutoStartArming
 
 gboolean on_window_delete(GtkWidget* widget, GdkEvent* event, gpointer user_data);
 void on_unit_toggle(GtkWidget* widget, gpointer user_data);
@@ -46,6 +47,27 @@ void on_autostart_set(GtkWidget* widget, gpointer user_data);
 void on_autostart_clear(GtkWidget* widget, gpointer user_data);
 void updateAutoStartDisplay(AppData* data);
 void performStageGo(AppData* data);
+
+// Zero the two halves of a stage start separately. An early departure zeroes
+// the distance when it is armed and the clock at the appointed minute.
+void zeroDistanceBaselines(AppData* data);
+void zeroTimeBaselines(AppData* data);
+
+// Fires a pending autostart, branching on which kind it is.
+void performAutoStart(AppData* data);
+
+// Replaces the armed autostart wholesale (see AutoStartArming). Every
+// arming, re-arming and clearing path goes through here, so a press always
+// overrules whatever was pending rather than merging with it.
+void applyAutoStartArming(AppData* data, const AutoStartArming& arming);
+
+// Milliseconds until an armed autostart fires (0 when nothing is armed,
+// negative once the moment has passed), and whether that autostart is
+// currently holding the stage readouts at zero. Both derived from state, so
+// the driver display and the phone telemetry cannot disagree.
+int64_t autoStartRemaining_ms(const AppData* data);
+bool autoStartHoldActive(const AppData* data);
+int64_t getAutoStartEpochMs();
 GtkWidget* createNumericKeypad(AppData* data);
 GtkWidget* createDateTimeKeypad(AppData* data);
 

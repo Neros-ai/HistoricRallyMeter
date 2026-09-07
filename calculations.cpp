@@ -210,3 +210,41 @@ std::string stageSummary(const std::vector<Segment>& segments) {
     }
     return ss.str();
 }
+
+uint64_t autoStartSecondsFromTargetMs(int64_t target_ms, int64_t epoch_ms) {
+    int64_t delta_ms = target_ms - epoch_ms;
+    if (delta_ms < 0) return 0;
+    return static_cast<uint64_t>(delta_ms / 1000);
+}
+
+int64_t autoStartTargetMsFromSeconds(uint64_t seconds, int64_t epoch_ms) {
+    return epoch_ms + static_cast<int64_t>(seconds) * 1000;
+}
+
+AutoStartArming autoStartArming(int64_t target_ms, int64_t epoch_ms,
+                                bool early_departure) {
+    AutoStartArming arming{};
+    arming.rally_time_s = autoStartSecondsFromTargetMs(target_ms, epoch_ms);
+    arming.early_departure = early_departure;
+    arming.triggered = false;
+    arming.zero_distance_now = early_departure;
+    return arming;
+}
+
+AutoStartArming autoStartDisarmed() {
+    return AutoStartArming{};
+}
+
+bool autoStartHoldsTimeError(uint64_t auto_start_rally_time_s,
+                             bool auto_start_early_departure,
+                             bool auto_start_triggered,
+                             int64_t diff_ms) {
+    if (auto_start_rally_time_s == 0) return false;
+    if (!auto_start_early_departure) return false;
+    if (auto_start_triggered) return false;
+    return diff_ms > 0 && diff_ms <= 24LL * 3600 * 1000;
+}
+
+double averageSpeedForDisplay(double average_speed, bool hold_at_zero) {
+    return hold_at_zero ? 0.0 : average_speed;
+}

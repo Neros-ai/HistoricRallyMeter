@@ -22,7 +22,19 @@ public:
     long segment_current_number = -1;  // -1 = no segment
     long rallyTimeOffset_ms = 0;  // offset in milliseconds
     long ahead_behind_zero_offset_ms = 0;  // manual offset for driver's ahead/behind display
-    uint64_t auto_start_rally_time_minutes = 0;  // minutes since 1/1/2020, 0 = not set
+    // Seconds since 1/1/2020, 0 = not set. Seconds, not minutes: the setup
+    // screen accepts HH:MM:SS, and storing at minute resolution threw the
+    // seconds away -- so the one screen that exists to start at an exact
+    // time could fire up to 59s early.
+    uint64_t auto_start_rally_time_s = 0;
+    // True when the pending autostart was armed by the Stage Go dialog's
+    // "Autostart HH:MM:00" button, which zeroes DISTANCE the moment it is
+    // armed and the CLOCK at the appointed minute -- so ground covered on
+    // the way to the line still counts toward the stage and its average
+    // speed. False for "Set Autostart", where distance and clock zero
+    // together when it fires. Persisted, so an app restart between arming
+    // and the minute still starts the right way.
+    bool auto_start_early_departure = false;
     std::vector<Segment> segments;
     
     // Up to 5 memory slots for storing/recalling segment setups

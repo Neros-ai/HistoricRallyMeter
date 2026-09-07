@@ -483,6 +483,11 @@ void updateDriverDisplay(AppData* data) {
         constexpr double alpha = 0.02;
         data->smoothedSpeed = alpha * current_speed + (1.0 - alpha) * data->smoothedSpeed;
     }
+    // Whether an armed early departure is holding the stage readouts at
+    // zero. Computed once: the averages below and the ahead/behind figure
+    // further down must agree.
+    const bool holdAtZero = autoStartHoldActive(data);
+
     std::stringstream ss;
     if (data->smoothedSpeed < 0) {
         ss << "--.-";
@@ -497,6 +502,7 @@ void updateDriverDisplay(AppData* data) {
         data->state->trip_start_cntr1, data->state->trip_start_cntr2);
     double trip_speed = calculateAverageSpeed(*data->state,
         data->state->trip_start_time_ms, current_time_ms, trip_count_diff);
+    trip_speed = averageSpeedForDisplay(trip_speed, holdAtZero);
     ss.str("");
     ss << std::fixed << std::setprecision(1) << trip_speed;
     gtk_label_set_text(data->tripSpeedLabel, ss.str().c_str());
@@ -507,6 +513,7 @@ void updateDriverDisplay(AppData* data) {
         data->state->total_start_cntr1, data->state->total_start_cntr2);
     double total_speed = calculateAverageSpeed(*data->state,
         data->state->total_start_time_ms, current_time_ms, total_count_diff);
+    total_speed = averageSpeedForDisplay(total_speed, holdAtZero);
     ss.str("");
     ss << std::fixed << std::setprecision(1) << total_speed;
     gtk_label_set_text(data->totalSpeedLabel, ss.str().c_str());
@@ -730,16 +737,9 @@ void updateDriverDisplay(AppData* data) {
     }
     
     // Auto-start countdown overlay
-    if (data->state->auto_start_rally_time_minutes > 0 && !data->autoStartTriggered) {
-        struct tm epoch_tm = {};
-        epoch_tm.tm_year = 120;
-        epoch_tm.tm_mon = 0;
-        epoch_tm.tm_mday = 1;
-        int64_t epoch_ms = static_cast<int64_t>(mktime(&epoch_tm)) * 1000;
-        int64_t target_ms = epoch_ms + 
-            static_cast<int64_t>(data->state->auto_start_rally_time_minutes) * 60000;
-        int64_t diff_ms = target_ms - current_time_ms;
-        
+    if (data->state->auto_start_rally_time_s > 0 && !data->autoStartTriggered) {
+        const int64_t diff_ms = autoStartRemaining_ms(data);
+
         if (diff_ms > 0 && diff_ms <= 24LL * 3600 * 1000) {
             int total_secs = static_cast<int>(diff_ms / 1000);
             int h = total_secs / 3600;
@@ -748,20 +748,39 @@ void updateDriverDisplay(AppData* data) {
             char buf[32];
             snprintf(buf, sizeof(buf), "T- %02d:%02d:%02d", h, m, s);
             gtk_label_set_text(data->countdownLabel, buf);
+            // Which kind of autostart is pending, so the crew can see at a
+            // glance whether rolling before the minute is going to count.
+            // Two lines: on one it is wider than the countdown box above it
+            // and runs across the figures either side of it.
+            if (data->earlyDepartureLabel) {
+                gtk_label_set_text(data->earlyDepartureLabel,
+                    data->state->auto_start_early_departure ? "Early Departure:\nENABLED"
+                                                            : "Early Departure:\nDISABLED");
+            }
             GtkWidget* frame = gtk_widget_get_parent(GTK_WIDGET(data->countdownLabel));
             if (frame) gtk_widget_show(frame);
+            if (data->earlyDepartureLabel)
+                gtk_widget_show(GTK_WIDGET(data->earlyDepartureLabel));
         } else if (diff_ms <= 0 && diff_ms > -2000) {
             GtkWidget* frame = gtk_widget_get_parent(GTK_WIDGET(data->countdownLabel));
             if (frame) gtk_widget_hide(frame);
+            if (data->earlyDepartureLabel)
+                gtk_widget_hide(GTK_WIDGET(data->earlyDepartureLabel));
             data->autoStartTriggered = true;
-            performStageGo(data);
+            // Branches on the kind: an early departure zeroed its distance
+            // when it was armed, so only the clock starts here.
+            performAutoStart(data);
         } else {
             GtkWidget* frame = gtk_widget_get_parent(GTK_WIDGET(data->countdownLabel));
             if (frame) gtk_widget_hide(frame);
+            if (data->earlyDepartureLabel)
+                gtk_widget_hide(GTK_WIDGET(data->earlyDepartureLabel));
         }
     } else {
         GtkWidget* frame = gtk_widget_get_parent(GTK_WIDGET(data->countdownLabel));
         if (frame && gtk_widget_get_visible(frame)) gtk_widget_hide(frame);
+        if (data->earlyDepartureLabel)
+            gtk_widget_hide(GTK_WIDGET(data->earlyDepartureLabel));
     }
 }
 
@@ -941,7 +960,8 @@ GtkWidget* createDriverWindow(AppData* data) {
     GtkCssProvider* cdProvider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(cdProvider,
         ".countdown-box { border: 4px solid white; background-color: #000000; }"
-        ".countdown-label { font-size: 60px; font-family: monospace; color: white; font-weight: bold; }",
+        ".countdown-label { font-size: 60px; font-family: monospace; color: white; font-weight: bold; }"
+        ".early-departure-label { font-size: 22px; color: white; font-weight: bold; }",
         -1, nullptr);
     gtk_style_context_add_provider(
         gtk_widget_get_style_context(countdownBox),
@@ -951,11 +971,32 @@ GtkWidget* createDriverWindow(AppData* data) {
         gtk_widget_get_style_context(GTK_WIDGET(data->countdownLabel)),
         GTK_STYLE_PROVIDER(cdProvider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 50);
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->countdownLabel)), "countdown-label");
+
+    // "Early Departure" line, directly beneath the box. Two lines of text,
+    // so both need centring on each other as well as on the box.
+    data->earlyDepartureLabel = GTK_LABEL(gtk_label_new(""));
+    gtk_label_set_justify(data->earlyDepartureLabel, GTK_JUSTIFY_CENTER);
+    gtk_label_set_xalign(data->earlyDepartureLabel, 0.5);
+    gtk_style_context_add_provider(
+        gtk_widget_get_style_context(GTK_WIDGET(data->earlyDepartureLabel)),
+        GTK_STYLE_PROVIDER(cdProvider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 50);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(GTK_WIDGET(data->earlyDepartureLabel)), "early-departure-label");
+    // Dropped only after the last add_provider above -- each of those takes
+    // its own reference, so unreffing earlier leaves the remaining calls
+    // working on a pointer kept alive purely by the contexts before them.
     g_object_unref(cdProvider);
-    
-    gtk_overlay_add_overlay(GTK_OVERLAY(data->countdownOverlay), countdownBox);
-    gtk_widget_show_all(countdownBox);
+
+    GtkWidget* countdownStack = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_set_halign(countdownStack, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(countdownStack, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(countdownStack), countdownBox, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(countdownStack), GTK_WIDGET(data->earlyDepartureLabel), FALSE, FALSE, 0);
+
+    gtk_overlay_add_overlay(GTK_OVERLAY(data->countdownOverlay), countdownStack);
+    gtk_widget_show_all(countdownStack);
     gtk_widget_hide(countdownBox);
+    gtk_widget_hide(GTK_WIDGET(data->earlyDepartureLabel));
     
     return window;
 }

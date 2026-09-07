@@ -131,8 +131,18 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.rallyTimeOffset_ms = extractLong(line);
         } else if (line.find("\"ahead_behind_zero_offset_ms\"") != std::string::npos) {
             state.ahead_behind_zero_offset_ms = extractLong(line);
+        } else if (line.find("\"auto_start_rally_time_s\"") != std::string::npos) {
+            state.auto_start_rally_time_s = static_cast<uint64_t>(extractLong(line));
         } else if (line.find("\"auto_start_rally_time_minutes\"") != std::string::npos) {
-            state.auto_start_rally_time_minutes = static_cast<uint64_t>(extractLong(line));
+            // A config written before the field moved to seconds. Read only
+            // when the seconds key is absent, so the order of the two lines
+            // in the file cannot decide which wins.
+            if (state.auto_start_rally_time_s == 0) {
+                state.auto_start_rally_time_s =
+                    static_cast<uint64_t>(extractLong(line)) * 60;
+            }
+        } else if (line.find("\"auto_start_early_departure\"") != std::string::npos) {
+            state.auto_start_early_departure = extractBool(line);
         } else if (line.find("\"driver_window_x\"") != std::string::npos) {
             state.driver_window_x = static_cast<int>(extractLong(line));
         } else if (line.find("\"driver_window_y\"") != std::string::npos) {
@@ -199,7 +209,9 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"segment_current_number\": " << state.segment_current_number << ",\n";
     file << "  \"rallyTimeOffset_ms\": " << state.rallyTimeOffset_ms << ",\n";
     file << "  \"ahead_behind_zero_offset_ms\": " << state.ahead_behind_zero_offset_ms << ",\n";
-    file << "  \"auto_start_rally_time_minutes\": " << state.auto_start_rally_time_minutes << ",\n";
+    file << "  \"auto_start_rally_time_s\": " << state.auto_start_rally_time_s << ",\n";
+    file << "  \"auto_start_early_departure\": "
+         << (state.auto_start_early_departure ? "true" : "false") << ",\n";
     file << "  \"driver_window_x\": " << state.driver_window_x << ",\n";
     file << "  \"driver_window_y\": " << state.driver_window_y << ",\n";
     file << "  \"driver_window_width\": " << state.driver_window_width << ",\n";

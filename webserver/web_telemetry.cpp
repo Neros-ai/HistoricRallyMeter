@@ -1,5 +1,6 @@
 #include "web_telemetry.h"
 #include "calculations.h"
+#include "callbacks.h"   // autoStartHoldActive
 #include "rally_types.h"
 #include "counter_poller.h"
 #include "rally_state.h"
@@ -57,15 +58,18 @@ std::string buildTelemetryJson(AppData* data) {
         current_poll.cntr1, current_poll.cntr2,
         data->state->trip_start_cntr1, data->state->trip_start_cntr2);
     long trip_m = countsToCentimeters(trip_count_diff, data->state->calibration) / 100;
-    double trip_avg = calculateAverageSpeed(*data->state,
-        data->state->trip_start_time_ms, current_time_ms, trip_count_diff);
+    // Same hold the box applies, so the phone cannot show an average the
+    // box is deliberately not showing.
+    const bool hold_at_zero = autoStartHoldActive(data);
+    double trip_avg = averageSpeedForDisplay(calculateAverageSpeed(*data->state,
+        data->state->trip_start_time_ms, current_time_ms, trip_count_diff), hold_at_zero);
 
     int64_t total_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
         data->state->total_start_cntr1, data->state->total_start_cntr2);
     long total_m = countsToCentimeters(total_count_diff, data->state->calibration) / 100;
-    double total_avg = calculateAverageSpeed(*data->state,
-        data->state->total_start_time_ms, current_time_ms, total_count_diff);
+    double total_avg = averageSpeedForDisplay(calculateAverageSpeed(*data->state,
+        data->state->total_start_time_ms, current_time_ms, total_count_diff), hold_at_zero);
 
     double cur_speed = calculateCurrentSpeed(*data->state, current_poll, tenth_poll);
     if (cur_speed < 0) cur_speed = 0.0;

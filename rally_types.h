@@ -145,6 +145,8 @@ struct AppData {
     // Driver countdown overlay
     GtkWidget* countdownOverlay;
     GtkLabel* countdownLabel;
+    // "Early Departure: ENABLED/DISABLED", under the countdown box.
+    GtkLabel* earlyDepartureLabel = nullptr;
     bool autoStartTriggered = false;
     
     // Tone generator for speed adjustment alerts
