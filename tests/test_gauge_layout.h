@@ -244,6 +244,23 @@ public:
                 && !gaugeTickLabelsVisible(-15.0);
         });
 
+        suite->addTest("tick labels follow the hysteretic zone, not the raw reading", []() {
+            // The gauge draws its arc, digits and chevrons from the damped
+            // zone, so the numerals must come from the same one. Taking
+            // them from the raw reading left 9.5-10.0 on the way down out of
+            // amber showing green numerals against an amber arc, and left a
+            // reading parked on 10.0 flickering them on every redraw.
+            return gaugeTickLabelsVisibleInZone(0)
+                && !gaugeTickLabelsVisibleInZone(1)
+                && !gaugeTickLabelsVisibleInZone(2)
+                // 9.7 still reads as zone 1 while descending out of amber.
+                && !gaugeTickLabelsVisibleInZone(gaugeZoneHysteretic(9.7, 1))
+                // ...and as zone 0 once it has cleared the dead band.
+                && gaugeTickLabelsVisibleInZone(gaugeZoneHysteretic(9.3, 1))
+                // The raw form still agrees with the plain zone.
+                && gaugeTickLabelsVisible(5.0) == gaugeTickLabelsVisibleInZone(gaugeZone(5.0));
+        });
+
         suite->addTest("tick angle matches the needle angle for the same seconds value", []() {
             // A tick labelled i seconds must sit at the same angle the
             // needle would be at for a reading of exactly i seconds -- the

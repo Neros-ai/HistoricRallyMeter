@@ -195,7 +195,7 @@ public:
             RallyState state;
             Segment a{}; a.target_speed_kph = 30.0;
             Segment b{}; b.target_speed_kph = 50.0;
-            state.segments = { a, b };
+            state.stage_segments = { a, b };
             state.segment_current_number = 0;
             double kph = 0.0;
             ASSERT_TRUE(nextSegmentTargetKph(state, &kph));
@@ -206,7 +206,7 @@ public:
         suite->addTest("there is no next speed on the last segment", []() {
             RallyState state;
             Segment a{}; a.target_speed_kph = 30.0;
-            state.segments = { a };
+            state.stage_segments = { a };
             state.segment_current_number = 0;
             double kph = 99.0;
             ASSERT_FALSE(nextSegmentTargetKph(state, &kph));
@@ -217,10 +217,31 @@ public:
             RallyState state;
             Segment a{}; a.target_speed_kph = 30.0;
             Segment b{}; b.target_speed_kph = 50.0;
-            state.segments = { a, b };
+            state.stage_segments = { a, b };
             state.segment_current_number = -1;
             double kph = 99.0;
             ASSERT_FALSE(nextSegmentTargetKph(state, &kph));
+            return true;
+        });
+
+        suite->addTest("editing the roadbook does not touch the running stage", []() {
+            // The stage is judged against the snapshot taken when it started.
+            // Editing segments, or recalling a memory slot over them, is
+            // preparation for the NEXT stage and must leave this one alone.
+            RallyState state;
+            Segment slow{}; slow.target_speed_kph = 30.0;
+            Segment fast{}; fast.target_speed_kph = 50.0;
+            state.stage_segments = { slow, fast };
+            state.segments = { slow, fast };
+            state.segment_current_number = 0;
+
+            // The crew load a completely different roadbook for the next stage.
+            Segment other{}; other.target_speed_kph = 90.0;
+            state.segments = { other };
+
+            double kph = 0.0;
+            ASSERT_TRUE(nextSegmentTargetKph(state, &kph));
+            ASSERT_NEAR(kph, 50.0, 0.001);
             return true;
         });
 

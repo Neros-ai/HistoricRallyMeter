@@ -170,7 +170,7 @@ public:
             Segment done{};  distance_and_speed(done, 1000.0, 360000.0);
             Segment blank{}; distance_and_speed(blank, 1000.0, 0.0);  // distance, no speed
             Segment cur{};   distance_and_speed(cur, 1000.0, 360000.0);
-            state.segments = { done, blank, cur };
+            state.stage_segments = { done, blank, cur };
             state.segment_current_number = 2;
 
             bool complete = true;
@@ -183,7 +183,7 @@ public:
             RallyState state;
             Segment a{}; distance_and_speed(a, 1000.0, 360000.0);
             Segment b{}; distance_and_speed(b, 1000.0, 360000.0);
-            state.segments = { a, b };
+            state.stage_segments = { a, b };
             state.segment_current_number = 1;
 
             bool complete = false;
@@ -198,7 +198,7 @@ public:
             RallyState state;
             Segment empty{}; distance_and_speed(empty, 0.0, 0.0);
             Segment cur{};   distance_and_speed(cur, 1000.0, 360000.0);
-            state.segments = { empty, cur };
+            state.stage_segments = { empty, cur };
             state.segment_current_number = 1;
 
             bool complete = false;
@@ -214,7 +214,7 @@ public:
             RallyState state;
             Segment blank{}; distance_and_speed(blank, 1000.0, 0.0);
             Segment cur{};   distance_and_speed(cur, 1000.0, 360000.0);
-            state.segments = { blank, cur };
+            state.stage_segments = { blank, cur };
             state.segment_current_number = 1;
             state.total_start_time_ms = 0;
 

@@ -3,6 +3,7 @@
 
 #include <gtk/gtk.h>
 #include "rally_types.h"
+#include "calculations.h"   // AutoStartArming
 
 // Column widths for the stage-setup segment table, in pixels. Declared once
 // and used by both the header row in createStageSetupScreen() and the data
@@ -86,6 +87,11 @@ void on_autostart_set(GtkWidget* widget, gpointer user_data);
 void on_autostart_clear(GtkWidget* widget, gpointer user_data);
 void updateAutoStartDisplay(AppData* data);
 void performStageGo(AppData* data);
+
+// Replaces the armed autostart wholesale (see AutoStartArming). Every arming,
+// re-arming and clearing path goes through here, so a press always overrules
+// whatever was pending rather than merging with it.
+void applyAutoStartArming(AppData* data, const AutoStartArming& arming);
 // Starts a stage from an autostart trigger, honouring whether it was armed as
 // an early departure (clock only) or an ordinary autostart (clock and
 // distance together).

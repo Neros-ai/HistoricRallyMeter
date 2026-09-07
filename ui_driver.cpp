@@ -124,7 +124,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // defines); pristine's separate, thinner "minor tick" category is gone.
     // Numerals are drawn only in the green zone -- past that the arc
     // colour is the at-a-glance signal instead.
-    bool labels_visible = gaugeTickLabelsVisible(seconds);
+    bool labels_visible = gaugeTickLabelsVisibleInZone(zone);
     int tick_count = static_cast<int>(max_val);
     for (int i = -tick_count; i <= tick_count; i++) {
         // gaugeTickAngle() uses max_val (the true sweep end), matching
@@ -532,6 +532,26 @@ void updateDriverDisplay(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
     auto tenth_poll = data->poller->get10th();
     auto current_time_ms = getRallyTime_ms(*data->state);
+
+    // How long an armed autostart still has to run. Computed once here
+    // because two things downstream need it: the T- overlay near the end of
+    // this function, and the time-error box, which holds at zero while an
+    // "on the minute" autostart counts down (see autoStartHoldsTimeError).
+    int64_t autoStartDiff_ms = 0;
+    if (data->state->auto_start_rally_time_s > 0) {
+        struct tm epoch_tm = {};
+        epoch_tm.tm_year = 120;
+        epoch_tm.tm_mon = 0;
+        epoch_tm.tm_mday = 1;
+        int64_t epoch_ms = static_cast<int64_t>(mktime(&epoch_tm)) * 1000;
+        autoStartDiff_ms = autoStartTargetMsFromSeconds(
+            data->state->auto_start_rally_time_s, epoch_ms) - current_time_ms;
+    }
+    const bool holdTimeErrorAtZero = autoStartHoldsTimeError(
+        data->state->auto_start_rally_time_s,
+        data->state->auto_start_early_departure,
+        data->autoStartTriggered,
+        autoStartDiff_ms);
     
     // Switch to compact layout (values drawn inside the gauge) when the
     // window is closer to 4:3 (e.g. 800x480) than wide-and-shallow 1280x400.
@@ -614,8 +634,8 @@ void updateDriverDisplay(AppData* data) {
 
     // Target speed and ahead/behind
     if (data->state->segment_current_number >= 0 && 
-        data->state->segment_current_number < static_cast<long>(data->state->segments.size())) {
-        const Segment& seg = data->state->segments[data->state->segment_current_number];
+        data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
+        const Segment& seg = data->state->stage_segments[data->state->segment_current_number];
         double target_kph = countsPerHourToKPH(seg.target_speed_counts_per_hour, data->state->calibration);
         if (data->state->units) {
             target_kph = target_kph * 0.621371;  // Convert to MPH
@@ -645,6 +665,11 @@ void updateDriverDisplay(AppData* data) {
             data->state->total_start_cntr1, data->state->total_start_cntr2);
         double seconds = calculateAheadBehindFromStageStart(*data->state, current_time_ms, total_count_diff_ab);
         seconds += data->state->ahead_behind_zero_offset_ms / 1000.0;
+        // Nothing to be ahead or behind of until the clock zeroes at the
+        // minute. Held before the value is stored, so the gauge needle, the
+        // chevrons and the tone all sit at rest too rather than tracking a
+        // stage that is not running yet.
+        if (holdTimeErrorAtZero) seconds = 0.0;
         
         // Store for gauge
         data->aheadBehindSeconds = seconds;
@@ -691,7 +716,7 @@ void updateDriverDisplay(AppData* data) {
         // (driven by whichever algorithm simple_tone_mode selects).
         double stage_dist_m = countsToMeters(total_count_diff_ab, data->state->calibration);
         double total_stage_counts = 0.0;
-        for (const auto& s : data->state->segments)
+        for (const auto& s : data->state->stage_segments)
             total_stage_counts += s.distance_counts;
         bool past_stage_end = (static_cast<double>(total_count_diff_ab) >= total_stage_counts);
 
@@ -756,8 +781,8 @@ void updateDriverDisplay(AppData* data) {
     
     // Next segment info
     if (data->state->segment_current_number >= 0 && 
-        data->state->segment_current_number < static_cast<long>(data->state->segments.size()) - 1) {
-        const Segment& current_seg = data->state->segments[data->state->segment_current_number];
+        data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size()) - 1) {
+        const Segment& current_seg = data->state->stage_segments[data->state->segment_current_number];
         int64_t seg_count_diff = calculateDistanceCounts(*data->state,
             current_poll.cntr1, current_poll.cntr2,
             data->state->segment_start_cntr1, data->state->segment_start_cntr2);
@@ -765,7 +790,7 @@ void updateDriverDisplay(AppData* data) {
         double remaining_counts = current_seg.distance_counts - static_cast<double>(seg_count_diff);
         double remaining_m = countsToMeters(static_cast<int64_t>(remaining_counts), data->state->calibration);
         
-        const Segment& next_seg = data->state->segments[data->state->segment_current_number + 1];
+        const Segment& next_seg = data->state->stage_segments[data->state->segment_current_number + 1];
         double next_target = countsPerHourToKPH(next_seg.target_speed_counts_per_hour, data->state->calibration);
         if (data->state->units) {
             next_target = next_target * 0.621371;
@@ -812,15 +837,8 @@ void updateDriverDisplay(AppData* data) {
     
     // Auto-start countdown overlay
     if (data->state->auto_start_rally_time_s > 0 && !data->autoStartTriggered) {
-        struct tm epoch_tm = {};
-        epoch_tm.tm_year = 120;
-        epoch_tm.tm_mon = 0;
-        epoch_tm.tm_mday = 1;
-        int64_t epoch_ms = static_cast<int64_t>(mktime(&epoch_tm)) * 1000;
-        int64_t target_ms = autoStartTargetMsFromSeconds(
-            data->state->auto_start_rally_time_s, epoch_ms);
-        int64_t diff_ms = target_ms - current_time_ms;
-        
+        const int64_t diff_ms = autoStartDiff_ms;
+
         if (diff_ms > 0 && diff_ms <= 24LL * 3600 * 1000) {
             int total_secs = static_cast<int>(diff_ms / 1000);
             int h = total_secs / 3600;
@@ -832,7 +850,7 @@ void updateDriverDisplay(AppData* data) {
             // Which kind of autostart is pending, so the crew can see at a
             // glance whether rolling before the minute is going to count.
             gtk_label_set_text(data->earlyDepartureLabel,
-                data->state->auto_start_early_departure ? "Early Departure : ENABLED"
+                data->state->auto_start_early_departure ? "Early Departure: ENABLED"
                                                         : "Early Departure: DISABLED");
             if (data->countdownContainer) gtk_widget_show(data->countdownContainer);
         } else if (diff_ms <= 0 && diff_ms > -2000) {
@@ -1064,8 +1082,7 @@ GtkWidget* createDriverWindow(AppData* data) {
         gtk_widget_get_style_context(GTK_WIDGET(data->countdownLabel)),
         GTK_STYLE_PROVIDER(cdProvider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 50);
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->countdownLabel)), "countdown-label");
-    g_object_unref(cdProvider);
-    
+
     // "Early Departure" line, directly beneath the box.
     data->earlyDepartureLabel = GTK_LABEL(gtk_label_new(""));
     gtk_style_context_add_provider(
@@ -1073,6 +1090,10 @@ GtkWidget* createDriverWindow(AppData* data) {
         GTK_STYLE_PROVIDER(cdProvider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 50);
     gtk_style_context_add_class(
         gtk_widget_get_style_context(GTK_WIDGET(data->earlyDepartureLabel)), "early-departure-label");
+    // Dropped only after the last add_provider above -- each of those takes
+    // its own reference, so unreffing earlier leaves the remaining calls
+    // working on a pointer kept alive purely by the contexts before them.
+    g_object_unref(cdProvider);
 
     GtkWidget* countdownStack = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_widget_set_halign(countdownStack, GTK_ALIGN_CENTER);

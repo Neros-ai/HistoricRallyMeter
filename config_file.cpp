@@ -112,12 +112,21 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
     // not leave a previous rally's waypoints in place alongside this file's
     // other values.
     state.beep_waypoints_m.clear();
+    state.stage_segments.clear();
+    state.stage_segments_recorded = false;
     for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
         state.memory_slots[i].beep_waypoints_m.clear();
+        // Flipped back to true below for each slot whose waypoint key the
+        // file actually contains; a file predating Beep Assist leaves them
+        // all false. See MemorySlot::waypoints_recorded.
+        state.memory_slots[i].waypoints_recorded = false;
     }
 
     while (std::getline(stream, line)) {
-        if (line.find("\"segments\"") != std::string::npos && line.find("\"memory_") == std::string::npos) {
+        if (line.find("\"stage_segments\"") != std::string::npos) {
+            parseSegmentArray(stream, state.stage_segments, state.calibration);
+            state.stage_segments_recorded = true;
+        } else if (line.find("\"segments\"") != std::string::npos && line.find("\"memory_") == std::string::npos) {
             parseSegmentArray(stream, state.segments, state.calibration);
         } else if (line.find("\"memory_1\"") != std::string::npos) {
             parseSegmentArray(stream, state.memory_slots[0].segments, state.calibration);
@@ -211,17 +220,31 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.beep_timing_mode = extractBool(line);
         } else if (line.find("\"memory_1_waypoints\"") != std::string::npos) {
             parseDoubleArray(stream, state.memory_slots[0].beep_waypoints_m);
+            state.memory_slots[0].waypoints_recorded = true;
         } else if (line.find("\"memory_2_waypoints\"") != std::string::npos) {
             parseDoubleArray(stream, state.memory_slots[1].beep_waypoints_m);
+            state.memory_slots[1].waypoints_recorded = true;
         } else if (line.find("\"memory_3_waypoints\"") != std::string::npos) {
             parseDoubleArray(stream, state.memory_slots[2].beep_waypoints_m);
+            state.memory_slots[2].waypoints_recorded = true;
         } else if (line.find("\"memory_4_waypoints\"") != std::string::npos) {
             parseDoubleArray(stream, state.memory_slots[3].beep_waypoints_m);
+            state.memory_slots[3].waypoints_recorded = true;
         } else if (line.find("\"memory_5_waypoints\"") != std::string::npos) {
             parseDoubleArray(stream, state.memory_slots[4].beep_waypoints_m);
+            state.memory_slots[4].waypoints_recorded = true;
         } else if (line.find("\"beep_waypoints_m\"") != std::string::npos) {
             parseDoubleArray(stream, state.beep_waypoints_m);
         }
+    }
+
+    // A config written before stage_segments existed has one roadbook and a
+    // segment_current_number indexing it. Seed the snapshot from it so a
+    // stage that was running across the upgrade keeps calculating against
+    // exactly the segments it started on.
+    if (!state.stage_segments_recorded) {
+        state.stage_segments = state.segments;
+        state.stage_segments_recorded = true;
     }
 }
 
@@ -317,6 +340,7 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
         if (!state.memory_slots[i].empty()) { has_memory = true; break; }
     }
 
+    writeSegmentArray(file, "stage_segments", state.stage_segments, true);
     writeSegmentArray(file, "segments", state.segments, has_memory);
     
     if (has_memory) {

@@ -170,7 +170,7 @@ void updateCopilotDisplay(AppData* data) {
             // past them and drop their beeps.
             data->beepNextTimingIndex = stage_active
                 ? beepTimingCursorFor(data->state->beep_waypoints_m, elapsed_stage_s,
-                                      data->state->segments, data->state->beep_advance_s)
+                                      data->state->stage_segments, data->state->beep_advance_s)
                 : 0;
             data->beepCursorsStale = false;
         }
@@ -186,7 +186,7 @@ void updateCopilotDisplay(AppData* data) {
                                        travelled_m,
                                        data->state->beep_navigation_mode, data->state->beep_advance_m,
                                        false, 0.0,
-                                       stage_active, elapsed_stage_s, data->state->segments);
+                                       stage_active, elapsed_stage_s, data->state->stage_segments);
         if (nav_due >= 0) {
             fireBeepAssist(data, data->state->beep_waypoints_m[static_cast<size_t>(nav_due)],
                            travelled_m, /*navigation=*/true);
@@ -197,7 +197,7 @@ void updateCopilotDisplay(AppData* data) {
                                           travelled_m,
                                           false, 0.0,
                                           data->state->beep_timing_mode, data->state->beep_advance_s,
-                                          stage_active, elapsed_stage_s, data->state->segments);
+                                          stage_active, elapsed_stage_s, data->state->stage_segments);
         if (timing_due >= 0) {
             fireBeepAssist(data, data->state->beep_waypoints_m[static_cast<size_t>(timing_due)],
                            travelled_m, /*navigation=*/false);
@@ -305,8 +305,8 @@ void updateCopilotDisplay(AppData* data) {
     
     // Next segment info: distance remaining in current segment + speed of next segment
     if (data->state->segment_current_number >= 0 &&
-        data->state->segment_current_number < static_cast<long>(data->state->segments.size())) {
-        const Segment& cur_seg = data->state->segments[data->state->segment_current_number];
+        data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
+        const Segment& cur_seg = data->state->stage_segments[data->state->segment_current_number];
         int64_t seg_count_diff = calculateDistanceCounts(*data->state,
             current_poll.cntr1, current_poll.cntr2,
             data->state->segment_start_cntr1, data->state->segment_start_cntr2);
@@ -321,8 +321,8 @@ void updateCopilotDisplay(AppData* data) {
         gtk_label_set_text(data->nextUnitLabel, next_unit);
         
         long next_seg_idx = data->state->segment_current_number + 1;
-        bool has_next = next_seg_idx < static_cast<long>(data->state->segments.size());
-        double next_kph = has_next ? data->state->segments[next_seg_idx].target_speed_kph : 0.0;
+        bool has_next = next_seg_idx < static_cast<long>(data->state->stage_segments.size());
+        double next_kph = has_next ? data->state->stage_segments[next_seg_idx].target_speed_kph : 0.0;
         double current_display_speed = cur_seg.target_speed_kph;
         double next_display_speed = next_kph;
         // Same conversion updateDriverDisplay() already applies to
@@ -340,7 +340,7 @@ void updateCopilotDisplay(AppData* data) {
 
         // next/prev button: active within 500m of segment end or start
         bool near_end = (remaining_m >= 0 && remaining_m <= 500) &&
-                        (next_seg_idx < static_cast<long>(data->state->segments.size()));
+                        (next_seg_idx < static_cast<long>(data->state->stage_segments.size()));
         bool near_start = (travelled_m >= 0 && travelled_m <= 500) &&
                           (data->state->segment_current_number > 0);
         if (near_end) {
@@ -352,7 +352,7 @@ void updateCopilotDisplay(AppData* data) {
         } else {
             gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
         }
-    } else if (data->state->segments.empty()) {
+    } else if (data->state->stage_segments.empty()) {
         gtk_label_set_text(data->nextDistLabel, "---.---");
         gtk_label_set_text(data->nextUnitLabel, "m");
         gtk_label_set_text(data->nextSpeedLabel, "---");

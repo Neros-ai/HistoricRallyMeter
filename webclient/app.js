@@ -181,8 +181,8 @@
       const question = store
         ? (populated ? 'Overwrite memory ' + slot + '?' : null)
         : 'Recall memory ' + slot + '?';
+      if (!store && !populated) return;  // nothing saved there, so nothing to ask
       if (question && !confirm(question)) return;
-      if (!store && !populated) return;  // nothing saved there
       send({ type: store ? 'memory_store' : 'memory_recall', slot: slot });
     });
   });

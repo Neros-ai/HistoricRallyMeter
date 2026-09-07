@@ -46,7 +46,34 @@ public:
     // distance and clock both zero together at the target time. Persisted, so
     // an app restart between arming and the minute still starts the right way.
     bool auto_start_early_departure = false;
+
+    // The roadbook as EDITED: what the stage-setup screen shows, what a
+    // memory slot stores and recalls, what the phone's segment list edits.
+    // Nothing here affects a stage that is already running or armed.
     std::vector<Segment> segments;
+
+    // The roadbook the running stage is actually calculating against -- a
+    // snapshot of `segments` taken at the instant the stage STARTS (its clock
+    // zeroes), and the vector `segment_current_number` indexes.
+    //
+    // Everything up to that instant counts, including edits made while an
+    // autostart counts down: arming is not starting. Everything after it
+    // lands on the next stage.
+    //
+    // Two vectors rather than one because the ideal-position maths
+    // re-integrates the whole roadbook from segment 0 on every frame. With a
+    // single shared list, editing a segment or recalling a memory slot to
+    // prepare the NEXT stage rewrote the running stage's history: the crew
+    // drove twenty minutes against one set of targets and the box then
+    // insisted they should have been driving another. Snapshotting means an
+    // edit lands on the next stage, which is the only stage it can honestly
+    // apply to.
+    std::vector<Segment> stage_segments;
+    // False when the config file that was loaded predates stage_segments, so
+    // load() can seed the snapshot from `segments` and leave a stage running
+    // across the upgrade calculating exactly as it did before. Not persisted;
+    // load() decides it per file.
+    bool stage_segments_recorded = true;
     
     // Up to 5 memory slots for storing/recalling a whole stage setup.
     // A slot carries its Beep Assist waypoints alongside its segments: the
@@ -61,9 +88,21 @@ public:
         // unlike segments these are never recalculated on a calibration
         // change.
         std::vector<double> beep_waypoints_m;
+        // True when this slot's waypoint list is authoritative -- it was
+        // stored in this session, or loaded from a config file that carried
+        // a "memory_N_waypoints" key for it. A slot written before Beep
+        // Assist existed has no such key, so its empty vector means
+        // "unknown", not "deliberately none": recalling one must leave the
+        // operator's live waypoint list alone rather than wipe it. Not
+        // persisted -- load() decides it per file.
+        bool waypoints_recorded = true;
 
         bool empty() const { return segments.empty(); }
-        void clear() { segments.clear(); beep_waypoints_m.clear(); }
+        void clear() {
+            segments.clear();
+            beep_waypoints_m.clear();
+            waypoints_recorded = true;
+        }
     };
 
     static constexpr int MAX_MEMORY_SLOTS = 5;

@@ -147,7 +147,7 @@ double calculateIdealCountsFromStageStart(const RallyState& state, int64_t elaps
                                           bool* roadbook_complete) {
     if (roadbook_complete) *roadbook_complete = true;
 
-    if (state.segment_current_number < 0 || state.segments.empty()) {
+    if (state.segment_current_number < 0 || state.stage_segments.empty()) {
         return 0.0;
     }
     
@@ -155,8 +155,8 @@ double calculateIdealCountsFromStageStart(const RallyState& state, int64_t elaps
     double remaining_time_s = elapsed_ms / 1000.0;
     
     // Go through each segment up to and including current
-    for (int i = 0; i <= state.segment_current_number && i < static_cast<int>(state.segments.size()); i++) {
-        const Segment& seg = state.segments[i];
+    for (int i = 0; i <= state.segment_current_number && i < static_cast<int>(state.stage_segments.size()); i++) {
+        const Segment& seg = state.stage_segments[i];
         
         if (seg.target_speed_counts_per_hour <= 0.0) {
             // A segment with real distance but no target speed is a hole in
@@ -191,7 +191,7 @@ double calculateIdealCountsFromStageStart(const RallyState& state, int64_t elaps
 
 double calculateAheadBehindFromStageStart(const RallyState& state, int64_t current_time_ms,
                                           int64_t actual_counts_from_stage_start) {
-    if (state.segment_current_number < 0 || state.segments.empty()) {
+    if (state.segment_current_number < 0 || state.stage_segments.empty()) {
         return 0.0;
     }
     
@@ -216,7 +216,7 @@ double calculateAheadBehindFromStageStart(const RallyState& state, int64_t curre
     double diff = static_cast<double>(actual_counts_from_stage_start) - ideal_counts;
     
     // Convert to seconds using current segment's target speed
-    const Segment& current_seg = state.segments[state.segment_current_number];
+    const Segment& current_seg = state.stage_segments[state.segment_current_number];
     if (current_seg.target_speed_counts_per_hour <= 0.0) {
         return 0.0;
     }
@@ -383,8 +383,8 @@ size_t beepTimingCursorFor(const std::vector<double>& waypoints_m, double elapse
 bool nextSegmentTargetKph(const RallyState& state, double* kph) {
     if (state.segment_current_number < 0) return false;
     long next = state.segment_current_number + 1;
-    if (next >= static_cast<long>(state.segments.size())) return false;
-    if (kph) *kph = state.segments[next].target_speed_kph;
+    if (next >= static_cast<long>(state.stage_segments.size())) return false;
+    if (kph) *kph = state.stage_segments[next].target_speed_kph;
     return true;
 }
 
@@ -558,6 +558,30 @@ double gaugeEffectiveMaxSeconds(double seconds) {
     return abs_sec;
 }
 
+AutoStartArming autoStartArming(int64_t target_ms, int64_t epoch_ms,
+                                bool early_departure) {
+    AutoStartArming arming{};
+    arming.rally_time_s = autoStartSecondsFromTargetMs(target_ms, epoch_ms);
+    arming.early_departure = early_departure;
+    arming.triggered = false;
+    arming.zero_distance_now = early_departure;
+    return arming;
+}
+
+AutoStartArming autoStartDisarmed() {
+    return AutoStartArming{};
+}
+
+bool autoStartHoldsTimeError(uint64_t auto_start_rally_time_s,
+                             bool auto_start_early_departure,
+                             bool auto_start_triggered,
+                             int64_t diff_ms) {
+    if (auto_start_rally_time_s == 0) return false;
+    if (!auto_start_early_departure) return false;
+    if (auto_start_triggered) return false;
+    return diff_ms > 0 && diff_ms <= 24LL * 3600 * 1000;
+}
+
 int gaugeZoneHysteretic(double seconds, int previous_zone) {
     int plain = gaugeZone(seconds);
     if (previous_zone < 0 || previous_zone > 2) return plain;
@@ -591,8 +615,12 @@ std::string gaugeTickLabel(int index) {
     return std::to_string(index);
 }
 
+bool gaugeTickLabelsVisibleInZone(int zone) {
+    return zone == 0;
+}
+
 bool gaugeTickLabelsVisible(double seconds) {
-    return gaugeZone(seconds) == 0;
+    return gaugeTickLabelsVisibleInZone(gaugeZone(seconds));
 }
 
 double gaugeTickAngle(int index, double max_val) {

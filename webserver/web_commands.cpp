@@ -20,6 +20,20 @@ static const char* jsonFindString(const char* json, const char* key, char* out, 
     return out;
 }
 
+// Whole-value form, with no length cap. The waypoint list can outgrow any
+// fixed buffer, and a truncated list is worse than none: the cut lands
+// mid-number, so the fragment parses as a real waypoint the operator never
+// entered and every waypoint after it is silently dropped.
+static bool jsonFindStringValue(const char* json, const char* key, std::string* out) {
+    std::string needle = std::string("\"") + key + "\":\"";
+    const char* p = strstr(json, needle.c_str());
+    if (!p) return false;
+    p += needle.size();
+    out->clear();
+    while (*p && *p != '"') out->push_back(*p++);
+    return true;
+}
+
 static bool jsonFindBool(const char* json, const char* key, bool* out) {
     std::string needle = std::string("\"") + key + "\":";
     const char* p = strstr(json, needle.c_str());
@@ -111,11 +125,9 @@ bool webHandleCommand(AppData* data, const char* json) {
         int index = 0;
         if (!jsonFindInt(json, "index", &index)) return false;
         if (index < 0 || index >= static_cast<int>(data->state->segments.size())) return false;
+        // segment_current_number indexes the running stage's snapshot, not
+        // this list, so editing the roadbook leaves it alone.
         data->state->segments.erase(data->state->segments.begin() + index);
-        if (data->state->segment_current_number >= static_cast<long>(data->state->segments.size())) {
-            data->state->segment_current_number =
-                data->state->segments.empty() ? -1 : static_cast<long>(data->state->segments.size()) - 1;
-        }
         ConfigFile::save(*data->state);
         refreshSegmentList(data);
         return true;
@@ -126,6 +138,7 @@ bool webHandleCommand(AppData* data, const char* json) {
         if (slot < 1 || slot > RallyState::MAX_MEMORY_SLOTS) return false;
         data->state->memory_slots[slot - 1].segments = data->state->segments;
         data->state->memory_slots[slot - 1].beep_waypoints_m = data->state->beep_waypoints_m;
+        data->state->memory_slots[slot - 1].waypoints_recorded = true;
         ConfigFile::save(*data->state);
         return true;
     }
@@ -135,11 +148,18 @@ bool webHandleCommand(AppData* data, const char* json) {
         if (slot < 1 || slot > RallyState::MAX_MEMORY_SLOTS) return false;
         if (data->state->memory_slots[slot - 1].empty()) return false;
         data->state->segments = data->state->memory_slots[slot - 1].segments;
-        data->state->beep_waypoints_m = data->state->memory_slots[slot - 1].beep_waypoints_m;
+        // A slot from a pre-Beep-Assist config has no list of its own; the
+        // live one stays rather than being silently deleted.
+        if (data->state->memory_slots[slot - 1].waypoints_recorded) {
+            data->state->beep_waypoints_m = data->state->memory_slots[slot - 1].beep_waypoints_m;
+        }
         data->beepCursorsStale = true;
-        data->state->segment_current_number = data->state->segments.empty() ? -1 : 0;
         ConfigFile::save(*data->state);
         refreshSegmentList(data);
+        // Same pair as the GTK recall path: without this the stage-setup text
+        // view still shows the previous stage, and the next keystroke there
+        // commits that stale text back over the list just recalled.
+        refreshBeepWaypointView(data);
         return true;
     }
     if (strcmp(type, "beep_set") == 0) {
@@ -147,7 +167,6 @@ bool webHandleCommand(AppData* data, const char* json) {
         // the fields the operator actually changed, so each is optional.
         bool flag = false;
         double value = 0.0;
-        char waypoints[512];
         if (jsonFindBool(json, "enabled", &flag)) data->state->beep_assist_enabled = flag;
         if (jsonFindBool(json, "navigation", &flag)) data->state->beep_navigation_mode = flag;
         if (jsonFindBool(json, "timing", &flag)) data->state->beep_timing_mode = flag;
@@ -157,7 +176,8 @@ bool webHandleCommand(AppData* data, const char* json) {
         if (jsonFindDouble(json, "advance_s", &value) && value >= 0.0) {
             data->state->beep_advance_s = value;
         }
-        if (jsonFindString(json, "waypoints_km", waypoints, sizeof(waypoints))) {
+        std::string waypoints;
+        if (jsonFindStringValue(json, "waypoints_km", &waypoints)) {
             data->state->beep_waypoints_m = parseBeepWaypointsKm(waypoints);
             refreshBeepWaypointView(data);
         }

@@ -63,6 +63,52 @@ bool nextSegmentTargetKph(const RallyState& state, double* kph);
 uint64_t autoStartSecondsFromTargetMs(int64_t target_ms, int64_t epoch_ms);
 int64_t autoStartTargetMsFromSeconds(uint64_t seconds, int64_t epoch_ms);
 
+// True while an armed "autostart on the minute" is still counting down, in
+// which case the time-error box reads a flat zero instead of a figure.
+//
+// That autostart zeroes the DISTANCE when it is armed but deliberately leaves
+// the clock running to the appointed minute, and it does not end the stage
+// that is loaded. Without this the error box therefore kept reporting the
+// previous stage against its old clock zero -- and since the car is standing
+// still on nought distance, that figure ran a second further behind for every
+// second of the countdown. There is no schedule to be ahead or behind of
+// until the clock zeroes, so zero is the honest reading.
+//
+// Deliberately NOT applied to an autostart entered on the Set Autostart
+// screen: that one arms nothing and zeroes nothing until it fires, so a stage
+// already under way keeps its real error. `diff_ms` is the countdown
+// remaining, so the hold lasts exactly as long as the T- overlay is on
+// screen and a stale target left in a config file releases it at once.
+// The complete armed-autostart state. Every arming press produces one of
+// these and the caller ASSIGNS it wholesale, which is what makes a press
+// overrule whatever was armed before -- including an autostart of the other
+// kind, and including one already armed for the very same target time. No
+// field survives from the previous arming, so there is no combination of
+// old kind and new time that can leave the box half-converted.
+struct AutoStartArming {
+    uint64_t rally_time_s;      // 0 = nothing armed
+    bool early_departure;       // true = the "on the minute" kind
+    bool triggered;             // always false: a fresh arming has not fired
+    bool zero_distance_now;     // early departure zeroes distance at arming
+};
+
+// Builds the arming for a press. `target_ms` is the moment the stage clock
+// zeroes; `early_departure` selects the "on the minute" kind, which also
+// zeroes the distance immediately so the roll-out to the line counts toward
+// the stage.
+AutoStartArming autoStartArming(int64_t target_ms, int64_t epoch_ms,
+                                bool early_departure);
+
+// The arming that cancels whatever is pending -- used by "Clear", and by a
+// manual Stage Go, which must not leave an autostart behind to re-zero the
+// stage a minute after the crew started it by hand.
+AutoStartArming autoStartDisarmed();
+
+bool autoStartHoldsTimeError(uint64_t auto_start_rally_time_s,
+                             bool auto_start_early_departure,
+                             bool auto_start_triggered,
+                             int64_t diff_ms);
+
 // Calculate seconds ahead/behind target (high precision) - single segment
 double calculateAheadBehind(const RallyState& state, int64_t current_time_ms,
                           int64_t segment_start_time, double target_counts_per_hour,
@@ -327,6 +373,14 @@ std::string gaugeTickLabel(int index);
 // instead, and a numeral next to a pinned needle would claim a precision
 // the needle position no longer carries.
 bool gaugeTickLabelsVisible(double seconds);
+
+// Same decision taken from an already-resolved zone. The gauge draws from
+// the hysteretic zone (see gaugeZoneHysteretic), so it must ask this rather
+// than the raw-reading form above -- otherwise the numerals would still
+// flicker on a reading parked at 10.0, and a reading between 9.5 and 10.0
+// on the way down out of amber would show green numerals against an amber
+// arc.
+bool gaugeTickLabelsVisibleInZone(int zone);
 
 // Angle (Cairo convention, same as NeedleGeometry::angle) for the major tick
 // labelled `index` seconds, given the gauge's current effective sweep
