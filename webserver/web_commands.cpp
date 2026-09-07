@@ -142,5 +142,42 @@ bool webHandleCommand(AppData* data, const char* json) {
         refreshSegmentList(data);
         return true;
     }
+    if (strcmp(type, "beep_set") == 0) {
+        // One command for the whole Beep Assist panel: the phone sends only
+        // the fields the operator actually changed, so each is optional.
+        bool flag = false;
+        double value = 0.0;
+        char waypoints[512];
+        if (jsonFindBool(json, "enabled", &flag)) data->state->beep_assist_enabled = flag;
+        if (jsonFindBool(json, "navigation", &flag)) data->state->beep_navigation_mode = flag;
+        if (jsonFindBool(json, "timing", &flag)) data->state->beep_timing_mode = flag;
+        if (jsonFindDouble(json, "advance_m", &value) && value >= 0.0) {
+            data->state->beep_advance_m = value;
+        }
+        if (jsonFindDouble(json, "advance_s", &value) && value >= 0.0) {
+            data->state->beep_advance_s = value;
+        }
+        if (jsonFindString(json, "waypoints_km", waypoints, sizeof(waypoints))) {
+            data->state->beep_waypoints_m = parseBeepWaypointsKm(waypoints);
+            refreshBeepWaypointView(data);
+        }
+        // Anything here can move a waypoint or re-arm a mode, so the beep
+        // bookmarks are rebuilt from where the car actually is on the next
+        // display tick rather than replaying what is already behind it.
+        data->beepCursorsStale = true;
+        ConfigFile::save(*data->state);
+        return true;
+    }
+    if (strcmp(type, "tone_set") == 0) {
+        bool flag = false;
+        int tone_type = 0;
+        if (jsonFindBool(json, "enabled", &flag)) data->state->tone_enabled = flag;
+        if (jsonFindInt(json, "tone_type", &tone_type)) {
+            if (tone_type != 1 && tone_type != 2) return false;
+            data->state->simple_tone_mode = (tone_type == 2);
+        }
+        ConfigFile::save(*data->state);
+        return true;
+    }
     return false;
 }

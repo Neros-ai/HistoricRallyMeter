@@ -59,14 +59,57 @@
     </div>
     <button id="btn-add-seg" type="button">+ Add segment</button>
     <section class="memory-row">
-      <span>Memory:</span>
-      <button class="mem-slot" data-slot="1" type="button">1</button>
-      <button class="mem-slot" data-slot="2" type="button">2</button>
-      <button class="mem-slot" data-slot="3" type="button">3</button>
-      <button class="mem-slot" data-slot="4" type="button">4</button>
-      <button class="mem-slot" data-slot="5" type="button">5</button>
-      <button id="btn-mem-store" type="button">Store</button>
-      <button id="btn-mem-recall" type="button">Recall</button>
+      <span class="mem-label">Store</span>
+      <button class="mem-slot" data-action="store" data-slot="1" type="button">1</button>
+      <button class="mem-slot" data-action="store" data-slot="2" type="button">2</button>
+      <button class="mem-slot" data-action="store" data-slot="3" type="button">3</button>
+      <button class="mem-slot" data-action="store" data-slot="4" type="button">4</button>
+      <button class="mem-slot" data-action="store" data-slot="5" type="button">5</button>
+    </section>
+    <section class="memory-row">
+      <span class="mem-label">Recall</span>
+      <button class="mem-slot" data-action="recall" data-slot="1" type="button">1</button>
+      <button class="mem-slot" data-action="recall" data-slot="2" type="button">2</button>
+      <button class="mem-slot" data-action="recall" data-slot="3" type="button">3</button>
+      <button class="mem-slot" data-action="recall" data-slot="4" type="button">4</button>
+      <button class="mem-slot" data-action="recall" data-slot="5" type="button">5</button>
+    </section>
+
+    <section class="beep-panel">
+      <h2>Beep Assist KM</h2>
+      <textarea id="beep-waypoints" rows="2"
+                placeholder="3.67, 4.98, 17.30"></textarea>
+      <div class="beep-row">
+        <label for="beep-enabled">Off/On</label>
+        <input id="beep-enabled" type="checkbox">
+      </div>
+      <div class="beep-row beep-head">
+        <span>Mode</span><span>Advance by</span>
+      </div>
+      <div class="beep-row">
+        <label for="beep-nav">Navigation</label>
+        <input id="beep-nav" type="checkbox">
+        <input id="beep-advance-m" type="number" min="0" step="1" inputmode="numeric"
+               placeholder="Metres">
+      </div>
+      <div class="beep-row">
+        <label for="beep-timing">Timing</label>
+        <input id="beep-timing" type="checkbox">
+        <input id="beep-advance-s" type="number" min="0" step="1" inputmode="numeric"
+               placeholder="Seconds">
+      </div>
+    </section>
+
+    <section class="beep-panel">
+      <div class="beep-row">
+        <label for="tone-enabled">tone off/on</label>
+        <input id="tone-enabled" type="checkbox">
+      </div>
+      <div class="beep-row">
+        <span>Type</span>
+        <label><input type="radio" name="tone-type" value="1"> 1</label>
+        <label><input type="radio" name="tone-type" value="2"> 2</label>
+      </div>
     </section>
     <section class="actions">
       <button id="btn-reset-trip2" type="button">Reset Trip</button>

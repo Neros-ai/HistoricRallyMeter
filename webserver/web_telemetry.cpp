@@ -134,6 +134,26 @@ std::string buildStateJson(AppData* data) {
            << ",\"distance_m\":" << static_cast<long>(seg.distance_m)
            << ",\"autoNext\":" << (seg.autoNext ? "true" : "false") << "}";
     }
+    ss << "],";
+
+    // Beep Assist and tone, so the phone renders the box's actual settings
+    // rather than blank controls that only take effect once touched.
+    ss << "\"beep_assist_enabled\":" << (data->state->beep_assist_enabled ? "true" : "false")
+       << ",\"beep_navigation_mode\":" << (data->state->beep_navigation_mode ? "true" : "false")
+       << ",\"beep_timing_mode\":" << (data->state->beep_timing_mode ? "true" : "false")
+       << ",\"beep_advance_m\":" << data->state->beep_advance_m
+       << ",\"beep_advance_s\":" << data->state->beep_advance_s
+       << ",\"beep_waypoints_km\":\"" << formatBeepWaypointsKm(data->state->beep_waypoints_m) << "\""
+       << ",\"tone_enabled\":" << (data->state->tone_enabled ? "true" : "false")
+       << ",\"tone_type\":" << (data->state->simple_tone_mode ? 2 : 1);
+
+    // Which memory slots hold a stage, so the phone can mark them the way the
+    // box does instead of offering five identical buttons.
+    ss << ",\"memory_populated\":[";
+    for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
+        if (i > 0) ss << ',';
+        ss << (data->state->memory_slots[i].empty() ? "false" : "true");
+    }
     ss << "]}";
     return ss.str();
 }

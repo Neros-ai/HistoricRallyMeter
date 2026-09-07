@@ -442,11 +442,15 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             double next_kph = 0.0;
             if (nextSegmentTargetKph(*data->state, &next_kph)) {
                 std::stringstream ns;
-                ns << std::fixed << std::setprecision(1)
+                ns << "> " << std::fixed << std::setprecision(1)
                    << (data->state->units ? next_kph / 1.60934 : next_kph);
-                cairo_set_font_size(cr, L.labelSize);
+                // 1.5x the caption size: this is a value to read at a glance,
+                // not a caption. The row below it is spaced off the larger
+                // size so the taller glyphs do not collide with the caption.
+                const double nextSize = L.labelSize * 1.5;
+                cairo_set_font_size(cr, nextSize);
                 cairo_move_to(cr, L.bandTargetX,
-                              baseline + 2 * (L.labelSize + L.labelGap));
+                              baseline + (L.labelSize + L.labelGap) + (nextSize + L.labelGap));
                 cairo_show_text(cr, ns.str().c_str());
             }
         }
@@ -624,8 +628,10 @@ void updateDriverDisplay(AppData* data) {
         double next_kph = 0.0;
         if (data->nextTargetSpeedLabel) {
             if (nextSegmentTargetKph(*data->state, &next_kph)) {
+                // "> " marks it as the speed being moved TO, so it cannot be
+                // misread as a second current value.
                 std::stringstream ns;
-                ns << std::fixed << std::setprecision(1)
+                ns << "> " << std::fixed << std::setprecision(1)
                    << (data->state->units ? next_kph / 1.60934 : next_kph);
                 gtk_label_set_text(data->nextTargetSpeedLabel, ns.str().c_str());
             } else {
@@ -856,7 +862,7 @@ static void applyDriverCSS(G_GNUC_UNUSED GtkWidget* widget) {
         "label { color: #FFFFFF; font-weight: bold; }"
         "button { background-color: #333333; color: #FFFFFF; font-weight: bold; }"
         ".speed-header { font-size: 28px; }"
-        ".speed-value-next { font-size: 34px; font-family: monospace; color: #FFDD00; }"
+        ".speed-value-next { font-size: 51px; font-family: monospace; color: #FFDD00; }"
         ".speed-value { font-size: 64px; font-family: monospace; }"
         ".speed-value-xl { font-size: 80px; font-family: monospace; }"
         ".speed-value-target { font-size: 45px; font-family: monospace; }"
@@ -950,7 +956,7 @@ GtkWidget* createDriverWindow(AppData* data) {
     data->nextTargetSpeedLabel = GTK_LABEL(gtk_label_new(""));
     gtk_style_context_add_class(
         gtk_widget_get_style_context(GTK_WIDGET(data->nextTargetSpeedLabel)), "speed-value-next");
-    gtk_label_set_width_chars(data->nextTargetSpeedLabel, 6);
+    gtk_label_set_width_chars(data->nextTargetSpeedLabel, 8);
     gtk_label_set_xalign(data->nextTargetSpeedLabel, 1.0);
     gtk_widget_set_halign(GTK_WIDGET(data->nextTargetSpeedLabel), GTK_ALIGN_CENTER);
     gtk_box_pack_start(GTK_BOX(leftCol), GTK_WIDGET(data->nextTargetSpeedLabel), FALSE, FALSE, 0);

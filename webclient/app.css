@@ -72,6 +72,24 @@ header h1 { font-size: 1rem; margin: 0; }
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 th, td { border: 1px solid #444; padding: 0.4rem; text-align: left; }
 td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; padding: 0.35rem; }
-.memory-row { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin: 0.75rem 0; }
-.mem-slot { min-width: 2.2rem; padding: 0.5rem; background: #222; color: #fff; border: 1px solid #666; }
-.mem-slot.selected { background: #555; }
+/* One row per action, its label on the same line as its five slots, so the
+   row reads as "Recall: 1 2 3 4 5" -- the action itself, rather than a grid
+   plus a separate verb button to press afterwards. */
+.memory-row { display: flex; flex-wrap: nowrap; gap: 0.4rem; align-items: center; margin: 0.4rem 0; }
+.mem-label { flex: 0 0 4.5rem; }
+.mem-slot { flex: 1 1 0; min-width: 2.2rem; padding: 0.6rem 0.3rem; background: #222; color: #fff; border: 1px solid #666; }
+/* A slot holding a saved stage, marked the way the box marks it. */
+.mem-slot.populated { border-color: #FFDD00; color: #FFDD00; }
+.mem-slot:active { background: #555; }
+
+.beep-panel { border: 1px solid #444; background: #111; padding: 0.6rem; margin: 0.75rem 0; }
+.beep-panel h2 { font-size: 1rem; margin: 0 0 0.5rem; }
+.beep-panel textarea { width: 100%; box-sizing: border-box; background: #000; color: #fff;
+                       border: 1px solid #666; padding: 0.4rem; font-size: 1.1rem; }
+.beep-row { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.5rem; }
+.beep-row label { flex: 0 0 6.5rem; }
+.beep-row input[type="number"] { margin-left: auto; width: 5.5rem; background: #000; color: #fff;
+                                 border: 1px solid #666; padding: 0.4rem; font-size: 1.2rem; }
+.beep-row input[type="checkbox"], .beep-row input[type="radio"] { width: 1.4rem; height: 1.4rem; }
+.beep-head { color: #aaa; font-size: 0.85rem; }
+.beep-head span:last-child { margin-left: auto; }
