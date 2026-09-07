@@ -300,9 +300,17 @@ static constexpr double kSimCountsPerSecond = 1000.0;
 // Build the counter backend: a real I2C counter on hardware, or a simulated
 // counter when RALLY_SIM_I2C=1 so the GUI can start on a dev machine with no
 // /dev/i2c-1. Real hardware is the default, so the Pi target is unaffected.
-static std::unique_ptr<ICounter> makeCounter(int bus, int address) {
+// Single source of truth for "are we simulating?". The log line below used to
+// test only for the variable's presence while this tested its value, so
+// RALLY_SIM_I2C=0 announced simulation while real I2C was used, and
+// RALLY_SIM_I2C=true announced it and then threw opening /dev/i2c-1.
+static bool usingSimCounters() {
     const char* sim = std::getenv("RALLY_SIM_I2C");
-    if (sim && std::string(sim) == "1") {
+    return sim && std::string(sim) == "1";
+}
+
+static std::unique_ptr<ICounter> makeCounter(int bus, int address) {
+    if (usingSimCounters()) {
         return std::make_unique<SimCounter>(0u, kSimCountsPerSecond);
     }
     return std::make_unique<I2CCounter>(bus, address);
@@ -339,8 +347,8 @@ int main(int argc, char* argv[]) {
         std::cerr << "[DEBUG] Step 5: Opening I2C counter2 at 0x71..." << std::endl;
         std::unique_ptr<ICounter> counter2 = makeCounter(I2C_BUS, CNTR_2_ADDRESS);
         std::cerr << "[DEBUG] Step 5: counter2 OK" << std::endl;
-        if (std::getenv("RALLY_SIM_I2C")) {
-            std::cerr << "[DEBUG] RALLY_SIM_I2C set: using simulated counters" << std::endl;
+        if (usingSimCounters()) {
+            std::cerr << "[DEBUG] RALLY_SIM_I2C=1: using simulated counters" << std::endl;
         }
         
         if (state.total_start_cntr1 == 0 && state.total_start_cntr2 == 0) {

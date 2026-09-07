@@ -1,4 +1,5 @@
 #include "tone_generator.h"
+#include <algorithm>
 #include <alsa/asoundlib.h>
 #include <cmath>
 #include <vector>
@@ -116,10 +117,20 @@ void ToneGenerator::threadFunc() {
             std::vector<int16_t> beep_buf(req.frames);
             double bp = 0.0;
             const double bp_inc = 2.0 * M_PI * req.freq_hz / SAMPLE_RATE;
+            // Both operands are unsigned, so `req.frames - FADE_FRAMES`
+            // wraps for any beep shorter than the fade (5ms). That was
+            // unreachable while the beep was a fixed 50ms, but duration is
+            // now caller-supplied: the wrapped comparison is never true, the
+            // fade-out never applies, and the beep is cut off at non-zero
+            // amplitude with an audible click. For a beep too short to hold
+            // both ramps, fade over half its length each way.
+            const unsigned fade = std::min(FADE_FRAMES, req.frames / 2);
             for (unsigned i = 0; i < req.frames; i++) {
                 double env = 1.0;
-                if (i < FADE_FRAMES) env = static_cast<double>(i) / FADE_FRAMES;
-                if (i > req.frames - FADE_FRAMES) env = static_cast<double>(req.frames - i) / FADE_FRAMES;
+                if (fade > 0) {
+                    if (i < fade) env = static_cast<double>(i) / fade;
+                    if (i > req.frames - fade) env = static_cast<double>(req.frames - i) / fade;
+                }
                 beep_buf[i] = static_cast<int16_t>(req.amplitude * 32767.0 * env * waveSample(bp, req.wave));
                 bp += bp_inc;
             }

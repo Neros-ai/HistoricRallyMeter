@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <string>
 
 #ifndef RALLY_NO_GTK
 #include <gtk/gtk.h>
@@ -56,10 +57,15 @@ struct AppData {
     GtkLabel* updatesPerSecLabel;
     GtkLabel* cpuTempLabel;
     GtkLabel* unitsLabel;  // Shows KPH or MPH in header
-    GtkLabel* driverTotalDistLabel;
-    GtkLabel* driverTotalUnitLabel;
-    GtkLabel* driverTripDistLabel;
-    GtkLabel* driverTripUnitLabel;
+    // Text carriers for the compact driver layout, which draws these with
+    // cairo rather than showing a widget. Plain strings: as GtkLabels they
+    // were created, never parented, and never destroyed.
+    std::string driverTotalDistText = "0";
+    std::string driverTotalUnitText = "m";
+    std::string driverTripDistText  = "0";
+    std::string driverTripUnitText  = "m";
+    // Zone currently shown by the gauge, for gaugeZoneHysteretic().
+    int gaugeZoneShown = 0;
     GtkButton* unitToggleBtn;
     
     // Rally gauge
@@ -213,6 +219,10 @@ struct AppData {
     // so this label stands in for the sound: it flashes briefly whenever a
     // navigation or timing beep fires, naming which mode triggered it.
     GtkLabel* beepFlashLabel = nullptr;
+    // The flash's own hide-timer, so a second beep arriving inside the window
+    // replaces it rather than adding a second timeout that hides the label
+    // early. 0 = not currently showing.
+    guint beepFlashTimer = 0;
 };
 #endif // RALLY_NO_GTK
 

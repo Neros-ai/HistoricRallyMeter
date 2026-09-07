@@ -28,6 +28,32 @@ public:
             return result.size() == 1 && std::abs(result[0] - 30.0) < 0.001;
         });
 
+        suite->addTest("parseSemicolonList skips a malformed token instead of throwing", []() {
+            // The stage-setup keypad offers "." and ";" as well as digits, and
+            // both the speed and distance entries feed through here. An
+            // unguarded std::stod throws out of a GTK "clicked" handler --
+            // C code with no C++ handler in the stack -- which terminates the
+            // app from a stray keypress mid-rally.
+            std::vector<double> result = parseSemicolonList("50;.;30");
+            ASSERT_EQ(result.size(), 2u);
+            ASSERT_NEAR(result[0], 50.0, 0.001);
+            ASSERT_NEAR(result[1], 30.0, 0.001);
+            return true;
+        });
+
+        suite->addTest("parseSemicolonList rejects a token with trailing junk", []() {
+            // "1.2.3" silently read as 1.2 is a wrong segment, not a typo the
+            // operator can see. Same contract as parseBeepWaypointsKm.
+            std::vector<double> result = parseSemicolonList("1.2.3;40");
+            ASSERT_EQ(result.size(), 1u);
+            ASSERT_NEAR(result[0], 40.0, 0.001);
+            return true;
+        });
+
+        suite->addTest("parseSemicolonList survives an all-rubbish list", []() {
+            return parseSemicolonList(".;-;;abc").empty();
+        });
+
         suite->addTest("parseSemicolonList skips empty tokens", []() {
             std::vector<double> result = parseSemicolonList("30;;40");
             return result.size() == 2

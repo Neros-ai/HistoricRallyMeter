@@ -278,6 +278,17 @@ double gaugeEffectiveMaxSeconds(double seconds);
 // computed fresh from the reading every frame instead.
 int gaugeZone(double seconds);
 
+// How far a reading must clear a zone boundary before the gauge leaves the
+// zone it is already showing. Entering is instant; only leaving is damped.
+constexpr double GAUGE_ZONE_DEAD_BAND_S = 0.5;
+
+// gaugeZone() with hysteresis, given the zone currently being displayed.
+// gaugeZone() alone is recomputed every frame from the raw reading and drives
+// the digital format, arc colour, chevron count and tick labels, so a reading
+// sitting on 10.0 or 30.0 flickers all four on every redraw. An out-of-range
+// previous_zone falls back to the plain zone.
+int gaugeZoneHysteretic(double seconds, int previous_zone);
+
 // Arc colour for a zone (see gaugeZone), matching pristine's exact
 // per-scale RGB triples.
 struct GaugeArcColor { double r, g, b; };

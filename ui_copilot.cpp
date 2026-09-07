@@ -140,7 +140,14 @@ void updateCopilotDisplay(AppData* data) {
     // Beep Assist. Checked here rather than on the stage-setup screen so the
     // beeps keep coming while the operator is on any screen at all.
     if (data->state->beep_assist_enabled && !data->state->beep_waypoints_m.empty()) {
-        double travelled_m = countsToMeters(total_count_diff, data->state->calibration);
+        // The corrected Total, not the raw counter: both readouts apply
+        // total_distance_adjust_cm (RB-NAV-03), and a waypoint is a roadbook
+        // distance the operator compares against what the display shows. On
+        // the raw value a +40 m correction made a waypoint entered as 12.00
+        // fire when the display read 12.04.
+        double travelled_m = static_cast<double>(adjustedDistanceMeters(
+            countsToCentimeters(total_count_diff, data->state->calibration),
+            data->state->total_distance_adjust_cm));
         bool stage_active = data->state->segment_current_number >= 0;
         double elapsed_stage_s = (current_time_ms - data->state->total_start_time_ms) / 1000.0;
 

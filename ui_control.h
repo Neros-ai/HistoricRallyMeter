@@ -20,4 +20,12 @@ void updateControlDisplay(AppData* data);
 // createControlWindow() was never called (beepFlashLabel is nullptr).
 void flashBeepWarning(AppData* data, bool navigation_fired);
 
+// Sets the sim speed and unpauses -- the panel's speed buttons.
+void applySpeedToSimCounters(AppData* data, double kph);
+
+// Re-derives the sim counters' rate from the CURRENT calibration, preserving
+// paused state. Call after any calibration change; a no-op when no speed has
+// been set or when not simulating.
+void resyncSimCounterRate(AppData* data);
+
 #endif // UI_CONTROL_H

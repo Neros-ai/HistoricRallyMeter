@@ -535,6 +535,19 @@ double gaugeEffectiveMaxSeconds(double seconds) {
     return abs_sec;
 }
 
+int gaugeZoneHysteretic(double seconds, int previous_zone) {
+    int plain = gaugeZone(seconds);
+    if (previous_zone < 0 || previous_zone > 2) return plain;
+    // Widen only the EXIT from the zone we are already in. Entering is
+    // instant, so a genuine crossing shows immediately; leaving needs the
+    // reading to clear the boundary by the dead band, which stops a value
+    // sitting on 10.0 or 30.0 from alternating on every 10ms redraw.
+    double abs_sec = std::abs(seconds);
+    if (previous_zone == 2 && abs_sec >= 30.0 - GAUGE_ZONE_DEAD_BAND_S) return 2;
+    if (previous_zone == 1 && abs_sec >= 10.0 - GAUGE_ZONE_DEAD_BAND_S && abs_sec < 30.0) return 1;
+    return plain;
+}
+
 int gaugeZone(double seconds) {
     double abs_sec = std::abs(seconds);
     if (abs_sec < 10.0) return 0;
@@ -570,7 +583,21 @@ std::vector<double> parseSemicolonList(const std::string& input) {
     std::string token;
     while (std::getline(stream, token, ';')) {
         if (token.empty()) continue;
-        result.push_back(std::stod(token));
+        // A bare std::stod throws on a token the keypad can easily produce
+        // ("." and ";" are both keypad buttons). The throw escapes through a
+        // GTK "clicked" handler -- C code with no C++ handler in the stack --
+        // and terminates the app from a stray keypress mid-rally. Skip the
+        // bad token instead, and reject trailing junk ("1.2.3" silently read
+        // as 1.2 is a wrong segment the operator cannot see). Same contract
+        // as parseBeepWaypointsKm.
+        try {
+            size_t consumed = 0;
+            double value = std::stod(token, &consumed);
+            if (consumed != token.size()) continue;
+            result.push_back(value);
+        } catch (const std::exception&) {
+            continue;
+        }
     }
     return result;
 }

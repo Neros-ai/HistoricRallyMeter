@@ -271,6 +271,45 @@ public:
             return std::abs(three_sec_needle.angle - tick_three_angle) < 1e-9;
         });
 
+        // ---- zone hysteresis ----
+        // gaugeZone() is recomputed every frame from the raw reading and
+        // drives the digital format, the arc colour, the chevron count and
+        // the tick labels. Without a dead band a reading sitting on a
+        // boundary alternates on every redraw of the 10ms timer.
+
+        suite->addTest("a reading hovering on the 30s boundary does not flip zone", []() {
+            // Was zone 2 (>=30); a hair under 30 must not drop straight back.
+            ASSERT_EQ(gaugeZoneHysteretic(29.98, 2), 2);
+            // ...but a clear move below the dead band does.
+            ASSERT_EQ(gaugeZoneHysteretic(29.0, 2), 1);
+            return true;
+        });
+
+        suite->addTest("a reading hovering on the 10s boundary does not flip zone", []() {
+            ASSERT_EQ(gaugeZoneHysteretic(9.98, 1), 1);
+            ASSERT_EQ(gaugeZoneHysteretic(9.0, 1), 0);
+            return true;
+        });
+
+        suite->addTest("entering a zone still uses the plain boundary", []() {
+            // Hysteresis widens the exit, never the entry: the gauge must
+            // change the instant the reading genuinely crosses.
+            ASSERT_EQ(gaugeZoneHysteretic(10.0, 0), 1);
+            ASSERT_EQ(gaugeZoneHysteretic(30.0, 1), 2);
+            return true;
+        });
+
+        suite->addTest("hysteresis is symmetric for negative readings", []() {
+            ASSERT_EQ(gaugeZoneHysteretic(-29.98, 2), 2);
+            ASSERT_EQ(gaugeZoneHysteretic(-10.0, 0), 1);
+            return true;
+        });
+
+        suite->addTest("an out-of-range previous zone falls back to the plain zone", []() {
+            ASSERT_EQ(gaugeZoneHysteretic(29.98, 99), gaugeZone(29.98));
+            return true;
+        });
+
         return suite;
     }
 };

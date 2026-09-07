@@ -116,6 +116,19 @@ public:
             return true;
         });
 
+        suite->addTest("the simulated count wraps like a 32-bit counter", []() {
+            // static_cast<uint32_t> of an out-of-range double is undefined
+            // behaviour, not a wrap. The real LS7866C is a 32-bit counter and
+            // rolls over; the sim must match rather than invoke UB.
+            int64_t now = 0;
+            SimCounter c(0, 1000000.0, [&now]() { return now; });
+            now = 5000000;  // 5000 s at 1e6 c/s = 5e9 counts, past 2^32
+            uint32_t v = c.readRegister(0x07);
+            // 5e9 mod 2^32 == 5e9 - 4294967296 = 705032704
+            ASSERT_EQ(v, 705032704u);
+            return true;
+        });
+
         return suite;
     }
 };

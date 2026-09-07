@@ -1,4 +1,5 @@
 #include "sim_counter.h"
+#include <cmath>
 #include <chrono>
 #include <utility>
 
@@ -28,6 +29,11 @@ uint32_t SimCounter::readRegister(uint8_t reg) {
     int64_t elapsed_ms = now_ms() - start_ms;
     if (elapsed_ms < 0) elapsed_ms = 0;  // guard against a non-monotonic clock
     double grown = counts_per_second * (static_cast<double>(elapsed_ms) / 1000.0);
+    // Casting an out-of-range double to uint32_t is undefined behaviour, not
+    // a wrap. The real LS7866C is a 32-bit counter and rolls over, so fold
+    // the value into range first and let the sim roll over the same way.
+    grown = std::fmod(grown, 4294967296.0);
+    if (grown < 0.0) grown = 0.0;
     return start_count + static_cast<uint32_t>(grown);
 }
 

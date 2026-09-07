@@ -296,6 +296,21 @@ public:
             return in.simple_tone_mode;
         });
 
+        suite->addTest("loading a config without waypoints clears any already in state", []() {
+            // ConfigFile::load takes RallyState& by reference, so a config
+            // predating Beep Assist must not leave a previous rally's
+            // waypoints in place alongside the new file's other values.
+            RallyState state;
+            state.beep_waypoints_m = { 1000.0, 2000.0 };
+            std::string path = "/tmp/rb_test_no_waypoints.json";
+            std::ofstream f(path);
+            f << "{\n  \"calibration\": 600000\n}\n";
+            f.close();
+            ConfigFile::load(state, path);
+            ASSERT_TRUE(state.beep_waypoints_m.empty());
+            return true;
+        });
+
         return suite;
     }
 };

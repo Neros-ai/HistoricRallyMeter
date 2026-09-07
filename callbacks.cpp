@@ -1086,6 +1086,12 @@ void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
                 // new_cal = (input_meters * 1000 * 1000) / total_count_diff
                 data->state->calibration = (rally_distance_m * 1000000) / total_count_diff;
                 
+                // The sim counters were given a counts-per-second derived from
+                // the OLD calibration; re-derive so the sim keeps driving at
+                // the speed the control panel says it does. Preserves paused
+                // state -- a calibration change must not restart the sim.
+                resyncSimCounterRate(data);
+
                 // Recalculate count-based values in all segments from stable human values
                 for (auto& seg : data->state->segments) {
                     seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
@@ -1125,6 +1131,9 @@ void on_reset_calibration_pulses(G_GNUC_UNUSED GtkWidget* widget, gpointer user_
     if (new_calibration <= 0) return;  // zero/negative entry -- no-op, not a crash
 
     data->state->calibration = new_calibration;
+
+    // Same re-derivation as the measured-calibration path above.
+    resyncSimCounterRate(data);
 
     // Recalculate count-based values in all segments from stable human
     // values, same as every other calibration change.

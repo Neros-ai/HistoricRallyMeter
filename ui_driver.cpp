@@ -72,7 +72,11 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // debounce or switch between any more.
     double seconds = data->aheadBehindSeconds;
     double max_val = gaugeEffectiveMaxSeconds(seconds);
-    int zone = gaugeZone(seconds);
+    // Hysteretic: gaugeZone() alone is recomputed every frame and drives the
+    // digital format, arc colour, chevron count and tick labels, so a reading
+    // sitting on 10.0 or 30.0 flickered all four on every 10ms redraw.
+    int zone = gaugeZoneHysteretic(seconds, data->gaugeZoneShown);
+    data->gaugeZoneShown = zone;
     GaugeArcColor arc = gaugeArcColor(zone);
 
     // Needle bar half-width, declared here so the ticks can match it.
@@ -438,7 +442,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
         drawValue(gtk_label_get_text(data->totalSpeedLabel), L.totalBaseline);
         drawCaption("Total", L.totalBaseline);
-        drawDistance(gtk_label_get_text(data->driverTotalDistLabel), L.totalBaseline);
+        drawDistance(data->driverTotalDistText.c_str(), L.totalBaseline);
 
         // Trip speed and Trip distance share a colour so the eye groups them
         // as one reading, instead of scanning four undifferentiated white
@@ -446,14 +450,14 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         cairo_set_source_rgb(cr, 0.0, 1.0, 1.0);  // #00FFFF
         drawValue(gtk_label_get_text(data->tripSpeedLabel), L.tripBaseline);
         drawCaption("Trip", L.tripBaseline);
-        drawDistance(gtk_label_get_text(data->driverTripDistLabel), L.tripBaseline);
+        drawDistance(data->driverTripDistText.c_str(), L.tripBaseline);
 
         // Column captions below each half of the panel. They carry the
         // units so the values above them do not have to repeat them on
         // every row -- and they follow the live unit, not a fixed string.
         {
             std::string dist_caption =
-                distanceColumnCaption(gtk_label_get_text(data->driverTotalUnitLabel));
+                distanceColumnCaption(data->driverTotalUnitText.c_str());
             std::string speed_caption = speedColumnCaption(data->state->units);
 
             cairo_set_font_size(cr, L.labelSize);
@@ -576,16 +580,16 @@ void updateDriverDisplay(AppData* data) {
         data->state->total_distance_adjust_cm);
     const char* total_unit = "m";
     std::string total_dist_str = formatDistanceAutoUnit(total_dist_m, &total_unit);
-    gtk_label_set_text(data->driverTotalDistLabel, total_dist_str.c_str());
-    gtk_label_set_text(data->driverTotalUnitLabel, total_unit);
+    data->driverTotalDistText = total_dist_str;
+    data->driverTotalUnitText = total_unit;
 
     long trip_dist_m = adjustedDistanceMeters(
         countsToCentimeters(trip_count_diff, data->state->calibration),
         data->state->trip_distance_adjust_cm);
     const char* trip_unit = "m";
     std::string trip_dist_str = formatDistanceAutoUnit(trip_dist_m, &trip_unit);
-    gtk_label_set_text(data->driverTripDistLabel, trip_dist_str.c_str());
-    gtk_label_set_text(data->driverTripUnitLabel, trip_unit);
+    data->driverTripDistText = trip_dist_str;
+    data->driverTripUnitText = trip_unit;
 
     // Target speed and ahead/behind
     if (data->state->segment_current_number >= 0 && 
@@ -933,10 +937,14 @@ GtkWidget* createDriverWindow(AppData* data) {
 
     // Total/Trip distance: data only, not yet drawn anywhere. RB-DRV-01
     // places these in the compact-mode gauge per the design mockup.
-    data->driverTotalDistLabel = GTK_LABEL(gtk_label_new("0"));
-    data->driverTotalUnitLabel = GTK_LABEL(gtk_label_new("m"));
-    data->driverTripDistLabel = GTK_LABEL(gtk_label_new("0"));
-    data->driverTripUnitLabel = GTK_LABEL(gtk_label_new("m"));
+    // Plain strings, not GtkLabels: these are text carriers read back by the
+    // compact draw path, never packed into a container. As unparented widgets
+    // their floating references were never sunk or released and they were
+    // never destroyed.
+    data->driverTotalDistText = "0";
+    data->driverTotalUnitText = "m";
+    data->driverTripDistText  = "0";
+    data->driverTripUnitText  = "m";
     
     // Footer row at bottom of LEFT side only (under speeds)
     GtkWidget* footerBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);

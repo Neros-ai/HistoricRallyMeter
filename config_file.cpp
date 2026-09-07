@@ -105,7 +105,14 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
     
     std::istringstream stream(content);
     std::string line;
-    
+
+    // load() takes state by reference and only assigns keys the file actually
+    // contains, so a vector field is otherwise left holding whatever was
+    // there before. Clear it up front: a config predating Beep Assist must
+    // not leave a previous rally's waypoints in place alongside this file's
+    // other values.
+    state.beep_waypoints_m.clear();
+
     while (std::getline(stream, line)) {
         if (line.find("\"segments\"") != std::string::npos && line.find("\"memory_") == std::string::npos) {
             parseSegmentArray(stream, state.segments, state.calibration);

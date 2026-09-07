@@ -13,8 +13,9 @@ static double kphToCountsPerSecond(double kph, long calibration) {
 }
 
 // Apply the speed (and resume if paused) to both simulated counters.
-static void applySpeedToSimCounters(AppData* data, double kph) {
+void applySpeedToSimCounters(AppData* data, double kph) {
     data->controlSpeedKph = kph;
+    // Derived from the calibration as it is NOW -- see resyncSimCounterRate.
     double cps = kphToCountsPerSecond(kph, data->state->calibration);
     if (data->simCounter1) {
         data->simCounter1->setCountsPerSecond(cps);
@@ -24,6 +25,20 @@ static void applySpeedToSimCounters(AppData* data, double kph) {
         data->simCounter2->setCountsPerSecond(cps);
         data->simCounter2->setPaused(false);
     }
+}
+
+void resyncSimCounterRate(AppData* data) {
+    // The counts-per-second handed to the sim counters is derived from the
+    // calibration at the moment the speed was set, so a later calibration
+    // change leaves them pulsing at the old rate while every consumer divides
+    // by the new one -- the sim silently drives at a different speed than the
+    // panel reports. Re-derive, WITHOUT touching paused state: a calibration
+    // change must never resume a sim the operator stopped, which is why this
+    // is not just a call to applySpeedToSimCounters.
+    if (data->controlSpeedKph <= 0.0) return;  // no speed set yet; nothing to resync
+    double cps = kphToCountsPerSecond(data->controlSpeedKph, data->state->calibration);
+    if (data->simCounter1) data->simCounter1->setCountsPerSecond(cps);
+    if (data->simCounter2) data->simCounter2->setCountsPerSecond(cps);
 }
 
 static void on_control_speed_clicked(GtkWidget* widget, gpointer user_data) {
@@ -148,16 +163,30 @@ GtkWidget* createControlWindow(AppData* data) {
 void flashBeepWarning(AppData* data, bool navigation_fired) {
     if (!data->beepFlashLabel) return;
 
-    gtk_label_set_text(data->beepFlashLabel,
-        navigation_fired ? "BEEP: NAVIGATION" : "BEEP: TIMING");
+    // Navigation and timing can both be due on the same tick, in which case
+    // fireBeepAssist() is called twice in a row. Showing both matters: the
+    // label used to be overwritten instantly by the second call (so the
+    // navigation flash never appeared at all) and the FIRST call's timeout
+    // then hid the label 4s later while the second flash was still meant to
+    // be up. One label line naming both, and one timer, fixes both halves.
+    if (data->beepFlashTimer) {
+        // Still showing from a beep moments ago -- name both rather than
+        // replacing what the operator may not have read yet.
+        gtk_label_set_text(data->beepFlashLabel, "BEEP: NAVIGATION + TIMING");
+        g_source_remove(data->beepFlashTimer);
+    } else {
+        gtk_label_set_text(data->beepFlashLabel,
+            navigation_fired ? "BEEP: NAVIGATION" : "BEEP: TIMING");
+    }
     gtk_widget_show(GTK_WIDGET(data->beepFlashLabel));
 
     // Clears itself rather than the next beep overwriting it, so a single
     // beep during a quiet stretch is still visibly transient. 4s, not 1.5s:
     // an operator watching the sandbox manually needs time to actually
     // notice it, not just a log-scale confirmation.
-    g_timeout_add(4000, [](gpointer d) -> gboolean {
+    data->beepFlashTimer = g_timeout_add(4000, [](gpointer d) -> gboolean {
         AppData* app_data = static_cast<AppData*>(d);
+        app_data->beepFlashTimer = 0;
         if (app_data->beepFlashLabel) gtk_widget_hide(GTK_WIDGET(app_data->beepFlashLabel));
         return G_SOURCE_REMOVE;
     }, data);
