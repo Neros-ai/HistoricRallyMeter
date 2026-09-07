@@ -1,0 +1,17 @@
+/* Prevent GTK from changing unfocused (backdrop) window appearance */
+/* Keep the same colors as when focused */
+
+.background:backdrop {
+    background-color: @theme_bg_color;
+}
+
+*:backdrop {
+    color: @theme_fg_color;
+    -gtk-icon-effect: none;
+}
+
+label:backdrop,
+entry:backdrop,
+button:backdrop {
+    color: @theme_fg_color;
+}

@@ -1,0 +1,36 @@
+[DEBUG] Step 1: calling gtk_init...
+[DEBUG] Step 1: gtk_init OK
+[DEBUG] Step 2: GTK theme set OK
+[DEBUG] Step 3: Config loaded OK
+[DEBUG] Step 4: Opening I2C counter1 at 0x70...
+[DEBUG] Step 4: counter1 OK
+[DEBUG] Step 5: Opening I2C counter2 at 0x71...
+[DEBUG] Step 5: counter2 OK
+[DEBUG] RALLY_SIM_I2C=1: using simulated counters
+[DEBUG] Step 6: Creating AppData...
+[DEBUG] Step 7: CounterPoller created OK
+[DEBUG] Step 8: Creating ToneGenerator...
+[DEBUG] Step 8a: ToneGenerator constructed OK
+[DEBUG] Step 8b: Calling toneGen->start()...
+[DEBUG] Step 8c: ToneGenerator started OK
+Web server listening on http://172.17.0.2:8080/
+[DEBUG] Step 9: Creating driver window...
+[DEBUG] Step 9: Driver window created OK
+[DEBUG] Step 10: Creating copilot window...
+[DEBUG] Step 10: Copilot window created OK
+[DEBUG] Step 10a: Creating control panel window...
+[DEBUG] Step 10a: Control panel window created OK
+System connectors:
+GDK monitors (1):
+  Monitor 0: 2160x940 at (0,0) model=screen mfr=null
+Found 0 small display(s)
+No co-pilot-capable (1280x400) display found, opening co-pilot as 1280x400 window
+Restoring driver window: size 800x480 on monitor 0
+Driver monitor 0 geometry: 2160x940 at (0,0)
+Using saved position
+Positioning driver window at (1340,20)
+[DEBUG] Step 11: Showing windows...
+[DEBUG] Step 11a: Driver window shown
+[DEBUG] Step 11b: Copilot window shown
+[DEBUG] Step 11c: Control panel window shown
+[DEBUG] Step 12: Setting up 10ms timer and entering gtk_main...

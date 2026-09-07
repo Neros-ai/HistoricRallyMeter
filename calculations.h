@@ -52,6 +52,33 @@ double calculateIdealCountsFromStageStart(const RallyState& state, int64_t elaps
 double calculateAheadBehindFromStageStart(const RallyState& state, int64_t current_time_ms,
                                           int64_t actual_counts_from_stage_start);
 
+// Format a distance in meters with thousands-separator commas. No unit
+// suffix and no padding -- callers that need column alignment use GTK
+// label width/xalign, not string padding.
+std::string formatDistanceGrouped(long meters);
+
+// Format a distance choosing meters or kilometers so the printed magnitude
+// stays bounded (switches to km above +/-999,999 m). Writes "m" or "km"
+// through *unit_out.
+std::string formatDistanceAutoUnit(long meters, const char** unit_out);
+
+// Format an elapsed interval as minutes:seconds, switching to hours:minutes
+// once the minutes need more than four digits, and to "toolong" when even
+// hours will not fit. Emits no padding -- callers align the column with GTK
+// label width and xalign, so the result does not depend on which monospace
+// font the platform resolves.
+std::string formatElapsedInterval(int64_t total_secs);
+
+// Limit a proposed manual distance correction so the corrected reading can
+// never fall below zero. Clamping the correction rather than the displayed
+// value matters: otherwise repeated downward presses bank an invisible debt
+// that silently swallows the next stretch of real travel.
+long clampDistanceAdjust(long raw_cm, long proposed_adjust_cm);
+
+// Apply a manual distance correction (centimetres) to a raw distance
+// (centimetres) and return whole metres, truncating the same way the
+// uncorrected path does.
+long adjustedDistanceMeters(long raw_cm, long adjust_cm);
 // Summary of the loaded stage for the Stage Go confirmation, built directly
 // from the segments the operator has entered or recalled -- the app tracks
 // no separate stage name or number, so this is the only truthful thing to

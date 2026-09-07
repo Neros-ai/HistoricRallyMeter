@@ -295,6 +295,28 @@ public:
         });
 
         
+        suite->addTest("distance corrections survive a save/load round trip", []() {
+            // A correction dialled in mid-rally has to outlive a restart, or
+            // a power blip silently reintroduces the error it cancelled.
+            const std::string path = "/tmp/rallybox_test_dist_adjust.json";
+            RallyState out;
+            out.total_distance_adjust_cm = -2500;
+            out.trip_distance_adjust_cm = -1800;
+            ConfigFile::save(out, path);
+
+            RallyState in;
+            ConfigFile::load(in, path);
+            std::remove(path.c_str());
+            return in.total_distance_adjust_cm == -2500
+                && in.trip_distance_adjust_cm == -1800;
+        });
+
+        suite->addTest("distance corrections default to zero", []() {
+            RallyState fresh;
+            return fresh.total_distance_adjust_cm == 0
+                && fresh.trip_distance_adjust_cm == 0;
+        });
+
         return suite;
     }
 };

@@ -22,6 +22,17 @@ public:
     long segment_current_number = -1;  // -1 = no segment
     long rallyTimeOffset_ms = 0;  // offset in milliseconds
     long ahead_behind_zero_offset_ms = 0;  // manual offset for driver's ahead/behind display
+
+    // Manual distance corrections applied to the Total and Trip readouts, in
+    // centimetres (the unit distances are computed in). Set from the co-pilot
+    // main screen's -10 / set / +10 controls to dial out wheel slip or a
+    // roadbook discrepancy without resetting the counter and losing the
+    // elapsed time. Each is cleared when its own counter is reset or a stage
+    // starts -- even though the -10/+10 buttons that set them always write
+    // to both together (a wheel-slip correction affects the one shared
+    // measurement both readouts are derived from).
+    long total_distance_adjust_cm = 0;
+    long trip_distance_adjust_cm = 0;
     // Seconds since 1/1/2020, 0 = not set. Seconds, not minutes: the setup
     // screen accepts HH:MM:SS, and storing at minute resolution threw the
     // seconds away -- so the one screen that exists to start at an exact

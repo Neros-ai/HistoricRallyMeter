@@ -4,6 +4,7 @@
 #include "test_framework.h"
 #include "../calculations.h"
 #include "../rally_state.h"
+#include <string>
 
 class TestDistance {
 public:
@@ -138,6 +139,49 @@ public:
             return true;
         });
         
+        suite->addTest("groups a distance with thousands separators", []() {
+            ASSERT_EQ(formatDistanceGrouped(27477), "27,477");
+            ASSERT_EQ(formatDistanceGrouped(143), "143");
+            ASSERT_EQ(formatDistanceGrouped(1234567), "1,234,567");
+            return true;
+        });
+
+        suite->addTest("groups a negative distance with the sign outside the separators", []() {
+            ASSERT_EQ(formatDistanceGrouped(-27477), "-27,477");
+            return true;
+        });
+
+        suite->addTest("carries no padding", []() {
+            // The old co-pilot helper left-padded to a fixed width; this one
+            // does not -- callers align with GTK label width, not string width.
+            ASSERT_EQ(formatDistanceGrouped(5), "5");
+            return true;
+        });
+
+        suite->addTest("stays in metres at and below the switch threshold", []() {
+            const char* unit = nullptr;
+            std::string s = formatDistanceAutoUnit(999999, &unit);
+            ASSERT_STR_EQ(std::string(unit), "m");
+            ASSERT_EQ(s, "999,999");
+            return true;
+        });
+
+        suite->addTest("switches to kilometres above the threshold", []() {
+            const char* unit = nullptr;
+            std::string s = formatDistanceAutoUnit(1000000, &unit);
+            ASSERT_STR_EQ(std::string(unit), "km");
+            ASSERT_EQ(s, "1,000");
+            return true;
+        });
+
+        suite->addTest("switches to kilometres below the negative threshold too", []() {
+            const char* unit = nullptr;
+            std::string s = formatDistanceAutoUnit(-1000000, &unit);
+            ASSERT_STR_EQ(std::string(unit), "km");
+            ASSERT_EQ(s, "-1,000");
+            return true;
+        });
+
         return suite;
     }
 };

@@ -75,4 +75,14 @@ int64_t getAutoStartEpochMs();
 GtkWidget* createNumericKeypad(AppData* data);
 GtkWidget* createDateTimeKeypad(AppData* data);
 
+// Manual distance correction, buttoned on the co-pilot main screen's Total
+// row. on_distance_adjust writes BOTH total_distance_adjust_cm and
+// trip_distance_adjust_cm -- Total and Trip are two windows onto the same
+// wheel-count measurement, so a wheel-slip correction applies to both. It
+// reads a signed "delta_m" object datum carrying the step in metres.
+// on_distance_set only ever resolves total_distance_adjust_cm -- pinning to
+// an exact roadbook figure has no Trip equivalent.
+void on_distance_adjust(GtkWidget* widget, gpointer user_data);
+void on_distance_set(GtkWidget* widget, gpointer user_data);
+
 #endif // CALLBACKS_H
