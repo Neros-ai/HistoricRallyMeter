@@ -133,7 +133,10 @@ double calculateAheadBehind(const RallyState& state, int64_t current_time_ms,
     return seconds;
 }
 
-double calculateIdealCountsFromStageStart(const RallyState& state, int64_t elapsed_ms) {
+double calculateIdealCountsFromStageStart(const RallyState& state, int64_t elapsed_ms,
+                                          bool* roadbook_complete) {
+    if (roadbook_complete) *roadbook_complete = true;
+
     if (state.segment_current_number < 0 || state.segments.empty()) {
         return 0.0;
     }
@@ -146,6 +149,13 @@ double calculateIdealCountsFromStageStart(const RallyState& state, int64_t elaps
         const Segment& seg = state.segments[i];
         
         if (seg.target_speed_counts_per_hour <= 0.0) {
+            // A segment with real distance but no target speed is a hole in
+            // the roadbook, not an empty segment: skipping it drops its
+            // distance too, so everything computed from here on is measured
+            // against a shorter stage than the one being driven. Report that
+            // rather than returning a confidently wrong figure. A segment
+            // with no distance genuinely contributes nothing and is fine.
+            if (seg.distance_counts > 0.0 && roadbook_complete) *roadbook_complete = false;
             continue;  // Skip invalid segments
         }
         
@@ -181,8 +191,16 @@ double calculateAheadBehindFromStageStart(const RallyState& state, int64_t curre
         return 0.0;
     }
     
-    // Calculate where we should ideally be
-    double ideal_counts = calculateIdealCountsFromStageStart(state, elapsed_ms);
+    // Calculate where we should ideally be. If the roadbook has a hole in it
+    // -- a segment with a distance but no target speed -- the ideal position
+    // is measured against a stage shorter than the real one, so read as zero
+    // rather than showing a wrong figure the crew cannot tell from a right
+    // one. Same convention as the zero-speed current-segment guard below.
+    bool roadbook_complete = true;
+    double ideal_counts = calculateIdealCountsFromStageStart(state, elapsed_ms, &roadbook_complete);
+    if (!roadbook_complete) {
+        return 0.0;
+    }
     
     // Difference: positive = ahead (traveled more than ideal), negative = behind
     double diff = static_cast<double>(actual_counts_from_stage_start) - ideal_counts;

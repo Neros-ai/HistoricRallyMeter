@@ -106,9 +106,14 @@ void ToneGenerator::threadFunc() {
                     phase += phase_inc;
                     if (phase >= 2.0 * M_PI) phase -= 2.0 * M_PI;
                 }
-                snd_pcm_writei(pcm, chunk_buf.data(), CHUNK_FRAMES);
+                snd_pcm_sframes_t faded = snd_pcm_writei(pcm, chunk_buf.data(), CHUNK_FRAMES);
+                if (faded < 0) snd_pcm_recover(pcm, static_cast<int>(faded), 1);
             } else {
-                snd_pcm_writei(pcm, silence_buf.data(), CHUNK_FRAMES);
+                // The idle path: without recovery here an underrun that lands
+                // while nothing is playing is never reset, and the device is
+                // left broken until some later write happens to check.
+                snd_pcm_sframes_t quiet = snd_pcm_writei(pcm, silence_buf.data(), CHUNK_FRAMES);
+                if (quiet < 0) snd_pcm_recover(pcm, static_cast<int>(quiet), 1);
             }
             cycle_ms = 0;
             in_tone = true;
