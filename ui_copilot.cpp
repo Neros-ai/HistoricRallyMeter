@@ -34,6 +34,9 @@ static void applyCopilotCSS() {
         ".dist-unit { font-size: 20px; font-weight: bold; font-family: monospace; }"
         ".time-label { font-size: 22px; font-family: monospace; color: #CCCCCC; }"
         ".alarm-label { font-size: 20px; min-width: 90px; }"
+        // Monospace: the panel is a fixed-width table of speeds and
+        // distances, and a proportional font makes its columns ragged.
+        ".stage-status { font-size: 22px; font-family: monospace; }"
         ".alarm-button { font-size: 22px; }"
         ".reset-button { font-size: 36px; }"
         ".alarm-countdown { font-size: 28px; color: #FFFFFF; font-family: monospace; }"
@@ -303,6 +306,24 @@ void updateCopilotDisplay(AppData* data) {
 
     gtk_label_set_text(data->tripTimeLabel, formatElapsedInterval(trip_secs).c_str());
     
+    // Read-only stage panel. Built from `segments` -- the roadbook as set,
+    // which is what "what is loaded" means -- not from the running stage's
+    // frozen snapshot.
+    if (data->stageStatusLabel) {
+        std::string panel = formatStageStatusTable(
+            data->state->segments, data->state->units,
+            formatAutoStartStatus(data->state->auto_start_rally_time_s,
+                                  data->state->auto_start_early_departure,
+                                  getAutoStartEpochMs()),
+            STAGE_STATUS_MAX_ROWS);
+        if (panel != data->stageStatusShown) {
+            // Markup, not plain text: the captions are coloured (see
+            // formatStageStatusTable).
+            gtk_label_set_markup(data->stageStatusLabel, panel.c_str());
+            data->stageStatusShown = panel;
+        }
+    }
+
     // Next segment info: distance remaining in current segment + speed of next segment
     if (data->state->segment_current_number >= 0 &&
         data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
@@ -387,6 +408,7 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_grid_set_column_spacing(GTK_GRID(distGrid), 8);
     gtk_grid_set_row_spacing(GTK_GRID(distGrid), 2);
     gtk_box_pack_start(GTK_BOX(leftPanel), distGrid, FALSE, FALSE, 0);
+
     
     // Row 0: Total distance — heading "Total" is itself the reset button
     GtkWidget* totalHeadingBtn = gtk_button_new_with_label("Total");
@@ -456,6 +478,24 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_style_context_add_class(gtk_widget_get_style_context(tripHeadingBtn), "dist-heading");
     gtk_widget_set_valign(tripHeadingBtn, GTK_ALIGN_CENTER);
     g_signal_connect(tripHeadingBtn, "clicked", G_CALLBACK(on_trip_reset), data);
+    // Read-only stage panel, in the block the distance-adjust buttons leave
+    // empty: columns 4-6, rows 1-2. Shows what is loaded and when it starts
+    // -- the crew previously had to open Stage Go or the segments screen to
+    // see either, and the Stage Go dialog is a confirmation, not somewhere
+    // to browse from.
+    data->stageStatusLabel = GTK_LABEL(gtk_label_new(""));
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(GTK_WIDGET(data->stageStatusLabel)), "stage-status");
+    gtk_label_set_xalign(data->stageStatusLabel, 0.0);
+    gtk_label_set_yalign(data->stageStatusLabel, 0.0);
+    gtk_widget_set_valign(GTK_WIDGET(data->stageStatusLabel), GTK_ALIGN_START);
+    gtk_widget_set_margin_top(GTK_WIDGET(data->stageStatusLabel), 6);
+    gtk_widget_set_margin_start(GTK_WIDGET(data->stageStatusLabel), 14);
+    // Spans a third, otherwise-empty grid row: a table taller than the two
+    // rows beside it then grows downward into the blank area rather than
+    // stretching Trip and next apart to make room.
+    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->stageStatusLabel), 4, 1, 3, 3);
+
     gtk_grid_attach(GTK_GRID(distGrid), tripHeadingBtn, 0, 1, 1, 1);
     
     data->tripDistLabel = GTK_LABEL(gtk_label_new("0"));

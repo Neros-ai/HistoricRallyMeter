@@ -210,6 +210,8 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.auto_start_early_departure = extractBool(line);
         } else if (line.find("\"stage_complete\"") != std::string::npos) {
             state.stage_complete = extractBool(line);
+        } else if (line.find("\"last_memory_slot\"") != std::string::npos) {
+            state.last_memory_slot = static_cast<int>(extractLong(line));
         } else if (line.find("\"beep_assist_enabled\"") != std::string::npos) {
             state.beep_assist_enabled = extractBool(line);
         } else if (line.find("\"beep_advance_m\"") != std::string::npos) {
@@ -330,6 +332,7 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
          << (state.auto_start_early_departure ? "true" : "false") << ",\n";
     file << "  \"stage_complete\": "
          << (state.stage_complete ? "true" : "false") << ",\n";
+    file << "  \"last_memory_slot\": " << state.last_memory_slot << ",\n";
     file << "  \"beep_waypoints_m\": [\n";
     for (size_t i = 0; i < state.beep_waypoints_m.size(); i++) {
         file << "    " << state.beep_waypoints_m[i];

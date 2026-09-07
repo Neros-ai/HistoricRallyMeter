@@ -76,6 +76,13 @@ public:
     // set instead of staring at the stage they have already finished.
     // Starts true: nothing is under way until something starts.
     bool stage_complete = true;
+
+    // Which memory slot the loaded roadbook was recalled from, 1-5, or 0 for
+    // "not from a slot" -- never recalled, or edited since. Tracked and
+    // persisted but not currently shown anywhere: the status panel dropped
+    // it because "Stage: N" was the widest field on the line and pushed the
+    // rest of the row across.
+    int last_memory_slot = 0;
     // False when the config file that was loaded predates stage_segments, so
     // load() can seed the snapshot from `segments` and leave a stage running
     // across the upgrade calculating exactly as it did before. Not persisted;

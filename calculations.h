@@ -79,6 +79,43 @@ int64_t autoStartTargetMsFromSeconds(uint64_t seconds, int64_t epoch_ms);
 // already under way keeps its real error. `diff_ms` is the countdown
 // remaining, so the hold lasts exactly as long as the T- overlay is on
 // screen and a stale target left in a config file releases it at once.
+// The armed autostart, as the status panel shows it: "none" when nothing is
+// armed, otherwise the wall-clock time it fires. Deliberately says nothing
+// about which kind it is -- the driver panel's countdown already carries
+// that, and `early_departure` is kept in the signature so a caller cannot
+// silently start passing the wrong thing if it comes back.
+std::string formatAutoStartStatus(uint64_t auto_start_rally_time_s,
+                                  bool early_departure, int64_t epoch_ms);
+
+// Caption colour for the status panel -- the orange the box uses elsewhere
+// for a label as against a value.
+constexpr const char* STAGE_STATUS_CAPTION_COLOR = "#FFA500";
+
+// Segment rows the status panel has room for beneath the distance-adjust
+// buttons on a 1280x400 co-pilot display, at 15px monospace.
+constexpr size_t STAGE_STATUS_MAX_ROWS = 6;
+
+// The read-only stage panel on the main co-pilot screen: where the loaded
+// roadbook came from, when the autostart fires, then one line per segment.
+// Same columns as the editable table on the stage setup screen, so the crew
+// read one layout rather than two. Returned as one monospace block of PANGO
+// MARKUP (captions coloured, values plain) rather than built as a widget
+// grid, so the whole layout is a pure function and testable without GTK --
+// the caller must render it with gtk_label_set_markup, not set_text. `max_rows` caps the segment lines to what the panel
+// has room for; the rest are summarised.
+std::string formatStageStatusTable(const std::vector<Segment>& segs, bool units,
+                                   const std::string& autostart_text,
+                                   size_t max_rows);
+
+// The average speed to SHOW. An armed "on the minute" autostart zeroes the
+// distance baselines but deliberately leaves the clock running to the
+// appointed minute, so an average taken over the previous stage's clock
+// against a distance that has just been re-zeroed reads as road speed the
+// moment the car rolls -- a car creeping to the line showing an average it
+// has not driven. There is no stage to average over until the clock zeroes,
+// so the honest figure is zero, matching the time-error box beside it.
+double averageSpeedForDisplay(double average_speed, bool hold_at_zero);
+
 // True once the car has covered the whole of `segs` -- the stage's own
 // distance, summed from its segments, against the counts driven since the
 // stage started. The point at which the stage is over and its roadbook is

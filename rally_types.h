@@ -109,6 +109,11 @@ struct AppData {
     GtkWidget* nextPrevBtn;
     GtkWidget* adjZeroBtn;
     GtkLabel* alarmCountdownLabel;
+    // Read-only stage panel on the main navigator screen, and the text it is
+    // currently showing -- compared each tick so the label is only touched
+    // when something actually changed, rather than 100 times a second.
+    GtkLabel* stageStatusLabel = nullptr;
+    std::string stageStatusShown;
     GtkWidget* alarmClearBtn;
     int64_t alarmSoundStartTime = 0;    // when doorbell started (0 = not ringing)
 

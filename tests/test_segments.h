@@ -2,6 +2,7 @@
 #define TEST_SEGMENTS_H
 
 #include "test_framework.h"
+#include <algorithm>
 #include "../rally_state.h"
 #include "../calculations.h"
 
@@ -221,6 +222,125 @@ public:
             state.segment_current_number = -1;
             double kph = 99.0;
             ASSERT_FALSE(nextSegmentTargetKph(state, &kph));
+            return true;
+        });
+
+        suite->addTest("the status panel carries speed, segment length and cumulative", []() {
+            Segment a{}; a.target_speed_kph = 40.0; a.distance_m = 148.0; a.autoNext = true;
+            std::string panel = formatStageStatusTable({ a }, false, "none", 6);
+            ASSERT_TRUE(panel.find("KPH") != std::string::npos);
+            ASSERT_TRUE(panel.find("Distance (m)") != std::string::npos);
+            // One heading over both distance columns, not one each.
+            ASSERT_TRUE(panel.find("Cum") == std::string::npos);
+            // The whole heading row is one coloured run.
+            ASSERT_TRUE(panel.find(std::string("<span foreground=\"")
+                                   + STAGE_STATUS_CAPTION_COLOR + "\">   KPH")
+                        != std::string::npos);
+            ASSERT_TRUE(panel.find("40.00") != std::string::npos);
+            // No Auto or Time columns. ("Autostart" on the line above also
+            // begins with "Auto", so check the heading itself.)
+            ASSERT_TRUE(panel.find("(m)  Auto") == std::string::npos);
+            ASSERT_TRUE(panel.find("Time") == std::string::npos);
+            // One line per segment, never wrapped into a second column.
+            ASSERT_EQ(std::count(panel.begin(), panel.end(), '\n'), 2);
+            return true;
+        });
+
+        suite->addTest("the cumulative column runs from the stage start", []() {
+            // The roadbook gives each segment's own length; the box counts
+            // from the stage start, so the crew need the running total to
+            // check the odometer against.
+            std::vector<Segment> segs;
+            for (double d : {148.0, 500.0, 500.0}) {
+                Segment s{}; s.target_speed_kph = 40.0; s.distance_m = d;
+                segs.push_back(s);
+            }
+            std::string panel = formatStageStatusTable(segs, false, "none", 6);
+            ASSERT_TRUE(panel.find("148") != std::string::npos);
+            ASSERT_TRUE(panel.find("648") != std::string::npos);
+            ASSERT_TRUE(panel.find("1148") != std::string::npos);
+            return true;
+        });
+
+        suite->addTest("the panel leads with the autostart and nothing else", []() {
+            // "Stage: N" ahead of it was the widest field on the line, and
+            // the panel sets the width of the grid column it sits in, so it
+            // pushed the rest of the row off to the right.
+            Segment a{}; a.target_speed_kph = 45.0; a.distance_m = 500.0;
+            std::string panel = formatStageStatusTable({ a }, false, "none", 6);
+            ASSERT_TRUE(panel.find("Stage") == std::string::npos);
+            // Captions are coloured markup, values are not.
+            ASSERT_TRUE(panel.find("Autostart:</span> none") != std::string::npos);
+
+            std::string empty = formatStageStatusTable({}, false, "none", 6);
+            ASSERT_TRUE(empty.find("(no segments set)") != std::string::npos);
+            // No column headings when there is nothing to head.
+            ASSERT_TRUE(empty.find("Speed") == std::string::npos);
+            return true;
+        });
+
+        suite->addTest("the status panel converts speed with the display units", []() {
+            Segment a{}; a.target_speed_kph = 100.0; a.distance_m = 1000.0;
+            std::string mph = formatStageStatusTable({ a }, true, "none", 6);
+            ASSERT_TRUE(mph.find("MPH") != std::string::npos);
+            ASSERT_TRUE(mph.find("62.14") != std::string::npos);
+            ASSERT_TRUE(mph.find("KPH") == std::string::npos);
+            return true;
+        });
+
+        suite->addTest("one segment over the limit is shown, not summarised", []() {
+            // "+1 more" costs exactly the row it replaces, so it earns
+            // nothing; the summary starts at two.
+            std::vector<Segment> segs;
+            for (int i = 0; i < 7; i++) {
+                Segment s{}; s.target_speed_kph = 40.0; s.distance_m = 100.0;
+                segs.push_back(s);
+            }
+            std::string panel = formatStageStatusTable(segs, false, "none", 6);
+            ASSERT_TRUE(panel.find("more") == std::string::npos);
+            // Autostart line, heading, seven rows.
+            ASSERT_EQ(std::count(panel.begin(), panel.end(), '\n'), 8);
+
+            // Two over, and the summary is worth its line again.
+            Segment extra{}; extra.target_speed_kph = 40.0; extra.distance_m = 100.0;
+            segs.push_back(extra);
+            std::string capped = formatStageStatusTable(segs, false, "none", 6);
+            ASSERT_TRUE(capped.find("+2 more") != std::string::npos);
+            return true;
+        });
+
+        suite->addTest("a stage taller than the panel is summarised", []() {
+            std::vector<Segment> segs;
+            for (int i = 0; i < 9; i++) {
+                Segment s{}; s.target_speed_kph = 40.0; s.distance_m = 100.0;
+                segs.push_back(s);
+            }
+            std::string panel = formatStageStatusTable(segs, false, "none", 6);
+            ASSERT_TRUE(panel.find("+3 more") != std::string::npos);
+            // Stage line, headings, six rows, summary.
+            ASSERT_EQ(std::count(panel.begin(), panel.end(), '\n'), 8);
+            return true;
+        });
+
+        suite->addTest("the autostart status is the fire time alone", []() {
+            int64_t epoch_ms = 1000000000000LL;
+            ASSERT_TRUE(formatAutoStartStatus(0, false, epoch_ms) == "none");
+            // Both kinds read as just the time. The driver panel's countdown
+            // is where the early-departure flag belongs.
+            std::string early = formatAutoStartStatus(45, true, epoch_ms);
+            std::string ordinary = formatAutoStartStatus(45, false, epoch_ms);
+            ASSERT_TRUE(early.find("early") == std::string::npos);
+            ASSERT_TRUE(early == ordinary);
+            ASSERT_EQ(early.size(), 8u);
+            return true;
+        });
+
+        suite->addTest("the average speed is held at zero while the autostart holds", []() {
+            // The distance baselines are zeroed at arming but the clock keeps
+            // running, so an unheld average reads as road speed the moment
+            // the car creeps toward the line.
+            ASSERT_NEAR(averageSpeedForDisplay(42.5, true), 0.0, 0.0001);
+            ASSERT_NEAR(averageSpeedForDisplay(42.5, false), 42.5, 0.0001);
             return true;
         });
 

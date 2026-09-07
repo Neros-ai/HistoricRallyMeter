@@ -245,6 +245,20 @@ void zeroDistanceBaselines(AppData* data) {
     data->beepCursorsStale = true;
 }
 
+int64_t autoStartRemaining_ms(const AppData* data) {
+    if (data->state->auto_start_rally_time_s == 0) return 0;
+    return autoStartTargetMsFromSeconds(data->state->auto_start_rally_time_s,
+                                        getAutoStartEpochMs())
+           - getRallyTime_ms(*data->state);
+}
+
+bool autoStartHoldActive(const AppData* data) {
+    return autoStartHoldsTimeError(data->state->auto_start_rally_time_s,
+                                   data->state->auto_start_early_departure,
+                                   data->autoStartTriggered,
+                                   autoStartRemaining_ms(data));
+}
+
 void adoptRoadbookIfIdle(AppData* data) {
     // Called wherever the roadbook is edited or replaced. While a stage is
     // under way this does nothing: that stage is judged against the segments
@@ -346,7 +360,7 @@ static const int RESPONSE_AUTO_START_NEXT_MINUTE = 98;
 
 // Defined further down (used by on_show_autostart/on_autostart_set); forward
 // declared here so the quick-set button below can share the same epoch.
-static int64_t getAutoStartEpochMs();
+int64_t getAutoStartEpochMs();
 
 // Always the *next* minute boundary, even if rally_ms already sits exactly on
 // one -- the quick-set button's printed time must still be ahead when pressed.
@@ -835,6 +849,8 @@ void on_segment_entry_changed(GtkWidget* widget, gpointer user_data) {
             double meters = std::stod(text);
             data->state->segments[index].distance_m = meters;
             data->state->segments[index].distance_counts = (meters * 1e6) / data->state->calibration;
+        // Edited, so it is no longer the slot it was recalled from.
+        data->state->last_memory_slot = 0;
         adoptRoadbookIfIdle(data);
         }
         ConfigFile::save(*data->state);
@@ -849,6 +865,7 @@ void on_segment_auto_toggled(GtkWidget* widget, gpointer user_data) {
     if (!data || index < 0 || index >= static_cast<int>(data->state->segments.size())) return;
     
     data->state->segments[index].autoNext = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
+    data->state->last_memory_slot = 0;
     adoptRoadbookIfIdle(data);
     ConfigFile::save(*data->state);
     notifyWebState(data);
@@ -1068,6 +1085,7 @@ void on_add_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
                 seg.autoNext = autoNext;
 
                 data->state->segments.push_back(seg);
+                data->state->last_memory_slot = 0;
                 adoptRoadbookIfIdle(data);
                 added = true;
             }
@@ -1095,6 +1113,7 @@ void on_delete_segment(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(g_object_get_data(G_OBJECT(widget), "app_data"));
     if (data && index >= 0 && index < static_cast<int>(data->state->segments.size())) {
         data->state->segments.erase(data->state->segments.begin() + index);
+        data->state->last_memory_slot = 0;
         adoptRoadbookIfIdle(data);
         ConfigFile::save(*data->state);
         refreshSegmentList(data);
@@ -1158,6 +1177,7 @@ void on_memory_recall(GtkWidget* widget, gpointer user_data) {
         // under way the recalled slot is adopted immediately, so the crew
         // see the stage they have just loaded.
         data->state->segments = data->state->memory_slots[slot].segments;
+        data->state->last_memory_slot = slot + 1;
         adoptRoadbookIfIdle(data);
         // A slot from a pre-Beep-Assist config has no list of its own; the
         // live one stays rather than being silently deleted.
@@ -1440,7 +1460,7 @@ void on_save_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 }
 
 // Epoch for auto_start: 2020-01-01 00:00:00 local time
-static int64_t getAutoStartEpochMs() {
+int64_t getAutoStartEpochMs() {
     struct tm epoch_tm = {};
     epoch_tm.tm_year = 120;  // 2020
     epoch_tm.tm_mon = 0;

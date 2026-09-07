@@ -558,6 +558,84 @@ double gaugeEffectiveMaxSeconds(double seconds) {
     return abs_sec;
 }
 
+std::string formatAutoStartStatus(uint64_t auto_start_rally_time_s,
+                                  bool early_departure, int64_t epoch_ms) {
+    if (auto_start_rally_time_s == 0) return "none";
+    int64_t target_ms = autoStartTargetMsFromSeconds(auto_start_rally_time_s, epoch_ms);
+    time_t target_s = target_ms / 1000;
+    struct tm* t = localtime(&target_s);
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%02d:%02d:%02d", t->tm_hour, t->tm_min, t->tm_sec);
+    // The kind of autostart is not shown: the driver panel already says
+    // "Early Departure: ENABLED" beneath its countdown, and repeating it
+    // here only lengthens a line read at a glance.
+    (void)early_departure;
+    return std::string(buf);
+}
+
+std::string formatStageStatusTable(const std::vector<Segment>& segs, bool units,
+                                   const std::string& autostart_text,
+                                   size_t max_rows) {
+    std::ostringstream out;
+    // Autostart alone. A "Stage: N" field ahead of it made the widest line
+    // of the panel, and the panel sets the width of the grid column it sits
+    // in -- so it pushed the rest of the row off to the right.
+    //
+    // Captions are orange and values white, the same split the rest of the
+    // box uses, so the eye lands on the figures. Pango markup rather than
+    // separate widgets: the columns only line up because the whole block is
+    // one monospace run, and markup does not disturb that.
+    out << "<span foreground=\"" << STAGE_STATUS_CAPTION_COLOR
+        << "\">Autostart:</span> " << autostart_text << "\n";
+
+    if (segs.empty()) {
+        out << "  (no segments set)";
+        return out.str();
+    }
+
+    // Speed, this segment's length, and the distance from the stage start
+    // to the end of it -- the cumulative column is what the crew read off
+    // against the odometer, since the roadbook gives each segment's length
+    // but the box counts from the start.
+    // One "Distance (m)" heading centred over both distance columns rather
+    // than a caption each: they are the same quantity measured from two
+    // points, and a second heading only made the row wider.
+    const std::string dist_head = "Distance (m)";
+    const size_t dist_span = 18;   // the two numeric columns and the gap
+    // Centred over the pair, then nudged right: dead-centre sat visibly
+    // left of the digits, which are right-aligned in their fields.
+    const size_t pad = (dist_span - dist_head.size()) / 2 + 2;
+    char head[96];
+    snprintf(head, sizeof(head), "%6s %*s%s", units ? "MPH" : "KPH",
+             static_cast<int>(pad), "", dist_head.c_str());
+    out << "<span foreground=\"" << STAGE_STATUS_CAPTION_COLOR << "\">"
+        << head << "</span>";
+
+    size_t shown = std::min(max_rows, segs.size());
+    // A single segment over the limit is shown rather than summarised: the
+    // "+1 more" line costs exactly the row it would be replacing.
+    if (max_rows > 0 && segs.size() == max_rows + 1) shown = segs.size();
+    double cumulative_m = 0.0;
+    for (size_t i = 0; i < shown; i++) {
+        double kph = segs[i].target_speed_kph;
+        double display_speed = units ? kph * 0.621371 : kph;
+        cumulative_m += segs[i].distance_m;
+        char row[96];
+        snprintf(row, sizeof(row), "\n%6.2f %10ld %7ld",
+                 display_speed, static_cast<long>(segs[i].distance_m + 0.5),
+                 static_cast<long>(cumulative_m + 0.5));
+        out << row;
+    }
+    if (segs.size() > shown) {
+        out << "\n   +" << (segs.size() - shown) << " more";
+    }
+    return out.str();
+}
+
+double averageSpeedForDisplay(double average_speed, bool hold_at_zero) {
+    return hold_at_zero ? 0.0 : average_speed;
+}
+
 bool stageDistanceComplete(const std::vector<Segment>& segs, int64_t stage_counts) {
     if (segs.empty()) return true;
     double total = 0.0;

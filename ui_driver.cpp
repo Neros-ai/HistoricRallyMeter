@@ -537,21 +537,8 @@ void updateDriverDisplay(AppData* data) {
     // because two things downstream need it: the T- overlay near the end of
     // this function, and the time-error box, which holds at zero while an
     // "on the minute" autostart counts down (see autoStartHoldsTimeError).
-    int64_t autoStartDiff_ms = 0;
-    if (data->state->auto_start_rally_time_s > 0) {
-        struct tm epoch_tm = {};
-        epoch_tm.tm_year = 120;
-        epoch_tm.tm_mon = 0;
-        epoch_tm.tm_mday = 1;
-        int64_t epoch_ms = static_cast<int64_t>(mktime(&epoch_tm)) * 1000;
-        autoStartDiff_ms = autoStartTargetMsFromSeconds(
-            data->state->auto_start_rally_time_s, epoch_ms) - current_time_ms;
-    }
-    const bool holdTimeErrorAtZero = autoStartHoldsTimeError(
-        data->state->auto_start_rally_time_s,
-        data->state->auto_start_early_departure,
-        data->autoStartTriggered,
-        autoStartDiff_ms);
+    const int64_t autoStartDiff_ms = autoStartRemaining_ms(data);
+    const bool holdTimeErrorAtZero = autoStartHoldActive(data);
     
     // Switch to compact layout (values drawn inside the gauge) when the
     // window is closer to 4:3 (e.g. 800x480) than wide-and-shallow 1280x400.
@@ -596,6 +583,7 @@ void updateDriverDisplay(AppData* data) {
     double trip_speed = calculateAverageSpeed(*data->state,
         data->state->trip_start_time_ms, current_time_ms, trip_count_diff,
         data->state->trip_distance_adjust_cm);
+    trip_speed = averageSpeedForDisplay(trip_speed, holdTimeErrorAtZero);
     ss.str("");
     ss << std::fixed << std::setprecision(1) << trip_speed;
     gtk_label_set_text(data->tripSpeedLabel, ss.str().c_str());
@@ -607,6 +595,7 @@ void updateDriverDisplay(AppData* data) {
     double total_speed = calculateAverageSpeed(*data->state,
         data->state->total_start_time_ms, current_time_ms, total_count_diff,
         data->state->total_distance_adjust_cm);
+    total_speed = averageSpeedForDisplay(total_speed, holdTimeErrorAtZero);
     ss.str("");
     ss << std::fixed << std::setprecision(1) << total_speed;
     gtk_label_set_text(data->totalSpeedLabel, ss.str().c_str());
@@ -849,9 +838,12 @@ void updateDriverDisplay(AppData* data) {
             gtk_label_set_text(data->countdownLabel, buf);
             // Which kind of autostart is pending, so the crew can see at a
             // glance whether rolling before the minute is going to count.
+            // Two lines: on one line the caption is wider than the
+            // countdown box above it and ran across the Distance and Total
+            // figures either side of it.
             gtk_label_set_text(data->earlyDepartureLabel,
-                data->state->auto_start_early_departure ? "Early Departure: ENABLED"
-                                                        : "Early Departure: DISABLED");
+                data->state->auto_start_early_departure ? "Early Departure:\nENABLED"
+                                                        : "Early Departure:\nDISABLED");
             if (data->countdownContainer) gtk_widget_show(data->countdownContainer);
         } else if (diff_ms <= 0 && diff_ms > -2000) {
             if (data->countdownContainer) gtk_widget_hide(data->countdownContainer);
@@ -1085,6 +1077,9 @@ GtkWidget* createDriverWindow(AppData* data) {
 
     // "Early Departure" line, directly beneath the box.
     data->earlyDepartureLabel = GTK_LABEL(gtk_label_new(""));
+    // Two lines, so they need centring on each other as well as on the box.
+    gtk_label_set_justify(data->earlyDepartureLabel, GTK_JUSTIFY_CENTER);
+    gtk_label_set_xalign(data->earlyDepartureLabel, 0.5);
     gtk_style_context_add_provider(
         gtk_widget_get_style_context(GTK_WIDGET(data->earlyDepartureLabel)),
         GTK_STYLE_PROVIDER(cdProvider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 50);

@@ -105,6 +105,14 @@ void zeroTimeBaselines(AppData* data);
 // Adopts the edited roadbook as the stage roadbook, but only when no stage
 // is under way. Call after any change to state->segments.
 void adoptRoadbookIfIdle(AppData* data);
+
+// Milliseconds until an armed autostart fires (0 when nothing is armed;
+// negative once the moment has passed), and whether that autostart is
+// currently holding the stage readouts at zero. Both derived from state, so
+// the driver display, the phone telemetry and anything else agree.
+int64_t autoStartRemaining_ms(const AppData* data);
+bool autoStartHoldActive(const AppData* data);
+int64_t getAutoStartEpochMs();
 GtkWidget* createNumericKeypad(AppData* data);
 GtkWidget* createDateTimeKeypad(AppData* data);
 
