@@ -124,7 +124,8 @@ bool webHandleCommand(AppData* data, const char* json) {
         int slot = 0;
         if (!jsonFindInt(json, "slot", &slot)) return false;
         if (slot < 1 || slot > RallyState::MAX_MEMORY_SLOTS) return false;
-        data->state->memory_slots[slot - 1] = data->state->segments;
+        data->state->memory_slots[slot - 1].segments = data->state->segments;
+        data->state->memory_slots[slot - 1].beep_waypoints_m = data->state->beep_waypoints_m;
         ConfigFile::save(*data->state);
         return true;
     }
@@ -133,7 +134,9 @@ bool webHandleCommand(AppData* data, const char* json) {
         if (!jsonFindInt(json, "slot", &slot)) return false;
         if (slot < 1 || slot > RallyState::MAX_MEMORY_SLOTS) return false;
         if (data->state->memory_slots[slot - 1].empty()) return false;
-        data->state->segments = data->state->memory_slots[slot - 1];
+        data->state->segments = data->state->memory_slots[slot - 1].segments;
+        data->state->beep_waypoints_m = data->state->memory_slots[slot - 1].beep_waypoints_m;
+        data->beepCursorsStale = true;
         data->state->segment_current_number = data->state->segments.empty() ? -1 : 0;
         ConfigFile::save(*data->state);
         refreshSegmentList(data);

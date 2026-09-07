@@ -434,6 +434,21 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         {
             double baseline = drawTopCorner(gtk_label_get_text(data->targetSpeedLabel), L.bandTargetX, false);
             drawTopCornerLabel("Target", L.bandTargetX, false, baseline);
+            // On a stage with more than one speed, the NEXT segment's target
+            // goes under the caption in smaller type, so the co-pilot can call
+            // the change before it arrives. Nothing is drawn on the last
+            // segment or a single-speed stage -- an empty slot reads as "no
+            // change coming", which is the truth.
+            double next_kph = 0.0;
+            if (nextSegmentTargetKph(*data->state, &next_kph)) {
+                std::stringstream ns;
+                ns << std::fixed << std::setprecision(1)
+                   << (data->state->units ? next_kph / 1.60934 : next_kph);
+                cairo_set_font_size(cr, L.labelSize);
+                cairo_move_to(cr, L.bandTargetX,
+                              baseline + 2 * (L.labelSize + L.labelGap));
+                cairo_show_text(cr, ns.str().c_str());
+            }
         }
 
         // {tot}: white, mirrored by the Total distance on the left. Both at
@@ -555,7 +570,8 @@ void updateDriverDisplay(AppData* data) {
         current_poll.cntr1, current_poll.cntr2,
         data->state->trip_start_cntr1, data->state->trip_start_cntr2);
     double trip_speed = calculateAverageSpeed(*data->state,
-        data->state->trip_start_time_ms, current_time_ms, trip_count_diff);
+        data->state->trip_start_time_ms, current_time_ms, trip_count_diff,
+        data->state->trip_distance_adjust_cm);
     ss.str("");
     ss << std::fixed << std::setprecision(1) << trip_speed;
     gtk_label_set_text(data->tripSpeedLabel, ss.str().c_str());
@@ -565,7 +581,8 @@ void updateDriverDisplay(AppData* data) {
         current_poll.cntr1, current_poll.cntr2,
         data->state->total_start_cntr1, data->state->total_start_cntr2);
     double total_speed = calculateAverageSpeed(*data->state,
-        data->state->total_start_time_ms, current_time_ms, total_count_diff);
+        data->state->total_start_time_ms, current_time_ms, total_count_diff,
+        data->state->total_distance_adjust_cm);
     ss.str("");
     ss << std::fixed << std::setprecision(1) << total_speed;
     gtk_label_set_text(data->totalSpeedLabel, ss.str().c_str());
@@ -603,6 +620,18 @@ void updateDriverDisplay(AppData* data) {
         ss << std::fixed << std::setprecision(1) << target_kph;
         gtk_label_set_text(data->targetSpeedLabel, ss.str().c_str());
         gtk_label_set_text(data->gaugeTargetLabel, ss.str().c_str());
+        // The coming change, in the same units as the value above it.
+        double next_kph = 0.0;
+        if (data->nextTargetSpeedLabel) {
+            if (nextSegmentTargetKph(*data->state, &next_kph)) {
+                std::stringstream ns;
+                ns << std::fixed << std::setprecision(1)
+                   << (data->state->units ? next_kph / 1.60934 : next_kph);
+                gtk_label_set_text(data->nextTargetSpeedLabel, ns.str().c_str());
+            } else {
+                gtk_label_set_text(data->nextTargetSpeedLabel, "");
+            }
+        }
         
         // Ahead/behind - calculated from stage start accounting for all segment speeds
         int64_t total_count_diff_ab = calculateDistanceCounts(*data->state,
@@ -704,6 +733,7 @@ void updateDriverDisplay(AppData* data) {
     } else {
         gtk_label_set_text(data->targetSpeedLabel, "--.-");
         gtk_label_set_text(data->gaugeTargetLabel, "--.-");
+        if (data->nextTargetSpeedLabel) gtk_label_set_text(data->nextTargetSpeedLabel, "");
         gtk_label_set_text(data->aheadBehindLabel, "--:--.--");
         gtk_label_set_text(data->speedAdjustArrowsLabel, "");
         if (data->toneGen) data->toneGen->setCadence(0, 0);
@@ -793,20 +823,28 @@ void updateDriverDisplay(AppData* data) {
             char buf[32];
             snprintf(buf, sizeof(buf), "T- %02d:%02d:%02d", h, m, s);
             gtk_label_set_text(data->countdownLabel, buf);
-            GtkWidget* frame = gtk_widget_get_parent(GTK_WIDGET(data->countdownLabel));
-            if (frame) gtk_widget_show(frame);
+            // Which kind of autostart is pending, so the crew can see at a
+            // glance whether rolling before the minute is going to count.
+            gtk_label_set_text(data->earlyDepartureLabel,
+                data->state->auto_start_early_departure ? "Early Departure : ENABLED"
+                                                        : "Early Departure: DISABLED");
+            if (data->countdownContainer) gtk_widget_show(data->countdownContainer);
         } else if (diff_ms <= 0 && diff_ms > -2000) {
-            GtkWidget* frame = gtk_widget_get_parent(GTK_WIDGET(data->countdownLabel));
-            if (frame) gtk_widget_hide(frame);
+            if (data->countdownContainer) gtk_widget_hide(data->countdownContainer);
             data->autoStartTriggered = true;
-            performStageGo(data);
+            // Branches internally on auto_start_early_departure: an early
+            // departure zeroed its distance when it was armed, so only the
+            // clock starts here.
+            performAutoStart(data);
         } else {
-            GtkWidget* frame = gtk_widget_get_parent(GTK_WIDGET(data->countdownLabel));
-            if (frame) gtk_widget_hide(frame);
+            if (data->countdownContainer) gtk_widget_hide(data->countdownContainer);
         }
     } else {
-        GtkWidget* frame = gtk_widget_get_parent(GTK_WIDGET(data->countdownLabel));
-        if (frame && gtk_widget_get_visible(frame)) gtk_widget_hide(frame);
+        // No autostart pending at all: the whole block goes, Early Departure
+        // line included.
+        if (data->countdownContainer && gtk_widget_get_visible(data->countdownContainer)) {
+            gtk_widget_hide(data->countdownContainer);
+        }
     }
 }
 
@@ -818,6 +856,7 @@ static void applyDriverCSS(G_GNUC_UNUSED GtkWidget* widget) {
         "label { color: #FFFFFF; font-weight: bold; }"
         "button { background-color: #333333; color: #FFFFFF; font-weight: bold; }"
         ".speed-header { font-size: 28px; }"
+        ".speed-value-next { font-size: 34px; font-family: monospace; color: #FFDD00; }"
         ".speed-value { font-size: 64px; font-family: monospace; }"
         ".speed-value-xl { font-size: 80px; font-family: monospace; }"
         ".speed-value-target { font-size: 45px; font-family: monospace; }"
@@ -904,7 +943,18 @@ GtkWidget* createDriverWindow(AppData* data) {
     gtk_widget_set_halign(GTK_WIDGET(data->targetSpeedLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_valign(GTK_WIDGET(data->targetSpeedLabel), GTK_ALIGN_CENTER);
     gtk_box_pack_start(GTK_BOX(leftCol), GTK_WIDGET(data->targetSpeedLabel), TRUE, TRUE, 0);
-    
+
+    // Next segment's target, smaller, directly under it. Blank -- not hidden --
+    // when there is no next segment, so the Target block keeps a constant
+    // height and the rows below it do not shift as segments advance.
+    data->nextTargetSpeedLabel = GTK_LABEL(gtk_label_new(""));
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(GTK_WIDGET(data->nextTargetSpeedLabel)), "speed-value-next");
+    gtk_label_set_width_chars(data->nextTargetSpeedLabel, 6);
+    gtk_label_set_xalign(data->nextTargetSpeedLabel, 1.0);
+    gtk_widget_set_halign(GTK_WIDGET(data->nextTargetSpeedLabel), GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(leftCol), GTK_WIDGET(data->nextTargetSpeedLabel), FALSE, FALSE, 0);
+
     // Right column: Total + Trip (vertically aligned)
     GtkWidget* rightCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_box_pack_start(GTK_BOX(speedColsBox), rightCol, TRUE, TRUE, 0);
@@ -997,7 +1047,8 @@ GtkWidget* createDriverWindow(AppData* data) {
     GtkCssProvider* cdProvider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(cdProvider,
         ".countdown-box { border: 4px solid white; background-color: #000000; }"
-        ".countdown-label { font-size: 60px; font-family: monospace; color: white; font-weight: bold; }",
+        ".countdown-label { font-size: 60px; font-family: monospace; color: white; font-weight: bold; }"
+        ".early-departure-label { font-size: 22px; color: white; font-weight: bold; }",
         -1, nullptr);
     gtk_style_context_add_provider(
         gtk_widget_get_style_context(countdownBox),
@@ -1009,9 +1060,24 @@ GtkWidget* createDriverWindow(AppData* data) {
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->countdownLabel)), "countdown-label");
     g_object_unref(cdProvider);
     
-    gtk_overlay_add_overlay(GTK_OVERLAY(data->countdownOverlay), countdownBox);
-    gtk_widget_show_all(countdownBox);
-    gtk_widget_hide(countdownBox);
+    // "Early Departure" line, directly beneath the box.
+    data->earlyDepartureLabel = GTK_LABEL(gtk_label_new(""));
+    gtk_style_context_add_provider(
+        gtk_widget_get_style_context(GTK_WIDGET(data->earlyDepartureLabel)),
+        GTK_STYLE_PROVIDER(cdProvider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 50);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(GTK_WIDGET(data->earlyDepartureLabel)), "early-departure-label");
+
+    GtkWidget* countdownStack = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_set_halign(countdownStack, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(countdownStack, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(countdownStack), countdownBox, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(countdownStack), GTK_WIDGET(data->earlyDepartureLabel), FALSE, FALSE, 0);
+    data->countdownContainer = countdownStack;
+
+    gtk_overlay_add_overlay(GTK_OVERLAY(data->countdownOverlay), countdownStack);
+    gtk_widget_show_all(countdownStack);
+    gtk_widget_hide(countdownStack);
     
     return window;
 }

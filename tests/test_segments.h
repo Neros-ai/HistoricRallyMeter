@@ -186,6 +186,44 @@ public:
             return true;
         });
         
+        // ---- nextSegmentTargetKph ----
+        // Shared by the co-pilot's "coming change" row and the driver's
+        // smaller speed under Target, so the two panels cannot disagree
+        // about what the next speed is.
+
+        suite->addTest("next segment speed is the one after the current segment", []() {
+            RallyState state;
+            Segment a{}; a.target_speed_kph = 30.0;
+            Segment b{}; b.target_speed_kph = 50.0;
+            state.segments = { a, b };
+            state.segment_current_number = 0;
+            double kph = 0.0;
+            ASSERT_TRUE(nextSegmentTargetKph(state, &kph));
+            ASSERT_NEAR(kph, 50.0, 0.001);
+            return true;
+        });
+
+        suite->addTest("there is no next speed on the last segment", []() {
+            RallyState state;
+            Segment a{}; a.target_speed_kph = 30.0;
+            state.segments = { a };
+            state.segment_current_number = 0;
+            double kph = 99.0;
+            ASSERT_FALSE(nextSegmentTargetKph(state, &kph));
+            return true;
+        });
+
+        suite->addTest("there is no next speed outside a stage", []() {
+            RallyState state;
+            Segment a{}; a.target_speed_kph = 30.0;
+            Segment b{}; b.target_speed_kph = 50.0;
+            state.segments = { a, b };
+            state.segment_current_number = -1;
+            double kph = 99.0;
+            ASSERT_FALSE(nextSegmentTargetKph(state, &kph));
+            return true;
+        });
+
         return suite;
     }
 };

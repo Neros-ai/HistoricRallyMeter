@@ -38,8 +38,22 @@ double calculateCurrentSpeed(const RallyState& state, const CounterPoll& current
                             const CounterPoll& tenth);
 
 // Calculate average speed
+// Average speed over a window. adjust_cm is the manual -10/+10 correction for
+// the counter in question (total_distance_adjust_cm / trip_distance_adjust_cm)
+// and is applied exactly as adjustedDistanceMeters applies it to the readout:
+// without it, a correction moved the displayed distance while the average
+// speed carried on using the uncorrected distance, so the two numbers on the
+// same panel disagreed for the rest of the stage.
 double calculateAverageSpeed(const RallyState& state, int64_t start_time_ms, 
-                            int64_t current_time_ms, int64_t count_diff);
+                            int64_t current_time_ms, int64_t count_diff,
+                            long adjust_cm = 0);
+
+// Target speed of the segment AFTER the current one, in KPH. Returns false --
+// leaving *kph untouched -- outside a stage or on the last segment, i.e.
+// whenever there is no coming change to announce. Shared by the co-pilot's
+// "next" row and the driver's smaller speed under Target so the two panels
+// cannot disagree about what is coming.
+bool nextSegmentTargetKph(const RallyState& state, double* kph);
 
 // Calculate seconds ahead/behind target (high precision) - single segment
 double calculateAheadBehind(const RallyState& state, int64_t current_time_ms,

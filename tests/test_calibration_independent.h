@@ -153,27 +153,27 @@ public:
             seg.distance_counts = (3000.0 * 1e6) / state.calibration;
             seg.autoNext = true;
 
-            state.memory_slots[0].push_back(seg);
-            state.memory_slots[2].push_back(seg);
+            state.memory_slots[0].segments.push_back(seg);
+            state.memory_slots[2].segments.push_back(seg);
 
             // Change calibration and recalculate
             state.calibration = 800000;
             for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
-                for (auto& s : state.memory_slots[i]) {
+                for (auto& s : state.memory_slots[i].segments) {
                     s.target_speed_counts_per_hour = kphToCountsPerHour(s.target_speed_kph, state.calibration);
                     s.distance_counts = (s.distance_m * 1e6) / state.calibration;
                 }
             }
 
             // Verify human values preserved
-            ASSERT_NEAR(state.memory_slots[0][0].target_speed_kph, 70.0, 0.001);
-            ASSERT_NEAR(state.memory_slots[2][0].distance_m, 3000.0, 0.001);
+            ASSERT_NEAR(state.memory_slots[0].segments[0].target_speed_kph, 70.0, 0.001);
+            ASSERT_NEAR(state.memory_slots[2].segments[0].distance_m, 3000.0, 0.001);
 
             // Verify recalculated count values are correct for new calibration
             double expected_speed = kphToCountsPerHour(70.0, 800000);
             double expected_dist = (3000.0 * 1e6) / 800000;
-            ASSERT_NEAR(state.memory_slots[0][0].target_speed_counts_per_hour, expected_speed, 0.01);
-            ASSERT_NEAR(state.memory_slots[2][0].distance_counts, expected_dist, 0.01);
+            ASSERT_NEAR(state.memory_slots[0].segments[0].target_speed_counts_per_hour, expected_speed, 0.01);
+            ASSERT_NEAR(state.memory_slots[2].segments[0].distance_counts, expected_dist, 0.01);
             return true;
         });
 
@@ -257,17 +257,17 @@ public:
             seg.distance_m = 8000.0;
             seg.distance_counts = (8000.0 * 1e6) / save_state.calibration;
             seg.autoNext = false;
-            save_state.memory_slots[0].push_back(seg);
+            save_state.memory_slots[0].segments.push_back(seg);
 
             ConfigFile::save(save_state, test_config);
 
             RallyState load_state;
             ConfigFile::load(load_state, test_config);
 
-            ASSERT_EQ(load_state.memory_slots[0].size(), 1u);
-            ASSERT_NEAR(load_state.memory_slots[0][0].target_speed_kph, 55.0, 0.001);
-            ASSERT_NEAR(load_state.memory_slots[0][0].distance_m, 8000.0, 0.001);
-            ASSERT_FALSE(load_state.memory_slots[0][0].autoNext);
+            ASSERT_EQ(load_state.memory_slots[0].segments.size(), 1u);
+            ASSERT_NEAR(load_state.memory_slots[0].segments[0].target_speed_kph, 55.0, 0.001);
+            ASSERT_NEAR(load_state.memory_slots[0].segments[0].distance_m, 8000.0, 0.001);
+            ASSERT_FALSE(load_state.memory_slots[0].segments[0].autoNext);
 
             cleanup();
             return true;

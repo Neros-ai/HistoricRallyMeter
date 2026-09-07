@@ -39,6 +39,10 @@ static void applyCopilotCSS() {
         ".alarm-countdown { font-size: 28px; color: #FFFFFF; font-family: monospace; }"
         ".nav-button { font-size: 20px; }"
         ".segment-label { font-size: 18px; }"
+        // The Navigation/Timing lead-in values are read at a glance while
+        // moving, so they get their own larger size rather than inheriting
+        // the 18px used for captions.
+        ".beep-advance-entry { font-size: 26px; }"
         ".segment-row entry, .segment-row button, .segment-row checkbutton { font-size: 18px; }"
         ".new-segment-row label, .new-segment-row entry, .new-segment-row button, .new-segment-row checkbutton { font-size: 18px; }"
         ".segment-list-frame { border: 1px solid #444444; background-color: #111111; }"
@@ -679,37 +683,41 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_list_box_set_selection_mode(data->segmentListBox, GTK_SELECTION_NONE);
     gtk_container_add(GTK_CONTAINER(scrolled), GTK_WIDGET(data->segmentListBox));
 
-    // Memory columns (Set and Recall) - vertical layout between segments and keypad
-    GtkWidget* memBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    // Centre column: memory on top, Beep Assist and the tone controls beneath
+    // it. Set and Recall each get ONE row with their label on the same line as
+    // their five buttons, rather than two stacked columns of pairs -- the row
+    // reads as "Recall: 1 2 3 4 5", which is the action, not a grid the eye
+    // has to index into.
+    GtkWidget* memBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
     gtk_box_pack_start(GTK_BOX(data->stageSetupMainBox), memBox, FALSE, FALSE, 10);
-    
-    // Header row for memory columns
-    GtkWidget* memHeaderRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_pack_start(GTK_BOX(memBox), memHeaderRow, FALSE, FALSE, 0);
-    GtkWidget* setHeader = gtk_label_new("Set");
-    GtkWidget* recallHeader = gtk_label_new("Recall");
-    gtk_widget_set_size_request(setHeader, 66, -1);
-    gtk_widget_set_size_request(recallHeader, 66, -1);
-    gtk_box_pack_start(GTK_BOX(memHeaderRow), setHeader, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(memHeaderRow), recallHeader, FALSE, FALSE, 0);
-    
-    // Buttons [1]-[5] in two vertical columns
-    for (int i = 1; i <= 5; i++) {
-        GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+
+    // Both labels share a width so the two rows' buttons line up in columns.
+    constexpr int MEM_LABEL_W = 72;
+    constexpr int MEM_BTN_W   = 62;
+
+    struct { const char* label; bool is_set; } memRows[] = {
+        { "Set",    true  },
+        { "Recall", false },
+    };
+    for (const auto& mr : memRows) {
+        GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
         gtk_box_pack_start(GTK_BOX(memBox), row, FALSE, FALSE, 0);
-        
-        GtkWidget* setBtn = gtk_button_new_with_label(std::to_string(i).c_str());
-        gtk_widget_set_size_request(setBtn, 66, 43);
-        g_signal_connect(setBtn, "clicked", G_CALLBACK(on_memory_set), data);
-        g_object_set_data(G_OBJECT(setBtn), "slot", GINT_TO_POINTER(i));
-        gtk_box_pack_start(GTK_BOX(row), setBtn, FALSE, FALSE, 0);
-        
-        GtkWidget* recallBtn = gtk_button_new_with_label(std::to_string(i).c_str());
-        gtk_widget_set_size_request(recallBtn, 66, 43);
-        g_signal_connect(recallBtn, "clicked", G_CALLBACK(on_memory_recall), data);
-        g_object_set_data(G_OBJECT(recallBtn), "slot", GINT_TO_POINTER(i));
-        gtk_box_pack_start(GTK_BOX(row), recallBtn, FALSE, FALSE, 0);
-        data->memoryRecallBtns[i - 1] = recallBtn;
+
+        GtkWidget* lbl = gtk_label_new(mr.label);
+        gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "segment-label");
+        gtk_label_set_xalign(GTK_LABEL(lbl), 0.0);
+        gtk_widget_set_size_request(lbl, MEM_LABEL_W, -1);
+        gtk_box_pack_start(GTK_BOX(row), lbl, FALSE, FALSE, 0);
+
+        for (int i = 1; i <= 5; i++) {
+            GtkWidget* btn = gtk_button_new_with_label(std::to_string(i).c_str());
+            gtk_widget_set_size_request(btn, MEM_BTN_W, 43);
+            g_object_set_data(G_OBJECT(btn), "slot", GINT_TO_POINTER(i));
+            g_signal_connect(btn, "clicked",
+                             G_CALLBACK(mr.is_set ? on_memory_set : on_memory_recall), data);
+            gtk_box_pack_start(GTK_BOX(row), btn, FALSE, FALSE, 0);
+            if (!mr.is_set) data->memoryRecallBtns[i - 1] = btn;
+        }
     }
     
     // Style populated recall buttons
@@ -724,21 +732,12 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     g_signal_connect(clearMemBtn, "clicked", G_CALLBACK(on_memory_clear), data);
     gtk_box_pack_start(GTK_BOX(memBox), clearMemBtn, FALSE, FALSE, 5);
 
-    // Beep Assist: waypoints the operator wants a warning at, so their eyes
-    // can stay on the roadbook rather than the odometer. Its own column,
-    // between the memory buttons and the keypad.
-    // Width is not an explicit size_request -- it's set by beepTitle's own
-    // natural size ("Beep Assist KM"), and every row below it is
-    // built to fit within that same budget rather than forcing the column
-    // wider. A size_request minimum was tried here through several rounds
-    // (260/200/150px) and had zero effect: the leadIns rows below always
-    // needed ~370px regardless of what floor was set on the column itself.
+    // Beep Assist, directly under the memory rows in the same column. It no
+    // longer needs its own width budget: the memory rows above it are wider
+    // than anything in it, so the column is set by them.
     GtkWidget* beepCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    gtk_box_pack_start(GTK_BOX(data->stageSetupMainBox), beepCol, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(memBox), beepCol, TRUE, TRUE, 0);
 
-    // Wraps rather than setting the column's width -- "Off/On ... Advance
-    // by" is the narrower, authoritative row; the title would otherwise be
-    // the widest thing in the column and push it out past "by".
     GtkWidget* beepTitle = gtk_label_new("Beep Assist KM");
     gtk_style_context_add_class(gtk_widget_get_style_context(beepTitle), "segment-label");
     gtk_label_set_xalign(GTK_LABEL(beepTitle), 0.0);
@@ -777,7 +776,7 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     // that turns out to be) so the entry fields genuinely align to the same
     // right edge as "Advance by" -- hexpand does not work for this: it
     // propagates a widget's expand request up through its parent boxes,
-    // but beepCol itself is packed with expand=FALSE into stageSetupMainBox,
+    // but beepCol itself is packed inside the memory column,
     // which blocks that propagation, so a bare hexpand on a row never
     // actually stretched it past its own natural content width.
     GtkSizeGroup* beepRowWidth = gtk_size_group_new(GTK_SIZE_GROUP_HORIZONTAL);
@@ -856,9 +855,13 @@ GtkWidget* createStageSetupScreen(AppData* data) {
         // the ceiling GTK needs to stop defaulting to ~168px.
         GtkEntry* entry = GTK_ENTRY(gtk_entry_new());
         gtk_entry_set_placeholder_text(entry, li.placeholder);
-        gtk_entry_set_width_chars(entry, 6);
-        gtk_entry_set_max_width_chars(entry, 6);
-        gtk_widget_set_size_request(GTK_WIDGET(entry), -1, 30);
+        // 5 chars, not 6: the larger font below needs the width back. "99999"
+        // still covers any lead-in anyone would enter (metres or seconds).
+        gtk_entry_set_width_chars(entry, 5);
+        gtk_entry_set_max_width_chars(entry, 5);
+        gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(entry)),
+                                    "beep-advance-entry");
+        gtk_widget_set_size_request(GTK_WIDGET(entry), -1, 38);
         double stored = (li.mode == 1) ? data->state->beep_advance_s : data->state->beep_advance_m;
         if (stored > 0.0) {
             char buf[32];
@@ -931,7 +934,7 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     g_signal_connect(toneModeSwitch, "state-set", G_CALLBACK(on_tone_enabled_toggle), data);
     gtk_box_pack_start(GTK_BOX(toneModeRow), toneModeLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(toneModeRow), toneModeSwitch, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(rightCol), toneModeRow, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(beepCol), toneModeRow, FALSE, FALSE, 0);
 
     GtkWidget* toneTypeRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_style_context_add_class(gtk_widget_get_style_context(toneTypeRow), "tone-mode-row");
@@ -949,7 +952,7 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(toneTypeRow), toneTypeLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(toneTypeRow), toneType1Check, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(toneTypeRow), toneType2Check, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(rightCol), toneTypeRow, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(beepCol), toneTypeRow, FALSE, FALSE, 0);
 
     GtkWidget* backBtn = gtk_button_new_with_label("back");
     gtk_widget_set_size_request(backBtn, -1, 40);

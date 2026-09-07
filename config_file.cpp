@@ -112,20 +112,23 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
     // not leave a previous rally's waypoints in place alongside this file's
     // other values.
     state.beep_waypoints_m.clear();
+    for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
+        state.memory_slots[i].beep_waypoints_m.clear();
+    }
 
     while (std::getline(stream, line)) {
         if (line.find("\"segments\"") != std::string::npos && line.find("\"memory_") == std::string::npos) {
             parseSegmentArray(stream, state.segments, state.calibration);
         } else if (line.find("\"memory_1\"") != std::string::npos) {
-            parseSegmentArray(stream, state.memory_slots[0], state.calibration);
+            parseSegmentArray(stream, state.memory_slots[0].segments, state.calibration);
         } else if (line.find("\"memory_2\"") != std::string::npos) {
-            parseSegmentArray(stream, state.memory_slots[1], state.calibration);
+            parseSegmentArray(stream, state.memory_slots[1].segments, state.calibration);
         } else if (line.find("\"memory_3\"") != std::string::npos) {
-            parseSegmentArray(stream, state.memory_slots[2], state.calibration);
+            parseSegmentArray(stream, state.memory_slots[2].segments, state.calibration);
         } else if (line.find("\"memory_4\"") != std::string::npos) {
-            parseSegmentArray(stream, state.memory_slots[3], state.calibration);
+            parseSegmentArray(stream, state.memory_slots[3].segments, state.calibration);
         } else if (line.find("\"memory_5\"") != std::string::npos) {
-            parseSegmentArray(stream, state.memory_slots[4], state.calibration);
+            parseSegmentArray(stream, state.memory_slots[4].segments, state.calibration);
         } else if (line.find("\"units\"") != std::string::npos) {
             state.units = extractBool(line);
         } else if (line.find("\"calibration\"") != std::string::npos) {
@@ -186,6 +189,8 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.web_enabled = extractBool(line);
         } else if (line.find("\"web_port\"") != std::string::npos) {
             state.web_port = static_cast<int>(extractLong(line));
+        } else if (line.find("\"auto_start_early_departure\"") != std::string::npos) {
+            state.auto_start_early_departure = extractBool(line);
         } else if (line.find("\"beep_assist_enabled\"") != std::string::npos) {
             state.beep_assist_enabled = extractBool(line);
         } else if (line.find("\"beep_advance_m\"") != std::string::npos) {
@@ -196,10 +201,33 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.beep_navigation_mode = extractBool(line);
         } else if (line.find("\"beep_timing_mode\"") != std::string::npos) {
             state.beep_timing_mode = extractBool(line);
+        } else if (line.find("\"memory_1_waypoints\"") != std::string::npos) {
+            parseDoubleArray(stream, state.memory_slots[0].beep_waypoints_m);
+        } else if (line.find("\"memory_2_waypoints\"") != std::string::npos) {
+            parseDoubleArray(stream, state.memory_slots[1].beep_waypoints_m);
+        } else if (line.find("\"memory_3_waypoints\"") != std::string::npos) {
+            parseDoubleArray(stream, state.memory_slots[2].beep_waypoints_m);
+        } else if (line.find("\"memory_4_waypoints\"") != std::string::npos) {
+            parseDoubleArray(stream, state.memory_slots[3].beep_waypoints_m);
+        } else if (line.find("\"memory_5_waypoints\"") != std::string::npos) {
+            parseDoubleArray(stream, state.memory_slots[4].beep_waypoints_m);
         } else if (line.find("\"beep_waypoints_m\"") != std::string::npos) {
             parseDoubleArray(stream, state.beep_waypoints_m);
         }
     }
+}
+
+static void writeDoubleArray(std::ofstream& file, const std::string& name,
+                             const std::vector<double>& values, bool trailing_comma) {
+    file << "  \"" << name << "\": [\n";
+    for (size_t i = 0; i < values.size(); i++) {
+        file << "    " << values[i];
+        if (i + 1 < values.size()) file << ",";
+        file << "\n";
+    }
+    file << "  ]";
+    if (trailing_comma) file << ",";
+    file << "\n";
 }
 
 static void writeSegmentArray(std::ofstream& file, const std::string& name,
@@ -265,6 +293,8 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"beep_advance_s\": " << state.beep_advance_s << ",\n";
     file << "  \"beep_navigation_mode\": " << (state.beep_navigation_mode ? "true" : "false") << ",\n";
     file << "  \"beep_timing_mode\": " << (state.beep_timing_mode ? "true" : "false") << ",\n";
+    file << "  \"auto_start_early_departure\": "
+         << (state.auto_start_early_departure ? "true" : "false") << ",\n";
     file << "  \"beep_waypoints_m\": [\n";
     for (size_t i = 0; i < state.beep_waypoints_m.size(); i++) {
         file << "    " << state.beep_waypoints_m[i];
@@ -289,7 +319,11 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
         for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
             if (!state.memory_slots[i].empty()) {
                 std::string name = "memory_" + std::to_string(i + 1);
-                writeSegmentArray(file, name, state.memory_slots[i], i < last_populated);
+                // Segments always take a trailing comma here: the slot's
+                // waypoints array follows them and carries the real one.
+                writeSegmentArray(file, name, state.memory_slots[i].segments, true);
+                writeDoubleArray(file, name + "_waypoints",
+                                 state.memory_slots[i].beep_waypoints_m, i < last_populated);
             }
         }
     }

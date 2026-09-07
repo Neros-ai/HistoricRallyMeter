@@ -106,13 +106,18 @@ double calculateCurrentSpeed(const RallyState& state, const CounterPoll& current
 }
 
 double calculateAverageSpeed(const RallyState& state, int64_t start_time_ms, 
-                            int64_t current_time_ms, int64_t count_diff) {
+                            int64_t current_time_ms, int64_t count_diff,
+                            long adjust_cm) {
     int64_t time_diff_ms = current_time_ms - start_time_ms;
     if (time_diff_ms <= 0) {
         return 0.0;
     }
     
-    long cm_diff = countsToCentimeters(count_diff, state.calibration);
+    // Same correction, and the same floor at zero, that adjustedDistanceMeters
+    // applies to the readout -- so the average and the distance it is derived
+    // from always describe the same journey.
+    long cm_diff = countsToCentimeters(count_diff, state.calibration) + adjust_cm;
+    if (cm_diff < 0) cm_diff = 0;
     double speed_cm_per_s = (cm_diff * 1000.0) / time_diff_ms;
     
     if (state.units) {
@@ -373,6 +378,14 @@ size_t beepTimingCursorFor(const std::vector<double>& waypoints_m, double elapse
     while (i < waypoints_m.size()
            && timingBeepDue(waypoints_m[i], elapsed_stage_s, segments, advance_s)) i++;
     return i;
+}
+
+bool nextSegmentTargetKph(const RallyState& state, double* kph) {
+    if (state.segment_current_number < 0) return false;
+    long next = state.segment_current_number + 1;
+    if (next >= static_cast<long>(state.segments.size())) return false;
+    if (kph) *kph = state.segments[next].target_speed_kph;
+    return true;
 }
 
 bool navigationBeepDue(double waypoint_m, double travelled_m, double advance_m) {

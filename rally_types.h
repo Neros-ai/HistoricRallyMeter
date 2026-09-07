@@ -195,7 +195,18 @@ struct AppData {
     
     // Driver countdown overlay
     GtkWidget* countdownOverlay;
+    // Next segment's target speed, smaller, under the Target value in the
+    // wide driver layout. The compact layout draws its own with cairo.
+    GtkLabel* nextTargetSpeedLabel = nullptr;
     GtkLabel* countdownLabel;
+    // Line under the countdown box saying whether the pending autostart
+    // permits an early departure. Its own widget rather than more text in the
+    // countdown label, so the box keeps its fixed monospace geometry.
+    GtkLabel* earlyDepartureLabel = nullptr;
+    // The countdown box AND the line under it. Shown/hidden as one; the code
+    // used to reach the box via the label's parent, which no longer reaches
+    // far enough now there is a second row.
+    GtkWidget* countdownContainer = nullptr;
     bool autoStartTriggered = false;
     
     // Tone generator for speed adjustment alerts

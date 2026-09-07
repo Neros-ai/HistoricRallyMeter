@@ -67,6 +67,8 @@ void on_beep_waypoints_changed(GtkTextBuffer* buffer, gpointer user_data);
 // Parse and persist the waypoint list now, cancelling nothing. Called by the
 // debounce timeout and by releaseKeypadTarget when leaving the screen.
 void commitBeepWaypoints(AppData* data);
+// Rewrites the waypoint box from state (after a memory recall).
+void refreshBeepWaypointView(AppData* data);
 // Clear the keypad's target and flush any pending waypoint edit. Called on
 // every screen switch -- the keypad target is shared process-wide.
 void releaseKeypadTarget(AppData* data);
@@ -84,6 +86,15 @@ void on_autostart_set(GtkWidget* widget, gpointer user_data);
 void on_autostart_clear(GtkWidget* widget, gpointer user_data);
 void updateAutoStartDisplay(AppData* data);
 void performStageGo(AppData* data);
+// Starts a stage from an autostart trigger, honouring whether it was armed as
+// an early departure (clock only) or an ordinary autostart (clock and
+// distance together).
+void performAutoStart(AppData* data);
+// The two halves of a stage start, separated so an early departure can zero
+// distance when the operator presses the button and the clock at the
+// appointed minute.
+void zeroDistanceBaselines(AppData* data);
+void zeroTimeBaselines(AppData* data);
 GtkWidget* createNumericKeypad(AppData* data);
 GtkWidget* createDateTimeKeypad(AppData* data);
 

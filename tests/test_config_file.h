@@ -311,6 +311,66 @@ public:
             return true;
         });
 
+        suite->addTest("a memory slot round-trips its beep waypoints with its segments", []() {
+            // Recalling a stage used to restore its segments while leaving the
+            // PREVIOUS stage's waypoints loaded -- a trap, since the two are
+            // one setup.
+            RallyState state;
+            state.calibration = 600000;
+            Segment a{}; a.target_speed_kph = 40.0; a.distance_m = 1000.0;
+            state.memory_slots[1].segments = { a };
+            state.memory_slots[1].beep_waypoints_m = { 3670.0, 4980.0 };
+            std::string path = "/tmp/rb_test_mem_waypoints.json";
+            ConfigFile::save(state, path);
+
+            RallyState loaded;
+            ConfigFile::load(loaded, path);
+            ASSERT_EQ(loaded.memory_slots[1].segments.size(), 1u);
+            ASSERT_EQ(loaded.memory_slots[1].beep_waypoints_m.size(), 2u);
+            ASSERT_NEAR(loaded.memory_slots[1].beep_waypoints_m[0], 3670.0, 0.5);
+            ASSERT_NEAR(loaded.memory_slots[1].beep_waypoints_m[1], 4980.0, 0.5);
+            std::remove(path.c_str());
+            return true;
+        });
+
+        suite->addTest("a memory slot saved before waypoints existed still loads", []() {
+            // Backward compatibility: a slot with segments but no waypoints
+            // key must load its segments and simply have no waypoints.
+            RallyState state;
+            std::string path = "/tmp/rb_test_mem_legacy.json";
+            std::ofstream f(path);
+            // The multi-line shape ConfigFile::save writes, minus the
+            // memory_1_waypoints array a pre-Beep-Assist build never emitted.
+            f << "{\n";
+            f << "  \"calibration\": 600000,\n";
+            f << "  \"memory_1\": [\n";
+            f << "    {\n";
+            f << "      \"target_speed_kph\": 40.000000,\n";
+            f << "      \"target_speed_counts_per_hour\": 24000000.000000,\n";
+            f << "      \"distance_m\": 1000.000000,\n";
+            f << "      \"distance_counts\": 1666.666667,\n";
+            f << "      \"autoNext\": true\n";
+            f << "    }\n";
+            f << "  ]\n";
+            f << "}\n";
+            f.close();
+            ConfigFile::load(state, path);
+            ASSERT_EQ(state.memory_slots[0].segments.size(), 1u);
+            ASSERT_TRUE(state.memory_slots[0].beep_waypoints_m.empty());
+            ASSERT_FALSE(state.memory_slots[0].empty());
+            std::remove(path.c_str());
+            return true;
+        });
+
+        suite->addTest("a slot is empty when it has no segments", []() {
+            RallyState state;
+            ASSERT_TRUE(state.memory_slots[0].empty());
+            state.memory_slots[0].beep_waypoints_m = { 100.0 };
+            // Waypoints alone are not a saved stage.
+            ASSERT_TRUE(state.memory_slots[0].empty());
+            return true;
+        });
+
         return suite;
     }
 };

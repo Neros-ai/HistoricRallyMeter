@@ -35,11 +35,35 @@ public:
     long trip_distance_adjust_cm = 0;
 
     uint64_t auto_start_rally_time_minutes = 0;  // minutes since 1/1/2020, 0 = not set
+    // True when the pending autostart was armed by "Autostart at next minute",
+    // which zeroes DISTANCE at the moment it is armed and the CLOCK at the
+    // appointed minute -- so distance covered before the due time still counts
+    // toward the stage and its average speed. False for "Set Autostart", where
+    // distance and clock both zero together at the target time. Persisted, so
+    // an app restart between arming and the minute still starts the right way.
+    bool auto_start_early_departure = false;
     std::vector<Segment> segments;
     
-    // Up to 5 memory slots for storing/recalling segment setups
+    // Up to 5 memory slots for storing/recalling a whole stage setup.
+    // A slot carries its Beep Assist waypoints alongside its segments: the
+    // two are one setup, and recalling segments while leaving the PREVIOUS
+    // stage's waypoints loaded is a trap rather than a feature. Beep Assist's
+    // modes and lead-ins stay global -- they are crew preferences, not stage
+    // data. empty() is defined so the many "is this slot populated?" checks
+    // read the same as they did when a slot was a bare vector.
+    struct MemorySlot {
+        std::vector<Segment> segments;
+        // Metres from the Total counter's zero. Calibration-independent, so
+        // unlike segments these are never recalculated on a calibration
+        // change.
+        std::vector<double> beep_waypoints_m;
+
+        bool empty() const { return segments.empty(); }
+        void clear() { segments.clear(); beep_waypoints_m.clear(); }
+    };
+
     static constexpr int MAX_MEMORY_SLOTS = 5;
-    std::vector<Segment> memory_slots[5];
+    MemorySlot memory_slots[5];
     
     // Alarm: co-pilot sets distance alarm that rings a doorbell
     int alarm_distance_km = 0;          // 0 = no alarm active

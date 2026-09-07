@@ -200,22 +200,41 @@ void on_distance_set(GtkWidget* widget, gpointer user_data) {
     updateCopilotDisplay(data);
 }
 
-void performStageGo(AppData* data) {
+void zeroDistanceBaselines(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
-    int64_t current_time = getRallyTime_ms(*data->state);
 
     data->state->total_start_cntr1 = current_poll.cntr1;
     data->state->total_start_cntr2 = current_poll.cntr2;
-    data->state->total_start_time_ms = current_time;
-
     data->state->trip_start_cntr1 = current_poll.cntr1;
     data->state->trip_start_cntr2 = current_poll.cntr2;
-    data->state->trip_start_time_ms = current_time;
-
     data->state->segment_start_cntr1 = current_poll.cntr1;
     data->state->segment_start_cntr2 = current_poll.cntr2;
+
+    // Both counters restart here, so both corrections describe a baseline
+    // that no longer exists.
+    data->state->total_distance_adjust_cm = 0;
+    data->state->trip_distance_adjust_cm = 0;
+
+    // Waypoints are measured from the Total counter's zero, so re-zeroing it
+    // puts every distance waypoint back in front of the car. Navigation beeps
+    // run from this moment; timing beeps run from the clock zero instead, and
+    // cannot fire until there is a stage to be on schedule for.
+    data->beepNextNavIndex = 0;
+    data->beepNextTimingIndex = 0;
+    data->beepCursorsStale = true;
+}
+
+void zeroTimeBaselines(AppData* data) {
+    int64_t current_time = getRallyTime_ms(*data->state);
+
+    data->state->total_start_time_ms = current_time;
+    data->state->trip_start_time_ms = current_time;
     data->state->segment_start_time_ms = current_time;
 
+    // The stage becomes active with the CLOCK, not with the distance. Timing
+    // beeps and ahead/behind are both gated on this, so an early departure
+    // stays silent on schedule until the appointed minute even though it is
+    // already accumulating distance.
     if (!data->state->segments.empty()) {
         data->state->segment_current_number = 0;
     }
@@ -223,19 +242,35 @@ void performStageGo(AppData* data) {
     data->aheadBehindSeconds = 0.0;
     data->smoothedSpeed = -1.0;
     data->state->ahead_behind_zero_offset_ms = 0;
-    // Both counters restart here, so both corrections describe a baseline
-    // that no longer exists.
-    data->state->total_distance_adjust_cm = 0;
-    data->state->trip_distance_adjust_cm = 0;
-    data->autoStartTriggered = false;
-    // Waypoints are measured from the Total counter's zero, so re-zeroing it
-    // puts every waypoint back in front of the car.
-    data->beepNextNavIndex = 0;
-    data->beepNextTimingIndex = 0;
+    // The timing bookmark is derived from elapsed stage time, which just
+    // became zero.
     data->beepCursorsStale = true;
 
     if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
-    
+}
+
+void performAutoStart(AppData* data) {
+    if (data->state->auto_start_early_departure) {
+        // Distance was zeroed when the operator armed this, so only the clock
+        // starts now and everything rolled on the way to the line counts
+        // toward the stage distance -- and therefore toward its average speed.
+        zeroTimeBaselines(data);
+        data->state->auto_start_early_departure = false;
+        ConfigFile::save(*data->state);
+        notifyWebState(data);
+        return;
+    }
+    // Ordinary autostart: distance and clock both zero at the appointed time.
+    performStageGo(data);
+}
+
+void performStageGo(AppData* data) {
+    // Distance and clock together: this is the ordinary "start now" case.
+    zeroDistanceBaselines(data);
+    zeroTimeBaselines(data);
+    data->autoStartTriggered = false;
+    data->state->auto_start_early_departure = false;
+
     ConfigFile::save(*data->state);
     notifyWebState(data);
 }
@@ -269,7 +304,16 @@ static void setAutoStartToNextRoundMinute(AppData* data) {
     data->state->auto_start_rally_time_minutes =
         static_cast<uint64_t>((target_ms - epoch_ms) / 60000);
     data->autoStartTriggered = false;
+
+    // Early departure: distance zeroes NOW, the clock zeroes at the minute.
+    // Anything rolled between the two therefore counts toward the stage
+    // distance and so toward the average speed, which is the point -- the car
+    // leaves before its due time and the roadbook still starts at the minute.
+    data->state->auto_start_early_departure = true;
+    zeroDistanceBaselines(data);
+
     ConfigFile::save(*data->state);
+    notifyWebState(data);
 }
 
 void on_stage_go(GtkWidget* widget, gpointer user_data) {
@@ -1018,7 +1062,9 @@ void on_memory_set(GtkWidget* widget, gpointer user_data) {
         if (response != GTK_RESPONSE_YES) return;
     }
     
-    data->state->memory_slots[slot] = data->state->segments;
+    data->state->memory_slots[slot].segments = data->state->segments;
+    // A slot is the whole stage setup, waypoints included.
+    data->state->memory_slots[slot].beep_waypoints_m = data->state->beep_waypoints_m;
     ConfigFile::save(*data->state);
     updateMemoryRecallStyles(data);
     notifyWebState(data);
@@ -1028,10 +1074,15 @@ void on_memory_recall(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     int slot = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "slot")) - 1;
     if (slot >= 0 && slot < RallyState::MAX_MEMORY_SLOTS && !data->state->memory_slots[slot].empty()) {
-        data->state->segments = data->state->memory_slots[slot];
+        data->state->segments = data->state->memory_slots[slot].segments;
+        data->state->beep_waypoints_m = data->state->memory_slots[slot].beep_waypoints_m;
         data->state->segment_current_number = data->state->segments.empty() ? -1 : 0;
+        // The waypoint list just changed wholesale, so the beep bookmarks
+        // mean nothing; rebuild them from where the car actually is.
+        data->beepCursorsStale = true;
         ConfigFile::save(*data->state);
         refreshSegmentList(data);
+        refreshBeepWaypointView(data);
         notifyWebState(data);
     }
 }
@@ -1098,7 +1149,7 @@ void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
                     seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
                 }
                 for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
-                    for (auto& seg : data->state->memory_slots[i]) {
+                    for (auto& seg : data->state->memory_slots[i].segments) {
                         seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
                         seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
                     }
@@ -1142,7 +1193,7 @@ void on_reset_calibration_pulses(G_GNUC_UNUSED GtkWidget* widget, gpointer user_
         seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
     }
     for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
-        for (auto& seg : data->state->memory_slots[i]) {
+        for (auto& seg : data->state->memory_slots[i].segments) {
             seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
             seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
         }
@@ -1173,7 +1224,7 @@ void on_set_sensor_1(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
     }
     for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
-        for (auto& seg : data->state->memory_slots[i]) {
+        for (auto& seg : data->state->memory_slots[i].segments) {
             seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
             seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
         }
@@ -1193,7 +1244,7 @@ void on_set_sensor_both(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
     }
     for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
-        for (auto& seg : data->state->memory_slots[i]) {
+        for (auto& seg : data->state->memory_slots[i].segments) {
             seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
             seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
         }
@@ -1424,6 +1475,7 @@ void on_autostart_set(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     }
     
     int64_t epoch_ms = getAutoStartEpochMs();
+    data->state->auto_start_early_departure = false;
     data->state->auto_start_rally_time_minutes = 
         static_cast<uint64_t>((target_ms - epoch_ms) / 60000);
     data->autoStartTriggered = false;
@@ -1435,6 +1487,7 @@ void on_autostart_set(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 void on_autostart_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     data->state->auto_start_rally_time_minutes = 0;
+    data->state->auto_start_early_departure = false;
     data->autoStartTriggered = false;
     ConfigFile::save(*data->state);
     gtk_entry_set_text(data->autoStartTimeEntry, "");
@@ -1448,6 +1501,20 @@ void on_autostart_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 // to "30" is 3 km, which at 2.6 km travelled is immediately due and beeps),
 // and committing per character rewrote the whole config JSON to the Pi's SD
 // card on every key.
+// Rewrites the waypoint box from state. Blocks the "changed" handler while it
+// does: otherwise a programmatic set (memory recall) would arm the debounce
+// and commit the list straight back, which is harmless but pointless churn on
+// the SD card.
+void refreshBeepWaypointView(AppData* data) {
+    if (!data->beepWaypointBuffer) return;
+    g_signal_handlers_block_by_func(data->beepWaypointBuffer,
+                                    (gpointer)on_beep_waypoints_changed, data);
+    gtk_text_buffer_set_text(data->beepWaypointBuffer,
+        formatBeepWaypointsKm(data->state->beep_waypoints_m).c_str(), -1);
+    g_signal_handlers_unblock_by_func(data->beepWaypointBuffer,
+                                      (gpointer)on_beep_waypoints_changed, data);
+}
+
 void commitBeepWaypoints(AppData* data) {
     if (!data->beepWaypointBuffer) return;
     GtkTextIter start, end;

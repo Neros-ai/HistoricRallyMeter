@@ -56,16 +56,22 @@ std::string buildTelemetryJson(AppData* data) {
     int64_t trip_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
         data->state->trip_start_cntr1, data->state->trip_start_cntr2);
-    long trip_m = countsToCentimeters(trip_count_diff, data->state->calibration) / 100;
+    long trip_m = adjustedDistanceMeters(
+        countsToCentimeters(trip_count_diff, data->state->calibration),
+        data->state->trip_distance_adjust_cm);
     double trip_avg = calculateAverageSpeed(*data->state,
-        data->state->trip_start_time_ms, current_time_ms, trip_count_diff);
+        data->state->trip_start_time_ms, current_time_ms, trip_count_diff,
+        data->state->trip_distance_adjust_cm);
 
     int64_t total_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
         data->state->total_start_cntr1, data->state->total_start_cntr2);
-    long total_m = countsToCentimeters(total_count_diff, data->state->calibration) / 100;
+    long total_m = adjustedDistanceMeters(
+        countsToCentimeters(total_count_diff, data->state->calibration),
+        data->state->total_distance_adjust_cm);
     double total_avg = calculateAverageSpeed(*data->state,
-        data->state->total_start_time_ms, current_time_ms, total_count_diff);
+        data->state->total_start_time_ms, current_time_ms, total_count_diff,
+        data->state->total_distance_adjust_cm);
 
     double cur_speed = calculateCurrentSpeed(*data->state, current_poll, tenth_poll);
     if (cur_speed < 0) cur_speed = 0.0;
