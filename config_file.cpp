@@ -249,6 +249,11 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
     if (!state.stage_segments_recorded) {
         state.stage_segments = state.segments;
         state.stage_segments_recorded = true;
+        // ...and the freeze that protects it. stage_complete has no key in
+        // such a file either, so it would default to "nothing under way" and
+        // the first edit after the restart would replace the snapshot the
+        // line above just restored.
+        if (state.segment_current_number >= 0) state.stage_complete = false;
     }
 }
 

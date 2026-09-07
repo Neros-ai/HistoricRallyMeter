@@ -92,7 +92,10 @@ std::string formatAutoStartStatus(uint64_t auto_start_rally_time_s,
 constexpr const char* STAGE_STATUS_CAPTION_COLOR = "#FFA500";
 
 // Segment rows the status panel has room for beneath the distance-adjust
-// buttons on a 1280x400 co-pilot display, at 15px monospace.
+// buttons on a 1280x400 co-pilot display, at 22px monospace (see the
+// .stage-status rule in ui_copilot.cpp -- keep the two in step). Worst case
+// is nine lines: the autostart line, the heading, and seven segments under
+// the "one over the limit is shown rather than summarised" rule.
 constexpr size_t STAGE_STATUS_MAX_ROWS = 6;
 
 // The read-only stage panel on the main co-pilot screen: where the loaded

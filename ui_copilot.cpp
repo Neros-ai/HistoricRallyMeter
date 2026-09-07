@@ -483,7 +483,12 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     // -- the crew previously had to open Stage Go or the segments screen to
     // see either, and the Stage Go dialog is a confirmation, not somewhere
     // to browse from.
-    data->stageStatusLabel = GTK_LABEL(gtk_label_new(""));
+    // Suppressed in single-display mode with the rest of columns 3-6: the
+    // left panel is deliberately narrowed there to leave room for the
+    // embedded gauge, and this is the widest thing in the block.
+    data->stageStatusLabel = data->singleDisplayMode
+        ? nullptr : GTK_LABEL(gtk_label_new(""));
+    if (data->stageStatusLabel) {
     gtk_style_context_add_class(
         gtk_widget_get_style_context(GTK_WIDGET(data->stageStatusLabel)), "stage-status");
     gtk_label_set_xalign(data->stageStatusLabel, 0.0);
@@ -495,6 +500,7 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     // rows beside it then grows downward into the blank area rather than
     // stretching Trip and next apart to make room.
     gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->stageStatusLabel), 4, 1, 3, 3);
+    }
 
     gtk_grid_attach(GTK_GRID(distGrid), tripHeadingBtn, 0, 1, 1, 1);
     

@@ -437,6 +437,10 @@ public:
             ASSERT_EQ(state.segments.size(), 1u);
             ASSERT_EQ(state.stage_segments.size(), 1u);
             ASSERT_NEAR(state.stage_segments[0].target_speed_kph, 40.0, 0.001);
+            // The seeded snapshot is protected too: without the freeze, the
+            // first edit after the restart would replace the very roadbook
+            // the seed exists to preserve.
+            ASSERT_FALSE(state.stage_complete);
             std::remove(path.c_str());
             return true;
         });

@@ -116,7 +116,7 @@ std::string buildTelemetryJson(AppData* data) {
         displayKph(data, target_kph),
         ahead_behind_s,
         data->state->segment_current_number >= 0 ? data->state->segment_current_number + 1 : 0,
-        data->state->segments.size(),
+        data->state->stage_segments.size(),
         np.label,
         np.enabled ? "true" : "false",
         data->state->units ? "mph" : "kph");

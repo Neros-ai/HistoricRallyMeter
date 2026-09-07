@@ -564,6 +564,10 @@ std::string formatAutoStartStatus(uint64_t auto_start_rally_time_s,
     int64_t target_ms = autoStartTargetMsFromSeconds(auto_start_rally_time_s, epoch_ms);
     time_t target_s = target_ms / 1000;
     struct tm* t = localtime(&target_s);
+    // auto_start_rally_time_s is a uint64_t read from a hand-editable config,
+    // so an out-of-range value can overflow target_s and return null here --
+    // and this runs on every co-pilot tick, with no operator action needed.
+    if (!t) return "none";
     char buf[32];
     snprintf(buf, sizeof(buf), "%02d:%02d:%02d", t->tm_hour, t->tm_min, t->tm_sec);
     // The kind of autostart is not shown: the driver panel already says

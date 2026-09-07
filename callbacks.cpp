@@ -55,6 +55,12 @@ void on_total_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->beepNextNavIndex = 0;
     data->beepNextTimingIndex = 0;
     data->beepCursorsStale = true;
+    // The stage measures its own progress from this counter, so zeroing it
+    // ends the stage as a thing that can still be completed: without this,
+    // stageDistanceComplete() could never be reached again and the roadbook
+    // would stay frozen for the rest of the session, silently discarding
+    // every later edit and memory recall.
+    data->state->stage_complete = true;
     ConfigFile::save(*data->state);
     notifyWebState(data);
 }
@@ -269,6 +275,17 @@ void adoptRoadbookIfIdle(AppData* data) {
     data->state->stage_segments = data->state->segments;
     data->state->segment_current_number =
         data->state->stage_segments.empty() ? -1 : 0;
+
+    // The segment counters have to move with the index. Left pointing at the
+    // previous stage's last segment start, the auto-advance check sees the
+    // whole of segment 1 already driven and cascades through every autoNext
+    // segment inside a frame or two -- so the panel would show the last
+    // segment of the stage just loaded rather than its first, in exactly the
+    // window this exists for.
+    auto poll = data->poller->getMostRecent();
+    data->state->segment_start_cntr1 = poll.cntr1;
+    data->state->segment_start_cntr2 = poll.cntr2;
+    data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
 }
 
 void zeroTimeBaselines(AppData* data) {
@@ -849,10 +866,12 @@ void on_segment_entry_changed(GtkWidget* widget, gpointer user_data) {
             double meters = std::stod(text);
             data->state->segments[index].distance_m = meters;
             data->state->segments[index].distance_counts = (meters * 1e6) / data->state->calibration;
-        // Edited, so it is no longer the slot it was recalled from.
+        }
+        // After the whole if/else, not inside the distance branch: a speed
+        // edit is just as much an edit, and nesting this left the gauge and
+        // the tone on the old speed until a distance happened to be typed.
         data->state->last_memory_slot = 0;
         adoptRoadbookIfIdle(data);
-        }
         ConfigFile::save(*data->state);
         notifyWebState(data);
     }
