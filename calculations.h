@@ -79,6 +79,12 @@ int64_t autoStartTargetMsFromSeconds(uint64_t seconds, int64_t epoch_ms);
 // already under way keeps its real error. `diff_ms` is the countdown
 // remaining, so the hold lasts exactly as long as the T- overlay is on
 // screen and a stale target left in a config file releases it at once.
+// True once the car has covered the whole of `segs` -- the stage's own
+// distance, summed from its segments, against the counts driven since the
+// stage started. The point at which the stage is over and its roadbook is
+// no longer the one the crew are working to.
+bool stageDistanceComplete(const std::vector<Segment>& segs, int64_t stage_counts);
+
 // The complete armed-autostart state. Every arming press produces one of
 // these and the caller ASSIGNS it wholesale, which is what makes a press
 // overrule whatever was armed before -- including an autostart of the other

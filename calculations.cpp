@@ -558,6 +558,13 @@ double gaugeEffectiveMaxSeconds(double seconds) {
     return abs_sec;
 }
 
+bool stageDistanceComplete(const std::vector<Segment>& segs, int64_t stage_counts) {
+    if (segs.empty()) return true;
+    double total = 0.0;
+    for (const auto& seg : segs) total += seg.distance_counts;
+    return static_cast<double>(stage_counts) >= total;
+}
+
 AutoStartArming autoStartArming(int64_t target_ms, int64_t epoch_ms,
                                 bool early_departure) {
     AutoStartArming arming{};

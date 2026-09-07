@@ -224,6 +224,26 @@ public:
             return true;
         });
 
+        suite->addTest("a stage is complete once its own distance is driven out", []() {
+            Segment a{}; a.distance_counts = 1000.0;
+            Segment b{}; b.distance_counts = 2000.0;
+            std::vector<Segment> stage = { a, b };
+            ASSERT_FALSE(stageDistanceComplete(stage, 0));
+            ASSERT_FALSE(stageDistanceComplete(stage, 2999));
+            // Exactly at the line counts as complete.
+            ASSERT_TRUE(stageDistanceComplete(stage, 3000));
+            ASSERT_TRUE(stageDistanceComplete(stage, 5000));
+            return true;
+        });
+
+        suite->addTest("a stage with no segments is complete before it begins", []() {
+            // Nothing to drive out, so nothing to protect: an edit is adopted
+            // straight away rather than waiting for a distance that will
+            // never be covered.
+            ASSERT_TRUE(stageDistanceComplete({}, 0));
+            return true;
+        });
+
         suite->addTest("editing the roadbook does not touch the running stage", []() {
             // The stage is judged against the snapshot taken when it started.
             // Editing segments, or recalling a memory slot over them, is

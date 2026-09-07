@@ -101,6 +101,10 @@ void performAutoStart(AppData* data);
 // appointed minute.
 void zeroDistanceBaselines(AppData* data);
 void zeroTimeBaselines(AppData* data);
+
+// Adopts the edited roadbook as the stage roadbook, but only when no stage
+// is under way. Call after any change to state->segments.
+void adoptRoadbookIfIdle(AppData* data);
 GtkWidget* createNumericKeypad(AppData* data);
 GtkWidget* createDateTimeKeypad(AppData* data);
 

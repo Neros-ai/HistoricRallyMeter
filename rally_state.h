@@ -69,6 +69,13 @@ public:
     // edit lands on the next stage, which is the only stage it can honestly
     // apply to.
     std::vector<Segment> stage_segments;
+    // False while a stage is genuinely under way -- started, and not yet
+    // driven past the end of its last segment. While it is false the
+    // snapshot is frozen; once it is true an edit or a memory recall adopts
+    // the roadbook straight away, so the crew can see what they have just
+    // set instead of staring at the stage they have already finished.
+    // Starts true: nothing is under way until something starts.
+    bool stage_complete = true;
     // False when the config file that was loaded predates stage_segments, so
     // load() can seed the snapshot from `segments` and leave a stage running
     // across the upgrade calculating exactly as it did before. Not persisted;

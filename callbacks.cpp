@@ -245,6 +245,18 @@ void zeroDistanceBaselines(AppData* data) {
     data->beepCursorsStale = true;
 }
 
+void adoptRoadbookIfIdle(AppData* data) {
+    // Called wherever the roadbook is edited or replaced. While a stage is
+    // under way this does nothing: that stage is judged against the segments
+    // it started on, and an edit is preparation for the next one. With no
+    // stage under way there is nothing to protect, so the change is adopted
+    // at once -- the crew set a speed, or recall a slot, and see it.
+    if (!data->state->stage_complete) return;
+    data->state->stage_segments = data->state->segments;
+    data->state->segment_current_number =
+        data->state->stage_segments.empty() ? -1 : 0;
+}
+
 void zeroTimeBaselines(AppData* data) {
     int64_t current_time = getRallyTime_ms(*data->state);
 
@@ -263,6 +275,9 @@ void zeroTimeBaselines(AppData* data) {
     data->state->stage_segments = data->state->segments;
     data->state->segment_current_number =
         data->state->stage_segments.empty() ? -1 : 0;
+    // A stage is under way from here, so the roadbook is frozen until it is
+    // driven out. An empty roadbook is over before it began.
+    data->state->stage_complete = data->state->stage_segments.empty();
 
     data->aheadBehindSeconds = 0.0;
     data->smoothedSpeed = -1.0;
@@ -552,6 +567,21 @@ gboolean update_display(gpointer user_data) {
     // Poll counters (respects 5ms minimum interval)
     data->poller->poll(data->counter1, data->counter2, data->register_addr);
     
+    // The stage's own distance is what ends it. Once it is driven out the
+    // roadbook stops being frozen, so the next edit or recall shows up
+    // straight away -- the ahead/behind figure at the line is left alone
+    // until the crew actually change something.
+    if (!data->state->stage_complete) {
+        auto poll = data->poller->getMostRecent();
+        int64_t stage_counts = calculateDistanceCounts(*data->state,
+            poll.cntr1, poll.cntr2,
+            data->state->total_start_cntr1, data->state->total_start_cntr2);
+        if (stageDistanceComplete(data->state->stage_segments, stage_counts)) {
+            data->state->stage_complete = true;
+            ConfigFile::save(*data->state);
+        }
+    }
+
     // Check for auto-advance segments
     if (data->state->segment_current_number >= 0 && 
         data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
@@ -805,6 +835,7 @@ void on_segment_entry_changed(GtkWidget* widget, gpointer user_data) {
             double meters = std::stod(text);
             data->state->segments[index].distance_m = meters;
             data->state->segments[index].distance_counts = (meters * 1e6) / data->state->calibration;
+        adoptRoadbookIfIdle(data);
         }
         ConfigFile::save(*data->state);
         notifyWebState(data);
@@ -818,6 +849,7 @@ void on_segment_auto_toggled(GtkWidget* widget, gpointer user_data) {
     if (!data || index < 0 || index >= static_cast<int>(data->state->segments.size())) return;
     
     data->state->segments[index].autoNext = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
+    adoptRoadbookIfIdle(data);
     ConfigFile::save(*data->state);
     notifyWebState(data);
 }
@@ -1036,6 +1068,7 @@ void on_add_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
                 seg.autoNext = autoNext;
 
                 data->state->segments.push_back(seg);
+                adoptRoadbookIfIdle(data);
                 added = true;
             }
         }
@@ -1062,6 +1095,7 @@ void on_delete_segment(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(g_object_get_data(G_OBJECT(widget), "app_data"));
     if (data && index >= 0 && index < static_cast<int>(data->state->segments.size())) {
         data->state->segments.erase(data->state->segments.begin() + index);
+        adoptRoadbookIfIdle(data);
         ConfigFile::save(*data->state);
         refreshSegmentList(data);
         notifyWebState(data);
@@ -1120,9 +1154,11 @@ void on_memory_recall(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     int slot = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "slot")) - 1;
     if (slot >= 0 && slot < RallyState::MAX_MEMORY_SLOTS && !data->state->memory_slots[slot].empty()) {
-        // Only the editable roadbook. A running stage keeps the segments it
-        // started on; this slot takes effect at the next stage start.
+        // A running stage keeps the segments it started on; with no stage
+        // under way the recalled slot is adopted immediately, so the crew
+        // see the stage they have just loaded.
         data->state->segments = data->state->memory_slots[slot].segments;
+        adoptRoadbookIfIdle(data);
         // A slot from a pre-Beep-Assist config has no list of its own; the
         // live one stays rather than being silently deleted.
         if (data->state->memory_slots[slot].waypoints_recorded) {

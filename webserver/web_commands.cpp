@@ -98,6 +98,7 @@ bool webHandleCommand(AppData* data, const char* json) {
         seg.distance_m = meters;
         seg.distance_counts = (meters * 1e6) / data->state->calibration;
         seg.autoNext = autoNext;
+        adoptRoadbookIfIdle(data);
         ConfigFile::save(*data->state);
         refreshSegmentList(data);
         return true;
@@ -117,6 +118,7 @@ bool webHandleCommand(AppData* data, const char* json) {
         seg.distance_counts = (meters * 1e6) / data->state->calibration;
         seg.autoNext = autoNext;
         data->state->segments.push_back(seg);
+        adoptRoadbookIfIdle(data);
         ConfigFile::save(*data->state);
         refreshSegmentList(data);
         return true;
@@ -126,8 +128,9 @@ bool webHandleCommand(AppData* data, const char* json) {
         if (!jsonFindInt(json, "index", &index)) return false;
         if (index < 0 || index >= static_cast<int>(data->state->segments.size())) return false;
         // segment_current_number indexes the running stage's snapshot, not
-        // this list, so editing the roadbook leaves it alone.
+        // this list, so a running stage is left alone.
         data->state->segments.erase(data->state->segments.begin() + index);
+        adoptRoadbookIfIdle(data);
         ConfigFile::save(*data->state);
         refreshSegmentList(data);
         return true;
@@ -148,6 +151,7 @@ bool webHandleCommand(AppData* data, const char* json) {
         if (slot < 1 || slot > RallyState::MAX_MEMORY_SLOTS) return false;
         if (data->state->memory_slots[slot - 1].empty()) return false;
         data->state->segments = data->state->memory_slots[slot - 1].segments;
+        adoptRoadbookIfIdle(data);
         // A slot from a pre-Beep-Assist config has no list of its own; the
         // live one stays rather than being silently deleted.
         if (data->state->memory_slots[slot - 1].waypoints_recorded) {
