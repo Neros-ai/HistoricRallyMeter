@@ -26,7 +26,13 @@ public:
             ASSERT_NEAR(seg.distance_m, 0.0, 0.001);
             ASSERT_NEAR(seg.target_speed_counts_per_hour, 0.0, 0.001);
             ASSERT_NEAR(seg.distance_counts, 0.0, 0.001);
-            ASSERT_FALSE(seg.autoNext);
+            // Auto-advance is the intended default: the meter rolls on to the
+            // next segment by itself at the end of the current one. The
+            // assertion here was ASSERT_FALSE, contradicting the `= true`
+            // default declared in rally_types.h -- both landed in the same
+            // commit, so this suite has been red ever since. The default is
+            // the correct half.
+            ASSERT_TRUE(seg.autoNext);
             return true;
         });
 

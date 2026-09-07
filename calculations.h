@@ -46,8 +46,17 @@ double calculateAheadBehind(const RallyState& state, int64_t current_time_ms,
                           int64_t segment_start_time, double target_counts_per_hour,
                           int64_t actual_counts);
 
-// Calculate ideal counts from stage start accounting for all segment speeds
-double calculateIdealCountsFromStageStart(const RallyState& state, int64_t elapsed_ms);
+// Calculate ideal counts from stage start accounting for all segment speeds.
+//
+// A segment with a real distance but no target speed cannot be divided by, so
+// it is skipped -- which silently drops its DISTANCE as well as its time and
+// leaves the result measured against a roadbook shorter than the real one.
+// Pass roadbook_complete to find out whether that happened: it is set false
+// if any segment up to and including the current one had distance but no
+// speed, in which case the returned figure is not trustworthy. Left null by
+// callers that do not care.
+double calculateIdealCountsFromStageStart(const RallyState& state, int64_t elapsed_ms,
+                                          bool* roadbook_complete = nullptr);
 
 // Calculate seconds ahead/behind from stage start (accounts for all segments)
 double calculateAheadBehindFromStageStart(const RallyState& state, int64_t current_time_ms,
