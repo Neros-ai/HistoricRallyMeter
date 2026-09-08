@@ -12,3 +12,21 @@ test_rally_config.json
 
 # Config files with runtime data (not secrets, but user-specific)
 rally_config.json
+
+# Sandbox run debris. The Docker box-display sandbox mounts this tree at
+# /build and writes into it as it runs, so these appear in `git status` after
+# any scripts/run-box.sh session. They were swept into a pull request once by
+# a `git add -A`; the PulseAudio cookie under .config/ is the reason that
+# matters more than the clutter does.
+app.log
+box_display.sh
+.config/
+
+# Screenshots taken while verifying behaviour on the sandbox box. The two
+# .png files upstream ships (gaugepilot-rallymaster-display.png and
+# historic_rally_meter_icon.png) are tracked and unaffected by these.
+box_screenshot.png
+copilot.png
+frame.png
+phone_qr.png
+sim_check.png
