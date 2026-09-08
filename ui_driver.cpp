@@ -649,9 +649,10 @@ void updateDriverDisplay(AppData* data) {
         }
         
         // Ahead/behind - calculated from stage start accounting for all segment speeds
-        int64_t total_count_diff_ab = calculateDistanceCounts(*data->state,
-            current_poll.cntr1, current_poll.cntr2,
-            data->state->total_start_cntr1, data->state->total_start_cntr2);
+        // Corrected, not raw: a wrong turn knocked off with -10 has to move
+        // the time error too, or the gauge keeps crediting distance the crew
+        // just told the box they had not driven.
+        int64_t total_count_diff_ab = stageCountsCorrected(data, current_poll);
         double seconds = calculateAheadBehindFromStageStart(*data->state, current_time_ms, total_count_diff_ab);
         seconds += data->state->ahead_behind_zero_offset_ms / 1000.0;
         // Nothing to be ahead or behind of until the clock zeroes at the
@@ -666,9 +667,7 @@ void updateDriverDisplay(AppData* data) {
         // Fraction of the current segment driven, for the needle's scale chevrons
         // and segment-end tick. "In segment" while between the segment start and end.
         {
-            int64_t seg_count_diff = calculateDistanceCounts(*data->state,
-                current_poll.cntr1, current_poll.cntr2,
-                data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+            int64_t seg_count_diff = segmentCountsCorrected(data, current_poll);
             double seg_total = seg.distance_counts;
             if (seg_total > 0.0) {
                 double frac = static_cast<double>(seg_count_diff) / seg_total;
@@ -772,9 +771,7 @@ void updateDriverDisplay(AppData* data) {
     if (data->state->segment_current_number >= 0 && 
         data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size()) - 1) {
         const Segment& current_seg = data->state->stage_segments[data->state->segment_current_number];
-        int64_t seg_count_diff = calculateDistanceCounts(*data->state,
-            current_poll.cntr1, current_poll.cntr2,
-            data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+        int64_t seg_count_diff = segmentCountsCorrected(data, current_poll);
         
         double remaining_counts = current_seg.distance_counts - static_cast<double>(seg_count_diff);
         double remaining_m = countsToMeters(static_cast<int64_t>(remaining_counts), data->state->calibration);

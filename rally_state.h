@@ -32,6 +32,13 @@ public:
     // to both together (a wheel-slip correction affects the one shared
     // measurement both readouts are derived from).
     long total_distance_adjust_cm = 0;
+    // total_distance_adjust_cm as it stood when the current segment began.
+    // Only the correction made SINCE then belongs to this segment: an earlier
+    // one already moved the boundary it was made before, and applying it again
+    // here would shift every later segment by the same amount a second time.
+    long segment_start_adjust_cm = 0;
+    // False for a config written before the field existed; see ConfigFile::load.
+    bool segment_start_adjust_recorded = false;
     long trip_distance_adjust_cm = 0;
 
     // Seconds since 1/1/2020, 0 = not set. Seconds, not minutes: the setup

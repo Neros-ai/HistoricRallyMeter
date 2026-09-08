@@ -38,14 +38,37 @@
       <div><span>Total</span><strong id="total-m">0 m</strong><span id="total-avg">avg 0.0</span></div>
     </section>
 
-    <section class="segment-row">
-      Segment <strong id="seg-num">0</strong> of <strong id="seg-count">0</strong>
-    </section>
-
     <section class="actions">
       <button id="btn-next-prev" type="button" disabled>---&gt;</button>
       <button id="btn-reset-trip" type="button">Reset Trip</button>
     </section>
+
+    <section class="adjust-row">
+      <span class="adjust-label">Adjust</span>
+      <button id="btn-dist-minus" type="button">&minus;10</button>
+      <input id="dist-set-m" type="number" min="0" max="999999" step="1"
+             inputmode="numeric" placeholder="Total m">
+      <button id="btn-dist-set" type="button">set</button>
+      <button id="btn-dist-plus" type="button">+10</button>
+    </section>
+
+    <section class="segment-row">
+      Segment <strong id="seg-num">0</strong> of <strong id="seg-count">0</strong>
+    </section>
+
+    <!-- The co-pilot's read-only stage panel, same figures in the same order:
+         the roadbook as set, each segment's own length, and the running total
+         the crew read off against the odometer. -->
+    <section class="stage-panel">
+      <div class="stage-autostart">Autostart: <strong id="stage-autostart">none</strong></div>
+      <table id="stage-table">
+        <thead>
+          <tr><th id="stage-speed-head">KPH</th><th colspan="2">Distance (m)</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
   </main>
 
   <main id="view-setup" class="view hidden">

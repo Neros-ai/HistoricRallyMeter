@@ -276,6 +276,53 @@ long clampDistanceAdjust(long raw_cm, long proposed_adjust_cm) {
     return proposed_adjust_cm;
 }
 
+int64_t correctedDistanceCounts(int64_t raw_counts, long adjust_cm, long calibration) {
+    if (calibration <= 0) return raw_counts;
+    // The inverse of countsToCentimeters: counts = cm * 10000 / calibration.
+    int64_t adjust_counts = (static_cast<int64_t>(adjust_cm) * 10000) / calibration;
+    int64_t corrected = raw_counts + adjust_counts;
+    return corrected < 0 ? 0 : corrected;
+}
+
+// Keeps distance_m in step with the count-based figure that was just changed.
+static void resyncSegmentMeters(Segment& seg, long calibration) {
+    seg.distance_m = (seg.distance_counts * static_cast<double>(calibration)) / 1e6;
+}
+
+bool retimeSegmentBoundaryForward(std::vector<Segment>& segs, long index,
+                                  int64_t driven_counts, long calibration) {
+    if (index < 0 || index + 1 >= static_cast<long>(segs.size())) return false;
+    Segment& cur = segs[index];
+    Segment& next = segs[index + 1];
+    // What this segment gives up is exactly what the next one takes on, so the
+    // boundary after it does not move.
+    double surrendered = cur.distance_counts - static_cast<double>(driven_counts);
+    cur.distance_counts = static_cast<double>(driven_counts);
+    next.distance_counts += surrendered;
+    // A "next" pressed past the end of the segment hands back a negative
+    // distance, which would leave the next segment shorter than nothing.
+    if (next.distance_counts < 0.0) next.distance_counts = 0.0;
+    resyncSegmentMeters(cur, calibration);
+    resyncSegmentMeters(next, calibration);
+    return true;
+}
+
+bool retimeSegmentBoundaryBackward(std::vector<Segment>& segs, long index,
+                                   int64_t driven_counts, long calibration) {
+    if (index <= 0 || index >= static_cast<long>(segs.size())) return false;
+    Segment& prev = segs[index - 1];
+    Segment& cur = segs[index];
+    // The previous segment really ran to here, so it grows by what has been
+    // driven since the boundary -- and this segment loses the same, leaving
+    // its own end where the roadbook has it.
+    prev.distance_counts += static_cast<double>(driven_counts);
+    cur.distance_counts -= static_cast<double>(driven_counts);
+    if (cur.distance_counts < 0.0) cur.distance_counts = 0.0;
+    resyncSegmentMeters(prev, calibration);
+    resyncSegmentMeters(cur, calibration);
+    return true;
+}
+
 long adjustedDistanceMeters(long raw_cm, long adjust_cm) {
     long corrected_cm = raw_cm + adjust_cm;
     if (corrected_cm < 0) corrected_cm = 0;
@@ -394,7 +441,16 @@ uint64_t autoStartSecondsFromTargetMs(int64_t target_ms, int64_t epoch_ms) {
     return static_cast<uint64_t>(delta_ms / 1000);
 }
 
+bool autoStartSecondsInRange(uint64_t seconds) {
+    return seconds <= AUTO_START_MAX_SECONDS;
+}
+
 int64_t autoStartTargetMsFromSeconds(uint64_t seconds, int64_t epoch_ms) {
+    // Range-checked before the multiply, not after: past the bound the
+    // multiply itself is the undefined behaviour, so no amount of checking
+    // the result would help. Out of range reads as nothing armed, which is
+    // the epoch itself -- already in the past, so it never fires.
+    if (!autoStartSecondsInRange(seconds)) return epoch_ms;
     return epoch_ms + static_cast<int64_t>(seconds) * 1000;
 }
 
@@ -561,12 +617,16 @@ double gaugeEffectiveMaxSeconds(double seconds) {
 std::string formatAutoStartStatus(uint64_t auto_start_rally_time_s,
                                   bool early_departure, int64_t epoch_ms) {
     if (auto_start_rally_time_s == 0) return "none";
+    // Rejected here as well as inside autoStartTargetMsFromSeconds: that
+    // function answers an out-of-range value with the epoch, which would
+    // print as a real-looking time from the start of the rally rather than
+    // saying nothing is armed.
+    if (!autoStartSecondsInRange(auto_start_rally_time_s)) return "none";
     int64_t target_ms = autoStartTargetMsFromSeconds(auto_start_rally_time_s, epoch_ms);
     time_t target_s = target_ms / 1000;
     struct tm* t = localtime(&target_s);
-    // auto_start_rally_time_s is a uint64_t read from a hand-editable config,
-    // so an out-of-range value can overflow target_s and return null here --
-    // and this runs on every co-pilot tick, with no operator action needed.
+    // localtime still refuses some in-range values on platforms with a
+    // narrow time_t, and this runs on every co-pilot tick.
     if (!t) return "none";
     char buf[32];
     snprintf(buf, sizeof(buf), "%02d:%02d:%02d", t->tm_hour, t->tm_min, t->tm_sec);

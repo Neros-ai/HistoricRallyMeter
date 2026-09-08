@@ -3,6 +3,7 @@
 
 #include "test_framework.h"
 #include <algorithm>
+#include <cmath>
 #include "../rally_state.h"
 #include "../calculations.h"
 
@@ -382,6 +383,60 @@ public:
             double kph = 0.0;
             ASSERT_TRUE(nextSegmentTargetKph(state, &kph));
             ASSERT_NEAR(kph, 50.0, 0.001);
+            return true;
+        });
+
+        suite->addTest("\"next\" moves one boundary and leaves the rest alone", []() {
+            // The crew press "next" when the distance at which the speed
+            // changes was not known in advance. The speed changes here; the
+            // NEXT known point is unchanged in its distance from the stage
+            // start, so the next segment simply becomes longer.
+            std::vector<Segment> segs(2);
+            segs[0].distance_counts = 1000.0;   // boundary 1 at 1000
+            segs[1].distance_counts = 2000.0;   // boundary 2 at 3000
+            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, 950, 1000));
+            ASSERT_TRUE(std::abs(segs[0].distance_counts - 950.0) < 1e-6);
+            ASSERT_TRUE(std::abs(segs[1].distance_counts - 2050.0) < 1e-6);
+            // The point that matters: boundary 2, and so the stage total, is
+            // exactly where the roadbook put it.
+            ASSERT_TRUE(std::abs((segs[0].distance_counts + segs[1].distance_counts)
+                                 - 3000.0) < 1e-6);
+            return true;
+        });
+
+        suite->addTest("\"prev\" is the mirror, and also holds the later boundary", []() {
+            std::vector<Segment> segs(2);
+            segs[0].distance_counts = 1000.0;
+            segs[1].distance_counts = 2000.0;
+            // 200 into segment 2, the crew decide the change really came here.
+            ASSERT_TRUE(retimeSegmentBoundaryBackward(segs, 1, 200, 1000));
+            ASSERT_TRUE(std::abs(segs[0].distance_counts - 1200.0) < 1e-6);
+            ASSERT_TRUE(std::abs(segs[1].distance_counts - 1800.0) < 1e-6);
+            ASSERT_TRUE(std::abs((segs[0].distance_counts + segs[1].distance_counts)
+                                 - 3000.0) < 1e-6);
+            return true;
+        });
+
+        suite->addTest("retiming refuses when there is no neighbour to move it to", []() {
+            std::vector<Segment> segs(1);
+            segs[0].distance_counts = 1000.0;
+            // Last segment: "next" has nowhere to hand the distance, and the
+            // first segment has no predecessor to give it to. Changing one
+            // side alone would silently resize the stage.
+            ASSERT_FALSE(retimeSegmentBoundaryForward(segs, 0, 950, 1000));
+            ASSERT_FALSE(retimeSegmentBoundaryBackward(segs, 0, 200, 1000));
+            ASSERT_TRUE(std::abs(segs[0].distance_counts - 1000.0) < 1e-6);
+            return true;
+        });
+
+        suite->addTest("a neighbour is never left shorter than nothing", []() {
+            std::vector<Segment> segs(2);
+            segs[0].distance_counts = 1000.0;
+            segs[1].distance_counts = 100.0;
+            // "next" pressed well past the segment end hands back a negative
+            // distance; the next segment floors at zero rather than inverting.
+            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, 2000, 1000));
+            ASSERT_TRUE(segs[1].distance_counts >= 0.0);
             return true;
         });
 

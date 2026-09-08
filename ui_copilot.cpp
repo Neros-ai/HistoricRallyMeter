@@ -328,9 +328,7 @@ void updateCopilotDisplay(AppData* data) {
     if (data->state->segment_current_number >= 0 &&
         data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
         const Segment& cur_seg = data->state->stage_segments[data->state->segment_current_number];
-        int64_t seg_count_diff = calculateDistanceCounts(*data->state,
-            current_poll.cntr1, current_poll.cntr2,
-            data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+        int64_t seg_count_diff = segmentCountsCorrected(data, current_poll);
         int64_t remaining_counts = cur_seg.distance_counts - seg_count_diff;
         long remaining_cm = countsToCentimeters(remaining_counts, data->state->calibration);
         long remaining_m = (remaining_cm >= 0) ? (remaining_cm + 99) / 100 : -((-remaining_cm) / 100);

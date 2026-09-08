@@ -168,6 +168,9 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.rallyTimeOffset_ms = extractLong(line);
         } else if (line.find("\"ahead_behind_zero_offset_ms\"") != std::string::npos) {
             state.ahead_behind_zero_offset_ms = extractLong(line);
+        } else if (line.find("\"segment_start_adjust_cm\"") != std::string::npos) {
+            state.segment_start_adjust_cm = static_cast<long>(extractLong(line));
+            state.segment_start_adjust_recorded = true;
         } else if (line.find("\"total_distance_adjust_cm\"") != std::string::npos) {
             state.total_distance_adjust_cm = static_cast<long>(extractLong(line));
         } else if (line.find("\"trip_distance_adjust_cm\"") != std::string::npos) {
@@ -255,6 +258,18 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
         // line above just restored.
         if (state.segment_current_number >= 0) state.stage_complete = false;
     }
+
+    // A config written before segment_start_adjust_cm existed would default it
+    // to zero while total_distance_adjust_cm still holds a standing
+    // correction, so the segment running across the upgrade would be credited
+    // with a correction made before it began -- moving its boundary once, on
+    // the first restart after the update. Seeding from the standing value
+    // makes the difference zero, which is what "no correction since this
+    // segment started" means.
+    if (!state.segment_start_adjust_recorded) {
+        state.segment_start_adjust_cm = state.total_distance_adjust_cm;
+        state.segment_start_adjust_recorded = true;
+    }
 }
 
 static void writeDoubleArray(std::ofstream& file, const std::string& name,
@@ -313,6 +328,7 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"rallyTimeOffset_ms\": " << state.rallyTimeOffset_ms << ",\n";
     file << "  \"ahead_behind_zero_offset_ms\": " << state.ahead_behind_zero_offset_ms << ",\n";
     file << "  \"total_distance_adjust_cm\": " << state.total_distance_adjust_cm << ",\n";
+    file << "  \"segment_start_adjust_cm\": " << state.segment_start_adjust_cm << ",\n";
     file << "  \"trip_distance_adjust_cm\": " << state.trip_distance_adjust_cm << ",\n";
     file << "  \"auto_start_rally_time_s\": " << state.auto_start_rally_time_s << ",\n";
     file << "  \"driver_window_x\": " << state.driver_window_x << ",\n";

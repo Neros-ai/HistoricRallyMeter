@@ -61,6 +61,20 @@ bool nextSegmentTargetKph(const RallyState& state, double* kph);
 // autostart set for 10:30:45 fired at 10:30:00 -- 45 seconds early, on a
 // screen whose whole purpose is starting at an exact time.
 uint64_t autoStartSecondsFromTargetMs(int64_t target_ms, int64_t epoch_ms);
+
+// Longest autostart offset the box will honour. auto_start_rally_time_s is
+// NOT an offset from the rally start -- it counts from getAutoStartEpochMs(),
+// which is 2020-01-01, so an ordinary value today is already several years of
+// seconds. The bound therefore has to be generous: it exists only to keep the
+// multiply in autoStartTargetMsFromSeconds inside int64_t, since that field is
+// a uint64_t read from a hand-editable JSON file and unchecked it is signed
+// overflow -- undefined behaviour reached with no operator action, on every
+// co-pilot tick. A century past the epoch is far beyond any rally and still
+// six orders of magnitude short of the overflow. Anything above it is treated
+// as nothing armed rather than clamped: a value that large is a corrupt file,
+// not an intention.
+static const uint64_t AUTO_START_MAX_SECONDS = 100ULL * 365 * 24 * 60 * 60;
+bool autoStartSecondsInRange(uint64_t seconds);
 int64_t autoStartTargetMsFromSeconds(uint64_t seconds, int64_t epoch_ms);
 
 // True while an armed "autostart on the minute" is still counting down, in
@@ -203,6 +217,39 @@ long clampDistanceAdjust(long raw_cm, long proposed_adjust_cm);
 // (centimetres) and return whole metres, truncating the same way the
 // uncorrected path does.
 long adjustedDistanceMeters(long raw_cm, long adjust_cm);
+
+// The same manual correction, expressed in counts so it can be applied to the
+// quantities that are compared against a roadbook's distance_counts rather
+// than displayed. Without this the -10/set correction reaches only the
+// odometer and the average speed: the ahead/behind figure, the segment
+// auto-advance and the end of the stage all keep counting the distance the
+// crew just told the box they had not driven. A wrong turn corrected with
+// five presses of -10 would leave the gauge saying "on time" while the crew
+// were a segment's worth of seconds behind, and would move every remaining
+// segment boundary 50 m up the road. Clamped at zero the way
+// adjustedDistanceMeters is, so an over-correction reads as "at the start"
+// rather than as negative progress.
+int64_t correctedDistanceCounts(int64_t raw_counts, long adjust_cm, long calibration);
+
+// The "next"/"prev" buttons move ONE boundary and nothing else. The crew press
+// them when the distance at which the speed changes was not known in advance:
+// the speed changes here, and they then drive whatever is left -- which may now
+// be longer -- to the next known point, which is unchanged in its distance from
+// the stage start. So the distance is moved BETWEEN the two adjacent segments
+// rather than added to or removed from one of them: every later boundary, and
+// the stage's own total distance, stay exactly where the roadbook put them.
+// Getting this wrong also steps the ahead/behind figure, because the ideal
+// position is summed from these boundaries.
+//
+// Forward ("next"): segment `index` ends at `driven_counts`, and whatever it
+// gives up is handed to segment index+1.
+// Backward ("prev"): segment index-1 is extended to here, and the same
+// distance comes off segment `index`.
+// Both return false, changing nothing, when the neighbour does not exist.
+bool retimeSegmentBoundaryForward(std::vector<Segment>& segs, long index,
+                                  int64_t driven_counts, long calibration);
+bool retimeSegmentBoundaryBackward(std::vector<Segment>& segs, long index,
+                                   int64_t driven_counts, long calibration);
 
 // Heading for the co-pilot's next-segment row: the current segment's own
 // target speed, with an arrow toward the change ahead. This is the one fact

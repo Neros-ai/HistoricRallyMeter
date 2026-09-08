@@ -56,7 +56,7 @@ header h1 { font-size: 1rem; margin: 0; }
 }
 .speed-grid span, .dist-grid span { display: block; color: #aaa; font-size: 0.85rem; }
 .speed-grid strong, .dist-grid strong { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
-.actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.actions { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .actions button {
   flex: 1;
   min-width: 120px;
@@ -93,3 +93,47 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .beep-row input[type="checkbox"], .beep-row input[type="radio"] { width: 1.4rem; height: 1.4rem; }
 .beep-head { color: #aaa; font-size: 0.85rem; }
 .beep-head span:last-child { margin-left: auto; }
+
+/* The co-pilot's Total-row correction, one line: nudge, pin, nudge. The
+   number field takes the middle so the two nudge buttons stay at the edges
+   where a thumb finds them without looking. */
+.adjust-row { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 1rem; }
+.adjust-label { flex: 0 0 3.5rem; color: #aaa; font-size: 0.85rem; }
+.adjust-row button {
+  flex: 0 0 3.5rem;
+  padding: 0.7rem 0.3rem;
+  font-size: 1rem;
+  font-weight: bold;
+  background: #222;
+  color: #fff;
+  border: 1px solid #666;
+}
+.adjust-row button:active { background: #555; }
+.adjust-row input[type="number"] {
+  flex: 1 1 0;
+  min-width: 0;
+  background: #000;
+  color: #fff;
+  border: 1px solid #666;
+  padding: 0.6rem 0.4rem;
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Read-only, and styled to say so: no borders round every cell like the
+   editable roadbook in Setup, just the box's own caption colour and figures
+   in a monospace column the eye can run down. */
+.stage-panel { border: 1px solid #444; background: #111; padding: 0.6rem; margin-bottom: 1rem; }
+.stage-autostart { color: #FFA500; font-size: 0.9rem; margin-bottom: 0.4rem; }
+.stage-autostart strong { color: #fff; font-weight: normal; }
+#stage-table { font-variant-numeric: tabular-nums; }
+#stage-table th {
+  border: none;
+  border-bottom: 1px solid #444;
+  color: #FFA500;
+  font-weight: normal;
+  text-align: right;
+  padding: 0.2rem 0.4rem;
+}
+#stage-table td { border: none; text-align: right; padding: 0.2rem 0.4rem; }
+#stage-table .stage-empty { text-align: left; color: #aaa; }

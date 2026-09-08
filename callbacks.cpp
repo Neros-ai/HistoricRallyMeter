@@ -47,9 +47,24 @@ void on_total_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->state->total_start_cntr1 = current_poll.cntr1;
     data->state->total_start_cntr2 = current_poll.cntr2;
     data->state->total_start_time_ms = getRallyTime_ms(*data->state);
+    // The segment measures from its own baseline, and the stage measures from
+    // Total's -- so moving one without the other leaves the current segment
+    // carrying distance the stage no longer counts. Reached by arming an
+    // early departure at the line, rolling on, then zeroing the counters
+    // before the minute: Total and Trip read 0 while segment 1 already held
+    // the rolled distance, so it ended that much early and every later
+    // segment inherited the lead, auto-advance re-basing from wherever it
+    // fired. Nothing else put it back -- the Trip button writes only trip_*,
+    // and zeroTimeBaselines at the minute moves clocks, not counters.
+    data->state->segment_start_cntr1 = current_poll.cntr1;
+    data->state->segment_start_cntr2 = current_poll.cntr2;
+    data->state->segment_start_time_ms = data->state->total_start_time_ms;
     // The correction described the old baseline; carrying it across a reset
     // would silently offset a counter the operator just zeroed.
     data->state->total_distance_adjust_cm = 0;
+    // Taken after the clear, not before: the segment restarts against a
+    // correction of zero like everything else this button re-bases.
+    data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
     // Waypoints are measured from the Total counter's zero, so re-zeroing it
     // puts every waypoint back in front of the car.
     data->beepNextNavIndex = 0;
@@ -60,7 +75,15 @@ void on_total_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     // stageDistanceComplete() could never be reached again and the roadbook
     // would stay frozen for the rest of the session, silently discarding
     // every later edit and memory recall.
-    data->state->stage_complete = true;
+    //
+    // The segment index has to go with it. Left pointing at, say, segment 3
+    // while the clock and the distance both restart here,
+    // calculateIdealCountsFromStageStart still sums the full distance of
+    // segments 1 and 2 into the ideal position -- against zero elapsed and
+    // zero travelled -- so both displays show a fabricated error the instant
+    // the button is pressed. The terms happen to cancel when every target
+    // speed is equal, which is what makes it easy to miss.
+    endStageAsIdle(data);
     ConfigFile::save(*data->state);
     notifyWebState(data);
 }
@@ -123,9 +146,11 @@ static long rawDistanceCm(AppData* data, bool is_trip) {
     return countsToCentimeters(counts, data->state->calibration);
 }
 
-void on_distance_adjust(GtkWidget* widget, gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
-    long delta_cm = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "delta_m")) * 100L;
+// The correction itself, with no widget in sight, so the co-pilot's buttons
+// and the phone client apply exactly the same arithmetic rather than two
+// implementations that can drift apart.
+void applyDistanceAdjust(AppData* data, long delta_m) {
+    long delta_cm = delta_m * 100L;
 
     // Both counters share the same underlying wheel measurement, so a
     // wheel-slip correction has to apply to both -- otherwise Trip would
@@ -140,6 +165,27 @@ void on_distance_adjust(GtkWidget* widget, gpointer user_data) {
 
     ConfigFile::save(*data->state);
     updateCopilotDisplay(data);
+}
+
+// Pins Total to an exact roadbook figure. Trip's correction is untouched --
+// "set" has no Trip equivalent. Returns false for a value the box would not
+// accept, so the phone can decline it the way the dialog does.
+bool applyDistanceSet(AppData* data, double meters) {
+    long wanted_cm = static_cast<long>(meters * 100.0);
+    if (wanted_cm < 0) return false;
+    // Solve for the correction that makes the reading equal what the operator
+    // entered.
+    long raw_cm = rawDistanceCm(data, false);
+    data->state->total_distance_adjust_cm = wanted_cm - raw_cm;
+    ConfigFile::save(*data->state);
+    updateCopilotDisplay(data);
+    return true;
+}
+
+void on_distance_adjust(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    applyDistanceAdjust(data,
+        static_cast<long>(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "delta_m"))));
 }
 
 void on_distance_set(GtkWidget* widget, gpointer user_data) {
@@ -186,15 +232,7 @@ void on_distance_set(GtkWidget* widget, gpointer user_data) {
     if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_OK) {
         const char* text = gtk_entry_get_text(entry);
         try {
-            long wanted_cm = static_cast<long>(std::stod(text) * 100.0);
-            if (wanted_cm >= 0) {
-                // Solve for the correction that makes the reading equal what
-                // the operator entered. Trip's correction is untouched --
-                // "set" has no Trip equivalent.
-                long raw_cm = rawDistanceCm(data, false);
-                data->state->total_distance_adjust_cm = wanted_cm - raw_cm;
-                ConfigFile::save(*data->state);
-            }
+            applyDistanceSet(data, std::stod(text));
         } catch (const std::exception&) {
             // Unparseable entry: leave the correction as it was rather than
             // zeroing a good one on a typo.
@@ -241,6 +279,8 @@ void zeroDistanceBaselines(AppData* data) {
     // that no longer exists.
     data->state->total_distance_adjust_cm = 0;
     data->state->trip_distance_adjust_cm = 0;
+    // Same ordering point as on_total_reset: after the clear.
+    data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
 
     // Waypoints are measured from the Total counter's zero, so re-zeroing it
     // puts every distance waypoint back in front of the car. Navigation beeps
@@ -273,19 +313,39 @@ void adoptRoadbookIfIdle(AppData* data) {
     // at once -- the crew set a speed, or recall a slot, and see it.
     if (!data->state->stage_complete) return;
     data->state->stage_segments = data->state->segments;
+
+    // No segment is current, rather than the first one. The stage baselines
+    // still belong to the stage that just finished, and ahead/behind is
+    // measured from those -- so making a segment current here would judge the
+    // new roadbook's speeds against the old stage's clock zero and show a
+    // false error of tens of minutes, needle pegged and tone sounding, until
+    // Stage Go. There is no stage running, so there is nothing to be ahead or
+    // behind of; the segment baselines are set by Stage Go along with the
+    // stage ones, and need no attention here.
+    //
+    // It also makes this idempotent, which matters because the entry handlers
+    // call it per keystroke: adopting the same roadbook twice now changes
+    // nothing the displays can see.
+    data->state->segment_current_number = -1;
+}
+
+// Fixes the roadbook the stage will be judged against, from the first segment.
+// An empty roadbook leaves no segment current, rather than leaving the previous
+// stage's index pointing into a snapshot that no longer has anything at it --
+// and it is over before it began, so it does not freeze the editable list.
+// Leaves the box with no stage running: nothing to be ahead or behind of, so
+// the gauge, the chevrons and the tone all rest, and the roadbook is free for
+// the crew to edit or recall against the stage they are about to start.
+void endStageAsIdle(AppData* data) {
+    data->state->segment_current_number = -1;
+    data->state->stage_complete = true;
+}
+
+void adoptRoadbookAsStage(AppData* data) {
+    data->state->stage_segments = data->state->segments;
     data->state->segment_current_number =
         data->state->stage_segments.empty() ? -1 : 0;
-
-    // The segment counters have to move with the index. Left pointing at the
-    // previous stage's last segment start, the auto-advance check sees the
-    // whole of segment 1 already driven and cascades through every autoNext
-    // segment inside a frame or two -- so the panel would show the last
-    // segment of the stage just loaded rather than its first, in exactly the
-    // window this exists for.
-    auto poll = data->poller->getMostRecent();
-    data->state->segment_start_cntr1 = poll.cntr1;
-    data->state->segment_start_cntr2 = poll.cntr2;
-    data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
+    data->state->stage_complete = data->state->stage_segments.empty();
 }
 
 void zeroTimeBaselines(AppData* data) {
@@ -299,16 +359,9 @@ void zeroTimeBaselines(AppData* data) {
     // beeps and ahead/behind are both gated on this, so an early departure
     // stays silent on schedule until the appointed minute even though it is
     // already accumulating distance.
-    // The stage starts here, so this is where the roadbook it will be judged
-    // against is fixed. An empty roadbook leaves no segment current, rather
-    // than leaving the previous stage's index pointing into a snapshot that
-    // no longer has anything at it.
-    data->state->stage_segments = data->state->segments;
-    data->state->segment_current_number =
-        data->state->stage_segments.empty() ? -1 : 0;
-    // A stage is under way from here, so the roadbook is frozen until it is
-    // driven out. An empty roadbook is over before it began.
-    data->state->stage_complete = data->state->stage_segments.empty();
+    // The roadbook is fixed here for an ordinary start, and re-fixed
+    // harmlessly for an early departure, which already took it at arming.
+    adoptRoadbookAsStage(data);
 
     data->aheadBehindSeconds = 0.0;
     data->smoothedSpeed = -1.0;
@@ -327,7 +380,24 @@ void applyAutoStartArming(AppData* data, const AutoStartArming& arming) {
     data->state->auto_start_rally_time_s = arming.rally_time_s;
     data->state->auto_start_early_departure = arming.early_departure;
     data->autoStartTriggered = arming.triggered;
-    if (arming.zero_distance_now) zeroDistanceBaselines(data);
+    if (arming.zero_distance_now) {
+        zeroDistanceBaselines(data);
+        // The roadbook moves with the distance, not with the clock. Arming an
+        // early departure declares that this is the new stage -- its distance
+        // starts counting from the press -- so the box has to be showing the
+        // new stage's speeds from the press too. Taking the roadbook at the
+        // minute instead left the driver panel on the previous stage's target
+        // speed and chevrons for the whole countdown, while the odometer was
+        // already running on the new one: an edit made just before arming
+        // looked ignored, and re-pressing the button changed nothing because
+        // the arming path never touched the roadbook at all.
+        adoptRoadbookAsStage(data);
+        // Paired with the segment counters zeroDistanceBaselines just moved,
+        // so segment 1 measures from the same instant in both quantities.
+        // The clock baselines stay put: the stage's time still starts at the
+        // appointed minute, which is what makes this an EARLY departure.
+        data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
+    }
 
     ConfigFile::save(*data->state);
     notifyWebState(data);
@@ -528,6 +598,7 @@ void on_next_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         data->state->segment_current_number++;
         data->state->segment_start_cntr1 = current_poll.cntr1;
         data->state->segment_start_cntr2 = current_poll.cntr2;
+        data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
         data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
         // Reset trip
         data->state->trip_start_cntr1 = current_poll.cntr1;
@@ -544,9 +615,13 @@ void on_next_prev_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         return;
     
     auto current_poll = data->poller->getMostRecent();
-    int64_t seg_count_diff = calculateDistanceCounts(*data->state,
-        current_poll.cntr1, current_poll.cntr2,
-        data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+    // Corrected, like every other comparison against a roadbook distance.
+    // This button is pressed at a timing point, which is exactly where a nav
+    // error has just been corrected with -10: it decides whether "next" is
+    // even offered, and "next"/"prev" write this figure into the roadbook as
+    // the segment's real length. On the raw counts it would record the
+    // distance the wheel turned rather than the distance the crew drove.
+    int64_t seg_count_diff = segmentCountsCorrected(data, current_poll);
     
     // The snapshot, not the saved roadbook: "next"/"prev" retime the stage
     // actually being driven, and must not rewrite the roadbook the crew will
@@ -563,25 +638,34 @@ void on_next_prev_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
                       (data->state->segment_current_number > 0);
     
     if (near_end) {
-        // "next": reduce current segment distance to actual distance travelled, then advance
-        cur_seg.distance_counts = seg_count_diff;
-        cur_seg.distance_m = (cur_seg.distance_counts * data->state->calibration) / 1e6;
-        
+        // "next": the speed changes here, and what this segment gives up is
+        // handed to the next one -- so the next known point stays where the
+        // roadbook puts it, measured from the stage start. Shortening this
+        // segment alone would drag that point, and every later one, backwards
+        // by however early the button was pressed.
+        retimeSegmentBoundaryForward(data->state->stage_segments,
+                                     data->state->segment_current_number,
+                                     seg_count_diff, data->state->calibration);
+
         data->state->segment_current_number++;
         data->state->segment_start_cntr1 = current_poll.cntr1;
         data->state->segment_start_cntr2 = current_poll.cntr2;
+        data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
         data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
         data->state->trip_start_cntr1 = current_poll.cntr1;
         data->state->trip_start_cntr2 = current_poll.cntr2;
         data->state->trip_start_time_ms = data->state->segment_start_time_ms;
     } else if (near_start) {
-        // "prev": extend previous segment distance to end here, reset current segment start to now
-        Segment& prev_seg = data->state->stage_segments[data->state->segment_current_number - 1];
-        prev_seg.distance_counts += seg_count_diff;
-        prev_seg.distance_m = (prev_seg.distance_counts * data->state->calibration) / 1e6;
-        
+        // "prev": the previous segment really ran to here, so it takes the
+        // distance and this one gives it up -- the mirror of "next", and for
+        // the same reason: this segment's own end must not move.
+        retimeSegmentBoundaryBackward(data->state->stage_segments,
+                                      data->state->segment_current_number,
+                                      seg_count_diff, data->state->calibration);
+
         data->state->segment_start_cntr1 = current_poll.cntr1;
         data->state->segment_start_cntr2 = current_poll.cntr2;
+        data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
         data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
         data->state->trip_start_cntr1 = current_poll.cntr1;
         data->state->trip_start_cntr2 = current_poll.cntr2;
@@ -590,6 +674,30 @@ void on_next_prev_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     
     ConfigFile::save(*data->state);
     notifyWebState(data);
+}
+
+// The distance the stage and the current segment have actually covered, with
+// the crew's manual correction applied. Everything judged against a roadbook
+// distance goes through these, so a wrong turn knocked off with the -10 button
+// moves the ahead/behind figure, the segment boundary and the end of the stage
+// together -- and not just the odometer, which is all the raw counts show.
+int64_t stageCountsCorrected(AppData* data, const CounterPoll& poll) {
+    int64_t raw = calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
+        data->state->total_start_cntr1, data->state->total_start_cntr2);
+    // The whole correction belongs to this stage: the stage's own start zeroed
+    // it along with the counters.
+    return correctedDistanceCounts(raw, data->state->total_distance_adjust_cm,
+                                   data->state->calibration);
+}
+
+int64_t segmentCountsCorrected(AppData* data, const CounterPoll& poll) {
+    int64_t raw = calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
+        data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+    // Only the correction made since this segment began: an earlier one
+    // already moved the boundary it preceded.
+    return correctedDistanceCounts(raw,
+        data->state->total_distance_adjust_cm - data->state->segment_start_adjust_cm,
+        data->state->calibration);
 }
 
 gboolean update_display(gpointer user_data) {
@@ -604,9 +712,7 @@ gboolean update_display(gpointer user_data) {
     // until the crew actually change something.
     if (!data->state->stage_complete) {
         auto poll = data->poller->getMostRecent();
-        int64_t stage_counts = calculateDistanceCounts(*data->state,
-            poll.cntr1, poll.cntr2,
-            data->state->total_start_cntr1, data->state->total_start_cntr2);
+        int64_t stage_counts = stageCountsCorrected(data, poll);
         if (stageDistanceComplete(data->state->stage_segments, stage_counts)) {
             data->state->stage_complete = true;
             ConfigFile::save(*data->state);
@@ -619,9 +725,7 @@ gboolean update_display(gpointer user_data) {
         Segment& seg = data->state->stage_segments[data->state->segment_current_number];
         if (seg.autoNext) {
             auto current_poll = data->poller->getMostRecent();
-            int64_t seg_count_diff = calculateDistanceCounts(*data->state,
-                current_poll.cntr1, current_poll.cntr2,
-                data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+            int64_t seg_count_diff = segmentCountsCorrected(data, current_poll);
             
             if (seg_count_diff >= seg.distance_counts) {
                 // Advance to next segment
@@ -630,6 +734,7 @@ gboolean update_display(gpointer user_data) {
                     auto current_poll = data->poller->getMostRecent();
                     data->state->segment_start_cntr1 = current_poll.cntr1;
                     data->state->segment_start_cntr2 = current_poll.cntr2;
+                    data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
                     data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
                     // Reset trip
                     data->state->trip_start_cntr1 = current_poll.cntr1;
@@ -1572,7 +1677,27 @@ void on_autostart_set(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 
 void on_autostart_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    // There is one autostart in the state, so this button reaches an early
+    // departure armed from the Stage Go dialog as well as one entered here.
+    // Only the early departure changed the stage when it was armed -- it
+    // zeroed the distance and took the roadbook, while leaving the clock on
+    // the previous stage's zero -- so only it has anything to undo.
+    const bool cancelling_early_departure =
+        data->state->auto_start_rally_time_s != 0 &&
+        data->state->auto_start_early_departure;
+
     applyAutoStartArming(data, autoStartDisarmed());
+
+    // The previous stage's distance zero is already gone, so there is nothing
+    // to restore it to: the honest state is that no stage is running. Without
+    // this the hold releases with the distance at the line and the clock still
+    // on the old stage, and the gauge reads tens of minutes behind with the
+    // needle pegged and the tone sounding.
+    if (cancelling_early_departure) {
+        endStageAsIdle(data);
+        ConfigFile::save(*data->state);
+        notifyWebState(data);
+    }
     gtk_entry_set_text(data->autoStartTimeEntry, "");
     updateAutoStartDisplay(data);
 }

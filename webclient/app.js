@@ -5,6 +5,9 @@
   let reconnectTimer = null;
   let suppressSegEdit = false;
   let units = 'kph';
+  // The last state message, kept so a units change arriving on telemetry can
+  // re-title the stage panel without waiting for the next state broadcast.
+  let lastState = null;
 
   const $ = (id) => document.getElementById(id);
 
@@ -33,7 +36,9 @@
     abEl.classList.toggle('ahead', ab > 0.05);
     abEl.classList.toggle('behind', ab < -0.05);
 
+    const previousUnits = units;
     units = msg.units || 'kph';
+    if (units !== previousUnits && lastState) renderStagePanel(lastState);
     $('unit-label').textContent = units;
     $('unit-label2').textContent = units;
     $('cur-kph').textContent = Number(msg.cur_kph || 0).toFixed(1);
@@ -76,6 +81,40 @@
     });
   }
 
+  // The co-pilot's stage panel, built from the same `segments` list the box
+  // builds it from -- the roadbook as set, not the running stage's frozen
+  // snapshot. The cumulative column is computed here for the same reason the
+  // box computes it: the roadbook gives each segment's length, but the
+  // odometer counts from the stage start.
+  function renderStagePanel(state) {
+    $('stage-autostart').textContent = state.autostart || 'none';
+    $('stage-speed-head').textContent = units === 'mph' ? 'MPH' : 'KPH';
+
+    const tbody = $('stage-table').querySelector('tbody');
+    tbody.innerHTML = '';
+    let cumulative = 0;
+    (state.segments || []).forEach((seg) => {
+      const dist = Number(seg.distance_m) || 0;
+      cumulative += dist;
+      const tr = document.createElement('tr');
+      // Converted, not just relabelled: the state message always carries KPH,
+      // and the box's own panel converts before printing. Leaving the number
+      // raw under an MPH heading showed 30.00 where the box showed 18.64 --
+      // the same segment, wrong by a margin the crew would drive to.
+      const speed = Number(seg.target_speed_kph || 0) * (units === 'mph' ? 0.621371 : 1);
+      tr.innerHTML =
+        '<td>' + speed.toFixed(2) + '</td>' +
+        '<td>' + Math.round(dist).toLocaleString() + '</td>' +
+        '<td>' + Math.round(cumulative).toLocaleString() + '</td>';
+      tbody.appendChild(tr);
+    });
+    if (!(state.segments || []).length) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td colspan="3" class="stage-empty">(no segments set)</td>';
+      tbody.appendChild(tr);
+    }
+  }
+
   function renderSegments(state) {
     const tbody = $('seg-table').querySelector('tbody');
     tbody.innerHTML = '';
@@ -112,7 +151,12 @@
     let msg;
     try { msg = JSON.parse(ev.data); } catch { return; }
     if (msg.type === 'telemetry') applyTelemetry(msg);
-    if (msg.type === 'state') { renderSegments(msg); applySetupState(msg); }
+    if (msg.type === 'state') {
+      lastState = msg;
+      renderSegments(msg);
+      applySetupState(msg);
+      renderStagePanel(msg);
+    }
   }
 
   function connect() {
@@ -144,6 +188,24 @@
     $('tab-live').classList.remove('active');
     $('view-setup').classList.remove('hidden');
     $('view-live').classList.add('hidden');
+  });
+
+  // ---- Distance correction ----
+  // The co-pilot's Total row, verbatim: -10 and +10 nudge both Total and Trip
+  // (one wheel measurement, so a slip correction belongs to both), and "set"
+  // pins Total alone to a roadbook figure.
+  $('btn-dist-minus').addEventListener('click', () => send({ type: 'distance_adjust', delta_m: -10 }));
+  $('btn-dist-plus').addEventListener('click', () => send({ type: 'distance_adjust', delta_m: 10 }));
+  $('btn-dist-set').addEventListener('click', () => {
+    const field = $('dist-set-m');
+    // An empty box is someone who has not typed a figure yet, not a request
+    // to pin Total to zero -- Reset Total is the button for that.
+    if (field.value.trim() === '') return;
+    const meters = Number(field.value);
+    if (!Number.isFinite(meters) || meters < 0) return;
+    send({ type: 'distance_set', meters: meters });
+    field.value = '';
+    field.blur();
   });
 
   $('btn-next-prev').addEventListener('click', () => send({ type: 'next_prev' }));

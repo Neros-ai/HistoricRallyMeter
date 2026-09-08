@@ -101,6 +101,21 @@ void performAutoStart(AppData* data);
 // appointed minute.
 void zeroDistanceBaselines(AppData* data);
 void zeroTimeBaselines(AppData* data);
+// Fixes the editable roadbook as the stage's own. Called by both halves: an
+// ordinary start takes it with the clock, an early departure with the
+// distance, at the moment the operator arms it.
+void adoptRoadbookAsStage(AppData* data);
+// The opposite: no stage running, so the gauge rests and the roadbook is free.
+void endStageAsIdle(AppData* data);
+
+// Stage and current-segment distance in counts, with the crew's manual
+// correction applied. Every comparison against a roadbook distance -- the
+// ahead/behind figure, the segment auto-advance, the end of the stage, the
+// "next" readout and the gauge's segment chevrons -- goes through these, so
+// the -10/set button moves all of them together instead of the odometer
+// alone. See correctedDistanceCounts in calculations.h.
+int64_t stageCountsCorrected(AppData* data, const CounterPoll& poll);
+int64_t segmentCountsCorrected(AppData* data, const CounterPoll& poll);
 
 // Adopts the edited roadbook as the stage roadbook, but only when no stage
 // is under way. Call after any change to state->segments.
@@ -115,6 +130,12 @@ bool autoStartHoldActive(const AppData* data);
 int64_t getAutoStartEpochMs();
 GtkWidget* createNumericKeypad(AppData* data);
 GtkWidget* createDateTimeKeypad(AppData* data);
+
+// The two distance corrections, free of any widget so the co-pilot buttons
+// and the phone client share one implementation. applyDistanceSet returns
+// false for a negative figure, which the box refuses.
+void applyDistanceAdjust(AppData* data, long delta_m);
+bool applyDistanceSet(AppData* data, double meters);
 
 // Manual distance correction, buttoned on the co-pilot main screen's Total
 // row. on_distance_adjust writes BOTH total_distance_adjust_cm and

@@ -21,9 +21,7 @@ NextPrevState computeNextPrevState(AppData* data) {
 
     auto current_poll = data->poller->getMostRecent();
     const Segment& cur_seg = data->state->stage_segments[data->state->segment_current_number];
-    int64_t seg_count_diff = calculateDistanceCounts(*data->state,
-        current_poll.cntr1, current_poll.cntr2,
-        data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+    int64_t seg_count_diff = segmentCountsCorrected(data, current_poll);
     int64_t remaining_counts = cur_seg.distance_counts - seg_count_diff;
     long remaining_m = countsToCentimeters(remaining_counts, data->state->calibration) / 100;
     long travelled_m = countsToCentimeters(seg_count_diff, data->state->calibration) / 100;
@@ -84,8 +82,18 @@ std::string buildTelemetryJson(AppData* data) {
         data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
         const Segment& seg = data->state->stage_segments[data->state->segment_current_number];
         target_kph = countsPerHourToKPH(seg.target_speed_counts_per_hour, data->state->calibration);
-        ahead_behind_s = calculateAheadBehindFromStageStart(*data->state, current_time_ms, total_count_diff);
+        // The corrected stage distance, matching ui_driver: see
+        // stageCountsCorrected. total_count_diff above stays raw because
+        // adjustedDistanceMeters applies the same correction to the odometer
+        // itself, and applying it twice would double it.
+        ahead_behind_s = calculateAheadBehindFromStageStart(*data->state, current_time_ms,
+            stageCountsCorrected(data, current_poll));
         ahead_behind_s += data->state->ahead_behind_zero_offset_ms / 1000.0;
+        // The same hold the driver display applies (ui_driver.cpp). Held here
+        // too, or the phone would show the previous stage's error climbing at
+        // the line while the driver's gauge sits at rest -- two screens
+        // disagreeing about whether the crew are on time.
+        if (hold_at_zero) ahead_behind_s = 0.0;
     }
 
     NextPrevState np = computeNextPrevState(data);
@@ -137,6 +145,15 @@ std::string buildStateJson(AppData* data) {
            << ",\"autoNext\":" << (seg.autoNext ? "true" : "false") << "}";
     }
     ss << "],";
+
+    // The autostart line the co-pilot's stage panel prints, so the phone
+    // shows the same words rather than re-deriving them from a target time
+    // it would have to be told the epoch for.
+    ss << "\"autostart\":\""
+       << formatAutoStartStatus(data->state->auto_start_rally_time_s,
+                                data->state->auto_start_early_departure,
+                                getAutoStartEpochMs())
+       << "\",";
 
     // Beep Assist and tone, so the phone renders the box's actual settings
     // rather than blank controls that only take effect once touched.

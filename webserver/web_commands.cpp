@@ -20,17 +20,32 @@ static const char* jsonFindString(const char* json, const char* key, char* out, 
     return out;
 }
 
-// Whole-value form, with no length cap. The waypoint list can outgrow any
-// fixed buffer, and a truncated list is worse than none: the cut lands
-// mid-number, so the fragment parses as a real waypoint the operator never
-// entered and every waypoint after it is silently dropped.
+// Whole-value form, with no fixed output buffer. The waypoint list can
+// outgrow any fixed buffer, and a truncated list is worse than none: the cut
+// lands mid-number, so the fragment parses as a real waypoint the operator
+// never entered and every waypoint after it is silently dropped.
+//
+// Which is exactly why the value must be closed by a quote before it is
+// accepted. A frame cut short in transit ends with no closing quote, and
+// returning what was read so far would commit that fragment -- the very
+// truncation this form exists to avoid. The length cap is a second guard:
+// a value longer than any plausible waypoint list is a malformed or hostile
+// frame, not a roadbook.
+static const size_t JSON_MAX_STRING_VALUE = 64 * 1024;
+
 static bool jsonFindStringValue(const char* json, const char* key, std::string* out) {
     std::string needle = std::string("\"") + key + "\":\"";
     const char* p = strstr(json, needle.c_str());
     if (!p) return false;
     p += needle.size();
-    out->clear();
-    while (*p && *p != '"') out->push_back(*p++);
+    std::string value;
+    while (*p && *p != '"') {
+        if (value.size() >= JSON_MAX_STRING_VALUE) return false;
+        value.push_back(*p++);
+    }
+    // Ran off the end of the buffer rather than reaching the closing quote.
+    if (*p != '"') return false;
+    *out = value;
     return true;
 }
 
@@ -76,6 +91,26 @@ bool webHandleCommand(AppData* data, const char* json) {
     if (strcmp(type, "reset_total") == 0) {
         on_total_reset(nullptr, data);
         return true;
+    }
+    if (strcmp(type, "distance_adjust") == 0) {
+        // Same arithmetic as the co-pilot's -10/+10 buttons, via the shared
+        // helper. The step comes from the phone so the two ends can differ
+        // later without a second command.
+        int delta_m = 0;
+        if (!jsonFindInt(json, "delta_m", &delta_m)) return false;
+        // A "correction" of hundreds of metres is a stuck key or a bad frame,
+        // not a wheel-slip fix; Reset Total is the tool for that.
+        if (delta_m == 0 || delta_m < -1000 || delta_m > 1000) return false;
+        applyDistanceAdjust(data, delta_m);
+        return true;
+    }
+    if (strcmp(type, "distance_set") == 0) {
+        double meters = 0.0;
+        if (!jsonFindDouble(json, "meters", &meters)) return false;
+        // Six digits, matching the entry cap on the box's dialog: past
+        // 999,999 m the display switches to km and reads as truncated.
+        if (meters < 0.0 || meters > 999999.0) return false;
+        return applyDistanceSet(data, meters);
     }
     if (strcmp(type, "next_prev") == 0) {
         on_next_prev_segment(nullptr, data);

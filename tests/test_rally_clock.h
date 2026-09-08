@@ -273,6 +273,35 @@ public:
             return true;
         });
 
+        suite->addTest("an out-of-range autostart time is refused, not multiplied", []() {
+            // auto_start_rally_time_s is a uint64_t read from a hand-editable
+            // config file. Multiplying it out unchecked is signed overflow --
+            // undefined behaviour, reached on every co-pilot tick with no
+            // operator action at all.
+            int64_t epoch_ms = 1000000000000LL;
+            ASSERT_TRUE(autoStartSecondsInRange(0));
+            // The field counts from 2020-01-01, not from the rally start, so
+            // an ordinary armed value is already years of seconds. A bound
+            // that rejected these would silently disarm every autostart --
+            // no countdown, no hold, and the panel reading "none".
+            ASSERT_TRUE(autoStartSecondsInRange(6ULL * 365 * 24 * 60 * 60));
+            ASSERT_TRUE(autoStartSecondsInRange(AUTO_START_MAX_SECONDS));
+            ASSERT_FALSE(autoStartSecondsInRange(AUTO_START_MAX_SECONDS + 1));
+            ASSERT_FALSE(autoStartSecondsInRange(~0ULL));
+
+            // Out of range reads as the epoch itself -- already past, so it
+            // never fires -- rather than a wrapped-around moment.
+            ASSERT_EQ(autoStartTargetMsFromSeconds(~0ULL, epoch_ms), epoch_ms);
+            ASSERT_EQ(autoStartTargetMsFromSeconds(AUTO_START_MAX_SECONDS + 1, epoch_ms), epoch_ms);
+            // In range still resolves normally.
+            ASSERT_EQ(autoStartTargetMsFromSeconds(45, epoch_ms), epoch_ms + 45000);
+
+            // And the panel says nothing is armed rather than printing a
+            // real-looking time from the start of the rally.
+            ASSERT_EQ(formatAutoStartStatus(~0ULL, true, epoch_ms), std::string("none"));
+            return true;
+        });
+
         suite->addTest("disarming leaves nothing armed", []() {
             AutoStartArming off = autoStartDisarmed();
             ASSERT_EQ(off.rally_time_s, 0u);
