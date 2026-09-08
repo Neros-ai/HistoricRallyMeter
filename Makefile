@@ -9,8 +9,8 @@ TARGET_DEBUG = HistoricRallyMeter_debug
 TEST_TARGET = run_tests
 
 # Main application sources
-SOURCES = main.cpp i2c_counter.cpp rally_state.cpp config_file.cpp counter_poller.cpp \
-          calculations.cpp ui_driver.cpp ui_copilot.cpp callbacks.cpp tone_generator.cpp \
+SOURCES = main.cpp i2c_counter.cpp sim_counter.cpp rally_state.cpp config_file.cpp counter_poller.cpp \
+          calculations.cpp ui_driver.cpp ui_copilot.cpp ui_control.cpp callbacks.cpp tone_generator.cpp \
           simple_tone.cpp arrow_tone.cpp \
           webserver/rally_web_server.cpp webserver/web_telemetry.cpp webserver/web_commands.cpp \
           webserver/qr_display.cpp
@@ -23,7 +23,7 @@ HEADERS = $(wildcard *.h)
 # Test sources (calculations, rally_state, config_file for unit tests)
 TEST_SOURCES = tests/test_main.cpp calculations.cpp rally_state.cpp config_file.cpp simple_tone.cpp arrow_tone.cpp
 TEST_OBJECTS = tests/test_main.o calculations_test.o rally_state_test.o config_file_test.o \
-               counter_poller_test.o simple_tone_test.o arrow_tone_test.o
+               sim_counter_test.o counter_poller_test.o simple_tone_test.o arrow_tone_test.o
 
 # Default target
 all: $(TARGET)
@@ -65,6 +65,9 @@ rally_state_test.o: rally_state.cpp rally_state.h rally_types.h
 
 config_file_test.o: config_file.cpp config_file.h rally_state.h rally_types.h
 	$(CXX) $(CXXFLAGS_TEST) -c config_file.cpp -o config_file_test.o
+
+sim_counter_test.o: sim_counter.cpp sim_counter.h i_counter.h
+	$(CXX) $(CXXFLAGS_TEST) -c sim_counter.cpp -o sim_counter_test.o
 
 counter_poller_test.o: counter_poller.cpp counter_poller.h i_counter.h rally_types.h
 	$(CXX) $(CXXFLAGS_TEST) -c counter_poller.cpp -o counter_poller_test.o

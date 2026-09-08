@@ -12,6 +12,7 @@
 #include "test_rally_clock.h"
 #include "test_edge_cases.h"
 #include "test_calibration_independent.h"
+#include "test_sim_counter.h"
 #include "test_counter_poller_real.h"
 #include "test_elapsed.h"
 #include "test_distance_adjust.h"
@@ -38,6 +39,7 @@ int main() {
     TestRallyClock clockTests;
     TestEdgeCases edgeCaseTests;
     TestCalibrationIndependent calIndepTests;
+    TestSimCounter simCounterTests;
     TestCounterPollerReal realPollerTests;
     TestElapsed elapsedTests;
     TestDistanceAdjust distanceAdjustTests;
@@ -61,6 +63,7 @@ int main() {
     runner.addSuite(clockTests.createSuite());
     runner.addSuite(edgeCaseTests.createSuite());
     runner.addSuite(calIndepTests.createSuite());
+    runner.addSuite(simCounterTests.createSuite());
     runner.addSuite(realPollerTests.createSuite());
     runner.addSuite(elapsedTests.createSuite());
     runner.addSuite(distanceAdjustTests.createSuite());

@@ -6,6 +6,7 @@
 #include "calculations.h"
 #include "ui_driver.h"
 #include "ui_copilot.h"
+#include "ui_control.h"
 #include "counter_poller.h"
 #include "tone_generator.h"
 #include <cmath>
@@ -748,6 +749,7 @@ gboolean update_display(gpointer user_data) {
     
     updateDriverDisplay(data);
     updateCopilotDisplay(data);
+    updateControlDisplay(data);
 
     if (data->webServer) {
         auto now = std::chrono::system_clock::now();
@@ -1368,6 +1370,10 @@ void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
                 
                 // The sim counters were given a counts-per-second derived from
                 // the OLD calibration; re-derive so the sim keeps driving at
+                // the speed the control panel says it does. Preserves paused
+                // state -- a calibration change must not restart the sim.
+                resyncSimCounterRate(data);
+
                 // Recalculate count-based values in all segments from stable human values
                 recalculateSegmentCounts(*data->state);
                 
@@ -1398,6 +1404,9 @@ void on_reset_calibration_pulses(G_GNUC_UNUSED GtkWidget* widget, gpointer user_
     if (new_calibration <= 0) return;  // zero/negative entry -- no-op, not a crash
 
     data->state->calibration = new_calibration;
+
+    // Same re-derivation as the measured-calibration path above.
+    resyncSimCounterRate(data);
 
     // Recalculate count-based values in all segments from stable human
     // values, same as every other calibration change.

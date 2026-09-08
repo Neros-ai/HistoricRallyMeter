@@ -1,5 +1,6 @@
 #include "ui_copilot.h"
 #include "ui_driver.h"
+#include "ui_control.h"
 #include "calculations.h"
 #include "rally_types.h"
 #include "rally_state.h"
@@ -92,8 +93,8 @@ static void fireBeepAssist(AppData* data, double waypoint_m, double travelled_m,
     // bong"), Timing mode plays it once.
     // Logged only under RALLY_DEBUG: this is the display hot path, and an
     // unconditional line per beep grows app.log all rally long. The on-screen
-    // log below is the always-available confirmation that the waypoint
-    // logic fired.
+    // flash below is the always-available confirmation that the waypoint
+    // logic fired, including in the sandbox.
     static const bool debug_beeps = (getenv("RALLY_DEBUG") != nullptr);
     if (debug_beeps) {
         std::cerr << "Beep Assist fired: waypoint " << waypoint_m
@@ -101,6 +102,7 @@ static void fireBeepAssist(AppData* data, double waypoint_m, double travelled_m,
                   << (navigation ? " (navigation, double beep)" : " (timing, single beep)")
                   << std::endl;
     }
+    flashBeepWarning(data, navigation);
     if (data->toneGen) {
         double freq_hz = navigation ? BEEP_ASSIST_NAV_FREQ_HZ : BEEP_ASSIST_TIMING_FREQ_HZ;
         ToneWaveform wave = navigation ? BEEP_ASSIST_NAV_WAVE : BEEP_ASSIST_TIMING_WAVE;

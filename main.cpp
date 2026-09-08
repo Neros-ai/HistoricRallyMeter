@@ -12,6 +12,7 @@
 #include <gtk/gtk.h>
 #include "i2c_counter.h"
 #include "i_counter.h"
+#include "sim_counter.h"
 #include <memory>
 #include <cstdlib>
 #include "rally_state.h"
@@ -20,6 +21,7 @@
 #include "rally_types.h"
 #include "ui_driver.h"
 #include "ui_copilot.h"
+#include "ui_control.h"
 #include "callbacks.h"
 #include "webserver/rally_web_server.h"
 #include "calculations.h"
@@ -277,8 +279,9 @@ static gboolean on_button_beep(GSignalInvocationHint*, guint n_param_values,
                                 const GValue* param_values, gpointer) {
     if (!g_beepToneGen) return TRUE;
     // param_values[0] is the emitting instance (the clicked button). Skip
-    // the click-feedback beep for buttons marked "no_click_beep" -- buttons
-    // pressed repeatedly in normal use, which do not want a beep each time.
+    // the click-feedback beep for buttons marked "no_click_beep" -- the
+    // Sim Control Panel's speed/START/STOP buttons, which fire dozens of
+    // times during a test drive and don't want a beep on every press.
     if (n_param_values > 0) {
         GObject* instance = static_cast<GObject*>(g_value_get_object(&param_values[0]));
         if (instance && g_object_get_data(instance, "no_click_beep")) {
@@ -289,7 +292,27 @@ static gboolean on_button_beep(GSignalInvocationHint*, guint n_param_values,
     return TRUE;
 }
 
+// Counts/sec for the simulated counter when RALLY_SIM_I2C=1 (off-target dev).
+// ~1000 c/s stays well under CounterPoller's per-poll jump guard (1000 counts
+// per ~5-10ms poll), so simulated reads are never rejected as spurious.
+static constexpr double kSimCountsPerSecond = 1000.0;
+
+// Build the counter backend: a real I2C counter on hardware, or a simulated
+// counter when RALLY_SIM_I2C=1 so the GUI can start on a dev machine with no
+// /dev/i2c-1. Real hardware is the default, so the Pi target is unaffected.
+// Single source of truth for "are we simulating?". The log line below used to
+// test only for the variable's presence while this tested its value, so
+// RALLY_SIM_I2C=0 announced simulation while real I2C was used, and
+// RALLY_SIM_I2C=true announced it and then threw opening /dev/i2c-1.
+static bool usingSimCounters() {
+    const char* sim = std::getenv("RALLY_SIM_I2C");
+    return sim && std::string(sim) == "1";
+}
+
 static std::unique_ptr<ICounter> makeCounter(int bus, int address) {
+    if (usingSimCounters()) {
+        return std::make_unique<SimCounter>(0u, kSimCountsPerSecond);
+    }
     return std::make_unique<I2CCounter>(bus, address);
 }
 
@@ -324,6 +347,9 @@ int main(int argc, char* argv[]) {
         std::cerr << "[DEBUG] Step 5: Opening I2C counter2 at 0x71..." << std::endl;
         std::unique_ptr<ICounter> counter2 = makeCounter(I2C_BUS, CNTR_2_ADDRESS);
         std::cerr << "[DEBUG] Step 5: counter2 OK" << std::endl;
+        if (usingSimCounters()) {
+            std::cerr << "[DEBUG] RALLY_SIM_I2C=1: using simulated counters" << std::endl;
+        }
         
         if (state.total_start_cntr1 == 0 && state.total_start_cntr2 == 0) {
             state.total_start_cntr1 = counter1->readRegister(REGISTER);
@@ -344,6 +370,15 @@ int main(int argc, char* argv[]) {
         app_data.counter1 = counter1.get();
         app_data.counter2 = counter2.get();
         app_data.register_addr = REGISTER;
+        // Non-null only when RALLY_SIM_I2C=1 (real I2CCounter does not derive
+        // from SimCounter, so this is nullptr on real hardware).
+        app_data.simCounter1 = dynamic_cast<SimCounter*>(counter1.get());
+        app_data.simCounter2 = dynamic_cast<SimCounter*>(counter2.get());
+        // Sim Control Panel starts stopped, not running at whatever speed
+        // the last session left it -- an operator opening a fresh sandbox
+        // should see a parked vehicle, not one already in motion.
+        if (app_data.simCounter1) app_data.simCounter1->setPaused(true);
+        if (app_data.simCounter2) app_data.simCounter2->setPaused(true);
         app_data.state = &state;
         app_data.poller = new CounterPoller();
         std::cerr << "[DEBUG] Step 7: CounterPoller created OK" << std::endl;
@@ -396,6 +431,14 @@ int main(int argc, char* argv[]) {
         std::cerr << "[DEBUG] Step 10: Creating copilot window..." << std::endl;
         app_data.copilotWindow = createCopilotWindow(&app_data);
         std::cerr << "[DEBUG] Step 10: Copilot window created OK" << std::endl;
+
+        // Sim Control Panel: a 3rd window for off-target testing only.
+        // Only created when the simulated sensor feed is active.
+        if (app_data.simCounter1 || app_data.simCounter2) {
+            std::cerr << "[DEBUG] Step 10a: Creating control panel window..." << std::endl;
+            app_data.controlWindow = createControlWindow(&app_data);
+            std::cerr << "[DEBUG] Step 10a: Control panel window created OK" << std::endl;
+        }
 
         // Install global button-click beep
         g_beepToneGen = app_data.toneGen;
@@ -560,6 +603,11 @@ int main(int argc, char* argv[]) {
         }
         gtk_widget_show_all(app_data.copilotWindow);
         std::cerr << "[DEBUG] Step 11b: Copilot window shown" << std::endl;
+
+        if (app_data.controlWindow) {
+            gtk_widget_show_all(app_data.controlWindow);
+            std::cerr << "[DEBUG] Step 11c: Control panel window shown" << std::endl;
+        }
 
         // Fullscreen co-pilot on its monitor AFTER showing (required for Wayland)
         if (copilot_monitor && copilot_index >= 0) {
