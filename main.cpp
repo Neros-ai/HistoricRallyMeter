@@ -11,6 +11,9 @@
 #include <algorithm>
 #include <gtk/gtk.h>
 #include "i2c_counter.h"
+#include "i_counter.h"
+#include <memory>
+#include <cstdlib>
 #include "rally_state.h"
 #include "config_file.h"
 #include "counter_poller.h"
@@ -270,9 +273,24 @@ static gboolean on_window_close_save(G_GNUC_UNUSED GtkWidget* widget, G_GNUC_UNU
 
 static ToneGenerator* g_beepToneGen = nullptr;
 
-static gboolean on_button_beep(GSignalInvocationHint*, guint, const GValue*, gpointer) {
-    if (g_beepToneGen) g_beepToneGen->playBeep();
+static gboolean on_button_beep(GSignalInvocationHint*, guint n_param_values,
+                                const GValue* param_values, gpointer) {
+    if (!g_beepToneGen) return TRUE;
+    // param_values[0] is the emitting instance (the clicked button). Skip
+    // the click-feedback beep for buttons marked "no_click_beep" -- buttons
+    // pressed repeatedly in normal use, which do not want a beep each time.
+    if (n_param_values > 0) {
+        GObject* instance = static_cast<GObject*>(g_value_get_object(&param_values[0]));
+        if (instance && g_object_get_data(instance, "no_click_beep")) {
+            return TRUE;
+        }
+    }
+    g_beepToneGen->playBeep();
     return TRUE;
+}
+
+static std::unique_ptr<ICounter> makeCounter(int bus, int address) {
+    return std::make_unique<I2CCounter>(bus, address);
 }
 
 int main(int argc, char* argv[]) {
@@ -301,30 +319,30 @@ int main(int argc, char* argv[]) {
         
         // Initialize counters from current values if not set
         std::cerr << "[DEBUG] Step 4: Opening I2C counter1 at 0x70..." << std::endl;
-        I2CCounter counter1(I2C_BUS, CNTR_1_ADDRESS);
+        std::unique_ptr<ICounter> counter1 = makeCounter(I2C_BUS, CNTR_1_ADDRESS);
         std::cerr << "[DEBUG] Step 4: counter1 OK" << std::endl;
         std::cerr << "[DEBUG] Step 5: Opening I2C counter2 at 0x71..." << std::endl;
-        I2CCounter counter2(I2C_BUS, CNTR_2_ADDRESS);
+        std::unique_ptr<ICounter> counter2 = makeCounter(I2C_BUS, CNTR_2_ADDRESS);
         std::cerr << "[DEBUG] Step 5: counter2 OK" << std::endl;
         
         if (state.total_start_cntr1 == 0 && state.total_start_cntr2 == 0) {
-            state.total_start_cntr1 = counter1.readRegister(REGISTER);
-            state.total_start_cntr2 = counter2.readRegister(REGISTER);
+            state.total_start_cntr1 = counter1->readRegister(REGISTER);
+            state.total_start_cntr2 = counter2->readRegister(REGISTER);
         }
         if (state.trip_start_cntr1 == 0 && state.trip_start_cntr2 == 0) {
-            state.trip_start_cntr1 = counter1.readRegister(REGISTER);
-            state.trip_start_cntr2 = counter2.readRegister(REGISTER);
+            state.trip_start_cntr1 = counter1->readRegister(REGISTER);
+            state.trip_start_cntr2 = counter2->readRegister(REGISTER);
         }
         if (state.segment_start_cntr1 == 0 && state.segment_start_cntr2 == 0) {
-            state.segment_start_cntr1 = counter1.readRegister(REGISTER);
-            state.segment_start_cntr2 = counter2.readRegister(REGISTER);
+            state.segment_start_cntr1 = counter1->readRegister(REGISTER);
+            state.segment_start_cntr2 = counter2->readRegister(REGISTER);
         }
         
         // Create application data
         std::cerr << "[DEBUG] Step 6: Creating AppData..." << std::endl;
         AppData app_data;
-        app_data.counter1 = &counter1;
-        app_data.counter2 = &counter2;
+        app_data.counter1 = counter1.get();
+        app_data.counter2 = counter2.get();
         app_data.register_addr = REGISTER;
         app_data.state = &state;
         app_data.poller = new CounterPoller();
@@ -378,7 +396,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "[DEBUG] Step 10: Creating copilot window..." << std::endl;
         app_data.copilotWindow = createCopilotWindow(&app_data);
         std::cerr << "[DEBUG] Step 10: Copilot window created OK" << std::endl;
-        
+
         // Install global button-click beep
         g_beepToneGen = app_data.toneGen;
         guint clicked_id = g_signal_lookup("clicked", GTK_TYPE_BUTTON);

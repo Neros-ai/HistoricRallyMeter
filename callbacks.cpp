@@ -15,6 +15,8 @@
 #include <cstring>
 #include <chrono>
 #include <functional>
+#include <string>
+#include <stdexcept>
 
 gboolean on_window_delete(G_GNUC_UNUSED GtkWidget* widget, G_GNUC_UNUSED GdkEvent* event, G_GNUC_UNUSED gpointer user_data) {
     gtk_main_quit();
@@ -44,6 +46,43 @@ void on_total_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->state->total_start_cntr1 = current_poll.cntr1;
     data->state->total_start_cntr2 = current_poll.cntr2;
     data->state->total_start_time_ms = getRallyTime_ms(*data->state);
+    // The segment measures from its own baseline, and the stage measures from
+    // Total's -- so moving one without the other leaves the current segment
+    // carrying distance the stage no longer counts. Reached by arming an
+    // early departure at the line, rolling on, then zeroing the counters
+    // before the minute: Total and Trip read 0 while segment 1 already held
+    // the rolled distance, so it ended that much early and every later
+    // segment inherited the lead, auto-advance re-basing from wherever it
+    // fired. Nothing else put it back -- the Trip button writes only trip_*,
+    // and zeroTimeBaselines at the minute moves clocks, not counters.
+    data->state->segment_start_cntr1 = current_poll.cntr1;
+    data->state->segment_start_cntr2 = current_poll.cntr2;
+    data->state->segment_start_time_ms = data->state->total_start_time_ms;
+    // The correction described the old baseline; carrying it across a reset
+    // would silently offset a counter the operator just zeroed.
+    data->state->total_distance_adjust_cm = 0;
+    // Taken after the clear, not before: the segment restarts against a
+    // correction of zero like everything else this button re-bases.
+    data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
+    // Waypoints are measured from the Total counter's zero, so re-zeroing it
+    // puts every waypoint back in front of the car.
+    data->beepNextNavIndex = 0;
+    data->beepNextTimingIndex = 0;
+    data->beepCursorsStale = true;
+    // The stage measures its own progress from this counter, so zeroing it
+    // ends the stage as a thing that can still be completed: without this,
+    // stageDistanceComplete() could never be reached again and the roadbook
+    // would stay frozen for the rest of the session, silently discarding
+    // every later edit and memory recall.
+    //
+    // The segment index has to go with it. Left pointing at, say, segment 3
+    // while the clock and the distance both restart here,
+    // calculateIdealCountsFromStageStart still sums the full distance of
+    // segments 1 and 2 into the ideal position -- against zero elapsed and
+    // zero travelled -- so both displays show a fabricated error the instant
+    // the button is pressed. The terms happen to cancel when every target
+    // speed is equal, which is what makes it easy to miss.
+    endStageAsIdle(data);
     ConfigFile::save(*data->state);
     notifyWebState(data);
 }
@@ -54,6 +93,9 @@ void on_trip_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->state->trip_start_cntr1 = current_poll.cntr1;
     data->state->trip_start_cntr2 = current_poll.cntr2;
     data->state->trip_start_time_ms = getRallyTime_ms(*data->state);
+    // The correction described the old baseline; carrying it across a reset
+    // would silently offset a counter the operator just zeroed.
+    data->state->trip_distance_adjust_cm = 0;
     ConfigFile::save(*data->state);
     notifyWebState(data);
 }
@@ -86,62 +128,402 @@ static void applyDialogStyle(GtkWidget* dialog) {
     G_GNUC_END_IGNORE_DEPRECATIONS
     if (action_area && GTK_IS_BUTTON_BOX(action_area)) {
         gtk_box_set_spacing(GTK_BOX(action_area), 20);
+        gtk_button_box_set_layout(GTK_BUTTON_BOX(action_area), GTK_BUTTONBOX_CENTER);
     }
 }
 
-void performStageGo(AppData* data) {
+// Raw, uncorrected distance in centimetres for one of the two counters.
+// Shared by both correction callbacks so they clamp against the same figure
+// the display is derived from.
+static long rawDistanceCm(AppData* data, bool is_trip) {
+    auto poll = data->poller->getMostRecent();
+    int64_t counts = is_trip
+        ? calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
+                                  data->state->trip_start_cntr1, data->state->trip_start_cntr2)
+        : calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
+                                  data->state->total_start_cntr1, data->state->total_start_cntr2);
+    return countsToCentimeters(counts, data->state->calibration);
+}
+
+// The correction itself, with no widget in sight, so the co-pilot's buttons
+// and the phone client apply exactly the same arithmetic rather than two
+// implementations that can drift apart.
+void applyDistanceAdjust(AppData* data, long delta_m) {
+    long delta_cm = delta_m * 100L;
+
+    // Both counters share the same underlying wheel measurement, so a
+    // wheel-slip correction has to apply to both -- otherwise Trip would
+    // keep showing the slipped, uncorrected value. Clamped independently:
+    // Total and Trip can have travelled different distances at this instant,
+    // so a -10 that is safe for one could still drive the other negative.
+    long& total_adjust = data->state->total_distance_adjust_cm;
+    total_adjust += clampDistanceAdjust(rawDistanceCm(data, false) + total_adjust, delta_cm);
+
+    long& trip_adjust = data->state->trip_distance_adjust_cm;
+    trip_adjust += clampDistanceAdjust(rawDistanceCm(data, true) + trip_adjust, delta_cm);
+
+    ConfigFile::save(*data->state);
+    updateCopilotDisplay(data);
+}
+
+// Pins Total to an exact roadbook figure. Trip's correction is untouched --
+// "set" has no Trip equivalent. Returns false for a value the box would not
+// accept, so the phone can decline it the way the dialog does.
+bool applyDistanceSet(AppData* data, double meters) {
+    long wanted_cm = static_cast<long>(meters * 100.0);
+    if (wanted_cm < 0) return false;
+    // Solve for the correction that makes the reading equal what the operator
+    // entered.
+    long raw_cm = rawDistanceCm(data, false);
+    data->state->total_distance_adjust_cm = wanted_cm - raw_cm;
+    ConfigFile::save(*data->state);
+    updateCopilotDisplay(data);
+    return true;
+}
+
+void on_distance_adjust(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    applyDistanceAdjust(data,
+        static_cast<long>(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "delta_m"))));
+}
+
+void on_distance_set(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+
+    GtkWidget* dialog = gtk_dialog_new_with_buttons(
+        "Set Total Distance",
+        GTK_WINDOW(gtk_widget_get_toplevel(widget)),
+        GTK_DIALOG_MODAL,
+        "Set", GTK_RESPONSE_OK,
+        "Cancel", GTK_RESPONSE_CANCEL,
+        nullptr);
+
+    GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_set_border_width(GTK_CONTAINER(content), 10);
+
+    GtkWidget* promptRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_pack_start(GTK_BOX(content), promptRow, FALSE, FALSE, 3);
+
+    GtkWidget* prompt = gtk_label_new("Set Total (m)");
+    gtk_box_pack_start(GTK_BOX(promptRow), prompt, FALSE, FALSE, 0);
+
+    GtkEntry* entry = GTK_ENTRY(gtk_entry_new());
+    gtk_entry_set_text(entry,
+        std::to_string(adjustedDistanceMeters(rawDistanceCm(data, false),
+                                              data->state->total_distance_adjust_cm)).c_str());
+    // Capped at 6 digits (999,999 m): past that the display auto-switches
+    // to km, which reads as if the entered value got truncated.
+    gtk_entry_set_max_length(entry, 6);
+    // Pre-filled with the current value; select it so the first digit typed
+    // replaces it instead of appending onto it.
+    gtk_editable_select_region(GTK_EDITABLE(entry), 0, -1);
+    gtk_box_pack_start(GTK_BOX(promptRow), GTK_WIDGET(entry), TRUE, TRUE, 0);
+
+    // The main screen has no keypad of its own, and the box has no physical
+    // keyboard, so the dialog brings one with it.
+    GtkEntry* previous_entry = data->activeEntry;
+    data->activeEntry = entry;
+    gtk_box_pack_start(GTK_BOX(content), createNumericKeypad(data), FALSE, FALSE, 3);
+
+    applyDialogStyle(dialog);
+    gtk_widget_show_all(dialog);
+
+    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_OK) {
+        const char* text = gtk_entry_get_text(entry);
+        try {
+            applyDistanceSet(data, std::stod(text));
+        } catch (const std::exception&) {
+            // Unparseable entry: leave the correction as it was rather than
+            // zeroing a good one on a typo.
+        }
+    }
+
+    data->activeEntry = previous_entry;
+    gtk_widget_destroy(dialog);
+    updateCopilotDisplay(data);
+}
+
+// Every segment's count-based fields re-derived from its stable human values
+// after a change to calibration or sensor mode. Covers the snapshot the
+// running stage is being judged against as well as the editable roadbook and
+// the memory slots -- a mid-stage calibration change that fixed up only the
+// editable copy would leave the stage running on counts derived from the old
+// figure, which is exactly when a calibration gets corrected.
+static void recalculateSegmentCounts(RallyState& state) {
+    auto redo = [&state](std::vector<Segment>& segs) {
+        for (auto& seg : segs) {
+            seg.target_speed_counts_per_hour =
+                kphToCountsPerHour(seg.target_speed_kph, state.calibration);
+            seg.distance_counts = (seg.distance_m * 1e6) / state.calibration;
+        }
+    };
+    redo(state.segments);
+    redo(state.stage_segments);
+    for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
+        redo(state.memory_slots[i].segments);
+    }
+}
+
+void zeroDistanceBaselines(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
-    int64_t current_time = getRallyTime_ms(*data->state);
 
     data->state->total_start_cntr1 = current_poll.cntr1;
     data->state->total_start_cntr2 = current_poll.cntr2;
-    data->state->total_start_time_ms = current_time;
-
     data->state->trip_start_cntr1 = current_poll.cntr1;
     data->state->trip_start_cntr2 = current_poll.cntr2;
-    data->state->trip_start_time_ms = current_time;
-
     data->state->segment_start_cntr1 = current_poll.cntr1;
     data->state->segment_start_cntr2 = current_poll.cntr2;
+
+    // Both counters restart here, so both corrections describe a baseline
+    // that no longer exists.
+    data->state->total_distance_adjust_cm = 0;
+    data->state->trip_distance_adjust_cm = 0;
+    // Same ordering point as on_total_reset: after the clear.
+    data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
+
+    // Waypoints are measured from the Total counter's zero, so re-zeroing it
+    // puts every distance waypoint back in front of the car. Navigation beeps
+    // run from this moment; timing beeps run from the clock zero instead, and
+    // cannot fire until there is a stage to be on schedule for.
+    data->beepNextNavIndex = 0;
+    data->beepNextTimingIndex = 0;
+    data->beepCursorsStale = true;
+}
+
+int64_t autoStartRemaining_ms(const AppData* data) {
+    if (data->state->auto_start_rally_time_s == 0) return 0;
+    return autoStartTargetMsFromSeconds(data->state->auto_start_rally_time_s,
+                                        getAutoStartEpochMs())
+           - getRallyTime_ms(*data->state);
+}
+
+bool autoStartHoldActive(const AppData* data) {
+    return autoStartHoldsTimeError(data->state->auto_start_rally_time_s,
+                                   data->state->auto_start_early_departure,
+                                   data->autoStartTriggered,
+                                   autoStartRemaining_ms(data));
+}
+
+void adoptRoadbookIfIdle(AppData* data) {
+    // Called wherever the roadbook is edited or replaced. While a stage is
+    // under way this does nothing: that stage is judged against the segments
+    // it started on, and an edit is preparation for the next one. With no
+    // stage under way there is nothing to protect, so the change is adopted
+    // at once -- the crew set a speed, or recall a slot, and see it.
+    if (!data->state->stage_complete) return;
+    data->state->stage_segments = data->state->segments;
+
+    // No segment is current, rather than the first one. The stage baselines
+    // still belong to the stage that just finished, and ahead/behind is
+    // measured from those -- so making a segment current here would judge the
+    // new roadbook's speeds against the old stage's clock zero and show a
+    // false error of tens of minutes, needle pegged and tone sounding, until
+    // Stage Go. There is no stage running, so there is nothing to be ahead or
+    // behind of; the segment baselines are set by Stage Go along with the
+    // stage ones, and need no attention here.
+    //
+    // It also makes this idempotent, which matters because the entry handlers
+    // call it per keystroke: adopting the same roadbook twice now changes
+    // nothing the displays can see.
+    data->state->segment_current_number = -1;
+}
+
+// Fixes the roadbook the stage will be judged against, from the first segment.
+// An empty roadbook leaves no segment current, rather than leaving the previous
+// stage's index pointing into a snapshot that no longer has anything at it --
+// and it is over before it began, so it does not freeze the editable list.
+// Leaves the box with no stage running: nothing to be ahead or behind of, so
+// the gauge, the chevrons and the tone all rest, and the roadbook is free for
+// the crew to edit or recall against the stage they are about to start.
+void endStageAsIdle(AppData* data) {
+    data->state->segment_current_number = -1;
+    data->state->stage_complete = true;
+}
+
+void adoptRoadbookAsStage(AppData* data) {
+    data->state->stage_segments = data->state->segments;
+    data->state->segment_current_number =
+        data->state->stage_segments.empty() ? -1 : 0;
+    data->state->stage_complete = data->state->stage_segments.empty();
+}
+
+void zeroTimeBaselines(AppData* data) {
+    int64_t current_time = getRallyTime_ms(*data->state);
+
+    data->state->total_start_time_ms = current_time;
+    data->state->trip_start_time_ms = current_time;
     data->state->segment_start_time_ms = current_time;
 
-    if (!data->state->segments.empty()) {
-        data->state->segment_current_number = 0;
-    }
+    // The stage becomes active with the CLOCK, not with the distance. Timing
+    // beeps and ahead/behind are both gated on this, so an early departure
+    // stays silent on schedule until the appointed minute even though it is
+    // already accumulating distance.
+    // The roadbook is fixed here for an ordinary start, and re-fixed
+    // harmlessly for an early departure, which already took it at arming.
+    adoptRoadbookAsStage(data);
 
-    data->gaugeScale = 0;
-    data->gaugeScaleChangeTime = 0;
     data->aheadBehindSeconds = 0.0;
     data->smoothedSpeed = -1.0;
     data->state->ahead_behind_zero_offset_ms = 0;
-    data->autoStartTriggered = false;
-    
+    // The timing bookmark is derived from elapsed stage time, which just
+    // became zero.
+    data->beepCursorsStale = true;
+
     if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
-    
+}
+
+void applyAutoStartArming(AppData* data, const AutoStartArming& arming) {
+    // Assignment, not a set of conditional updates: whatever kind of
+    // autostart was armed before -- ordinary, on-the-minute, even one already
+    // armed for this very same target time -- is completely replaced here.
+    data->state->auto_start_rally_time_s = arming.rally_time_s;
+    data->state->auto_start_early_departure = arming.early_departure;
+    data->autoStartTriggered = arming.triggered;
+    if (arming.zero_distance_now) {
+        zeroDistanceBaselines(data);
+        // The roadbook moves with the distance, not with the clock. Arming an
+        // early departure declares that this is the new stage -- its distance
+        // starts counting from the press -- so the box has to be showing the
+        // new stage's speeds from the press too. Taking the roadbook at the
+        // minute instead left the driver panel on the previous stage's target
+        // speed and chevrons for the whole countdown, while the odometer was
+        // already running on the new one: an edit made just before arming
+        // looked ignored, and re-pressing the button changed nothing because
+        // the arming path never touched the roadbook at all.
+        adoptRoadbookAsStage(data);
+        // Paired with the segment counters zeroDistanceBaselines just moved,
+        // so segment 1 measures from the same instant in both quantities.
+        // The clock baselines stay put: the stage's time still starts at the
+        // appointed minute, which is what makes this an EARLY departure.
+        data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
+    }
+
+    ConfigFile::save(*data->state);
+    notifyWebState(data);
+}
+
+void performAutoStart(AppData* data) {
+    if (data->state->auto_start_early_departure) {
+        // Distance was zeroed when the operator armed this, so only the clock
+        // starts now and everything rolled on the way to the line counts
+        // toward the stage distance -- and therefore toward its average speed.
+        zeroTimeBaselines(data);
+        // Spent. Leaving the target armed would let a restart of the app --
+        // which forgets autoStartTriggered -- see it as pending again.
+        data->state->auto_start_rally_time_s = 0;
+        data->state->auto_start_early_departure = false;
+        ConfigFile::save(*data->state);
+        notifyWebState(data);
+        return;
+    }
+    // Ordinary autostart: distance and clock both zero at the appointed time.
+    performStageGo(data);
+}
+
+void performStageGo(AppData* data) {
+    // Distance and clock together: this is the ordinary "start now" case.
+    zeroDistanceBaselines(data);
+    zeroTimeBaselines(data);
+    // Deliberately does NOT clear autoStartTriggered: the driver display sets
+    // that flag just before calling this on the autostart tick, and clearing
+    // it here would let the same 2-second trigger window re-enter on every
+    // 10 ms frame -- re-zeroing the baselines and rewriting the config file
+    // a couple of hundred times. Only the arming/clearing paths own the flag.
+    //
+    // The pending autostart is cancelled outright. Reached two ways, and both
+    // want that: an autostart that has just fired is spent, and a manual
+    // "Now" must not leave a target armed to silently re-zero the stage a
+    // minute after the crew started it by hand.
+    data->state->auto_start_rally_time_s = 0;
+    data->state->auto_start_early_departure = false;
+
     ConfigFile::save(*data->state);
     notifyWebState(data);
 }
 
 static const int RESPONSE_AUTO_START = 99;
+static const int RESPONSE_AUTO_START_NEXT_MINUTE = 98;
+
+// Defined further down (used by on_show_autostart/on_autostart_set); forward
+// declared here so the quick-set button below can share the same epoch.
+int64_t getAutoStartEpochMs();
+
+// Always the *next* minute boundary, even if rally_ms already sits exactly on
+// one -- the quick-set button's printed time must still be ahead when pressed.
+static int64_t nextRoundMinute_ms(int64_t rally_ms) {
+    return ((rally_ms / 60000) + 1) * 60000;
+}
+
+static std::string formatHms(int64_t epoch_ms) {
+    time_t s = epoch_ms / 1000;
+    struct tm* t = localtime(&s);
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%02d:%02d:%02d", t->tm_hour, t->tm_min, t->tm_sec);
+    return std::string(buf);
+}
+
+// Commits the autostart time directly (no manual entry needed), reusing the
+// same state field and epoch as the "Set Autostart" screen.
+static void setAutoStartToNextRoundMinute(AppData* data) {
+    // Early departure: distance zeroes NOW, the clock zeroes at the minute.
+    // Anything rolled between the two therefore counts toward the stage
+    // distance and so toward the average speed, which is the point -- the car
+    // leaves before its due time and the roadbook still starts at the minute.
+    int64_t target_ms = nextRoundMinute_ms(getRallyTime_ms(*data->state));
+    applyAutoStartArming(data, autoStartArming(target_ms, getAutoStartEpochMs(), true));
+}
 
 void on_stage_go(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
-    
+
+    std::string nextMinuteLabel = "Autostart "
+        + formatHms(nextRoundMinute_ms(getRallyTime_ms(*data->state)));
+
     GtkWidget* dialog = gtk_dialog_new_with_buttons(
         "Confirm Stage Go",
         GTK_WINDOW(gtk_widget_get_toplevel(widget)),
         GTK_DIALOG_MODAL,
-        "Yes", GTK_RESPONSE_YES,
-        "Auto start", RESPONSE_AUTO_START,
+        // "Now" rather than "Yes": what distinguishes this from the autostart
+        // option is that the stage begins immediately.
+        "Now", GTK_RESPONSE_YES,
+        "Set Autostart", RESPONSE_AUTO_START,
+        nextMinuteLabel.c_str(), RESPONSE_AUTO_START_NEXT_MINUTE,
         "No", GTK_RESPONSE_NO,
         nullptr);
-    
+
     GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    gtk_container_set_border_width(GTK_CONTAINER(content), 20);
-    
-    GtkWidget* label = gtk_label_new("Stage Go?\n\nThis will reset Total, Trip,\nand Segment counters.");
+    gtk_container_set_border_width(GTK_CONTAINER(content), 8);
+
+    // Show what is actually about to start, highlighted: this dialog guards
+    // the most destructive action on the box, and an operator who recalled
+    // the wrong memory slot or mis-edited a segment had no way to notice
+    // before confirming. The summary is the segments page's own content --
+    // there is no separate stage name or number in the model to show
+    // instead.
+    std::string summary = stageSummary(data->state->segments);
+    std::string markup = "Stage Go?\n\nStage = <span foreground=\"#FFDD00\">"
+                       + summary + "</span>\n"
+                       + "Total and Trip Counters will reset";
+
+    GtkWidget* label = gtk_label_new(nullptr);
+    gtk_label_set_markup(GTK_LABEL(label), markup.c_str());
     gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
-    gtk_box_pack_start(GTK_BOX(content), label, TRUE, TRUE, 10);
+    // A stage with many segments would otherwise force the dialog as wide
+    // as the whole comma-separated list on one line; wrap it instead.
+    gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+    // width_chars, not just max_width_chars: fixing the measurement width
+    // up front gives GTK a single, stable wrap pass. max_width_chars alone
+    // only caps the natural width, so the dialog's first size-negotiation
+    // pass (before the final width is settled) can wrap taller than the
+    // final render needs, leaving reserved-but-unused height below the text.
+    gtk_label_set_width_chars(GTK_LABEL(label), 44);
+    gtk_label_set_max_width_chars(GTK_LABEL(label), 44);
+    // expand=FALSE: with TRUE the label was stretched to fill whatever
+    // extra height the button row's width forced onto the dialog, and its
+    // 0.5 yalign centred the text in that slack -- an equal gap above
+    // "Stage Go?" and below the last line, both growing every time
+    // wrapping added another line. Natural size only, no slack to centre in.
+    gtk_box_pack_start(GTK_BOX(content), label, FALSE, FALSE, 0);
     gtk_widget_show(label);
     
     applyDialogStyle(dialog);
@@ -153,6 +535,11 @@ void on_stage_go(GtkWidget* widget, gpointer user_data) {
         performStageGo(data);
     } else if (response == RESPONSE_AUTO_START) {
         on_show_autostart(widget, user_data);
+    } else if (response == RESPONSE_AUTO_START_NEXT_MINUTE) {
+        // Already fully committed by setAutoStartToNextRoundMinute -- no
+        // Set/Save step needed, so just return to whatever screen was
+        // showing rather than detouring through the autostart setup screen.
+        setAutoStartToNextRoundMinute(data);
     }
 }
 
@@ -205,11 +592,12 @@ void on_adj_driver_zero(GtkWidget* widget, gpointer user_data) {
 
 void on_next_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
-    if (data->state->segment_current_number < static_cast<long>(data->state->segments.size()) - 1) {
+    if (data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size()) - 1) {
         auto current_poll = data->poller->getMostRecent();
         data->state->segment_current_number++;
         data->state->segment_start_cntr1 = current_poll.cntr1;
         data->state->segment_start_cntr2 = current_poll.cntr2;
+        data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
         data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
         // Reset trip
         data->state->trip_start_cntr1 = current_poll.cntr1;
@@ -222,45 +610,61 @@ void on_next_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 void on_next_prev_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     if (data->state->segment_current_number < 0 ||
-        data->state->segment_current_number >= static_cast<long>(data->state->segments.size()))
+        data->state->segment_current_number >= static_cast<long>(data->state->stage_segments.size()))
         return;
     
     auto current_poll = data->poller->getMostRecent();
-    int64_t seg_count_diff = calculateDistanceCounts(*data->state,
-        current_poll.cntr1, current_poll.cntr2,
-        data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+    // Corrected, like every other comparison against a roadbook distance.
+    // This button is pressed at a timing point, which is exactly where a nav
+    // error has just been corrected with -10: it decides whether "next" is
+    // even offered, and "next"/"prev" write this figure into the roadbook as
+    // the segment's real length. On the raw counts it would record the
+    // distance the wheel turned rather than the distance the crew drove.
+    int64_t seg_count_diff = segmentCountsCorrected(data, current_poll);
     
-    Segment& cur_seg = data->state->segments[data->state->segment_current_number];
+    // The snapshot, not the saved roadbook: "next"/"prev" retime the stage
+    // actually being driven, and must not rewrite the roadbook the crew will
+    // start the next stage from.
+    Segment& cur_seg = data->state->stage_segments[data->state->segment_current_number];
     int64_t remaining_counts = cur_seg.distance_counts - seg_count_diff;
     long remaining_m = countsToCentimeters(remaining_counts, data->state->calibration) / 100;
     long travelled_m = countsToCentimeters(seg_count_diff, data->state->calibration) / 100;
     
     long next_seg_idx = data->state->segment_current_number + 1;
     bool near_end = (remaining_m >= 0 && remaining_m <= 500) &&
-                    (next_seg_idx < static_cast<long>(data->state->segments.size()));
+                    (next_seg_idx < static_cast<long>(data->state->stage_segments.size()));
     bool near_start = (travelled_m >= 0 && travelled_m <= 500) &&
                       (data->state->segment_current_number > 0);
     
     if (near_end) {
-        // "next": reduce current segment distance to actual distance travelled, then advance
-        cur_seg.distance_counts = seg_count_diff;
-        cur_seg.distance_m = (cur_seg.distance_counts * data->state->calibration) / 1e6;
-        
+        // "next": the speed changes here, and what this segment gives up is
+        // handed to the next one -- so the next known point stays where the
+        // roadbook puts it, measured from the stage start. Shortening this
+        // segment alone would drag that point, and every later one, backwards
+        // by however early the button was pressed.
+        retimeSegmentBoundaryForward(data->state->stage_segments,
+                                     data->state->segment_current_number,
+                                     seg_count_diff, data->state->calibration);
+
         data->state->segment_current_number++;
         data->state->segment_start_cntr1 = current_poll.cntr1;
         data->state->segment_start_cntr2 = current_poll.cntr2;
+        data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
         data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
         data->state->trip_start_cntr1 = current_poll.cntr1;
         data->state->trip_start_cntr2 = current_poll.cntr2;
         data->state->trip_start_time_ms = data->state->segment_start_time_ms;
     } else if (near_start) {
-        // "prev": extend previous segment distance to end here, reset current segment start to now
-        Segment& prev_seg = data->state->segments[data->state->segment_current_number - 1];
-        prev_seg.distance_counts += seg_count_diff;
-        prev_seg.distance_m = (prev_seg.distance_counts * data->state->calibration) / 1e6;
-        
+        // "prev": the previous segment really ran to here, so it takes the
+        // distance and this one gives it up -- the mirror of "next", and for
+        // the same reason: this segment's own end must not move.
+        retimeSegmentBoundaryBackward(data->state->stage_segments,
+                                      data->state->segment_current_number,
+                                      seg_count_diff, data->state->calibration);
+
         data->state->segment_start_cntr1 = current_poll.cntr1;
         data->state->segment_start_cntr2 = current_poll.cntr2;
+        data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
         data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
         data->state->trip_start_cntr1 = current_poll.cntr1;
         data->state->trip_start_cntr2 = current_poll.cntr2;
@@ -271,29 +675,65 @@ void on_next_prev_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     notifyWebState(data);
 }
 
+// The distance the stage and the current segment have actually covered, with
+// the crew's manual correction applied. Everything judged against a roadbook
+// distance goes through these, so a wrong turn knocked off with the -10 button
+// moves the ahead/behind figure, the segment boundary and the end of the stage
+// together -- and not just the odometer, which is all the raw counts show.
+int64_t stageCountsCorrected(AppData* data, const CounterPoll& poll) {
+    int64_t raw = calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
+        data->state->total_start_cntr1, data->state->total_start_cntr2);
+    // The whole correction belongs to this stage: the stage's own start zeroed
+    // it along with the counters.
+    return correctedDistanceCounts(raw, data->state->total_distance_adjust_cm,
+                                   data->state->calibration);
+}
+
+int64_t segmentCountsCorrected(AppData* data, const CounterPoll& poll) {
+    int64_t raw = calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
+        data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+    // Only the correction made since this segment began: an earlier one
+    // already moved the boundary it preceded.
+    return correctedDistanceCounts(raw,
+        data->state->total_distance_adjust_cm - data->state->segment_start_adjust_cm,
+        data->state->calibration);
+}
+
 gboolean update_display(gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     
     // Poll counters (respects 5ms minimum interval)
     data->poller->poll(data->counter1, data->counter2, data->register_addr);
     
+    // The stage's own distance is what ends it. Once it is driven out the
+    // roadbook stops being frozen, so the next edit or recall shows up
+    // straight away -- the ahead/behind figure at the line is left alone
+    // until the crew actually change something.
+    if (!data->state->stage_complete) {
+        auto poll = data->poller->getMostRecent();
+        int64_t stage_counts = stageCountsCorrected(data, poll);
+        if (stageDistanceComplete(data->state->stage_segments, stage_counts)) {
+            data->state->stage_complete = true;
+            ConfigFile::save(*data->state);
+        }
+    }
+
     // Check for auto-advance segments
     if (data->state->segment_current_number >= 0 && 
-        data->state->segment_current_number < static_cast<long>(data->state->segments.size())) {
-        Segment& seg = data->state->segments[data->state->segment_current_number];
+        data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
+        Segment& seg = data->state->stage_segments[data->state->segment_current_number];
         if (seg.autoNext) {
             auto current_poll = data->poller->getMostRecent();
-            int64_t seg_count_diff = calculateDistanceCounts(*data->state,
-                current_poll.cntr1, current_poll.cntr2,
-                data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+            int64_t seg_count_diff = segmentCountsCorrected(data, current_poll);
             
             if (seg_count_diff >= seg.distance_counts) {
                 // Advance to next segment
-                if (data->state->segment_current_number < static_cast<long>(data->state->segments.size()) - 1) {
+                if (data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size()) - 1) {
                     data->state->segment_current_number++;
                     auto current_poll = data->poller->getMostRecent();
                     data->state->segment_start_cntr1 = current_poll.cntr1;
                     data->state->segment_start_cntr2 = current_poll.cntr2;
+                    data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
                     data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
                     // Reset trip
                     data->state->trip_start_cntr1 = current_poll.cntr1;
@@ -322,6 +762,7 @@ gboolean update_display(gpointer user_data) {
 // Screen navigation callbacks
 void on_show_segments(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    releaseKeypadTarget(data);
     gtk_stack_set_visible_child_name(data->copilotStack, "stagesetup");
     // Refresh segment list
     refreshSegmentList(data);
@@ -329,6 +770,7 @@ void on_show_segments(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 
 void on_show_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    releaseKeypadTarget(data);
     gtk_stack_set_visible_child_name(data->copilotStack, "calibration");
     
     // Reset calibration state when entering screen
@@ -341,11 +783,13 @@ void on_show_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 
 void on_show_twinmaster(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    releaseKeypadTarget(data);
     gtk_stack_set_visible_child_name(data->copilotStack, "twinmaster");
 }
 
 void on_show_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    releaseKeypadTarget(data);
     gtk_stack_set_visible_child_name(data->copilotStack, "datetime");
     updateDateTimeDisplay(data);
 
@@ -371,19 +815,19 @@ GtkWidget* createNumericKeypad(AppData* data) {
     
     for (int i = 0; i < 12; i++) {
         GtkWidget* btn = gtk_button_new_with_label(digits[i]);
-        gtk_widget_set_size_request(btn, 60, 48);
+        gtk_widget_set_size_request(btn, 60, 42);
         g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_digit), data);
         gtk_grid_attach(GTK_GRID(keypad), btn, i % 3, i / 3, 1, 1);
     }
     
     // Row 5: Clear and Backspace
     GtkWidget* clearBtn = gtk_button_new_with_label("C");
-    gtk_widget_set_size_request(clearBtn, 60, 48);
+    gtk_widget_set_size_request(clearBtn, 60, 42);
     g_signal_connect(clearBtn, "clicked", G_CALLBACK(on_keypad_clear), data);
     gtk_grid_attach(GTK_GRID(keypad), clearBtn, 0, 4, 1, 1);
-    
+
     GtkWidget* bkspBtn = gtk_button_new_with_label("<-");
-    gtk_widget_set_size_request(bkspBtn, 130, 48);
+    gtk_widget_set_size_request(bkspBtn, 130, 42);
     g_signal_connect(bkspBtn, "clicked", G_CALLBACK(on_keypad_backspace), data);
     gtk_grid_attach(GTK_GRID(keypad), bkspBtn, 1, 4, 2, 1);
     
@@ -399,18 +843,18 @@ GtkWidget* createDateTimeKeypad(AppData* data) {
     
     for (int i = 0; i < 12; i++) {
         GtkWidget* btn = gtk_button_new_with_label(digits[i]);
-        gtk_widget_set_size_request(btn, 60, 48);
+        gtk_widget_set_size_request(btn, 60, 42);
         g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_digit), data);
         gtk_grid_attach(GTK_GRID(keypad), btn, i % 3, i / 3, 1, 1);
     }
     
     GtkWidget* clearBtn = gtk_button_new_with_label("C");
-    gtk_widget_set_size_request(clearBtn, 60, 48);
+    gtk_widget_set_size_request(clearBtn, 60, 42);
     g_signal_connect(clearBtn, "clicked", G_CALLBACK(on_keypad_clear), data);
     gtk_grid_attach(GTK_GRID(keypad), clearBtn, 0, 4, 1, 1);
-    
+
     GtkWidget* bkspBtn = gtk_button_new_with_label("<-");
-    gtk_widget_set_size_request(bkspBtn, 130, 48);
+    gtk_widget_set_size_request(bkspBtn, 130, 42);
     g_signal_connect(bkspBtn, "clicked", G_CALLBACK(on_keypad_backspace), data);
     gtk_grid_attach(GTK_GRID(keypad), bkspBtn, 1, 4, 2, 1);
     
@@ -420,25 +864,50 @@ GtkWidget* createDateTimeKeypad(AppData* data) {
 // Keypad callbacks
 void on_keypad_digit(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    if (data->activeBuffer) {
+        gtk_text_buffer_insert_at_cursor(data->activeBuffer,
+                                         gtk_button_get_label(GTK_BUTTON(widget)), -1);
+        return;
+    }
     if (!data->activeEntry) return;
-    
+
     const char* digit = gtk_button_get_label(GTK_BUTTON(widget));
+
+    // A digit typed while the entry's text is selected (e.g. the current
+    // value a dialog pre-fills on open) replaces it, matching normal
+    // text-field behaviour -- otherwise the typed digits silently append
+    // to whatever was left in the box, inflating the result.
+    gint sel_start, sel_end;
+    if (gtk_editable_get_selection_bounds(GTK_EDITABLE(data->activeEntry), &sel_start, &sel_end)) {
+        gtk_editable_delete_selection(GTK_EDITABLE(data->activeEntry));
+    }
+
     const char* current = gtk_entry_get_text(data->activeEntry);
-    
     std::string new_text = std::string(current) + digit;
     gtk_entry_set_text(data->activeEntry, new_text.c_str());
 }
 
 void on_keypad_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    if (data->activeBuffer) {
+        gtk_text_buffer_set_text(data->activeBuffer, "", -1);
+        return;
+    }
     if (!data->activeEntry) return;
     gtk_entry_set_text(data->activeEntry, "");
 }
 
 void on_keypad_backspace(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    if (data->activeBuffer) {
+        GtkTextIter cursor;
+        gtk_text_buffer_get_iter_at_mark(data->activeBuffer, &cursor,
+                                         gtk_text_buffer_get_insert(data->activeBuffer));
+        gtk_text_buffer_backspace(data->activeBuffer, &cursor, TRUE, TRUE);
+        return;
+    }
     if (!data->activeEntry) return;
-    
+
     const char* current = gtk_entry_get_text(data->activeEntry);
     std::string text(current);
     if (!text.empty()) {
@@ -450,8 +919,36 @@ void on_keypad_backspace(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 gboolean on_entry_focus(GtkWidget* widget, G_GNUC_UNUSED GdkEvent* event, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     data->activeEntry = GTK_ENTRY(widget);
+    data->activeBuffer = nullptr;
     gtk_widget_show(data->numericKeypad);
     return FALSE;
+}
+
+gboolean on_textview_focus(GtkWidget* widget, G_GNUC_UNUSED GdkEvent* event, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->activeEntry = nullptr;   // exactly one keypad target at a time
+    data->activeBuffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(widget));
+    // The keypad starts hidden and is the only way to type on the box, so it
+    // must be raised here exactly as on_entry_focus does -- without this,
+    // tapping the waypoint list produced no keypad at all until some
+    // unrelated entry had been focused first.
+    if (data->numericKeypad) gtk_widget_show(data->numericKeypad);
+    return FALSE;
+}
+
+// Commit any pending waypoint edit and drop the keypad's target. Called when
+// leaving a screen: the keypad target is process-wide (the date/time screen
+// builds its own keypad on the same handlers and the same AppData), so a
+// stale target let a keypress on one screen edit a widget on another -- and
+// the keypad's "C" silently wipe it.
+void releaseKeypadTarget(AppData* data) {
+    if (data->beepWaypointCommitTimer) {
+        g_source_remove(data->beepWaypointCommitTimer);
+        data->beepWaypointCommitTimer = 0;
+        commitBeepWaypoints(data);
+    }
+    data->activeEntry = nullptr;
+    data->activeBuffer = nullptr;
 }
 
 // Callback for when segment entry value changes
@@ -473,6 +970,11 @@ void on_segment_entry_changed(GtkWidget* widget, gpointer user_data) {
             data->state->segments[index].distance_m = meters;
             data->state->segments[index].distance_counts = (meters * 1e6) / data->state->calibration;
         }
+        // After the whole if/else, not inside the distance branch: a speed
+        // edit is just as much an edit, and nesting this left the gauge and
+        // the tone on the old speed until a distance happened to be typed.
+        data->state->last_memory_slot = 0;
+        adoptRoadbookIfIdle(data);
         ConfigFile::save(*data->state);
         notifyWebState(data);
     }
@@ -485,6 +987,8 @@ void on_segment_auto_toggled(GtkWidget* widget, gpointer user_data) {
     if (!data || index < 0 || index >= static_cast<int>(data->state->segments.size())) return;
     
     data->state->segments[index].autoNext = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
+    data->state->last_memory_slot = 0;
+    adoptRoadbookIfIdle(data);
     ConfigFile::save(*data->state);
     notifyWebState(data);
 }
@@ -505,16 +1009,16 @@ void refreshSegmentList(AppData* data) {
         long distance_m = static_cast<long>(seg.distance_m);
         
         GtkWidget* row = gtk_list_box_row_new();
-        GtkWidget* box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-        gtk_style_context_add_class(gtk_widget_get_style_context(box), "segment-row");
-        gtk_container_add(GTK_CONTAINER(row), box);
-        
+        GtkWidget* grid = gtk_grid_new();
+        gtk_grid_set_column_spacing(GTK_GRID(grid), SEGMENT_COL_SPACING);
+        gtk_style_context_add_class(gtk_widget_get_style_context(grid), "segment-row");
+        gtk_container_add(GTK_CONTAINER(row), grid);
+
         // Speed entry (editable)
         std::stringstream ss;
         ss << std::fixed << std::setprecision(2) << target_kph;
         GtkWidget* speedEntry = gtk_entry_new();
         gtk_entry_set_text(GTK_ENTRY(speedEntry), ss.str().c_str());
-        gtk_widget_set_size_request(speedEntry, 100, 36);
         g_object_set_data(G_OBJECT(speedEntry), "app_data", data);
         g_object_set_data(G_OBJECT(speedEntry), "entry_type", (gpointer)"speed");
         g_signal_connect(speedEntry, "changed", G_CALLBACK(on_segment_entry_changed), GINT_TO_POINTER(i));
@@ -525,7 +1029,6 @@ void refreshSegmentList(AppData* data) {
         ss << distance_m;
         GtkWidget* distEntry = gtk_entry_new();
         gtk_entry_set_text(GTK_ENTRY(distEntry), ss.str().c_str());
-        gtk_widget_set_size_request(distEntry, 100, 36);
         g_object_set_data(G_OBJECT(distEntry), "app_data", data);
         g_object_set_data(G_OBJECT(distEntry), "entry_type", (gpointer)"distance");
         g_signal_connect(distEntry, "changed", G_CALLBACK(on_segment_entry_changed), GINT_TO_POINTER(i));
@@ -549,16 +1052,25 @@ void refreshSegmentList(AppData* data) {
         
         // Delete button
         GtkWidget* deleteBtn = gtk_button_new_with_label("del");
-        gtk_widget_set_size_request(deleteBtn, -1, 36);
         g_object_set_data(G_OBJECT(deleteBtn), "app_data", data);
         g_signal_connect(deleteBtn, "clicked", G_CALLBACK(on_delete_segment), GINT_TO_POINTER(i));
-        
-        gtk_box_pack_start(GTK_BOX(box), speedEntry, FALSE, FALSE, 5);
-        gtk_box_pack_start(GTK_BOX(box), distEntry, FALSE, FALSE, 5);
-        gtk_box_pack_start(GTK_BOX(box), autoCheck, FALSE, FALSE, 15);
-        gtk_box_pack_start(GTK_BOX(box), timeLabel, FALSE, FALSE, 5);
-        gtk_box_pack_start(GTK_BOX(box), deleteBtn, FALSE, FALSE, 5);
-        
+
+        gtk_widget_set_size_request(speedEntry, SEGMENT_COL_SPEED, 36);
+        gtk_grid_attach(GTK_GRID(grid), speedEntry, 0, 0, 1, 1);
+
+        gtk_widget_set_size_request(distEntry, SEGMENT_COL_DISTANCE, 36);
+        gtk_grid_attach(GTK_GRID(grid), distEntry, 1, 0, 1, 1);
+
+        gtk_widget_set_size_request(autoCheck, SEGMENT_COL_AUTO, -1);
+        gtk_grid_attach(GTK_GRID(grid), autoCheck, 2, 0, 1, 1);
+
+        gtk_label_set_xalign(GTK_LABEL(timeLabel), 0.0);
+        gtk_widget_set_size_request(timeLabel, SEGMENT_COL_TIME, -1);
+        gtk_grid_attach(GTK_GRID(grid), timeLabel, 3, 0, 1, 1);
+
+        gtk_widget_set_size_request(deleteBtn, SEGMENT_COL_DELETE, 36);
+        gtk_grid_attach(GTK_GRID(grid), deleteBtn, 4, 0, 1, 1);
+
         gtk_list_box_insert(data->segmentListBox, row, -1);
         gtk_widget_show_all(row);
     }
@@ -581,7 +1093,10 @@ void on_calibration_start(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 // Helper function to update calibration display
 void updateCalibrationDisplay(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
-    
+
+    gtk_label_set_text(data->calibrationClockLabel,
+        formatTime(getRallyTime_ms(*data->state)).c_str());
+
     // Calculate counts from calibration start (or total start if not started)
     uint64_t start_cntr1 = data->cal_started ? data->cal_start_cntr1 : data->state->total_start_cntr1;
     uint64_t start_cntr2 = data->cal_started ? data->cal_start_cntr2 : data->state->total_start_cntr2;
@@ -600,14 +1115,15 @@ void updateCalibrationDisplay(AppData* data) {
         cntr_a = cntr1_diff;
     }
     
-    // Distance in meters
     long total_m = countsToCentimeters(cntr_a, data->state->calibration) / 100;
-    
-    // Format: "Total distance: xxx,xxx m  (counts calculated: CNTR_A  1: CNTR_1  2: CNTR_2)"
-    std::stringstream ss;
-    ss << "Total distance: " << total_m << " m  (counts calculated: " << cntr_a 
-       << "   1: " << cntr1_diff << "   2: " << cntr2_diff << ")";
-    gtk_label_set_text(data->totalDistCalLabel, ss.str().c_str());
+    gtk_label_set_text(data->totalDistCalLabel,
+        calibrationReadoutLine(total_m, cntr_a, cntr1_diff, cntr2_diff).c_str());
+
+    char current[96];
+    snprintf(current, sizeof(current),
+             "Current <span foreground=\"#FFDD00\">Calibration %ld pulses/KM</span>. Reset to",
+             static_cast<long>(pulsesPerKm(data->state->calibration) + 0.5));
+    gtk_label_set_markup(data->calibrationCurrentLabel, current);
 }
 
 // Helper function to update date/time display
@@ -663,33 +1179,40 @@ void on_add_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     bool autoNext = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(data->autoNextCheck));
     
     if (speed_str && dist_str && strlen(speed_str) > 0 && strlen(dist_str) > 0) {
-        double target_kph = std::stod(speed_str);
-        double target_counts_per_hour = kphToCountsPerHour(target_kph, data->state->calibration);
-        
-        // Split distance by comma to allow multiple segments at the same speed
-        std::string dist_input(dist_str);
-        std::stringstream dist_stream(dist_input);
-        std::string token;
+        // RB-SEG-03: both fields are ';'-separated lists now, not just
+        // distance. A single speed still broadcasts to every distance (the
+        // original use case); multiple speeds must match the distance
+        // count and pair positionally -- see buildSegmentSpeedDistancePairs()
+        // in calculations.cpp for the exact rule and why mismatched counts
+        // are rejected outright rather than guessed at.
+        std::vector<double> speeds = parseSemicolonList(speed_str);
+        std::vector<double> distances = parseSemicolonList(dist_str);
+        std::vector<std::pair<double, double>> pairs;
+        bool paired = buildSegmentSpeedDistancePairs(speeds, distances, pairs);
+
         bool added = false;
-        
-        while (std::getline(dist_stream, token, ';')) {
-            if (token.empty()) continue;
-            double distance_m = std::stod(token);
-            if (distance_m <= 0) continue;
-            
-            double distance_counts = (distance_m * 1e6) / data->state->calibration;
-            
-            Segment seg;
-            seg.target_speed_kph = target_kph;
-            seg.target_speed_counts_per_hour = target_counts_per_hour;
-            seg.distance_m = distance_m;
-            seg.distance_counts = distance_counts;
-            seg.autoNext = autoNext;
-            
-            data->state->segments.push_back(seg);
-            added = true;
+
+        if (paired) {
+            for (const auto& [target_kph, distance_m] : pairs) {
+                if (distance_m <= 0) continue;
+
+                double target_counts_per_hour = kphToCountsPerHour(target_kph, data->state->calibration);
+                double distance_counts = (distance_m * 1e6) / data->state->calibration;
+
+                Segment seg;
+                seg.target_speed_kph = target_kph;
+                seg.target_speed_counts_per_hour = target_counts_per_hour;
+                seg.distance_m = distance_m;
+                seg.distance_counts = distance_counts;
+                seg.autoNext = autoNext;
+
+                data->state->segments.push_back(seg);
+                data->state->last_memory_slot = 0;
+                adoptRoadbookIfIdle(data);
+                added = true;
+            }
         }
-        
+
         if (added) {
             ConfigFile::save(*data->state);
             
@@ -712,6 +1235,8 @@ void on_delete_segment(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(g_object_get_data(G_OBJECT(widget), "app_data"));
     if (data && index >= 0 && index < static_cast<int>(data->state->segments.size())) {
         data->state->segments.erase(data->state->segments.begin() + index);
+        data->state->last_memory_slot = 0;
+        adoptRoadbookIfIdle(data);
         ConfigFile::save(*data->state);
         refreshSegmentList(data);
         notifyWebState(data);
@@ -757,7 +1282,10 @@ void on_memory_set(GtkWidget* widget, gpointer user_data) {
         if (response != GTK_RESPONSE_YES) return;
     }
     
-    data->state->memory_slots[slot] = data->state->segments;
+    data->state->memory_slots[slot].segments = data->state->segments;
+    // A slot is the whole stage setup, waypoints included.
+    data->state->memory_slots[slot].beep_waypoints_m = data->state->beep_waypoints_m;
+    data->state->memory_slots[slot].waypoints_recorded = true;
     ConfigFile::save(*data->state);
     updateMemoryRecallStyles(data);
     notifyWebState(data);
@@ -767,10 +1295,23 @@ void on_memory_recall(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     int slot = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "slot")) - 1;
     if (slot >= 0 && slot < RallyState::MAX_MEMORY_SLOTS && !data->state->memory_slots[slot].empty()) {
-        data->state->segments = data->state->memory_slots[slot];
-        data->state->segment_current_number = data->state->segments.empty() ? -1 : 0;
+        // A running stage keeps the segments it started on; with no stage
+        // under way the recalled slot is adopted immediately, so the crew
+        // see the stage they have just loaded.
+        data->state->segments = data->state->memory_slots[slot].segments;
+        data->state->last_memory_slot = slot + 1;
+        adoptRoadbookIfIdle(data);
+        // A slot from a pre-Beep-Assist config has no list of its own; the
+        // live one stays rather than being silently deleted.
+        if (data->state->memory_slots[slot].waypoints_recorded) {
+            data->state->beep_waypoints_m = data->state->memory_slots[slot].beep_waypoints_m;
+        }
+        // The waypoint list just changed wholesale, so the beep bookmarks
+        // mean nothing; rebuild them from where the car actually is.
+        data->beepCursorsStale = true;
         ConfigFile::save(*data->state);
         refreshSegmentList(data);
+        refreshBeepWaypointView(data);
         notifyWebState(data);
     }
 }
@@ -825,17 +1366,10 @@ void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
                 // new_cal = (input_meters * 1000 * 1000) / total_count_diff
                 data->state->calibration = (rally_distance_m * 1000000) / total_count_diff;
                 
+                // The sim counters were given a counts-per-second derived from
+                // the OLD calibration; re-derive so the sim keeps driving at
                 // Recalculate count-based values in all segments from stable human values
-                for (auto& seg : data->state->segments) {
-                    seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
-                    seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
-                }
-                for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
-                    for (auto& seg : data->state->memory_slots[i]) {
-                        seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
-                        seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
-                    }
-                }
+                recalculateSegmentCounts(*data->state);
                 
                 ConfigFile::save(*data->state);
                 
@@ -848,51 +1382,48 @@ void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     }
 }
 
-void on_reset_calibration_1m(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+void on_reset_calibration_pulses(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    const char* text = gtk_entry_get_text(data->resetPulsesEntry);
+    if (!text || !*text) return;
 
-    // 1m per pulse: 1 count = 1000mm, so 1000 counts = 1,000,000mm
-    data->state->calibration = 1000000;
+    double pulses_per_km = 0.0;
+    try {
+        pulses_per_km = std::stod(text);
+    } catch (const std::exception&) {
+        return;  // unparseable entry -- leave calibration untouched
+    }
 
-    for (auto& seg : data->state->segments) {
-        seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
-        seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
-    }
-    for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
-        for (auto& seg : data->state->memory_slots[i]) {
-            seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
-            seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
-        }
-    }
+    long new_calibration = calibrationFromPulsesPerKm(pulses_per_km);
+    if (new_calibration <= 0) return;  // zero/negative entry -- no-op, not a crash
+
+    data->state->calibration = new_calibration;
+
+    // Recalculate count-based values in all segments from stable human
+    // values, same as every other calibration change.
+    recalculateSegmentCounts(*data->state);
 
     ConfigFile::save(*data->state);
-    data->cal_started = false;
-    gtk_entry_set_text(data->rallyDistEntry, "");
     updateCalibrationDisplay(data);
 }
 
-static void updateSensorModeLabel(AppData* data) {
-    if (data->state->counters) {
-        gtk_label_set_text(data->sensorModeLabel, "Currently set to both sensors");
-    } else {
-        gtk_label_set_text(data->sensorModeLabel, "Currently set to sensor 1");
-    }
+void updateSensorModeLabel(AppData* data) {
+    // The sensor selection silently changes what every other number on this
+    // screen means, so the phrase itself is highlighted in the same yellow
+    // the driver panel uses for the live speed.
+    const char* phrase = data->state->counters
+        ? "using Sensors 1+2 (avg)"
+        : "using Sensor 1";
+    std::string markup = std::string("Currently <span foreground=\"#FFDD00\">")
+                       + phrase + "</span>";
+    gtk_label_set_markup(data->sensorModeLabel, markup.c_str());
 }
 
 void on_set_sensor_1(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     data->state->counters = false;
 
-    for (auto& seg : data->state->segments) {
-        seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
-        seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
-    }
-    for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
-        for (auto& seg : data->state->memory_slots[i]) {
-            seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
-            seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
-        }
-    }
+    recalculateSegmentCounts(*data->state);
 
     ConfigFile::save(*data->state);
     updateSensorModeLabel(data);
@@ -903,16 +1434,7 @@ void on_set_sensor_both(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     data->state->counters = true;
 
-    for (auto& seg : data->state->segments) {
-        seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
-        seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
-    }
-    for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
-        for (auto& seg : data->state->memory_slots[i]) {
-            seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
-            seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
-        }
-    }
+    recalculateSegmentCounts(*data->state);
 
     ConfigFile::save(*data->state);
     updateSensorModeLabel(data);
@@ -959,6 +1481,37 @@ gboolean on_force_single_display_toggle(G_GNUC_UNUSED GtkSwitch* sw, gboolean st
     data->state->force_single_display = state;
     ConfigFile::save(*data->state);
     return FALSE;  // allow default handler to update the switch visual state
+}
+
+// "tone mode off/on" switch on the Stage Setup screen -- master enable
+// for the ahead/behind tone, independent of which type is selected.
+// Takes effect immediately: ui_driver.cpp reads the flag fresh every
+// 10ms tick, same as force_single_display's mechanism but without
+// needing a restart (nothing here depends on window/monitor layout).
+gboolean on_tone_enabled_toggle(G_GNUC_UNUSED GtkSwitch* sw, gboolean state,
+                                gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->state->tone_enabled = state;
+    ConfigFile::save(*data->state);
+    return FALSE;  // allow default handler to update the switch visual state
+}
+
+// "Type 1[ ] 2[ ]" checkboxes on the Stage Setup screen -- mutually
+// exclusive via a cross-reference on each widget (set in
+// createStageSetupScreen) rather than a new AppData field pair,
+// matching the "app_data"/"mode" g_object_set_data() pattern this file
+// already uses (see on_beep_mode_toggled, on_segment_auto_toggled).
+// Only acts when a box becomes CHECKED; unchecking the other box (which
+// this triggers) is a no-op re-entry, since that call sees active=false
+// and returns immediately -- no infinite loop.
+void on_tone_type_toggled(GtkWidget* widget, gpointer user_data) {
+    if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget))) return;
+    AppData* data = static_cast<AppData*>(user_data);
+    GtkWidget* other = GTK_WIDGET(g_object_get_data(G_OBJECT(widget), "other_type_check"));
+    if (other) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(other), FALSE);
+    bool is_type2 = (GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "tone_type")) == 2);
+    data->state->simple_tone_mode = is_type2;
+    ConfigFile::save(*data->state);
 }
 
 void on_save_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
@@ -1022,7 +1575,7 @@ void on_save_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 }
 
 // Epoch for auto_start: 2020-01-01 00:00:00 local time
-static int64_t getAutoStartEpochMs() {
+int64_t getAutoStartEpochMs() {
     struct tm epoch_tm = {};
     epoch_tm.tm_year = 120;  // 2020
     epoch_tm.tm_mon = 0;
@@ -1032,12 +1585,13 @@ static int64_t getAutoStartEpochMs() {
 
 void on_show_autostart(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    releaseKeypadTarget(data);
     gtk_stack_set_visible_child_name(data->copilotStack, "autostart");
     data->activeEntry = data->autoStartTimeEntry;
     
-    if (data->state->auto_start_rally_time_minutes > 0) {
-        int64_t target_ms = getAutoStartEpochMs() + 
-            static_cast<int64_t>(data->state->auto_start_rally_time_minutes) * 60000;
+    if (data->state->auto_start_rally_time_s > 0) {
+        int64_t target_ms = autoStartTargetMsFromSeconds(
+            data->state->auto_start_rally_time_s, getAutoStartEpochMs());
         time_t target_s = target_ms / 1000;
         struct tm* t = localtime(&target_s);
         char buf[16];
@@ -1061,9 +1615,9 @@ void updateAutoStartDisplay(AppData* data) {
              rally_tm->tm_hour, rally_tm->tm_min, rally_tm->tm_sec);
     gtk_label_set_text(data->autoStartRallyClockLabel, buf);
     
-    if (data->state->auto_start_rally_time_minutes > 0) {
-        int64_t target_ms = getAutoStartEpochMs() + 
-            static_cast<int64_t>(data->state->auto_start_rally_time_minutes) * 60000;
+    if (data->state->auto_start_rally_time_s > 0) {
+        int64_t target_ms = autoStartTargetMsFromSeconds(
+            data->state->auto_start_rally_time_s, getAutoStartEpochMs());
         time_t target_s = target_ms / 1000;
         struct tm* t = localtime(&target_s);
         snprintf(buf, sizeof(buf), "%04d/%02d/%02d  %02d:%02d:%02d",
@@ -1106,20 +1660,126 @@ void on_autostart_set(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         return;
     }
     
-    int64_t epoch_ms = getAutoStartEpochMs();
-    data->state->auto_start_rally_time_minutes = 
-        static_cast<uint64_t>((target_ms - epoch_ms) / 60000);
-    data->autoStartTriggered = false;
-    
-    ConfigFile::save(*data->state);
+    // Supersedes an on-the-minute autostart if one is armed, kind and all --
+    // this one arms nothing and zeroes nothing until it fires.
+    applyAutoStartArming(data, autoStartArming(target_ms, getAutoStartEpochMs(), false));
     updateAutoStartDisplay(data);
 }
 
 void on_autostart_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
-    data->state->auto_start_rally_time_minutes = 0;
-    data->autoStartTriggered = false;
-    ConfigFile::save(*data->state);
+    // There is one autostart in the state, so this button reaches an early
+    // departure armed from the Stage Go dialog as well as one entered here.
+    // Only the early departure changed the stage when it was armed -- it
+    // zeroed the distance and took the roadbook, while leaving the clock on
+    // the previous stage's zero -- so only it has anything to undo.
+    const bool cancelling_early_departure =
+        data->state->auto_start_rally_time_s != 0 &&
+        data->state->auto_start_early_departure;
+
+    applyAutoStartArming(data, autoStartDisarmed());
+
+    // The previous stage's distance zero is already gone, so there is nothing
+    // to restore it to: the honest state is that no stage is running. Without
+    // this the hold releases with the distance at the line and the clock still
+    // on the old stage, and the gauge reads tens of minutes behind with the
+    // needle pegged and the tone sounding.
+    if (cancelling_early_departure) {
+        endStageAsIdle(data);
+        ConfigFile::save(*data->state);
+        notifyWebState(data);
+    }
     gtk_entry_set_text(data->autoStartTimeEntry, "");
     updateAutoStartDisplay(data);
+}
+
+// Parse the waypoint list out of the buffer and persist it. Parsing is cheap
+// and forgiving (a malformed token is skipped, not fatal), so the operator is
+// never made to confirm -- but it runs on a debounce, not per keystroke, for
+// two reasons: a half-typed number is briefly a real waypoint ("3" en route
+// to "30" is 3 km, which at 2.6 km travelled is immediately due and beeps),
+// and committing per character rewrote the whole config JSON to the Pi's SD
+// card on every key.
+// Rewrites the waypoint box from state. Blocks the "changed" handler while it
+// does: otherwise a programmatic set (memory recall) would arm the debounce
+// and commit the list straight back, which is harmless but pointless churn on
+// the SD card.
+void refreshBeepWaypointView(AppData* data) {
+    if (!data->beepWaypointBuffer) return;
+    g_signal_handlers_block_by_func(data->beepWaypointBuffer,
+                                    (gpointer)on_beep_waypoints_changed, data);
+    gtk_text_buffer_set_text(data->beepWaypointBuffer,
+        formatBeepWaypointsKm(data->state->beep_waypoints_m).c_str(), -1);
+    g_signal_handlers_unblock_by_func(data->beepWaypointBuffer,
+                                      (gpointer)on_beep_waypoints_changed, data);
+}
+
+void commitBeepWaypoints(AppData* data) {
+    if (!data->beepWaypointBuffer) return;
+    GtkTextIter start, end;
+    gtk_text_buffer_get_bounds(data->beepWaypointBuffer, &start, &end);
+    gchar* text = gtk_text_buffer_get_text(data->beepWaypointBuffer, &start, &end, FALSE);
+    data->state->beep_waypoints_m = parseBeepWaypointsKm(text ? text : "");
+    g_free(text);
+
+    // The list changed under the cursors, so they no longer mean anything;
+    // the next display tick rebuilds them from where the car actually is.
+    data->beepCursorsStale = true;
+
+    ConfigFile::save(*data->state);
+}
+
+static gboolean on_beep_waypoints_commit_timeout(gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->beepWaypointCommitTimer = 0;
+    commitBeepWaypoints(data);
+    return G_SOURCE_REMOVE;
+}
+
+void on_beep_waypoints_changed(G_GNUC_UNUSED GtkTextBuffer* buffer, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (data->beepWaypointCommitTimer) g_source_remove(data->beepWaypointCommitTimer);
+    data->beepWaypointCommitTimer =
+        g_timeout_add(BEEP_WAYPOINT_COMMIT_MS, on_beep_waypoints_commit_timeout, data);
+}
+
+gboolean on_beep_enable_toggled(G_GNUC_UNUSED GtkWidget* widget, gboolean state, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->state->beep_assist_enabled = state;
+    // While Beep Assist was off the cursors stood still, so they now point at
+    // waypoints the car passed long ago. Without this, switching on at 40 km
+    // with waypoints at 5/10/15/20 km fires all four back to back.
+    data->beepCursorsStale = true;
+    ConfigFile::save(*data->state);
+    return FALSE;  // let the switch draw the new state
+}
+
+void on_beep_mode_toggled(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    bool active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
+    if (GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "mode")) == 1)
+        data->state->beep_timing_mode = active;
+    else
+        data->state->beep_navigation_mode = active;
+    // A mode that was off never advanced its cursor either -- same replay.
+    if (active) data->beepCursorsStale = true;
+    ConfigFile::save(*data->state);
+}
+
+void on_beep_advance_changed(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    const char* text = gtk_entry_get_text(GTK_ENTRY(widget));
+    bool is_seconds = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "mode")) == 1;
+    double value = 0.0;
+    try {
+        if (text && *text) value = std::stod(text);
+    } catch (const std::exception&) {
+        // Mid-typing the field is briefly unparseable ("." on its own); treat
+        // that as no lead-in rather than rejecting the keystroke.
+        value = 0.0;
+    }
+    if (value < 0.0) value = 0.0;
+    if (is_seconds) data->state->beep_advance_s = value;
+    else            data->state->beep_advance_m = value;
+    ConfigFile::save(*data->state);
 }

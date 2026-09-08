@@ -20,6 +20,35 @@ static const char* jsonFindString(const char* json, const char* key, char* out, 
     return out;
 }
 
+// Whole-value form, with no fixed output buffer. The waypoint list can
+// outgrow any fixed buffer, and a truncated list is worse than none: the cut
+// lands mid-number, so the fragment parses as a real waypoint the operator
+// never entered and every waypoint after it is silently dropped.
+//
+// Which is exactly why the value must be closed by a quote before it is
+// accepted. A frame cut short in transit ends with no closing quote, and
+// returning what was read so far would commit that fragment -- the very
+// truncation this form exists to avoid. The length cap is a second guard:
+// a value longer than any plausible waypoint list is a malformed or hostile
+// frame, not a roadbook.
+static const size_t JSON_MAX_STRING_VALUE = 64 * 1024;
+
+static bool jsonFindStringValue(const char* json, const char* key, std::string* out) {
+    std::string needle = std::string("\"") + key + "\":\"";
+    const char* p = strstr(json, needle.c_str());
+    if (!p) return false;
+    p += needle.size();
+    std::string value;
+    while (*p && *p != '"') {
+        if (value.size() >= JSON_MAX_STRING_VALUE) return false;
+        value.push_back(*p++);
+    }
+    // Ran off the end of the buffer rather than reaching the closing quote.
+    if (*p != '"') return false;
+    *out = value;
+    return true;
+}
+
 static bool jsonFindBool(const char* json, const char* key, bool* out) {
     std::string needle = std::string("\"") + key + "\":";
     const char* p = strstr(json, needle.c_str());
@@ -63,6 +92,26 @@ bool webHandleCommand(AppData* data, const char* json) {
         on_total_reset(nullptr, data);
         return true;
     }
+    if (strcmp(type, "distance_adjust") == 0) {
+        // Same arithmetic as the co-pilot's -10/+10 buttons, via the shared
+        // helper. The step comes from the phone so the two ends can differ
+        // later without a second command.
+        int delta_m = 0;
+        if (!jsonFindInt(json, "delta_m", &delta_m)) return false;
+        // A "correction" of hundreds of metres is a stuck key or a bad frame,
+        // not a wheel-slip fix; Reset Total is the tool for that.
+        if (delta_m == 0 || delta_m < -1000 || delta_m > 1000) return false;
+        applyDistanceAdjust(data, delta_m);
+        return true;
+    }
+    if (strcmp(type, "distance_set") == 0) {
+        double meters = 0.0;
+        if (!jsonFindDouble(json, "meters", &meters)) return false;
+        // Six digits, matching the entry cap on the box's dialog: past
+        // 999,999 m the display switches to km and reads as truncated.
+        if (meters < 0.0 || meters > 999999.0) return false;
+        return applyDistanceSet(data, meters);
+    }
     if (strcmp(type, "next_prev") == 0) {
         on_next_prev_segment(nullptr, data);
         return true;
@@ -84,6 +133,8 @@ bool webHandleCommand(AppData* data, const char* json) {
         seg.distance_m = meters;
         seg.distance_counts = (meters * 1e6) / data->state->calibration;
         seg.autoNext = autoNext;
+        data->state->last_memory_slot = 0;
+        adoptRoadbookIfIdle(data);
         ConfigFile::save(*data->state);
         refreshSegmentList(data);
         return true;
@@ -103,6 +154,8 @@ bool webHandleCommand(AppData* data, const char* json) {
         seg.distance_counts = (meters * 1e6) / data->state->calibration;
         seg.autoNext = autoNext;
         data->state->segments.push_back(seg);
+        data->state->last_memory_slot = 0;
+        adoptRoadbookIfIdle(data);
         ConfigFile::save(*data->state);
         refreshSegmentList(data);
         return true;
@@ -111,11 +164,11 @@ bool webHandleCommand(AppData* data, const char* json) {
         int index = 0;
         if (!jsonFindInt(json, "index", &index)) return false;
         if (index < 0 || index >= static_cast<int>(data->state->segments.size())) return false;
+        // segment_current_number indexes the running stage's snapshot, not
+        // this list, so a running stage is left alone.
         data->state->segments.erase(data->state->segments.begin() + index);
-        if (data->state->segment_current_number >= static_cast<long>(data->state->segments.size())) {
-            data->state->segment_current_number =
-                data->state->segments.empty() ? -1 : static_cast<long>(data->state->segments.size()) - 1;
-        }
+        data->state->last_memory_slot = 0;
+        adoptRoadbookIfIdle(data);
         ConfigFile::save(*data->state);
         refreshSegmentList(data);
         return true;
@@ -124,7 +177,9 @@ bool webHandleCommand(AppData* data, const char* json) {
         int slot = 0;
         if (!jsonFindInt(json, "slot", &slot)) return false;
         if (slot < 1 || slot > RallyState::MAX_MEMORY_SLOTS) return false;
-        data->state->memory_slots[slot - 1] = data->state->segments;
+        data->state->memory_slots[slot - 1].segments = data->state->segments;
+        data->state->memory_slots[slot - 1].beep_waypoints_m = data->state->beep_waypoints_m;
+        data->state->memory_slots[slot - 1].waypoints_recorded = true;
         ConfigFile::save(*data->state);
         return true;
     }
@@ -133,10 +188,58 @@ bool webHandleCommand(AppData* data, const char* json) {
         if (!jsonFindInt(json, "slot", &slot)) return false;
         if (slot < 1 || slot > RallyState::MAX_MEMORY_SLOTS) return false;
         if (data->state->memory_slots[slot - 1].empty()) return false;
-        data->state->segments = data->state->memory_slots[slot - 1];
-        data->state->segment_current_number = data->state->segments.empty() ? -1 : 0;
+        data->state->segments = data->state->memory_slots[slot - 1].segments;
+        data->state->last_memory_slot = slot;
+        adoptRoadbookIfIdle(data);
+        // A slot from a pre-Beep-Assist config has no list of its own; the
+        // live one stays rather than being silently deleted.
+        if (data->state->memory_slots[slot - 1].waypoints_recorded) {
+            data->state->beep_waypoints_m = data->state->memory_slots[slot - 1].beep_waypoints_m;
+        }
+        data->beepCursorsStale = true;
         ConfigFile::save(*data->state);
         refreshSegmentList(data);
+        // Same pair as the GTK recall path: without this the stage-setup text
+        // view still shows the previous stage, and the next keystroke there
+        // commits that stale text back over the list just recalled.
+        refreshBeepWaypointView(data);
+        return true;
+    }
+    if (strcmp(type, "beep_set") == 0) {
+        // One command for the whole Beep Assist panel: the phone sends only
+        // the fields the operator actually changed, so each is optional.
+        bool flag = false;
+        double value = 0.0;
+        if (jsonFindBool(json, "enabled", &flag)) data->state->beep_assist_enabled = flag;
+        if (jsonFindBool(json, "navigation", &flag)) data->state->beep_navigation_mode = flag;
+        if (jsonFindBool(json, "timing", &flag)) data->state->beep_timing_mode = flag;
+        if (jsonFindDouble(json, "advance_m", &value) && value >= 0.0) {
+            data->state->beep_advance_m = value;
+        }
+        if (jsonFindDouble(json, "advance_s", &value) && value >= 0.0) {
+            data->state->beep_advance_s = value;
+        }
+        std::string waypoints;
+        if (jsonFindStringValue(json, "waypoints_km", &waypoints)) {
+            data->state->beep_waypoints_m = parseBeepWaypointsKm(waypoints);
+            refreshBeepWaypointView(data);
+        }
+        // Anything here can move a waypoint or re-arm a mode, so the beep
+        // bookmarks are rebuilt from where the car actually is on the next
+        // display tick rather than replaying what is already behind it.
+        data->beepCursorsStale = true;
+        ConfigFile::save(*data->state);
+        return true;
+    }
+    if (strcmp(type, "tone_set") == 0) {
+        bool flag = false;
+        int tone_type = 0;
+        if (jsonFindBool(json, "enabled", &flag)) data->state->tone_enabled = flag;
+        if (jsonFindInt(json, "tone_type", &tone_type)) {
+            if (tone_type != 1 && tone_type != 2) return false;
+            data->state->simple_tone_mode = (tone_type == 2);
+        }
+        ConfigFile::save(*data->state);
         return true;
     }
     return false;

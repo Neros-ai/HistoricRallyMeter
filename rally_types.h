@@ -3,13 +3,16 @@
 
 #include <cstdint>
 #include <vector>
+#include <string>
 
 #ifndef RALLY_NO_GTK
 #include <gtk/gtk.h>
 #endif
 
+#include "simple_tone.h"
+
 // Forward declarations
-class I2CCounter;
+class ICounter;
 class RallyState;
 class CounterPoller;
 class ToneGenerator;
@@ -34,8 +37,8 @@ struct CounterPoll {
 #ifndef RALLY_NO_GTK
 // Application data structure (requires GTK)
 struct AppData {
-    I2CCounter* counter1;
-    I2CCounter* counter2;
+    ICounter* counter1;
+    ICounter* counter2;
     uint8_t register_addr;
     RallyState* state;
     CounterPoller* poller;
@@ -53,17 +56,29 @@ struct AppData {
     GtkLabel* updatesPerSecLabel;
     GtkLabel* cpuTempLabel;
     GtkLabel* unitsLabel;  // Shows KPH or MPH in header
+    // Text carriers for the compact driver layout, which draws these with
+    // cairo rather than showing a widget. Plain strings: as GtkLabels they
+    // were created, never parented, and never destroyed.
+    std::string driverTotalDistText = "0";
+    std::string driverTotalUnitText = "m";
+    std::string driverTripDistText  = "0";
+    std::string driverTripUnitText  = "m";
+    // Zone currently shown by the gauge, for gaugeZoneHysteretic().
+    int gaugeZoneShown = 0;
     GtkButton* unitToggleBtn;
     
     // Rally gauge
     GtkWidget* rallyGaugeDrawingArea;
     double aheadBehindSeconds = 0.0;
     double smoothedSpeed = -1.0;      // EMA-filtered current speed for display
-    int gaugeScale = 1;               // 0=±3s(green), 1=±10s(yellow), 2=±5min(red)
-    int64_t gaugeScaleChangeTime = 0; // Timestamp of last scale change (2s cooldown)
     double segmentProgress = 0.0;     // fraction (0..1) of the current segment driven
     bool inSegment = false;           // true while within the current segment's distance
-    
+
+    // Runtime latch for the alternative time-error-only tone
+    // (simple_tone.h). Deliberately not persisted -- restarting the app
+    // with a fresh latch is correct, matching aheadBehindSeconds above.
+    SimpleToneState simpleToneState;
+
     // Compact (800x480-style) driver layout: values drawn inside the gauge
     GtkWidget* driverSpeedsBox = nullptr;  // left pane, hidden in compact mode
     bool driverCompactMode = false;
@@ -93,6 +108,11 @@ struct AppData {
     GtkWidget* nextPrevBtn;
     GtkWidget* adjZeroBtn;
     GtkLabel* alarmCountdownLabel;
+    // Read-only stage panel on the main navigator screen, and the text it is
+    // currently showing -- compared each tick so the label is only touched
+    // when something actually changed, rather than 100 times a second.
+    GtkLabel* stageStatusLabel = nullptr;
+    std::string stageStatusShown;
     GtkWidget* alarmClearBtn;
     int64_t alarmSoundStartTime = 0;    // when doorbell started (0 = not ringing)
 
@@ -109,8 +129,40 @@ struct AppData {
     GtkCheckButton* autoNextCheck;
     GtkWidget* numericKeypad;      // Numeric keypad container
     GtkEntry* activeEntry;         // Currently focused entry for keypad input
+    // Keypad target when the focused widget is a multi-line view rather than
+    // a single-line entry (the Beep Assist waypoint list). At most one of
+    // activeEntry / activeBuffer is ever non-null, so a keypress cannot land
+    // in two places.
+    GtkTextBuffer* activeBuffer = nullptr;
     GtkWidget* memoryRecallBtns[5] = {};  // Recall buttons for memory slots
-    
+
+    // Beep Assist runtime cursors: index of the next waypoint not yet beeped,
+    // one per mode. Separate cursors so navigation and timing can each fire
+    // independently for the same waypoint -- a shared cursor meant whichever
+    // condition tripped first silently consumed the OTHER mode's beep for
+    // that waypoint too (e.g. a navigation lead-in tripping before the
+    // scheduled time meant the timing beep never fired at all).
+    // Deliberately not persisted -- on restart they are re-derived from the
+    // distance already travelled, so a power blip mid-stage does not replay
+    // every waypoint the car has already passed.
+    size_t beepNextNavIndex = 0;
+    size_t beepNextTimingIndex = 0;
+    // Set whenever the cursors no longer describe where the car is: at
+    // startup, on an edit to the waypoint list, and when Beep Assist or one
+    // of its modes is switched on. They are re-derived on the next display
+    // tick rather than on the spot, because the counter has not necessarily
+    // been polled yet at window-construction time -- deriving from an
+    // unpolled counter yields a negative travelled distance, a cursor of 0,
+    // and a replay of every waypoint already behind the car.
+    bool beepCursorsStale = true;
+    // Debounce for waypoint-list edits: the buffer's "changed" signal fires
+    // per keystroke, and committing on each one both saved the whole config
+    // to the SD card per character and could beep on a half-typed number.
+    guint beepWaypointCommitTimer = 0;
+    GtkTextBuffer* beepWaypointBuffer = nullptr;
+    GtkEntry* beepAdvanceMetresEntry = nullptr;
+    GtkEntry* beepAdvanceSecondsEntry = nullptr;
+
     // Calibration screen
     GtkWidget* calibrationScreen;
     GtkWidget* calibrationMainBox;  // Main horizontal container for keypad
@@ -119,7 +171,10 @@ struct AppData {
     GtkEntry* rallyDistEntry;
     GtkWidget* calibrationKeypad;   // Numeric keypad for calibration
     GtkLabel* sensorModeLabel;      // "Currently set to sensor 1 / both sensors"
-    
+    GtkLabel* calibrationCurrentLabel;  // "Current Calibration: N pulses/KM"
+    GtkEntry* resetPulsesEntry;  // operator-entered target for RB-CAL-03's reset
+    GtkLabel* calibrationClockLabel;  // rally clock, shares the title row
+
     // Calibration baseline values (set when "start" is pressed)
     uint64_t cal_start_cntr1 = 0;
     uint64_t cal_start_cntr2 = 0;
@@ -144,7 +199,18 @@ struct AppData {
     
     // Driver countdown overlay
     GtkWidget* countdownOverlay;
+    // Next segment's target speed, smaller, under the Target value in the
+    // wide driver layout. The compact layout draws its own with cairo.
+    GtkLabel* nextTargetSpeedLabel = nullptr;
     GtkLabel* countdownLabel;
+    // Line under the countdown box saying whether the pending autostart
+    // permits an early departure. Its own widget rather than more text in the
+    // countdown label, so the box keeps its fixed monospace geometry.
+    GtkLabel* earlyDepartureLabel = nullptr;
+    // The countdown box AND the line under it. Shown/hidden as one; the code
+    // used to reach the box via the label's parent, which no longer reaches
+    // far enough now there is a second row.
+    GtkWidget* countdownContainer = nullptr;
     bool autoStartTriggered = false;
     
     // Tone generator for speed adjustment alerts
@@ -152,6 +218,23 @@ struct AppData {
     
     int updateCount = 0;
     int64_t lastUpdateCountTime_ms = 0;
+
+    // Sim Control Panel (3rd display, dev/testing only — created only when
+    // RALLY_SIM_I2C=1). Drives the simulated counters in real time.
+    GtkWidget* controlSpeedButtons[6] = {};  // 25,30,35,40,45,50 km/h
+    GtkWidget* controlStartBtn = nullptr;
+    GtkWidget* controlStopBtn = nullptr;
+    GtkLabel* controlStatusLabel = nullptr;
+    double controlSpeedKph = 0.0;
+
+    // Beep Assist has no audible feedback in the sandbox (no ALSA device),
+    // so this label stands in for the sound: it flashes briefly whenever a
+    // navigation or timing beep fires, naming which mode triggered it.
+    GtkLabel* beepFlashLabel = nullptr;
+    // The flash's own hide-timer, so a second beep arriving inside the window
+    // replaces it rather than adding a second timeout that hides the label
+    // early. 0 = not currently showing.
+    guint beepFlashTimer = 0;
 };
 #endif // RALLY_NO_GTK
 

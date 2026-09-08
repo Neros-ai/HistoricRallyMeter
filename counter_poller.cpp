@@ -1,5 +1,5 @@
 #include "counter_poller.h"
-#include "i2c_counter.h"
+#include "i_counter.h"
 #include <chrono>
 #include <cstdio>
 
@@ -10,7 +10,7 @@ CounterPoller::CounterPoller() {
     most_recent_poll = {0, 0, 0};
 }
 
-bool CounterPoller::poll(I2CCounter* cntr1, I2CCounter* cntr2, uint8_t reg) {
+bool CounterPoller::poll(ICounter* cntr1, ICounter* cntr2, uint8_t reg) {
     auto now = std::chrono::system_clock::now();
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         now.time_since_epoch()).count();

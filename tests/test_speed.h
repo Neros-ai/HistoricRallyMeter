@@ -212,6 +212,41 @@ public:
             return true;
         });
         
+        // ---- average speed and the -10/+10 correction ----
+        // The correction was applied only to the distance READOUT, so after a
+        // -10 the displayed distance dropped while average speed carried on
+        // using the uncorrected distance -- two numbers on the same panel
+        // disagreeing for the rest of the stage.
+
+        suite->addTest("a distance correction changes the average speed with it", []() {
+            RallyState state;
+            state.calibration = 600000;  // 1 count = 1/600 m... see countsToCentimeters
+            // 1 hour of travel, no correction, gives some baseline speed.
+            double plain = calculateAverageSpeed(state, 0, 3600000, 600000, 0);
+            // Removing 100 m of that distance must lower the average.
+            double corrected = calculateAverageSpeed(state, 0, 3600000, 600000, -10000);
+            ASSERT_TRUE(corrected < plain);
+            return true;
+        });
+
+        suite->addTest("a correction that would drive distance negative clamps at zero", []() {
+            RallyState state;
+            state.calibration = 600000;
+            double speed = calculateAverageSpeed(state, 0, 3600000, 600000, -99999999);
+            ASSERT_NEAR(speed, 0.0, 0.001);
+            return true;
+        });
+
+        suite->addTest("no correction leaves the average unchanged", []() {
+            RallyState state;
+            state.calibration = 600000;
+            double a = calculateAverageSpeed(state, 0, 3600000, 600000, 0);
+            double b = calculateAverageSpeed(state, 0, 3600000, 600000, 0);
+            ASSERT_NEAR(a, b, 0.0001);
+            ASSERT_TRUE(a > 0.0);
+            return true;
+        });
+
         return suite;
     }
 };

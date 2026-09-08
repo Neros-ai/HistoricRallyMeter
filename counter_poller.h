@@ -4,7 +4,7 @@
 #include <cstdint>
 #include "rally_types.h"
 
-class I2CCounter;
+class ICounter;
 
 class CounterPoller {
 private:
@@ -26,7 +26,7 @@ private:
 public:
     CounterPoller();
     
-    bool poll(I2CCounter* cntr1, I2CCounter* cntr2, uint8_t reg);
+    bool poll(ICounter* cntr1, ICounter* cntr2, uint8_t reg);
     
     CounterPoll get10th() const;
     CounterPoll getMostRecent() const;  // most recent I2C read; use this for speed, never polls[0]

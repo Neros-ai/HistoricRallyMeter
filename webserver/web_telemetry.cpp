@@ -1,5 +1,6 @@
 #include "web_telemetry.h"
 #include "calculations.h"
+#include "callbacks.h"   // autoStartHoldActive
 #include "rally_types.h"
 #include "counter_poller.h"
 #include "rally_state.h"
@@ -14,22 +15,20 @@ NextPrevState computeNextPrevState(AppData* data) {
     if (!data || !data->state || !data->poller) return out;
 
     if (data->state->segment_current_number < 0 ||
-        data->state->segment_current_number >= static_cast<long>(data->state->segments.size())) {
+        data->state->segment_current_number >= static_cast<long>(data->state->stage_segments.size())) {
         return out;
     }
 
     auto current_poll = data->poller->getMostRecent();
-    const Segment& cur_seg = data->state->segments[data->state->segment_current_number];
-    int64_t seg_count_diff = calculateDistanceCounts(*data->state,
-        current_poll.cntr1, current_poll.cntr2,
-        data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+    const Segment& cur_seg = data->state->stage_segments[data->state->segment_current_number];
+    int64_t seg_count_diff = segmentCountsCorrected(data, current_poll);
     int64_t remaining_counts = cur_seg.distance_counts - seg_count_diff;
     long remaining_m = countsToCentimeters(remaining_counts, data->state->calibration) / 100;
     long travelled_m = countsToCentimeters(seg_count_diff, data->state->calibration) / 100;
 
     long next_seg_idx = data->state->segment_current_number + 1;
     bool near_end = (remaining_m >= 0 && remaining_m <= 500) &&
-                    (next_seg_idx < static_cast<long>(data->state->segments.size()));
+                    (next_seg_idx < static_cast<long>(data->state->stage_segments.size()));
     bool near_start = (travelled_m >= 0 && travelled_m <= 500) &&
                       (data->state->segment_current_number > 0);
 
@@ -56,16 +55,23 @@ std::string buildTelemetryJson(AppData* data) {
     int64_t trip_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
         data->state->trip_start_cntr1, data->state->trip_start_cntr2);
-    long trip_m = countsToCentimeters(trip_count_diff, data->state->calibration) / 100;
-    double trip_avg = calculateAverageSpeed(*data->state,
-        data->state->trip_start_time_ms, current_time_ms, trip_count_diff);
+    long trip_m = adjustedDistanceMeters(
+        countsToCentimeters(trip_count_diff, data->state->calibration),
+        data->state->trip_distance_adjust_cm);
+    const bool hold_at_zero = autoStartHoldActive(data);
+    double trip_avg = averageSpeedForDisplay(calculateAverageSpeed(*data->state,
+        data->state->trip_start_time_ms, current_time_ms, trip_count_diff,
+        data->state->trip_distance_adjust_cm), hold_at_zero);
 
     int64_t total_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
         data->state->total_start_cntr1, data->state->total_start_cntr2);
-    long total_m = countsToCentimeters(total_count_diff, data->state->calibration) / 100;
-    double total_avg = calculateAverageSpeed(*data->state,
-        data->state->total_start_time_ms, current_time_ms, total_count_diff);
+    long total_m = adjustedDistanceMeters(
+        countsToCentimeters(total_count_diff, data->state->calibration),
+        data->state->total_distance_adjust_cm);
+    double total_avg = averageSpeedForDisplay(calculateAverageSpeed(*data->state,
+        data->state->total_start_time_ms, current_time_ms, total_count_diff,
+        data->state->total_distance_adjust_cm), hold_at_zero);
 
     double cur_speed = calculateCurrentSpeed(*data->state, current_poll, tenth_poll);
     if (cur_speed < 0) cur_speed = 0.0;
@@ -73,11 +79,21 @@ std::string buildTelemetryJson(AppData* data) {
     double target_kph = 0.0;
     double ahead_behind_s = 0.0;
     if (data->state->segment_current_number >= 0 &&
-        data->state->segment_current_number < static_cast<long>(data->state->segments.size())) {
-        const Segment& seg = data->state->segments[data->state->segment_current_number];
+        data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
+        const Segment& seg = data->state->stage_segments[data->state->segment_current_number];
         target_kph = countsPerHourToKPH(seg.target_speed_counts_per_hour, data->state->calibration);
-        ahead_behind_s = calculateAheadBehindFromStageStart(*data->state, current_time_ms, total_count_diff);
+        // The corrected stage distance, matching ui_driver: see
+        // stageCountsCorrected. total_count_diff above stays raw because
+        // adjustedDistanceMeters applies the same correction to the odometer
+        // itself, and applying it twice would double it.
+        ahead_behind_s = calculateAheadBehindFromStageStart(*data->state, current_time_ms,
+            stageCountsCorrected(data, current_poll));
         ahead_behind_s += data->state->ahead_behind_zero_offset_ms / 1000.0;
+        // The same hold the driver display applies (ui_driver.cpp). Held here
+        // too, or the phone would show the previous stage's error climbing at
+        // the line while the driver's gauge sits at rest -- two screens
+        // disagreeing about whether the crew are on time.
+        if (hold_at_zero) ahead_behind_s = 0.0;
     }
 
     NextPrevState np = computeNextPrevState(data);
@@ -108,7 +124,7 @@ std::string buildTelemetryJson(AppData* data) {
         displayKph(data, target_kph),
         ahead_behind_s,
         data->state->segment_current_number >= 0 ? data->state->segment_current_number + 1 : 0,
-        data->state->segments.size(),
+        data->state->stage_segments.size(),
         np.label,
         np.enabled ? "true" : "false",
         data->state->units ? "mph" : "kph");
@@ -127,6 +143,35 @@ std::string buildStateJson(AppData* data) {
         ss << "{\"target_speed_kph\":" << seg.target_speed_kph
            << ",\"distance_m\":" << static_cast<long>(seg.distance_m)
            << ",\"autoNext\":" << (seg.autoNext ? "true" : "false") << "}";
+    }
+    ss << "],";
+
+    // The autostart line the co-pilot's stage panel prints, so the phone
+    // shows the same words rather than re-deriving them from a target time
+    // it would have to be told the epoch for.
+    ss << "\"autostart\":\""
+       << formatAutoStartStatus(data->state->auto_start_rally_time_s,
+                                data->state->auto_start_early_departure,
+                                getAutoStartEpochMs())
+       << "\",";
+
+    // Beep Assist and tone, so the phone renders the box's actual settings
+    // rather than blank controls that only take effect once touched.
+    ss << "\"beep_assist_enabled\":" << (data->state->beep_assist_enabled ? "true" : "false")
+       << ",\"beep_navigation_mode\":" << (data->state->beep_navigation_mode ? "true" : "false")
+       << ",\"beep_timing_mode\":" << (data->state->beep_timing_mode ? "true" : "false")
+       << ",\"beep_advance_m\":" << data->state->beep_advance_m
+       << ",\"beep_advance_s\":" << data->state->beep_advance_s
+       << ",\"beep_waypoints_km\":\"" << formatBeepWaypointsKm(data->state->beep_waypoints_m) << "\""
+       << ",\"tone_enabled\":" << (data->state->tone_enabled ? "true" : "false")
+       << ",\"tone_type\":" << (data->state->simple_tone_mode ? 2 : 1);
+
+    // Which memory slots hold a stage, so the phone can mark them the way the
+    // box does instead of offering five identical buttons.
+    ss << ",\"memory_populated\":[";
+    for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
+        if (i > 0) ss << ',';
+        ss << (data->state->memory_slots[i].empty() ? "false" : "true");
     }
     ss << "]}";
     return ss.str();

@@ -5,6 +5,14 @@
 #include "../calculations.h"
 #include "../rally_state.h"
 
+// Segments carry both the user-entered (kph/metres) and the derived
+// (counts) forms; the stage-start calculations use the counts form.
+static inline void distance_and_speed(Segment& seg, double distance_counts,
+                                      double counts_per_hour) {
+    seg.distance_counts = distance_counts;
+    seg.target_speed_counts_per_hour = counts_per_hour;
+}
+
 class TestAheadBehind {
 public:
     TestSuite* createSuite() {
@@ -149,6 +157,72 @@ public:
             return true;
         });
         
+        // ---- an incomplete roadbook ----
+        // A segment with a real distance but no target speed cannot be
+        // divided by, so it is skipped -- but skipping it drops its DISTANCE
+        // as well as its time, leaving the ideal position measured against a
+        // roadbook physically shorter than the real one. Every reading from
+        // that segment onward is then confidently wrong with no indication
+        // to the crew, which is worse than showing nothing.
+
+        suite->addTest("a completed segment with no target speed makes ideal counts undefined", []() {
+            RallyState state;
+            Segment done{};  distance_and_speed(done, 1000.0, 360000.0);
+            Segment blank{}; distance_and_speed(blank, 1000.0, 0.0);  // distance, no speed
+            Segment cur{};   distance_and_speed(cur, 1000.0, 360000.0);
+            state.stage_segments = { done, blank, cur };
+            state.segment_current_number = 2;
+
+            bool complete = true;
+            calculateIdealCountsFromStageStart(state, 60000, &complete);
+            ASSERT_FALSE(complete);
+            return true;
+        });
+
+        suite->addTest("a complete roadbook reports itself complete", []() {
+            RallyState state;
+            Segment a{}; distance_and_speed(a, 1000.0, 360000.0);
+            Segment b{}; distance_and_speed(b, 1000.0, 360000.0);
+            state.stage_segments = { a, b };
+            state.segment_current_number = 1;
+
+            bool complete = false;
+            calculateIdealCountsFromStageStart(state, 60000, &complete);
+            ASSERT_TRUE(complete);
+            return true;
+        });
+
+        suite->addTest("a zero-LENGTH segment does not make the roadbook incomplete", []() {
+            // No distance means nothing to contribute either way; only a
+            // segment with real distance and no speed is a hole.
+            RallyState state;
+            Segment empty{}; distance_and_speed(empty, 0.0, 0.0);
+            Segment cur{};   distance_and_speed(cur, 1000.0, 360000.0);
+            state.stage_segments = { empty, cur };
+            state.segment_current_number = 1;
+
+            bool complete = false;
+            calculateIdealCountsFromStageStart(state, 60000, &complete);
+            ASSERT_TRUE(complete);
+            return true;
+        });
+
+        suite->addTest("ahead/behind reads zero rather than guessing on an incomplete roadbook", []() {
+            // The existing convention for "cannot be computed" in this
+            // function is a 0.0 return (see the zero-speed current-segment
+            // guard below); a hole earlier in the roadbook is the same case.
+            RallyState state;
+            Segment blank{}; distance_and_speed(blank, 1000.0, 0.0);
+            Segment cur{};   distance_and_speed(cur, 1000.0, 360000.0);
+            state.stage_segments = { blank, cur };
+            state.segment_current_number = 1;
+            state.total_start_time_ms = 0;
+
+            double seconds = calculateAheadBehindFromStageStart(state, 60000, 5000);
+            ASSERT_NEAR(seconds, 0.0, 0.001);
+            return true;
+        });
+
         // Test no segment returns 0
         suite->addTest("No segment returns 0 for ahead/behind", []() {
             RallyState state;

@@ -209,6 +209,277 @@ public:
             return true;
         });
         
+        suite->addTest("distance corrections survive a save/load round trip", []() {
+            // A correction dialled in mid-rally has to outlive a restart, or
+            // a power blip silently reintroduces the error it cancelled.
+            const std::string path = "/tmp/rallybox_test_dist_adjust.json";
+            RallyState out;
+            out.total_distance_adjust_cm = -2500;
+            out.trip_distance_adjust_cm = -1800;
+            ConfigFile::save(out, path);
+
+            RallyState in;
+            ConfigFile::load(in, path);
+            std::remove(path.c_str());
+            return in.total_distance_adjust_cm == -2500
+                && in.trip_distance_adjust_cm == -1800;
+        });
+
+        suite->addTest("distance corrections default to zero", []() {
+            RallyState fresh;
+            return fresh.total_distance_adjust_cm == 0
+                && fresh.trip_distance_adjust_cm == 0;
+        });
+
+        suite->addTest("beep assist settings survive a save/load round trip", []() {
+            const std::string path = "/tmp/rallybox_test_beep.json";
+            RallyState out;
+            out.beep_assist_enabled = true;
+            out.beep_navigation_mode = true;
+            out.beep_timing_mode = false;
+            out.beep_advance_m = 250.0;
+            out.beep_advance_s = 8.0;
+            out.beep_waypoints_m = { 3670.0, 4980.0, 17300.0 };
+            ConfigFile::save(out, path);
+
+            RallyState in;
+            ConfigFile::load(in, path);
+            std::remove(path.c_str());
+            return in.beep_assist_enabled
+                && in.beep_navigation_mode
+                && !in.beep_timing_mode
+                && std::abs(in.beep_advance_m - 250.0) < 0.001
+                && std::abs(in.beep_advance_s - 8.0) < 0.001
+                && in.beep_waypoints_m.size() == 3
+                && std::abs(in.beep_waypoints_m[2] - 17300.0) < 0.001;
+        });
+
+        suite->addTest("beep waypoints coexist with the segment array", []() {
+            // Both are parsed by consuming the stream to a closing bracket,
+            // so one must not swallow the other.
+            const std::string path = "/tmp/rallybox_test_beep_segs.json";
+            RallyState out;
+            out.beep_waypoints_m = { 1000.0, 2000.0 };
+            Segment s{};
+            s.target_speed_kph = 50.0;
+            s.distance_m = 1200.0;
+            out.segments.push_back(s);
+            ConfigFile::save(out, path);
+
+            RallyState in;
+            ConfigFile::load(in, path);
+            std::remove(path.c_str());
+            return in.beep_waypoints_m.size() == 2 && in.segments.size() == 1;
+        });
+
+        suite->addTest("tone_enabled survives a save/load round trip", []() {
+            const std::string path = "/tmp/rallybox_test_tone_enabled.json";
+            RallyState out;
+            out.tone_enabled = false;
+            ConfigFile::save(out, path);
+
+            RallyState in;
+            ConfigFile::load(in, path);
+            std::remove(path.c_str());
+            return !in.tone_enabled;
+        });
+
+        suite->addTest("simple_tone_mode survives a save/load round trip", []() {
+            const std::string path = "/tmp/rallybox_test_simple_tone_mode.json";
+            RallyState out;
+            out.simple_tone_mode = true;
+            ConfigFile::save(out, path);
+
+            RallyState in;
+            ConfigFile::load(in, path);
+            std::remove(path.c_str());
+            return in.simple_tone_mode;
+        });
+
+        suite->addTest("loading a config without waypoints clears any already in state", []() {
+            // ConfigFile::load takes RallyState& by reference, so a config
+            // predating Beep Assist must not leave a previous rally's
+            // waypoints in place alongside the new file's other values.
+            RallyState state;
+            state.beep_waypoints_m = { 1000.0, 2000.0 };
+            std::string path = "/tmp/rb_test_no_waypoints.json";
+            std::ofstream f(path);
+            f << "{\n  \"calibration\": 600000\n}\n";
+            f.close();
+            ConfigFile::load(state, path);
+            ASSERT_TRUE(state.beep_waypoints_m.empty());
+            return true;
+        });
+
+        suite->addTest("a memory slot round-trips its beep waypoints with its segments", []() {
+            // Recalling a stage used to restore its segments while leaving the
+            // PREVIOUS stage's waypoints loaded -- a trap, since the two are
+            // one setup.
+            RallyState state;
+            state.calibration = 600000;
+            Segment a{}; a.target_speed_kph = 40.0; a.distance_m = 1000.0;
+            state.memory_slots[1].segments = { a };
+            state.memory_slots[1].beep_waypoints_m = { 3670.0, 4980.0 };
+            std::string path = "/tmp/rb_test_mem_waypoints.json";
+            ConfigFile::save(state, path);
+
+            RallyState loaded;
+            ConfigFile::load(loaded, path);
+            ASSERT_EQ(loaded.memory_slots[1].segments.size(), 1u);
+            ASSERT_EQ(loaded.memory_slots[1].beep_waypoints_m.size(), 2u);
+            ASSERT_NEAR(loaded.memory_slots[1].beep_waypoints_m[0], 3670.0, 0.5);
+            ASSERT_NEAR(loaded.memory_slots[1].beep_waypoints_m[1], 4980.0, 0.5);
+            ASSERT_TRUE(loaded.memory_slots[1].waypoints_recorded);
+            std::remove(path.c_str());
+            return true;
+        });
+
+        suite->addTest("a memory slot saved before waypoints existed still loads", []() {
+            // Backward compatibility: a slot with segments but no waypoints
+            // key must load its segments and simply have no waypoints.
+            RallyState state;
+            std::string path = "/tmp/rb_test_mem_legacy.json";
+            std::ofstream f(path);
+            // The multi-line shape ConfigFile::save writes, minus the
+            // memory_1_waypoints array a pre-Beep-Assist build never emitted.
+            f << "{\n";
+            f << "  \"calibration\": 600000,\n";
+            f << "  \"memory_1\": [\n";
+            f << "    {\n";
+            f << "      \"target_speed_kph\": 40.000000,\n";
+            f << "      \"target_speed_counts_per_hour\": 24000000.000000,\n";
+            f << "      \"distance_m\": 1000.000000,\n";
+            f << "      \"distance_counts\": 1666.666667,\n";
+            f << "      \"autoNext\": true\n";
+            f << "    }\n";
+            f << "  ]\n";
+            f << "}\n";
+            f.close();
+            ConfigFile::load(state, path);
+            ASSERT_EQ(state.memory_slots[0].segments.size(), 1u);
+            ASSERT_TRUE(state.memory_slots[0].beep_waypoints_m.empty());
+            ASSERT_FALSE(state.memory_slots[0].empty());
+            // ...and it must say so, rather than passing its empty list off
+            // as a deliberate one. Recall assigns the slot's waypoints over
+            // the live list only when this is true, so a slot from an older
+            // config cannot silently delete the operator's loaded waypoints.
+            ASSERT_FALSE(state.memory_slots[0].waypoints_recorded);
+            std::remove(path.c_str());
+            return true;
+        });
+
+        suite->addTest("a slot stored with no waypoints still recalls as authoritative", []() {
+            // The other side of the legacy case: a stage the operator really
+            // did save without waypoints writes an empty array, which loads
+            // back as recorded -- so recalling it clears the live list, as
+            // it should.
+            RallyState state;
+            state.calibration = 600000;
+            Segment a{}; a.target_speed_kph = 40.0; a.distance_m = 1000.0;
+            state.memory_slots[0].segments = { a };
+            std::string path = "/tmp/rb_test_mem_no_waypoints.json";
+            ConfigFile::save(state, path);
+
+            RallyState loaded;
+            ConfigFile::load(loaded, path);
+            ASSERT_EQ(loaded.memory_slots[0].segments.size(), 1u);
+            ASSERT_TRUE(loaded.memory_slots[0].beep_waypoints_m.empty());
+            ASSERT_TRUE(loaded.memory_slots[0].waypoints_recorded);
+            std::remove(path.c_str());
+            return true;
+        });
+
+        suite->addTest("the stage snapshot round-trips separately from the roadbook", []() {
+            // The running stage must survive a restart still judged against
+            // the segments it started on, not against whatever the roadbook
+            // has been edited to since.
+            RallyState state;
+            state.calibration = 600000;
+            Segment running{}; running.target_speed_kph = 40.0; running.distance_m = 1000.0;
+            Segment edited{};  edited.target_speed_kph = 90.0;  edited.distance_m = 2000.0;
+            state.stage_segments = { running };
+            state.segments = { edited };
+            std::string path = "/tmp/rb_test_stage_snapshot.json";
+            ConfigFile::save(state, path);
+
+            RallyState loaded;
+            ConfigFile::load(loaded, path);
+            ASSERT_EQ(loaded.stage_segments.size(), 1u);
+            ASSERT_NEAR(loaded.stage_segments[0].target_speed_kph, 40.0, 0.001);
+            ASSERT_EQ(loaded.segments.size(), 1u);
+            ASSERT_NEAR(loaded.segments[0].target_speed_kph, 90.0, 0.001);
+            std::remove(path.c_str());
+            return true;
+        });
+
+        suite->addTest("a config predating the snapshot seeds it from the roadbook", []() {
+            // Upgrading mid-stage must not blank the stage: with no
+            // stage_segments key, the one roadbook the file has is what the
+            // stage was running on.
+            RallyState state;
+            std::string path = "/tmp/rb_test_no_snapshot.json";
+            std::ofstream f(path);
+            f << "{\n";
+            f << "  \"calibration\": 600000,\n";
+            f << "  \"segment_current_number\": 0,\n";
+            f << "  \"segments\": [\n";
+            f << "    {\n";
+            f << "      \"target_speed_kph\": 40.000000,\n";
+            f << "      \"target_speed_counts_per_hour\": 24000000.000000,\n";
+            f << "      \"distance_m\": 1000.000000,\n";
+            f << "      \"distance_counts\": 1666.666667,\n";
+            f << "      \"autoNext\": true\n";
+            f << "    }\n";
+            f << "  ]\n";
+            f << "}\n";
+            f.close();
+            ConfigFile::load(state, path);
+            ASSERT_EQ(state.segments.size(), 1u);
+            ASSERT_EQ(state.stage_segments.size(), 1u);
+            ASSERT_NEAR(state.stage_segments[0].target_speed_kph, 40.0, 0.001);
+            // The seeded snapshot is protected too: without the freeze, the
+            // first edit after the restart would replace the very roadbook
+            // the seed exists to preserve.
+            ASSERT_FALSE(state.stage_complete);
+            std::remove(path.c_str());
+            return true;
+        });
+
+        suite->addTest("a slot is empty when it has no segments", []() {
+            RallyState state;
+            ASSERT_TRUE(state.memory_slots[0].empty());
+            state.memory_slots[0].beep_waypoints_m = { 100.0 };
+            // Waypoints alone are not a saved stage.
+            ASSERT_TRUE(state.memory_slots[0].empty());
+            return true;
+        });
+
+        suite->addTest("a pre-seconds config still arms its autostart", []() {
+            // The field was minutes since the epoch; a config written by an
+            // older build must not silently lose a pending autostart.
+            RallyState state;
+            std::string path = "/tmp/rb_test_autostart_legacy.json";
+            std::ofstream f(path);
+            f << "{\n  \"auto_start_rally_time_minutes\": 600\n}\n";
+            f.close();
+            ConfigFile::load(state, path);
+            ASSERT_EQ(state.auto_start_rally_time_s, 36000u);  // 600 min = 36000 s
+            std::remove(path.c_str());
+            return true;
+        });
+
+        suite->addTest("autostart seconds survive a save/load round trip", []() {
+            RallyState state;
+            state.auto_start_rally_time_s = 37845;  // 10:30:45 past the epoch
+            std::string path = "/tmp/rb_test_autostart_s.json";
+            ConfigFile::save(state, path);
+            RallyState loaded;
+            ConfigFile::load(loaded, path);
+            ASSERT_EQ(loaded.auto_start_rally_time_s, 37845u);
+            std::remove(path.c_str());
+            return true;
+        });
+
         return suite;
     }
 };

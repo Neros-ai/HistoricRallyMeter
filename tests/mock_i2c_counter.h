@@ -4,9 +4,10 @@
 #include <cstdint>
 #include <map>
 #include <stdexcept>
+#include "../i_counter.h"
 
 // Mock I2C Counter for testing without hardware
-class MockI2CCounter {
+class MockI2CCounter : public ICounter {
 private:
     int device_address;
     std::map<uint8_t, uint32_t> registers;
@@ -20,9 +21,9 @@ public:
         registers[0x07] = 0;
     }
     
-    ~MockI2CCounter() {}
-    
-    uint32_t readRegister(uint8_t reg) {
+    ~MockI2CCounter() override {}
+
+    uint32_t readRegister(uint8_t reg) override {
         if (should_fail) {
             throw std::runtime_error("Mock I2C read failure");
         }
