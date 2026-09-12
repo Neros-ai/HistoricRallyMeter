@@ -504,6 +504,22 @@ long calibrationFromPulsesPerKm(double pulses_per_km) {
     return static_cast<long>((1e9 / pulses_per_km) + 0.5);
 }
 
+double propRpmFromCounts(uint64_t cntr_now, uint64_t cntr_then,
+                         int64_t elapsed_ms, int pulses_per_rev) {
+    if (elapsed_ms <= 0 || !validPropPulsesPerRev(pulses_per_rev)) return -1.0;
+    uint32_t pulses = static_cast<uint32_t>(cntr_now) - static_cast<uint32_t>(cntr_then);
+    return pulses * 1000.0 / elapsed_ms / pulses_per_rev * 60.0;
+}
+
+bool validPropPulsesPerRev(long pulses_per_rev) {
+    return pulses_per_rev >= 1 && pulses_per_rev <= 64;
+}
+
+std::string propRpmReading(double rpm) {
+    if (rpm < 0.0) return "---";
+    return std::to_string(std::lround(rpm));
+}
+
 std::string stageSummary(const std::vector<Segment>& segments) {
     if (segments.empty()) return std::string("No stage");
 
