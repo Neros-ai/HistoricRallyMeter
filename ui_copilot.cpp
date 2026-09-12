@@ -1135,9 +1135,56 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     // Right side: numeric keypad. Nudged down from the top of its column so
     // it doesn't sit flush against the title row now that the row is taller
     // (title + clock) than a plain title alone.
+    // The keypad and, under it, the Prop RPM block share one column, so the
+    // keypad keeps exactly the position it had on its own.
+    GtkWidget* rightCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_box_pack_end(GTK_BOX(data->calibrationMainBox), rightCol, FALSE, FALSE, 10);
     data->calibrationKeypad = createNumericKeypad(data);
     gtk_widget_set_margin_top(data->calibrationKeypad, 12);
-    gtk_box_pack_end(GTK_BOX(data->calibrationMainBox), data->calibrationKeypad, FALSE, FALSE, 10);
+    // The Prop RPM line is wider than the keypad; pinning the keypad to the
+    // column's right edge keeps it where it sat on its own, and the wider
+    // line grows leftwards instead.
+    gtk_widget_set_halign(data->calibrationKeypad, GTK_ALIGN_END);
+    gtk_box_pack_start(GTK_BOX(rightCol), data->calibrationKeypad, FALSE, FALSE, 0);
+
+    // RB-CAL-06: Prop RPM. Counter 1 read as a prop-shaft sensor -- engine
+    // rpm in a direct-drive top gear. The pulses-per-turn box takes this
+    // screen's keypad like the other entries here.
+    GtkWidget* propRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
+    gtk_box_pack_start(GTK_BOX(rightCol), propRow, FALSE, FALSE, 0);
+    GtkWidget* propLabel = gtk_label_new("Prop RPM at");
+    gtk_style_context_add_class(gtk_widget_get_style_context(propLabel), "instruction-label");
+    gtk_box_pack_start(GTK_BOX(propRow), propLabel, FALSE, FALSE, 0);
+
+    data->propPulsesEntry = GTK_ENTRY(gtk_entry_new());
+    gtk_entry_set_width_chars(data->propPulsesEntry, 2);
+    gtk_entry_set_max_width_chars(data->propPulsesEntry, 2);
+    gtk_entry_set_max_length(data->propPulsesEntry, 2);
+    gtk_entry_set_text(data->propPulsesEntry,
+                       std::to_string(data->state->prop_pulses_per_rev).c_str());
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->propPulsesEntry)), "instruction-label");
+    g_signal_connect(data->propPulsesEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
+    g_signal_connect(data->propPulsesEntry, "changed", G_CALLBACK(on_prop_pulses_changed), data);
+    gtk_box_pack_start(GTK_BOX(propRow), GTK_WIDGET(data->propPulsesEntry), FALSE, FALSE, 0);
+
+    GtkWidget* pulsesLabel = gtk_label_new("pulses");
+    gtk_style_context_add_class(gtk_widget_get_style_context(pulsesLabel), "instruction-label");
+    gtk_box_pack_start(GTK_BOX(propRow), pulsesLabel, FALSE, FALSE, 0);
+
+    // The figure is right-aligned in a fixed width ("12,345" is the widest)
+    // and "rpm" is its own label, so the unit stays put as the figure grows.
+    GtkWidget* rpmRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_pack_start(GTK_BOX(rightCol), rpmRow, FALSE, FALSE, 0);
+    data->propRpmLabel = GTK_LABEL(gtk_label_new(NULL));
+    gtk_label_set_markup(data->propRpmLabel, "<span foreground=\"#FFDD00\">---</span>");
+    data->propRpmShown = "---";
+    gtk_label_set_width_chars(data->propRpmLabel, 6);
+    gtk_label_set_xalign(data->propRpmLabel, 1.0);
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->propRpmLabel)), "clock-label");
+    gtk_box_pack_start(GTK_BOX(rpmRow), GTK_WIDGET(data->propRpmLabel), FALSE, FALSE, 0);
+    GtkWidget* rpmUnit = gtk_label_new("rpm");
+    gtk_style_context_add_class(gtk_widget_get_style_context(rpmUnit), "clock-label");
+    gtk_box_pack_start(GTK_BOX(rpmRow), rpmUnit, FALSE, FALSE, 0);
     
     // Bottom: navigation buttons
     GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);

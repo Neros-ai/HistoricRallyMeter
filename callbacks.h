@@ -52,6 +52,8 @@ gboolean on_entry_focus(GtkWidget* widget, GdkEvent* event, gpointer user_data);
 // Focus handler for the Beep Assist waypoint view, mirroring on_entry_focus.
 gboolean on_textview_focus(GtkWidget* widget, GdkEvent* event, gpointer user_data);
 void on_segment_entry_changed(GtkWidget* widget, gpointer user_data);
+// RB-CAL-06: the calibration screen's Prop RPM pulses-per-turn box.
+void on_prop_pulses_changed(GtkWidget* widget, gpointer user_data);
 void on_segment_auto_toggled(GtkWidget* widget, gpointer user_data);
 void on_memory_set(GtkWidget* widget, gpointer user_data);
 void on_memory_recall(GtkWidget* widget, gpointer user_data);

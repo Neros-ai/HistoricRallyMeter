@@ -160,6 +160,10 @@ public:
     // Embedded web server for phone browsers
     bool web_enabled = true;
     int web_port = 8080;
+
+    // Pulses per turn of the prop-shaft sensor on counter 1, for the Prop
+    // RPM readout on the calibration screen (RB-CAL-06). Display only.
+    int prop_pulses_per_rev = 8;
     
     // Driver window position/size (remembered across sessions)
     int driver_window_x = -1;      // -1 = not set

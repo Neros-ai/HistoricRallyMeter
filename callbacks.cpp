@@ -1126,6 +1126,31 @@ void updateCalibrationDisplay(AppData* data) {
              "Current <span foreground=\"#FFDD00\">Calibration %ld pulses/KM</span>. Reset to",
              static_cast<long>(pulsesPerKm(data->state->calibration) + 0.5));
     gtk_label_set_markup(data->calibrationCurrentLabel, current);
+
+    // RB-CAL-06: Prop RPM, counter 1 alone over the poller's ~2 s span --
+    // the same span the app's own speed uses. get10th() is all zeros until
+    // there is enough history, which reads as no figure rather than a
+    // nonsense one.
+    CounterPoll tenth = data->poller->get10th();
+    int64_t elapsed_ms = tenth.time_ms ? current_poll.time_ms - tenth.time_ms : 0;
+    std::string rpm = propRpmReading(propRpmFromCounts(current_poll.cntr1, tenth.cntr1,
+                                                       elapsed_ms, data->state->prop_pulses_per_rev));
+    if (data->propRpmLabel && rpm != data->propRpmShown) {
+        data->propRpmShown = rpm;
+        std::string markup = "<span foreground=\"#FFDD00\">" + rpm + "</span>";
+        gtk_label_set_markup(data->propRpmLabel, markup.c_str());
+    }
+}
+
+// Committed as typed, like the other calibration-screen entries. An empty or
+// out-of-range entry -- usually one caught mid-edit -- is simply not taken,
+// so the readout keeps the last good figure rather than dividing by zero.
+void on_prop_pulses_changed(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    long ppr = std::strtol(gtk_entry_get_text(GTK_ENTRY(widget)), nullptr, 10);
+    if (!validPropPulsesPerRev(ppr) || ppr == data->state->prop_pulses_per_rev) return;
+    data->state->prop_pulses_per_rev = static_cast<int>(ppr);
+    ConfigFile::save(*data->state);
 }
 
 // Helper function to update date/time display
