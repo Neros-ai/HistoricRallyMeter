@@ -20,10 +20,25 @@ constexpr int SEGMENT_COL_SPACING  = 15;
 gboolean on_window_delete(GtkWidget* widget, GdkEvent* event, gpointer user_data);
 void on_unit_toggle(GtkWidget* widget, gpointer user_data);
 void on_total_reset(GtkWidget* widget, gpointer user_data);
+
+// The crew's answer to "CONFIRM DISTANCE RESET" when Reset Total is pressed
+// with a stage running (see TotalResetCase). Ignored in every other case.
+enum class TotalResetChoice { Cancel, ConfirmDistanceReset };
+// Records the counters and time of a Reset Total press, so a confirmed
+// distance reset zeroes where the button was pressed, not where the crew
+// confirmed. Called on the press, before asking -- by the box and the phone.
+void captureTotalResetPress(AppData* data);
+// Reset Total, free of any widget so the box and the phone share it. Returns
+// false, changing nothing, when a stage is running and the choice is Cancel --
+// which is what the phone sends, having no way to ask.
+bool applyTotalReset(AppData* data, TotalResetChoice choice);
 void on_trip_reset(GtkWidget* widget, gpointer user_data);
 void on_stage_go(GtkWidget* widget, gpointer user_data);
 void on_next_segment(GtkWidget* widget, gpointer user_data);
-void on_next_prev_segment(GtkWidget* widget, gpointer user_data);
+// The co-pilot's next and prev buttons (and the phone's), live at any point
+// in a segment. See mergeSegmentBack for what prev does.
+void on_next_press(GtkWidget* widget, gpointer user_data);
+void on_prev_press(GtkWidget* widget, gpointer user_data);
 void on_show_segments(GtkWidget* widget, gpointer user_data);
 void on_show_calibration(GtkWidget* widget, gpointer user_data);
 void on_show_twinmaster(GtkWidget* widget, gpointer user_data);
@@ -89,6 +104,10 @@ void on_autostart_set(GtkWidget* widget, gpointer user_data);
 void on_autostart_clear(GtkWidget* widget, gpointer user_data);
 void updateAutoStartDisplay(AppData* data);
 void performStageGo(AppData* data);
+// ABORT STAGE, from the Stage Go dialog: no stage running, the driver's
+// needle at zero, Total and Trip left as they read, and any armed autostart
+// cancelled, of either kind.
+void performAbortStage(AppData* data);
 
 // Replaces the armed autostart wholesale (see AutoStartArming). Every arming,
 // re-arming and clearing path goes through here, so a press always overrules

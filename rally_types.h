@@ -106,7 +106,15 @@ struct AppData {
     GtkLabel* nextDistLabel;
     GtkLabel* nextUnitLabel;
     GtkLabel* nextSpeedLabel;
-    GtkWidget* nextPrevBtn;
+    GtkWidget* nextPrevBtn;  // "next" (the name predates the separate prev)
+    GtkWidget* prevBtn;
+    // Reset Total pressed with a stage running (usership 6): the counters and
+    // rally time AT THE PRESS, applied if the crew confirm -- the distance
+    // zero is the press, not the confirm. Stale after a minute.
+    bool totalResetPending = false;
+    uint64_t totalResetCntr1 = 0;
+    uint64_t totalResetCntr2 = 0;
+    int64_t totalResetPressMs = 0;
     GtkWidget* adjZeroBtn;
     GtkLabel* alarmCountdownLabel;
     // Read-only stage panel on the main navigator screen, and the text it is

@@ -137,3 +137,18 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 }
 #stage-table td { border: none; text-align: right; padding: 0.2rem 0.4rem; }
 #stage-table .stage-empty { text-align: left; color: #aaa; }
+
+/* Reset Total's mid-stage question, over the page like the box's dialog. */
+.modal {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.8);
+  display: flex; align-items: center; justify-content: center; padding: 1rem;
+}
+.modal.hidden { display: none; }
+.modal-box { background: #000; border: 3px solid #fff; padding: 1rem; max-width: 26rem; width: 100%; }
+.modal-title { font-size: 1.2rem; font-weight: bold; text-align: center; margin: 0 0 0.6rem; }
+.modal-note { color: #ccc; font-size: 0.9rem; text-align: center; margin: 0 0 1rem; }
+.modal-actions { display: flex; flex-direction: column; gap: 0.6rem; }
+.modal-actions button {
+  padding: 0.9rem; font-size: 1rem; font-weight: bold;
+  background: #222; color: #fff; border: 2px solid #fff;
+}

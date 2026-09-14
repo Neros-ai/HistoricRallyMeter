@@ -24,6 +24,8 @@
 #include "test_segment_entry_parsing.h"
 #include "test_simple_tone.h"
 #include "test_arrow_tone.h"
+#include "test_total_reset.h"
+#include "test_next_prev.h"
 
 int main() {
     TestRunner runner;
@@ -51,6 +53,8 @@ int main() {
     TestSegmentEntryParsing segmentEntryParsingTests;
     TestSimpleTone simpleToneTests;
     TestArrowTone arrowToneTests;
+    TestTotalReset totalResetTests;
+    TestNextPrev nextPrevTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -75,6 +79,8 @@ int main() {
     runner.addSuite(segmentEntryParsingTests.createSuite());
     runner.addSuite(simpleToneTests.createSuite());
     runner.addSuite(arrowToneTests.createSuite());
+    runner.addSuite(totalResetTests.createSuite());
+    runner.addSuite(nextPrevTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();

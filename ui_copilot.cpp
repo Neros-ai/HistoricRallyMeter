@@ -332,8 +332,6 @@ void updateCopilotDisplay(AppData* data) {
         int64_t remaining_counts = cur_seg.distance_counts - seg_count_diff;
         long remaining_cm = countsToCentimeters(remaining_counts, data->state->calibration);
         long remaining_m = (remaining_cm >= 0) ? (remaining_cm + 99) / 100 : -((-remaining_cm) / 100);
-        long travelled_m = countsToCentimeters(seg_count_diff, data->state->calibration) / 100;
-        
         const char* next_unit = "m";
         std::string next_str = formatDistanceAutoUnit(remaining_m, &next_unit);
         gtk_label_set_text(data->nextDistLabel, next_str.c_str());
@@ -342,47 +340,32 @@ void updateCopilotDisplay(AppData* data) {
         long next_seg_idx = data->state->segment_current_number + 1;
         bool has_next = next_seg_idx < static_cast<long>(data->state->stage_segments.size());
         double next_kph = has_next ? data->state->stage_segments[next_seg_idx].target_speed_kph : 0.0;
-        double current_display_speed = cur_seg.target_speed_kph;
         double next_display_speed = next_kph;
         // Same conversion updateDriverDisplay() already applies to
         // targetSpeedLabel -- showing "40 mph" for a 40 km/h segment would be
         // wrong by a safety-relevant margin, not just a labelling nicety.
         if (data->state->units) {
-            current_display_speed *= 0.621371;
             next_display_speed *= 0.621371;
         }
         gtk_label_set_text(data->nextSpeedLabel,
             segmentSpeedTransition(next_display_speed, has_next, data->state->units).c_str());
 
-        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn),
-            segmentRowHeading(current_display_speed, true).c_str());
-
-        // next/prev button: active within 500m of segment end or start
-        bool near_end = (remaining_m >= 0 && remaining_m <= 500) &&
-                        (next_seg_idx < static_cast<long>(data->state->stage_segments.size()));
-        bool near_start = (travelled_m >= 0 && travelled_m <= 500) &&
-                          (data->state->segment_current_number > 0);
-        if (near_end) {
-            gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "next");
-            gtk_widget_set_sensitive(data->nextPrevBtn, TRUE);
-        } else if (near_start) {
-            gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "prev");
-            gtk_widget_set_sensitive(data->nextPrevBtn, TRUE);
-        } else {
-            gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
-        }
+        // Live at any point in the segment: next while one follows, prev
+        // while one precedes.
+        gtk_widget_set_sensitive(data->nextPrevBtn, nextAvailable(*data->state));
+        gtk_widget_set_sensitive(data->prevBtn, prevAvailable(*data->state));
     } else if (data->state->stage_segments.empty()) {
         gtk_label_set_text(data->nextDistLabel, "---.---");
         gtk_label_set_text(data->nextUnitLabel, "m");
         gtk_label_set_text(data->nextSpeedLabel, "---");
-        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), segmentRowHeading(0.0, false).c_str());
         gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
+        gtk_widget_set_sensitive(data->prevBtn, FALSE);
     } else {
         gtk_label_set_text(data->nextDistLabel, "---.---");
         gtk_label_set_text(data->nextUnitLabel, "m");
         gtk_label_set_text(data->nextSpeedLabel, segmentSpeedTransition(0.0, false, false).c_str());
-        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), segmentRowHeading(0.0, false).c_str());
         gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
+        gtk_widget_set_sensitive(data->prevBtn, FALSE);
     }
 }
 
@@ -527,13 +510,24 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     if (!data->singleDisplayMode)  // hidden in single-display mode for a bigger gauge
         gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->tripTimeLabel), 3, 1, 1, 1);
     
-    // Row 2: Next segment — heading is the next/prev button
-    data->nextPrevBtn = gtk_button_new_with_label("--->");
+    // Row 2: Next segment — heading is the next button. Row 3, beneath it:
+    // prev. Two buttons, live at any point in a segment (owner's ruling,
+    // 2026-09-14), where one shared button used to switch between them
+    // inside 500 m windows. See tools/layout-preview/navigator-next-prev.html.
+    data->nextPrevBtn = gtk_button_new_with_label("next");
     gtk_style_context_add_class(gtk_widget_get_style_context(data->nextPrevBtn), "dist-heading");
     gtk_widget_set_valign(data->nextPrevBtn, GTK_ALIGN_CENTER);
     gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
-    g_signal_connect(data->nextPrevBtn, "clicked", G_CALLBACK(on_next_prev_segment), data);
+    g_signal_connect(data->nextPrevBtn, "clicked", G_CALLBACK(on_next_press), data);
     gtk_grid_attach(GTK_GRID(distGrid), data->nextPrevBtn, 0, 2, 1, 1);
+
+    data->prevBtn = gtk_button_new_with_label("prev");
+    gtk_style_context_add_class(gtk_widget_get_style_context(data->prevBtn), "dist-heading");
+    gtk_widget_set_valign(data->prevBtn, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_top(data->prevBtn, 6);
+    gtk_widget_set_sensitive(data->prevBtn, FALSE);
+    g_signal_connect(data->prevBtn, "clicked", G_CALLBACK(on_prev_press), data);
+    gtk_grid_attach(GTK_GRID(distGrid), data->prevBtn, 0, 3, 1, 1);
     
     data->nextDistLabel = GTK_LABEL(gtk_label_new("---.---"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->nextDistLabel)), "dist-value");

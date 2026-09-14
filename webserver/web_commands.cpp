@@ -89,8 +89,25 @@ bool webHandleCommand(AppData* data, const char* json) {
         return true;
     }
     if (strcmp(type, "reset_total") == 0) {
-        on_total_reset(nullptr, data);
-        return true;
+        // With a stage running the phone sends "reset_total_capture" on the
+        // press, asks the box's question, and sends choice "confirm" only if
+        // the crew confirm. A choice arriving when the box has no running
+        // stage was asked against a stale picture, so it is refused rather
+        // than acted on as something the crew did not choose.
+        char choice[16] = "";
+        jsonFindString(json, "choice", choice, sizeof(choice));
+        const bool running = classifyTotalReset(*data->state) == TotalResetCase::StageRunning;
+        if (choice[0] != '\0' && !running) return false;
+        return applyTotalReset(data, strcmp(choice, "confirm") == 0
+                                         ? TotalResetChoice::ConfirmDistanceReset
+                                         : TotalResetChoice::Cancel);
+    }
+    if (strcmp(type, "reset_total_capture") == 0) {
+        // The press itself: the distance zero, if the crew then confirm.
+        if (classifyTotalReset(*data->state) == TotalResetCase::StageRunning) {
+            captureTotalResetPress(data);
+        }
+        return false;
     }
     if (strcmp(type, "distance_adjust") == 0) {
         // Same arithmetic as the co-pilot's -10/+10 buttons, via the shared
@@ -112,8 +129,9 @@ bool webHandleCommand(AppData* data, const char* json) {
         if (meters < 0.0 || meters > 999999.0) return false;
         return applyDistanceSet(data, meters);
     }
-    if (strcmp(type, "next_prev") == 0) {
-        on_next_prev_segment(nullptr, data);
+    if (strcmp(type, "next") == 0 || strcmp(type, "prev") == 0) {
+        if (strcmp(type, "next") == 0) on_next_press(nullptr, data);
+        else on_prev_press(nullptr, data);
         return true;
     }
     if (strcmp(type, "segment_set") == 0) {

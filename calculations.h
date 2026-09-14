@@ -169,6 +169,74 @@ bool autoStartHoldsTimeError(uint64_t auto_start_rally_time_s,
                              bool auto_start_triggered,
                              int64_t diff_ms);
 
+// How long after its moment an armed autostart can still fire. The driver
+// display checks on every frame and fires inside this window; past it the
+// moment is simply missed.
+constexpr int64_t AUTO_START_TRIGGER_WINDOW_MS = 2000;
+
+// Whether the Stage Go dialog's "At HH:MM" can still arm the minute it showed
+// when it opened: only strictly before that minute. At or after it -- even
+// inside the trigger window, where it would still fire, but late -- the press
+// arms nothing and the crew are told to reopen the menu (owner's ruling).
+bool autoStartTargetReachable(int64_t target_ms, int64_t now_ms);
+
+// What a press of Reset Total means depends on where the crew are. A primed
+// "on the minute" autostart takes precedence over a running stage: arming it
+// already loaded the new stage, so the crew are at its line, not in the one
+// before. A "Set Autostart" does not: it loads nothing until it fires, and is
+// often set while the previous stage -- whose end the crew may not know -- is
+// still running, so a press then is asked about like any other mid-stage one.
+enum class TotalResetCase {
+    AwaitingEarlyDeparture,  // "on the minute" primed: the car crept at the line
+    AwaitingTimedStart,      // "Set Autostart" primed: fires at its own time
+    StageRunning,            // a stage running: a missed start (usership 6),
+                             // confirmed distance reset, clock kept
+    Idle                     // odometer and stopwatch: zero Total, as ever
+};
+TotalResetCase classifyTotalReset(const RallyState& state);
+
+// Whether ABORT STAGE has anything to end: a stage running or already driven
+// out to its full distance but still on the driver's gauge (a stage's end is
+// often not where the roadbook says, and a finished stage keeps its error
+// figure on the gauge until the crew change something), or any autostart
+// armed -- ABORT STAGE cancels those too, inside a stage or out of one.
+bool stageAbortable(const RallyState& state);
+
+// The halves a Total reset is built from, on the state alone so each case is
+// testable. `c1`/`c2` are the counters now, `now_ms` the rally time now.
+//
+// Total's distance zero, with the segment's alongside it: the segment
+// measures from its own baseline and the stage from Total's, so moving one
+// without the other leaves the current segment carrying distance the stage no
+// longer counts. Both corrections described the old baseline and are cleared.
+void rebaseTotalDistance(RallyState& state, uint64_t c1, uint64_t c2);
+// Trip's distance zero, and its correction.
+void rebaseTripDistance(RallyState& state, uint64_t c1, uint64_t c2);
+// Trip's distance and time together -- the Trip button.
+void resetTrip(RallyState& state, uint64_t c1, uint64_t c2, int64_t now_ms);
+// A segment change: Trip becomes the new segment's odometer, measured from the
+// segment's own start. The correction goes with the old baseline -- a -10
+// made in the last segment was spent there, and carrying it over left Trip
+// reading short all through the next one.
+void rebaseTripToSegment(RallyState& state, uint64_t c1, uint64_t c2);
+// Contingency 4: the car crept at the line with "on the minute" primed. Total
+// and Trip distance zero here; the clock still starts at the minute, and the
+// stage loaded at arming stays loaded, so the driver panel keeps its speeds.
+void applyTotalResetAwaitingEarlyDeparture(RallyState& state, uint64_t c1, uint64_t c2,
+                                           int64_t now_ms);
+// Contingency 6, a missed start with the stage clock already running: Total
+// and Trip (distance and correction) zero at `c1`/`c2` -- the counters when
+// Total was PRESSED, not when the reset was confirmed -- and the stage runs on
+// from its first segment there. The stage clock is not touched, so the gauge
+// shows the real lateness. Trip's time restarts at the press.
+void applyDistanceResetKeepingClock(RallyState& state, uint64_t c1, uint64_t c2,
+                                    int64_t press_ms);
+// Distance and clock zero here and no stage is running. `with_trip` resets
+// Trip too: at the line of a timed start, and when a running stage is
+// aborted. A plain idle press leaves Trip alone, as it always has.
+void applyTotalResetToIdle(RallyState& state, uint64_t c1, uint64_t c2,
+                           int64_t now_ms, bool with_trip);
+
 // Calculate seconds ahead/behind target (high precision) - single segment
 double calculateAheadBehind(const RallyState& state, int64_t current_time_ms,
                           int64_t segment_start_time, double target_counts_per_hour,
@@ -243,13 +311,47 @@ int64_t correctedDistanceCounts(int64_t raw_counts, long adjust_cm, long calibra
 //
 // Forward ("next"): segment `index` ends at `driven_counts`, and whatever it
 // gives up is handed to segment index+1.
-// Backward ("prev"): segment index-1 is extended to here, and the same
-// distance comes off segment `index`.
+// Backward (the old, 500 m-window "prev"; no longer wired to a button --
+// prev is now mergeSegmentBack): segment index-1 is extended to here, and the
+// same distance comes off segment `index`.
 // Both return false, changing nothing, when the neighbour does not exist.
 bool retimeSegmentBoundaryForward(std::vector<Segment>& segs, long index,
                                   int64_t driven_counts, long calibration);
 bool retimeSegmentBoundaryBackward(std::vector<Segment>& segs, long index,
                                    int64_t driven_counts, long calibration);
+
+// "prev" (owner's ruling, 2026-09-14): undo a speed change. The previous
+// segment's speed comes back at once and the change point becomes unknown
+// again: segment index-1 absorbs segment `index` whole, so it now runs to the
+// next known point -- the boundary after the undone change, which does not
+// move -- and segment `index` is left at zero length, to be given its real
+// start by the next "next" press. Returns false, changing nothing, when there
+// is no previous segment.
+bool mergeSegmentBack(std::vector<Segment>& segs, long index, long calibration);
+
+// Stage distance, in counts, at which segment `index` starts: the sum of every
+// segment before it.
+int64_t segmentStartStageCounts(const std::vector<Segment>& segs, long index);
+
+// The segment the car is in at `stage_counts`, walking forward from the first
+// only across boundaries auto-advance would cross itself (the segment ending
+// there has autoNext set) -- a manual boundary waits for "next" as it always
+// does. How a confirmed missed-start reset (usership 6) lands the car in the
+// right segment when it has already driven past boundaries since the press.
+long segmentIndexAtStageCounts(const std::vector<Segment>& segs, int64_t stage_counts);
+
+// Puts the segment's distance baseline `counts_into_segment` behind the
+// counters' current reading, with the correction taken as it stands now, so
+// the segment reads exactly that far driven. How "prev" re-enters a segment
+// whose start was passed long ago.
+void rebaseSegmentAt(RallyState& state, uint64_t c1, uint64_t c2,
+                     int64_t counts_into_segment);
+
+// Whether the co-pilot's next / prev buttons (and the phone's) are live: at
+// any point in a segment -- the old 500 m windows are gone -- next while a
+// segment follows, prev while one precedes.
+bool nextAvailable(const RallyState& state);
+bool prevAvailable(const RallyState& state);
 
 // Heading for the co-pilot's next-segment row: the current segment's own
 // target speed, with an arrow toward the change ahead. This is the one fact
