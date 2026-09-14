@@ -91,13 +91,10 @@ bool webHandleCommand(AppData* data, const char* json) {
     if (strcmp(type, "reset_total") == 0) {
         // With a stage running the phone sends "reset_total_capture" on the
         // press, asks the box's question, and sends choice "confirm" only if
-        // the crew confirm. A choice arriving when the box has no running
-        // stage was asked against a stale picture, so it is refused rather
-        // than acted on as something the crew did not choose.
+        // the crew confirm. If the stage was driven out meanwhile, the confirm
+        // is the plain idle reset, as on the box.
         char choice[16] = "";
         jsonFindString(json, "choice", choice, sizeof(choice));
-        const bool running = classifyTotalReset(*data->state) == TotalResetCase::StageRunning;
-        if (choice[0] != '\0' && !running) return false;
         return applyTotalReset(data, strcmp(choice, "confirm") == 0
                                          ? TotalResetChoice::ConfirmDistanceReset
                                          : TotalResetChoice::Cancel);

@@ -42,11 +42,16 @@ static void notifyWebState(AppData* data) {
 }
 
 static void applyDialogStyle(GtkWidget* dialog);
+static void flashMessage(GtkWidget* widget, const std::string& text);
 
 bool applyTotalReset(AppData* data, TotalResetChoice choice) {
     auto poll = data->poller->getMostRecent();
     const int64_t now_ms = getRallyTime_ms(*data->state);
     RallyState& state = *data->state;
+
+    // No new stage can start while the question is open: with an autostart
+    // armed there is no question. If the stage is driven out meanwhile, the
+    // confirm is a plain idle reset below -- its clock no longer matters.
 
     switch (classifyTotalReset(state)) {
     case TotalResetCase::AwaitingEarlyDeparture:
@@ -60,10 +65,8 @@ bool applyTotalReset(AppData* data, TotalResetChoice choice) {
     case TotalResetCase::StageRunning: {
         if (choice != TotalResetChoice::ConfirmDistanceReset) return false;
         // Zeroed where the button was pressed: the car kept rolling while the
-        // crew read the question. A capture older than a minute is not this
-        // press's, so the counters now stand in.
-        const bool pressed = data->totalResetPending &&
-                             now_ms - data->totalResetPressMs <= 60000;
+        // crew read the question. With no press recorded, the counters now.
+        const bool pressed = data->totalResetPending;
         applyDistanceResetKeepingClock(state,
             pressed ? data->totalResetCntr1 : poll.cntr1,
             pressed ? data->totalResetCntr2 : poll.cntr2,
@@ -563,8 +566,18 @@ static void setAutoStartToMinute(AppData* data, int64_t target_ms) {
 }
 
 static gboolean closeFlashMessage(gpointer dialog) {
+    // Spent: clear the id first so the destroy handler below does not try to
+    // remove the source that is running now.
+    g_object_set_data(G_OBJECT(dialog), "flash-timeout", nullptr);
     gtk_widget_destroy(GTK_WIDGET(dialog));
     return G_SOURCE_REMOVE;
+}
+
+// Closed some other way first (Escape, a window-manager close): cancel the
+// timer, or it would later destroy a dialog that is already gone.
+static void onFlashMessageDestroyed(GtkWidget* dialog, G_GNUC_UNUSED gpointer unused) {
+    guint id = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(dialog), "flash-timeout"));
+    if (id != 0) g_source_remove(id);
 }
 
 // A short notice that closes itself: nothing to answer, and at the line the
@@ -581,7 +594,9 @@ static void flashMessage(GtkWidget* widget, const std::string& text) {
     gtk_box_pack_start(GTK_BOX(content), label, FALSE, FALSE, 0);
     applyDialogStyle(dialog);
     gtk_widget_show_all(dialog);
-    g_timeout_add(2500, closeFlashMessage, dialog);
+    guint id = g_timeout_add(2500, closeFlashMessage, dialog);
+    g_object_set_data(G_OBJECT(dialog), "flash-timeout", GUINT_TO_POINTER(id));
+    g_signal_connect(dialog, "destroy", G_CALLBACK(onFlashMessageDestroyed), nullptr);
 }
 
 // One tap from the stage-go row must not end a stage: the button sits between
@@ -789,6 +804,8 @@ void on_next_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 void on_next_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     if (!nextAvailable(*data->state)) return;
+    // Before the retime, so prev can put it back.
+    recordSegmentChange(*data->state, data->state->segment_current_number, false);
 
     auto current_poll = data->poller->getMostRecent();
     // Corrected, like every other comparison against a roadbook distance: a
@@ -813,24 +830,14 @@ void on_next_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     notifyWebState(data);
 }
 
-// "prev", at any point: undo a speed change -- one pressed by mistake, or an
-// auto-advance before the real change point. The previous speed is back at
-// once and runs on to the next known point; the crew press "next" where the
-// change really is. See mergeSegmentBack.
+// "prev": undo the last speed change -- a "next" pressed by mistake, or an
+// auto-advance before the real change point. See undoSegmentChange.
 void on_prev_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     if (!prevAvailable(*data->state)) return;
 
     auto poll = data->poller->getMostRecent();
-    const int64_t stage_counts = stageCountsCorrected(data, poll);
-    const long idx = data->state->segment_current_number;
-
-    mergeSegmentBack(data->state->stage_segments, idx, data->state->calibration);
-    data->state->segment_current_number = idx - 1;
-    // Back inside a segment whose start was passed earlier: its distance
-    // baseline goes back to that start, measured on the stage distance.
-    rebaseSegmentAt(*data->state, poll.cntr1, poll.cntr2,
-                    stage_counts - segmentStartStageCounts(data->state->stage_segments, idx - 1));
+    undoSegmentChange(*data->state, poll.cntr1, poll.cntr2, stageCountsCorrected(data, poll));
 
     ConfigFile::save(*data->state);
     notifyWebState(data);
@@ -893,6 +900,8 @@ gboolean update_display(gpointer user_data) {
             if (seg_count_diff >= seg.distance_counts) {
                 // Advance to next segment
                 if (data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size()) - 1) {
+                    // So prev can undo an automatic change too.
+                    recordSegmentChange(*data->state, data->state->segment_current_number, true);
                     data->state->segment_current_number++;
                     auto current_poll = data->poller->getMostRecent();
                     data->state->segment_start_cntr1 = current_poll.cntr1;

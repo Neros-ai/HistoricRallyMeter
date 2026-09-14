@@ -329,6 +329,10 @@ bool mergeSegmentBack(std::vector<Segment>& segs, long index, long calibration) 
     Segment& cur = segs[index];
     prev.distance_counts += cur.distance_counts;
     cur.distance_counts = 0.0;
+    // The merged segment now ends where the undone one did, so it takes that
+    // segment's auto-advance: an automatic change point stays automatic, and
+    // a manual one (a timing point) still waits for "next".
+    prev.autoNext = cur.autoNext;
     resyncSegmentMeters(prev, calibration);
     resyncSegmentMeters(cur, calibration);
     return true;
@@ -372,7 +376,44 @@ bool nextAvailable(const RallyState& state) {
 
 bool prevAvailable(const RallyState& state) {
     long i = state.segment_current_number;
-    return i > 0 && i < static_cast<long>(state.stage_segments.size());
+    return state.undo_valid &&
+           state.undo_stage_start_ms == state.total_start_time_ms &&
+           i == state.undo_from_index + 1 &&
+           i < static_cast<long>(state.stage_segments.size());
+}
+
+void recordSegmentChange(RallyState& state, long from_index, bool automatic) {
+    if (from_index < 0 || from_index + 1 >= static_cast<long>(state.stage_segments.size())) {
+        state.undo_valid = false;
+        return;
+    }
+    state.undo_valid = true;
+    state.undo_from_index = from_index;
+    state.undo_from_counts = state.stage_segments[from_index].distance_counts;
+    state.undo_to_counts = state.stage_segments[from_index + 1].distance_counts;
+    state.undo_automatic = automatic;
+    state.undo_stage_start_ms = state.total_start_time_ms;
+}
+
+bool undoSegmentChange(RallyState& state, uint64_t c1, uint64_t c2, int64_t stage_counts) {
+    if (!prevAvailable(state)) return false;
+    auto& segs = state.stage_segments;
+    const long i = state.undo_from_index;
+    if (state.undo_automatic) {
+        mergeSegmentBack(segs, i + 1, state.calibration);
+        state.segment_current_number = i;
+    } else {
+        segs[i].distance_counts = state.undo_from_counts;
+        segs[i + 1].distance_counts = state.undo_to_counts;
+        resyncSegmentMeters(segs[i], state.calibration);
+        resyncSegmentMeters(segs[i + 1], state.calibration);
+        const int64_t point = segmentStartStageCounts(segs, i + 1);
+        state.segment_current_number = stage_counts < point ? i : i + 1;
+    }
+    const long cur = state.segment_current_number;
+    rebaseSegmentAt(state, c1, c2, stage_counts - segmentStartStageCounts(segs, cur));
+    state.undo_valid = false;   // once only
+    return true;
 }
 
 long adjustedDistanceMeters(long raw_cm, long adjust_cm) {
@@ -804,16 +845,20 @@ bool autoStartTargetReachable(int64_t target_ms, int64_t now_ms) {
 }
 
 TotalResetCase classifyTotalReset(const RallyState& state) {
-    const bool primed = state.auto_start_rally_time_s != 0;
-    if (primed && state.auto_start_early_departure) {
-        return TotalResetCase::AwaitingEarlyDeparture;
+    // Any autostart armed and not yet fired: the driver display is counting
+    // down to a start, and Total is the waiting-for-autostart reset --
+    // immediate, no question -- even with the previous stage still on the
+    // gauge (owner's ruling).
+    if (state.auto_start_rally_time_s != 0) {
+        return state.auto_start_early_departure ? TotalResetCase::AwaitingEarlyDeparture
+                                                : TotalResetCase::AwaitingTimedStart;
     }
     // Only a stage still running: one driven out to its end is over, and a
     // Total press then is the plain idle reset.
     if (!state.stage_complete && state.segment_current_number >= 0) {
         return TotalResetCase::StageRunning;
     }
-    return primed ? TotalResetCase::AwaitingTimedStart : TotalResetCase::Idle;
+    return TotalResetCase::Idle;
 }
 
 bool stageAbortable(const RallyState& state) {
@@ -867,6 +912,8 @@ void applyDistanceResetKeepingClock(RallyState& state, uint64_t c1, uint64_t c2,
     state.segment_current_number = state.stage_segments.empty() ? -1 : 0;
     state.stage_complete = state.stage_segments.empty();
     state.segment_start_time_ms = state.total_start_time_ms;
+    // The distance the last change was measured on has gone.
+    state.undo_valid = false;
 }
 
 void applyTotalResetToIdle(RallyState& state, uint64_t c1, uint64_t c2,

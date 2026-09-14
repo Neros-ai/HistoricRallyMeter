@@ -43,15 +43,16 @@ public:
             return true;
         });
 
-        suite->addTest("a set-time autostart does not end a stage still running", []() {
-            // Set while the previous stage runs on to an unknown end: a press
-            // then must be asked about, not silently end that stage.
+        suite->addTest("a set-time autostart outranks a stage still on the gauge", []() {
+            // Armed while the previous stage runs on: the display counts down
+            // to the next start, so Total is the waiting-for-autostart reset,
+            // with no question (owner's ruling).
             RallyState s;
             s.stage_complete = false;
             s.segment_current_number = 2;
             s.auto_start_rally_time_s = 1000;
             s.auto_start_early_departure = false;
-            ASSERT_TRUE(classifyTotalReset(s) == TotalResetCase::StageRunning);
+            ASSERT_TRUE(classifyTotalReset(s) == TotalResetCase::AwaitingTimedStart);
             // With no stage running it is the line of the timed start.
             s.stage_complete = true;
             s.segment_current_number = -1;

@@ -180,12 +180,10 @@ constexpr int64_t AUTO_START_TRIGGER_WINDOW_MS = 2000;
 // arms nothing and the crew are told to reopen the menu (owner's ruling).
 bool autoStartTargetReachable(int64_t target_ms, int64_t now_ms);
 
-// What a press of Reset Total means depends on where the crew are. A primed
-// "on the minute" autostart takes precedence over a running stage: arming it
-// already loaded the new stage, so the crew are at its line, not in the one
-// before. A "Set Autostart" does not: it loads nothing until it fires, and is
-// often set while the previous stage -- whose end the crew may not know -- is
-// still running, so a press then is asked about like any other mid-stage one.
+// What a press of Reset Total means depends on where the crew are. Any armed
+// autostart takes precedence over a running stage: the driver display is
+// counting down to the next start, so the crew are at its line, and the reset
+// is the waiting-for-autostart one -- immediate, no question.
 enum class TotalResetCase {
     AwaitingEarlyDeparture,  // "on the minute" primed: the car crept at the line
     AwaitingTimedStart,      // "Set Autostart" primed: fires at its own time
@@ -347,11 +345,31 @@ long segmentIndexAtStageCounts(const std::vector<Segment>& segs, int64_t stage_c
 void rebaseSegmentAt(RallyState& state, uint64_t c1, uint64_t c2,
                      int64_t counts_into_segment);
 
-// Whether the co-pilot's next / prev buttons (and the phone's) are live: at
-// any point in a segment -- the old 500 m windows are gone -- next while a
-// segment follows, prev while one precedes.
+// Whether the co-pilot's next / prev buttons (and the phone's) are live.
+// next: at any point in a segment (the old 500 m windows are gone) while a
+// segment follows. prev: only in the segment straight after the last speed
+// change, and only once -- it undoes that change.
 bool nextAvailable(const RallyState& state);
 bool prevAvailable(const RallyState& state);
+
+// Records a speed change about to happen out of segment `from_index` -- a
+// "next" press (`automatic` false) or an auto-advance -- so prev can undo it.
+// Call BEFORE the roadbook is retimed or the segment index moves.
+void recordSegmentChange(RallyState& state, long from_index, bool automatic);
+
+// "prev" (owner's ruling, 2026-09-14): a pure undo of the last speed change,
+// with the timing error recalculated as if it had never happened. Later
+// change points never move.
+//  - After a "next": both segments get their lengths back, so the change
+//    point is where the roadbook had it. Short of it, the car is back in the
+//    earlier segment and the box changes there as normal; past it, it stays
+//    in the later one, the change counted at that point.
+//  - After an auto-advance: putting the point back would re-fire it at once,
+//    so the earlier segment runs on to the next known point instead
+//    (mergeSegmentBack) and waits for "next" at the real change.
+// `stage_counts` is the stage distance now. Returns false, changing nothing,
+// when prev is not available.
+bool undoSegmentChange(RallyState& state, uint64_t c1, uint64_t c2, int64_t stage_counts);
 
 // Heading for the co-pilot's next-segment row: the current segment's own
 // target speed, with an arrow toward the change ahead. This is the one fact

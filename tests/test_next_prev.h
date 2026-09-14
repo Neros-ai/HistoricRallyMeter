@@ -40,6 +40,20 @@ public:
             return true;
         });
 
+        suite->addTest("prev's merged segment takes the undone segment's auto-advance", []() {
+            auto segs = roadbook();
+            segs[0].autoNext = true;    // auto change, fired too early
+            segs[1].autoNext = false;   // ends at a timing point: manual
+            ASSERT_TRUE(mergeSegmentBack(segs, 1, 600000));
+            ASSERT_FALSE(segs[0].autoNext);
+            segs = roadbook();
+            segs[0].autoNext = false;
+            segs[1].autoNext = true;
+            ASSERT_TRUE(mergeSegmentBack(segs, 1, 600000));
+            ASSERT_TRUE(segs[0].autoNext);
+            return true;
+        });
+
         suite->addTest("prev refuses on the first segment", []() {
             auto segs = roadbook();
             ASSERT_FALSE(mergeSegmentBack(segs, 0, 600000));
@@ -77,7 +91,7 @@ public:
             return true;
         });
 
-        suite->addTest("next and prev are live anywhere in a segment", []() {
+        suite->addTest("next is live anywhere; prev only right after a change, once", []() {
             RallyState s;
             s.stage_segments = roadbook();
             s.segment_current_number = -1;
@@ -85,13 +99,71 @@ public:
             ASSERT_FALSE(prevAvailable(s));
             s.segment_current_number = 0;
             ASSERT_TRUE(nextAvailable(s));
-            ASSERT_FALSE(prevAvailable(s));
+            ASSERT_FALSE(prevAvailable(s));          // nothing to undo
+            recordSegmentChange(s, 0, false);
             s.segment_current_number = 1;
-            ASSERT_TRUE(nextAvailable(s));
             ASSERT_TRUE(prevAvailable(s));
-            s.segment_current_number = 2;
+            s.segment_current_number = 2;            // moved on: gone
+            ASSERT_FALSE(prevAvailable(s));
             ASSERT_FALSE(nextAvailable(s));
-            ASSERT_TRUE(prevAvailable(s));
+            s.segment_current_number = 1;
+            s.total_start_time_ms = 999;             // another stage: gone
+            ASSERT_FALSE(prevAvailable(s));
+            return true;
+        });
+
+        // 30 km/h to 1000, 45 to 3000, 60 to 4500 (counts). The owner's
+        // examples, with "next" at 500 and the roadbook change at 1000.
+        suite->addTest("prev undoes a mistaken next: the roadbook point comes back", []() {
+            RallyState s;
+            s.stage_segments = roadbook();
+            s.segment_current_number = 0;
+            recordSegmentChange(s, 0, false);
+            ASSERT_TRUE(retimeSegmentBoundaryForward(s.stage_segments, 0, 500, 600000));
+            s.segment_current_number = 1;
+            // prev at 700: short of 1000, so back in the earlier segment.
+            ASSERT_TRUE(undoSegmentChange(s, 10700, 10700, 700));
+            ASSERT_EQ(s.segment_current_number, 0);
+            ASSERT_NEAR(s.stage_segments[0].distance_counts, 1000.0, 0.001);
+            ASSERT_NEAR(s.stage_segments[1].distance_counts, 2000.0, 0.001);
+            ASSERT_EQ(calculateDistanceCounts(s, 10700, 10700,
+                s.segment_start_cntr1, s.segment_start_cntr2), 700);
+            ASSERT_FALSE(prevAvailable(s));          // once only
+            return true;
+        });
+
+        suite->addTest("prev after the roadbook point keeps the later speed, change at the point", []() {
+            RallyState s;
+            s.stage_segments = roadbook();
+            s.segment_current_number = 0;
+            recordSegmentChange(s, 0, false);
+            ASSERT_TRUE(retimeSegmentBoundaryForward(s.stage_segments, 0, 500, 600000));
+            s.segment_current_number = 1;
+            // Noticed only at 1100: past 1000, so it stays in segment 1,
+            // counted from 1000.
+            ASSERT_TRUE(undoSegmentChange(s, 11100, 11100, 1100));
+            ASSERT_EQ(s.segment_current_number, 1);
+            ASSERT_NEAR(s.stage_segments[0].distance_counts, 1000.0, 0.001);
+            ASSERT_EQ(calculateDistanceCounts(s, 11100, 11100,
+                s.segment_start_cntr1, s.segment_start_cntr2), 100);
+            return true;
+        });
+
+        suite->addTest("prev undoes an automatic change: the earlier speed holds", []() {
+            RallyState s;
+            s.stage_segments = roadbook();
+            for (auto& seg : s.stage_segments) seg.autoNext = true;
+            s.segment_current_number = 0;
+            recordSegmentChange(s, 0, true);          // auto-advance at 1000
+            s.segment_current_number = 1;
+            ASSERT_TRUE(undoSegmentChange(s, 11200, 11200, 1200));
+            ASSERT_EQ(s.segment_current_number, 0);
+            // Runs on to the next known point, 3000, not re-firing at 1000.
+            ASSERT_NEAR(s.stage_segments[0].distance_counts, 3000.0, 0.001);
+            ASSERT_NEAR(s.stage_segments[1].distance_counts, 0.0, 0.001);
+            ASSERT_EQ(segmentStartStageCounts(s.stage_segments, 2), 3000);
+            ASSERT_EQ(calculateDistanceCounts(s, 11200, 11200,
+                s.segment_start_cntr1, s.segment_start_cntr2), 1200);
             return true;
         });
 

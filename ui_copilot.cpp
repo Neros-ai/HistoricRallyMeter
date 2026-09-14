@@ -62,6 +62,24 @@ static void applyCopilotCSS() {
         GTK_STYLE_PROVIDER(provider),
         GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
     g_object_unref(provider);
+
+    // An unavailable heading button -- prev with nothing to undo, next on
+    // the last segment -- has to look it. The box's anti-dimming gtk.css
+    // keeps every unfocused widget at full brightness, and with no window
+    // manager the windows are always unfocused; it sits at USER priority,
+    // above this application's, so the dimming is set one step above that.
+    GtkCssProvider* disabled = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(disabled,
+        "button.dist-heading:disabled, button.dist-heading:disabled:backdrop"
+        " { color: #555555; border-color: #555555; }"
+        "button.dist-heading:disabled label, button.dist-heading:disabled label:backdrop"
+        " { color: #555555; }",
+        -1, NULL);
+    gtk_style_context_add_provider_for_screen(
+        gdk_screen_get_default(),
+        GTK_STYLE_PROVIDER(disabled),
+        GTK_STYLE_PROVIDER_PRIORITY_USER + 1);
+    g_object_unref(disabled);
 }
 
 // RB-SEG-04: Navigation and Timing modes share the same 3200 Hz sine pitch

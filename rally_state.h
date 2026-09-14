@@ -171,6 +171,18 @@ public:
     int driver_window_width = 1280;
     int driver_window_height = 400;
     int driver_window_monitor = 0;
+
+    // The last speed change of the running stage -- a "next" press or the
+    // box's own auto-advance -- so "prev" can undo it (see
+    // undoSegmentChange). Taken just before the change, from the stage's own
+    // roadbook. Not persisted: an undo is for the moment, not across a
+    // restart.
+    bool undo_valid = false;
+    long undo_from_index = -1;           // the segment the change left
+    double undo_from_counts = 0.0;       // its length before the change
+    double undo_to_counts = 0.0;         // the next segment's, before it
+    bool undo_automatic = false;         // auto-advance rather than "next"
+    int64_t undo_stage_start_ms = 0;     // which stage it belongs to
     
     RallyState();
 };
