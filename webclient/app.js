@@ -52,6 +52,8 @@
 
     $('btn-next').disabled = !msg.next_enabled;
     $('btn-prev').disabled = !msg.prev_enabled;
+
+    toneHeard(msg.tone);
   }
 
   // Reflects the box's own settings back into the controls. Skips whichever
@@ -168,6 +170,7 @@
       $('conn').classList.add('ok');
     };
     ws.onclose = () => {
+      stopTone();
       $('conn').textContent = 'disconnected';
       $('conn').classList.remove('ok');
       clearTimeout(reconnectTimer);
@@ -287,6 +290,128 @@
       if (radio.checked) send({ type: 'tone_set', tone_type: Number(radio.value) });
     });
   });
+
+  // ---- Sound (RB-WEB-02) ----
+  // The box's ahead/behind tone, played exactly as the box is playing it --
+  // telemetry carries its cadence -- and the box's click on every button
+  // pressed here. Browsers allow sound only once the page has been touched,
+  // so the audio starts on the first tap; "Sound" in the header mutes this
+  // phone only.
+  let audioCtx = null;
+  let soundOn = true;
+  try { soundOn = localStorage.getItem('rallySound') !== 'off'; } catch (e) { /* private mode */ }
+  let tone = null;
+  let toneWatchdog = null;
+  const TONE_LEVEL = 0.25;   // ToneGenerator's AMPLITUDE
+
+  function audio() {
+    if (!audioCtx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      audioCtx = new Ctx();
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  // The box's button click: 1200 Hz sine, 50 ms, 0.20 -- ToneGenerator::playBeep's defaults.
+  function playClick() {
+    if (!soundOn) return;
+    const ctx = audio();
+    if (!ctx) return;
+    const t0 = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = 1200;
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(0.2, t0 + 0.005);
+    gain.gain.setValueAtTime(0.2, t0 + 0.045);
+    gain.gain.linearRampToValueAtTime(0, t0 + 0.05);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + 0.06);
+  }
+
+  function stopTone() {
+    if (!tone) return;
+    const t = tone;
+    tone = null;
+    clearInterval(t.timer);
+    const now = audioCtx.currentTime;
+    t.gain.gain.cancelScheduledValues(now);
+    t.gain.gain.setValueAtTime(t.gain.gain.value, now);
+    t.gain.gain.linearRampToValueAtTime(0, now + 0.01);
+    t.osc.stop(now + 0.02);
+  }
+
+  // One beep of the cadence, with short fades so its edges don't click --
+  // the box's generator fades its edges for the same reason.
+  function pulse(t) {
+    const g = t.gain.gain;
+    const now = audioCtx.currentTime;
+    const on = t.toneMs / 1000;
+    g.cancelScheduledValues(now);
+    g.setValueAtTime(0, now);
+    g.linearRampToValueAtTime(TONE_LEVEL, now + 0.005);
+    g.setValueAtTime(TONE_LEVEL, now + Math.max(0.005, on - 0.005));
+    g.linearRampToValueAtTime(0, now + on);
+  }
+
+  // Restarted only when the cadence changes; telemetry repeats it 10 times a
+  // second.
+  function applyTone(c) {
+    const sounding = soundOn && !!audioCtx && !!c && c.tone_ms > 0 && c.freq_hz > 0;
+    const key = sounding ? [c.tone_ms, c.silence_ms, c.freq_hz, c.wave].join('|') : '';
+    if ((tone ? tone.key : '') === key) return;
+    stopTone();
+    if (!sounding) return;
+    const ctx = audio();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = c.wave === 'triangle' ? 'triangle' : 'sine';
+    osc.frequency.value = c.freq_hz;
+    gain.gain.value = 0;
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    const t = { osc: osc, gain: gain, key: key, toneMs: c.tone_ms, timer: null };
+    tone = t;
+    if (c.silence_ms > 0) {
+      pulse(t);
+      t.timer = setInterval(() => pulse(t), c.tone_ms + c.silence_ms);
+    } else {
+      // Continuous (the simple tone): fade in and hold.
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(TONE_LEVEL, ctx.currentTime + 0.01);
+    }
+  }
+
+  // Silence rather than a stuck tone if the box stops talking.
+  function toneHeard(c) {
+    applyTone(c);
+    clearTimeout(toneWatchdog);
+    toneWatchdog = setTimeout(stopTone, 1000);
+  }
+
+  function showSound() {
+    $('sound-toggle').textContent = soundOn ? 'Sound on' : 'Sound off';
+    $('sound-toggle').classList.toggle('off', !soundOn);
+  }
+  $('sound-toggle').addEventListener('click', () => {
+    soundOn = !soundOn;
+    try { localStorage.setItem('rallySound', soundOn ? 'on' : 'off'); } catch (e) { /* private mode */ }
+    if (soundOn) audio(); else stopTone();
+    showSound();
+  });
+  showSound();
+
+  // Any touch unlocks the audio; every button pressed here clicks, as every
+  // button on the box does. Capture phase, so the click sounds before any
+  // confirm() the button opens.
+  document.addEventListener('pointerdown', () => { if (soundOn) audio(); }, true);
+  document.addEventListener('click', (e) => {
+    if (soundOn) audio();
+    if (e.target.closest && e.target.closest('button')) playClick();
+  }, true);
 
   connect();
 })();

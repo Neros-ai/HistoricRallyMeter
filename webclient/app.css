@@ -15,6 +15,17 @@ header {
 }
 header h1 { font-size: 1rem; margin: 0; }
 .conn { font-size: 0.8rem; color: #aaa; }
+/* This phone's own mute for the box's tone and clicks (RB-WEB-02). */
+.header-right { display: flex; align-items: center; gap: 0.6rem; }
+.sound-toggle {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.8rem;
+  font-weight: bold;
+  background: #222;
+  color: #fff;
+  border: 1px solid #666;
+}
+.sound-toggle.off { color: #aaa; border-style: dashed; }
 .conn.ok { color: #6f6; }
 .tabs { display: flex; gap: 0.5rem; padding: 0.5rem 1rem; }
 .tab {
