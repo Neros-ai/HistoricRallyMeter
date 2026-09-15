@@ -180,7 +180,7 @@ struct AppData {
     GtkEntry* rallyDistEntry;
     GtkWidget* calibrationKeypad;   // Numeric keypad for calibration
     GtkLabel* sensorModeLabel;      // "Currently set to sensor 1 / both sensors"
-    GtkLabel* calibrationCurrentLabel;  // "Current Calibration: N pulses/KM"
+    GtkLabel* calibrationCurrentLabel;  // "Using Calibration N pulses/KM. Reset to"
     GtkEntry* resetPulsesEntry;  // operator-entered target for RB-CAL-03's reset
     GtkLabel* calibrationClockLabel;  // rally clock, shares the title row
     // RB-CAL-06: Prop/Wheel RPM (pulses box on the "4. Save Calibration" line,

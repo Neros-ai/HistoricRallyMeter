@@ -1292,7 +1292,7 @@ void updateCalibrationDisplay(AppData* data) {
 
     char current[96];
     snprintf(current, sizeof(current),
-             "Current <span foreground=\"#FFDD00\">Calibration %ld pulses/KM</span>. Reset to",
+             "Using <span foreground=\"#FFDD00\">Calibration %ld pulses/KM</span>. Reset to",
              static_cast<long>(pulsesPerKm(data->state->calibration) + 0.5));
     gtk_label_set_markup(data->calibrationCurrentLabel, current);
 
@@ -1615,9 +1615,10 @@ void updateSensorModeLabel(AppData* data) {
     // screen means, so the phrase itself is highlighted in the same yellow
     // the driver panel uses for the live speed.
     const char* phrase = data->state->counters
-        ? "using Sensors 1+2 (avg)"
-        : "using Sensor 1";
-    std::string markup = std::string("Currently <span foreground=\"#FFDD00\">")
+        ? "Sensors 1+2 (avg)"
+        : "Sensor 1";
+    // "Using" stays white like the other captions; only the selection is yellow.
+    std::string markup = std::string("Using <span foreground=\"#FFDD00\">")
                        + phrase + "</span>";
     gtk_label_set_markup(data->sensorModeLabel, markup.c_str());
 }

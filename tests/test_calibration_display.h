@@ -32,11 +32,11 @@ public:
 
         suite->addTest("readout line carries distance and both sensors", []() {
             // Pulses/KM dropped from this line -- it's shown on its own row
-            // elsewhere on the screen ("Current Calibration ... pulses/KM"),
+            // elsewhere on the screen ("Using Calibration ... pulses/KM"),
             // repeating it here just pushed the line width past the
             // screen's budget for no benefit.
             std::string line = calibrationReadoutLine(1000, 3236, 3236, 3236);
-            return line == "Device distance: 1000m. Pulses 3236 "
+            return line == "Device distance: 1000m Pulses 3236 "
                            "S1=3236 S2=3236";
         });
 

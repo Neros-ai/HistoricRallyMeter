@@ -1112,7 +1112,7 @@ GtkWidget* createCalibrationScreen(AppData* data) {
 
     data->calibrationCurrentLabel = GTK_LABEL(gtk_label_new(NULL));
     gtk_label_set_markup(GTK_LABEL(data->calibrationCurrentLabel),
-        "Current <span foreground=\"#FFDD00\">Calibration 0 pulses/KM</span>. Reset to");
+        "Using <span foreground=\"#FFDD00\">Calibration 0 pulses/KM</span>. Reset to");
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->calibrationCurrentLabel)), "clock-label");
     gtk_widget_set_halign(GTK_WIDGET(data->calibrationCurrentLabel), GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(currentCalRow), GTK_WIDGET(data->calibrationCurrentLabel), FALSE, FALSE, 0);
