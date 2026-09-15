@@ -1,5 +1,6 @@
 #include "ui_copilot.h"
 #include "ui_driver.h"
+#include "ui_control.h"
 #include "calculations.h"
 #include "rally_types.h"
 #include "rally_state.h"
@@ -54,6 +55,7 @@ static void applyCopilotCSS() {
         "button.memory-populated { background-image: none; background-color: #FFFFFF; color: #000000; }"
         ".adjust-button { font-size: 28px; font-weight: bold; font-family: monospace; }"
         ".instruction-label { font-size: 16px; color: #CCCCCC; }"
+        ".compact-entry { min-height: 0; padding-top: 0; padding-bottom: 0; }"
         ".tone-mode-row label, .tone-mode-row checkbutton { font-size: 20px; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
@@ -61,6 +63,24 @@ static void applyCopilotCSS() {
         GTK_STYLE_PROVIDER(provider),
         GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
     g_object_unref(provider);
+
+    // An unavailable heading button -- prev with nothing to undo, next on
+    // the last segment -- has to look it. The box's anti-dimming gtk.css
+    // keeps every unfocused widget at full brightness, and with no window
+    // manager the windows are always unfocused; it sits at USER priority,
+    // above this application's, so the dimming is set one step above that.
+    GtkCssProvider* disabled = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(disabled,
+        "button.dist-heading:disabled, button.dist-heading:disabled:backdrop"
+        " { color: #555555; border-color: #555555; }"
+        "button.dist-heading:disabled label, button.dist-heading:disabled label:backdrop"
+        " { color: #555555; }",
+        -1, NULL);
+    gtk_style_context_add_provider_for_screen(
+        gdk_screen_get_default(),
+        GTK_STYLE_PROVIDER(disabled),
+        GTK_STYLE_PROVIDER_PRIORITY_USER + 1);
+    g_object_unref(disabled);
 }
 
 // RB-SEG-04: Navigation and Timing modes share the same 3200 Hz sine pitch
@@ -92,8 +112,8 @@ static void fireBeepAssist(AppData* data, double waypoint_m, double travelled_m,
     // bong"), Timing mode plays it once.
     // Logged only under RALLY_DEBUG: this is the display hot path, and an
     // unconditional line per beep grows app.log all rally long. The on-screen
-    // log below is the always-available confirmation that the waypoint
-    // logic fired.
+    // flash below is the always-available confirmation that the waypoint
+    // logic fired, including in the sandbox.
     static const bool debug_beeps = (getenv("RALLY_DEBUG") != nullptr);
     if (debug_beeps) {
         std::cerr << "Beep Assist fired: waypoint " << waypoint_m
@@ -101,6 +121,7 @@ static void fireBeepAssist(AppData* data, double waypoint_m, double travelled_m,
                   << (navigation ? " (navigation, double beep)" : " (timing, single beep)")
                   << std::endl;
     }
+    flashBeepWarning(data, navigation);
     if (data->toneGen) {
         double freq_hz = navigation ? BEEP_ASSIST_NAV_FREQ_HZ : BEEP_ASSIST_TIMING_FREQ_HZ;
         ToneWaveform wave = navigation ? BEEP_ASSIST_NAV_WAVE : BEEP_ASSIST_TIMING_WAVE;
@@ -330,8 +351,6 @@ void updateCopilotDisplay(AppData* data) {
         int64_t remaining_counts = cur_seg.distance_counts - seg_count_diff;
         long remaining_cm = countsToCentimeters(remaining_counts, data->state->calibration);
         long remaining_m = (remaining_cm >= 0) ? (remaining_cm + 99) / 100 : -((-remaining_cm) / 100);
-        long travelled_m = countsToCentimeters(seg_count_diff, data->state->calibration) / 100;
-        
         const char* next_unit = "m";
         std::string next_str = formatDistanceAutoUnit(remaining_m, &next_unit);
         gtk_label_set_text(data->nextDistLabel, next_str.c_str());
@@ -340,47 +359,32 @@ void updateCopilotDisplay(AppData* data) {
         long next_seg_idx = data->state->segment_current_number + 1;
         bool has_next = next_seg_idx < static_cast<long>(data->state->stage_segments.size());
         double next_kph = has_next ? data->state->stage_segments[next_seg_idx].target_speed_kph : 0.0;
-        double current_display_speed = cur_seg.target_speed_kph;
         double next_display_speed = next_kph;
         // Same conversion updateDriverDisplay() already applies to
         // targetSpeedLabel -- showing "40 mph" for a 40 km/h segment would be
         // wrong by a safety-relevant margin, not just a labelling nicety.
         if (data->state->units) {
-            current_display_speed *= 0.621371;
             next_display_speed *= 0.621371;
         }
         gtk_label_set_text(data->nextSpeedLabel,
             segmentSpeedTransition(next_display_speed, has_next, data->state->units).c_str());
 
-        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn),
-            segmentRowHeading(current_display_speed, true).c_str());
-
-        // next/prev button: active within 500m of segment end or start
-        bool near_end = (remaining_m >= 0 && remaining_m <= 500) &&
-                        (next_seg_idx < static_cast<long>(data->state->stage_segments.size()));
-        bool near_start = (travelled_m >= 0 && travelled_m <= 500) &&
-                          (data->state->segment_current_number > 0);
-        if (near_end) {
-            gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "next");
-            gtk_widget_set_sensitive(data->nextPrevBtn, TRUE);
-        } else if (near_start) {
-            gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "prev");
-            gtk_widget_set_sensitive(data->nextPrevBtn, TRUE);
-        } else {
-            gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
-        }
+        // Live at any point in the segment: next while one follows, prev
+        // while one precedes.
+        gtk_widget_set_sensitive(data->nextPrevBtn, nextAvailable(*data->state));
+        gtk_widget_set_sensitive(data->prevBtn, prevAvailable(*data->state));
     } else if (data->state->stage_segments.empty()) {
         gtk_label_set_text(data->nextDistLabel, "---.---");
         gtk_label_set_text(data->nextUnitLabel, "m");
         gtk_label_set_text(data->nextSpeedLabel, "---");
-        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), segmentRowHeading(0.0, false).c_str());
         gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
+        gtk_widget_set_sensitive(data->prevBtn, FALSE);
     } else {
         gtk_label_set_text(data->nextDistLabel, "---.---");
         gtk_label_set_text(data->nextUnitLabel, "m");
         gtk_label_set_text(data->nextSpeedLabel, segmentSpeedTransition(0.0, false, false).c_str());
-        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), segmentRowHeading(0.0, false).c_str());
         gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
+        gtk_widget_set_sensitive(data->prevBtn, FALSE);
     }
 }
 
@@ -525,13 +529,24 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     if (!data->singleDisplayMode)  // hidden in single-display mode for a bigger gauge
         gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->tripTimeLabel), 3, 1, 1, 1);
     
-    // Row 2: Next segment — heading is the next/prev button
-    data->nextPrevBtn = gtk_button_new_with_label("--->");
+    // Row 2: Next segment — heading is the next button. Row 3, beneath it:
+    // prev. Two buttons, live at any point in a segment (owner's ruling,
+    // 2026-09-14), where one shared button used to switch between them
+    // inside 500 m windows. See tools/layout-preview/navigator-next-prev.html.
+    data->nextPrevBtn = gtk_button_new_with_label("next");
     gtk_style_context_add_class(gtk_widget_get_style_context(data->nextPrevBtn), "dist-heading");
     gtk_widget_set_valign(data->nextPrevBtn, GTK_ALIGN_CENTER);
     gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
-    g_signal_connect(data->nextPrevBtn, "clicked", G_CALLBACK(on_next_prev_segment), data);
+    g_signal_connect(data->nextPrevBtn, "clicked", G_CALLBACK(on_next_press), data);
     gtk_grid_attach(GTK_GRID(distGrid), data->nextPrevBtn, 0, 2, 1, 1);
+
+    data->prevBtn = gtk_button_new_with_label("prev");
+    gtk_style_context_add_class(gtk_widget_get_style_context(data->prevBtn), "dist-heading");
+    gtk_widget_set_valign(data->prevBtn, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_top(data->prevBtn, 6);
+    gtk_widget_set_sensitive(data->prevBtn, FALSE);
+    g_signal_connect(data->prevBtn, "clicked", G_CALLBACK(on_prev_press), data);
+    gtk_grid_attach(GTK_GRID(distGrid), data->prevBtn, 0, 3, 1, 1);
     
     data->nextDistLabel = GTK_LABEL(gtk_label_new("---.---"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->nextDistLabel)), "dist-value");
@@ -736,6 +751,10 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     GtkWidget* recallHeader = gtk_label_new("Recall");
     gtk_widget_set_size_request(setHeader, 66, -1);
     gtk_widget_set_size_request(recallHeader, 66, -1);
+    // The segment table's own heading size ("Recall" at the 20 px menu font
+    // would be wider than its 66 px column).
+    gtk_style_context_add_class(gtk_widget_get_style_context(setHeader), "segment-label");
+    gtk_style_context_add_class(gtk_widget_get_style_context(recallHeader), "segment-label");
     gtk_box_pack_start(GTK_BOX(memHeaderRow), setHeader, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(memHeaderRow), recallHeader, FALSE, FALSE, 0);
     
@@ -746,12 +765,14 @@ GtkWidget* createStageSetupScreen(AppData* data) {
         
         GtkWidget* setBtn = gtk_button_new_with_label(std::to_string(i).c_str());
         gtk_widget_set_size_request(setBtn, 66, 43);
+        gtk_style_context_add_class(gtk_widget_get_style_context(setBtn), "nav-button");
         g_signal_connect(setBtn, "clicked", G_CALLBACK(on_memory_set), data);
         g_object_set_data(G_OBJECT(setBtn), "slot", GINT_TO_POINTER(i));
         gtk_box_pack_start(GTK_BOX(row), setBtn, FALSE, FALSE, 0);
         
         GtkWidget* recallBtn = gtk_button_new_with_label(std::to_string(i).c_str());
         gtk_widget_set_size_request(recallBtn, 66, 43);
+        gtk_style_context_add_class(gtk_widget_get_style_context(recallBtn), "nav-button");
         g_signal_connect(recallBtn, "clicked", G_CALLBACK(on_memory_recall), data);
         g_object_set_data(G_OBJECT(recallBtn), "slot", GINT_TO_POINTER(i));
         gtk_box_pack_start(GTK_BOX(row), recallBtn, FALSE, FALSE, 0);
@@ -766,7 +787,12 @@ GtkWidget* createStageSetupScreen(AppData* data) {
         }
     }
     
-    GtkWidget* clearMemBtn = gtk_button_new_with_label("clear memory");
+    // Two lines: at the menu font one line (~174 px) is wider than the two
+    // memory columns it sits under (142 px), and this screen has no width to
+    // give -- widening Beep Assist by 40 px has pushed the keypad off before.
+    GtkWidget* clearMemBtn = gtk_button_new_with_label("clear\nmemory");
+    gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(clearMemBtn))), GTK_JUSTIFY_CENTER);
+    gtk_style_context_add_class(gtk_widget_get_style_context(clearMemBtn), "nav-button");
     g_signal_connect(clearMemBtn, "clicked", G_CALLBACK(on_memory_clear), data);
     gtk_box_pack_start(GTK_BOX(memBox), clearMemBtn, FALSE, FALSE, 5);
 
@@ -1004,6 +1030,7 @@ GtkWidget* createStageSetupScreen(AppData* data) {
 
     GtkWidget* backBtn = gtk_button_new_with_label("back");
     gtk_widget_set_size_request(backBtn, -1, 40);
+    gtk_style_context_add_class(gtk_widget_get_style_context(backBtn), "nav-button");
     gtk_widget_set_valign(backBtn, GTK_ALIGN_END);
     g_signal_connect(backBtn, "clicked", G_CALLBACK(on_show_twinmaster), data);
     gtk_box_pack_end(GTK_BOX(rightCol), backBtn, FALSE, FALSE, 0);
@@ -1079,10 +1106,14 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     updateSensorModeLabel(data);
     
     GtkWidget* sensor1Btn = gtk_button_new_with_label("Set sensor 1");
+    // Menu font. Fits since the caption dropped "Currently": the row is
+    // ~950 px at 20 px against a ~1,050 px column.
+    gtk_style_context_add_class(gtk_widget_get_style_context(sensor1Btn), "nav-button");
     g_signal_connect(sensor1Btn, "clicked", G_CALLBACK(on_set_sensor_1), data);
     gtk_box_pack_start(GTK_BOX(sensorRow), sensor1Btn, FALSE, FALSE, 20);
     
     GtkWidget* sensorBothBtn = gtk_button_new_with_label("Set both sensors and avg.");
+    gtk_style_context_add_class(gtk_widget_get_style_context(sensorBothBtn), "nav-button");
     g_signal_connect(sensorBothBtn, "clicked", G_CALLBACK(on_set_sensor_both), data);
     gtk_box_pack_start(GTK_BOX(sensorRow), sensorBothBtn, FALSE, FALSE, 5);
 
@@ -1097,7 +1128,7 @@ GtkWidget* createCalibrationScreen(AppData* data) {
 
     data->calibrationCurrentLabel = GTK_LABEL(gtk_label_new(NULL));
     gtk_label_set_markup(GTK_LABEL(data->calibrationCurrentLabel),
-        "Current <span foreground=\"#FFDD00\">Calibration 0 pulses/KM</span>. Reset to");
+        "Using <span foreground=\"#FFDD00\">Calibration 0 pulses/KM</span>. Reset to");
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->calibrationCurrentLabel)), "clock-label");
     gtk_widget_set_halign(GTK_WIDGET(data->calibrationCurrentLabel), GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(currentCalRow), GTK_WIDGET(data->calibrationCurrentLabel), FALSE, FALSE, 0);
@@ -1110,6 +1141,8 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(currentCalRow), GTK_WIDGET(data->resetPulsesEntry), FALSE, FALSE, 0);
 
     GtkWidget* resetPulsesBtn = gtk_button_new_with_label("Reset");
+    // Menu font: ~1,030 px with a 4-digit calibration, inside the column.
+    gtk_style_context_add_class(gtk_widget_get_style_context(resetPulsesBtn), "nav-button");
     g_signal_connect(resetPulsesBtn, "clicked", G_CALLBACK(on_reset_calibration_pulses), data);
     gtk_box_pack_start(GTK_BOX(currentCalRow), resetPulsesBtn, FALSE, FALSE, 0);
 
@@ -1122,21 +1155,90 @@ GtkWidget* createCalibrationScreen(AppData* data) {
         "3. Press Sensor button to select counter.",
         "4. Save Calibration",
     };
+    // The instructions sit at the foot of the column rather than a fixed
+    // distance under the rows above: whatever height is spare becomes the gap
+    // above INSTRUCTIONS, and the last line's foot is the column's foot --
+    // level with the Prop/Wheel RPM reading, which sits at the foot of the
+    // keypad's column.
+    GtkWidget* instrBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_box_pack_end(GTK_BOX(leftBox), instrBox, FALSE, FALSE, 0);
+    GtkWidget* lastInstructionRow = nullptr;
     for (int i = 0; i < 5; i++) {
         GtkWidget* lbl = gtk_label_new(instructions[i]);
         gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "instruction-label");
         gtk_widget_set_halign(lbl, GTK_ALIGN_START);
-        if (i == 0) gtk_widget_set_margin_top(lbl, 22);
-        gtk_box_pack_start(GTK_BOX(leftBox), lbl, FALSE, FALSE, 0);
+        if (i == 4) {
+            lastInstructionRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+            gtk_box_pack_start(GTK_BOX(lastInstructionRow), lbl, FALSE, FALSE, 0);
+            gtk_box_pack_start(GTK_BOX(instrBox), lastInstructionRow, FALSE, FALSE, 0);
+        } else {
+            gtk_box_pack_start(GTK_BOX(instrBox), lbl, FALSE, FALSE, 0);
+        }
     }
+
+    // RB-CAL-06: Prop/Wheel RPM. Counter 1 read as a prop-shaft or wheel
+    // sensor -- engine rpm in a direct-drive top gear. Its heading and
+    // pulses-per-turn box sit at the right-hand end of "4. Save Calibration";
+    // the reading itself goes under the keypad (below). Both under the keypad
+    // took two lines and pushed the button bar off the screen, and heading
+    // and reading on one line there is too wide beside the calibration rows.
+    // The pulses-per-turn box takes this screen's keypad like the other
+    // entries here.
+    GtkWidget* propRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
+    gtk_box_pack_end(GTK_BOX(lastInstructionRow), propRow, FALSE, FALSE, 0);
+    GtkWidget* propLabel = gtk_label_new("Prop/Wheel RPM at");
+    gtk_style_context_add_class(gtk_widget_get_style_context(propLabel), "instruction-label");
+    gtk_box_pack_start(GTK_BOX(propRow), propLabel, FALSE, FALSE, 0);
+
+    data->propPulsesEntry = GTK_ENTRY(gtk_entry_new());
+    gtk_entry_set_width_chars(data->propPulsesEntry, 2);
+    gtk_entry_set_max_width_chars(data->propPulsesEntry, 2);
+    gtk_entry_set_max_length(data->propPulsesEntry, 2);
+    gtk_entry_set_text(data->propPulsesEntry,
+                       std::to_string(data->state->prop_pulses_per_rev).c_str());
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->propPulsesEntry)), "instruction-label");
+    // Only as tall as the text, so "4. Save Calibration" keeps the same line
+    // spacing as the three instructions above it.
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->propPulsesEntry)), "compact-entry");
+    gtk_widget_set_valign(GTK_WIDGET(data->propPulsesEntry), GTK_ALIGN_CENTER);
+    g_signal_connect(data->propPulsesEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
+    g_signal_connect(data->propPulsesEntry, "changed", G_CALLBACK(on_prop_pulses_changed), data);
+    gtk_box_pack_start(GTK_BOX(propRow), GTK_WIDGET(data->propPulsesEntry), FALSE, FALSE, 0);
+
+    GtkWidget* pulsesLabel = gtk_label_new("pulses");
+    gtk_style_context_add_class(gtk_widget_get_style_context(pulsesLabel), "instruction-label");
+    gtk_box_pack_start(GTK_BOX(propRow), pulsesLabel, FALSE, FALSE, 0);
 
     // Right side: numeric keypad. Nudged down from the top of its column so
     // it doesn't sit flush against the title row now that the row is taller
     // (title + clock) than a plain title alone.
+    // The Prop/Wheel RPM reading shares the keypad's column, under it; it is
+    // narrower than the keypad (~170 px against 190), so the keypad keeps
+    // exactly the position it had on its own.
+    GtkWidget* rightCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_box_pack_end(GTK_BOX(data->calibrationMainBox), rightCol, FALSE, FALSE, 10);
     data->calibrationKeypad = createNumericKeypad(data);
     gtk_widget_set_margin_top(data->calibrationKeypad, 12);
-    gtk_box_pack_end(GTK_BOX(data->calibrationMainBox), data->calibrationKeypad, FALSE, FALSE, 10);
-    
+    gtk_box_pack_start(GTK_BOX(rightCol), data->calibrationKeypad, FALSE, FALSE, 0);
+
+    // The figure is right-aligned in a fixed width ("12,345" is the widest)
+    // and "rpm" is its own label, so the unit stays put as the figure grows.
+    // At the foot of the column, so it sits level with its heading on the last
+    // instruction line (the instructions are at the foot of theirs).
+    GtkWidget* rpmRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_widget_set_halign(rpmRow, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(rightCol), rpmRow, FALSE, FALSE, 0);
+    data->propRpmLabel = GTK_LABEL(gtk_label_new(NULL));
+    gtk_label_set_markup(data->propRpmLabel, "<span foreground=\"#FFDD00\">---</span>");
+    data->propRpmShown = "---";
+    gtk_label_set_width_chars(data->propRpmLabel, 6);
+    gtk_label_set_xalign(data->propRpmLabel, 1.0);
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->propRpmLabel)), "clock-label");
+    gtk_box_pack_start(GTK_BOX(rpmRow), GTK_WIDGET(data->propRpmLabel), FALSE, FALSE, 0);
+    GtkWidget* rpmUnit = gtk_label_new("rpm");
+    gtk_style_context_add_class(gtk_widget_get_style_context(rpmUnit), "clock-label");
+    gtk_box_pack_start(GTK_BOX(rpmRow), rpmUnit, FALSE, FALSE, 0);
+
     // Bottom: navigation buttons
     GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
     gtk_box_pack_end(GTK_BOX(screen), buttonBox, FALSE, FALSE, 5);
@@ -1147,6 +1249,9 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     GtkWidget* saveBtn = gtk_button_new_with_label("Save Calibration");
     GtkWidget* backBtn = gtk_button_new_with_label("Back");
     
+    // The main screen's menu-bar font, not GTK's small default.
+    for (GtkWidget* btn : {startBtn, saveBtn, backBtn})
+        gtk_style_context_add_class(gtk_widget_get_style_context(btn), "nav-button");
     g_signal_connect(startBtn, "clicked", G_CALLBACK(on_calibration_start), data);
     g_signal_connect(saveBtn, "clicked", G_CALLBACK(on_save_calibration), data);
     g_signal_connect(backBtn, "clicked", G_CALLBACK(on_show_twinmaster), data);
@@ -1177,6 +1282,7 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     
     GtkWidget* exitBtn = gtk_button_new_with_label("exit app");
     g_signal_connect(exitBtn, "clicked", G_CALLBACK(on_exit_app), data);
+    gtk_style_context_add_class(gtk_widget_get_style_context(exitBtn), "nav-button");
     gtk_box_pack_end(GTK_BOX(titleRow), exitBtn, FALSE, FALSE, 0);
     
     // Main horizontal container: left side for content, right side for keypad
@@ -1272,6 +1378,7 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     gtk_style_context_add_class(gtk_widget_get_style_context(unitsRowLabel), "clock-label");
     data->unitToggleBtn = GTK_BUTTON(gtk_button_new_with_label(data->state->units ? "MPH" : "KPH"));
     gtk_widget_set_valign(GTK_WIDGET(data->unitToggleBtn), GTK_ALIGN_CENTER);
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->unitToggleBtn)), "nav-button");
     gtk_box_pack_start(GTK_BOX(unitsRow), unitsRowLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(unitsRow), GTK_WIDGET(data->unitToggleBtn), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(leftBox), unitsRow, FALSE, FALSE, 0);
@@ -1308,6 +1415,8 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     GtkWidget* saveBtn = gtk_button_new_with_label("set and save");
     GtkWidget* backBtn = gtk_button_new_with_label("back");
     
+    for (GtkWidget* btn : {saveBtn, backBtn})
+        gtk_style_context_add_class(gtk_widget_get_style_context(btn), "nav-button");
     g_signal_connect(saveBtn, "clicked", G_CALLBACK(on_save_datetime), data);
     g_signal_connect(backBtn, "clicked", G_CALLBACK(on_show_twinmaster), data);
     
@@ -1380,6 +1489,8 @@ GtkWidget* createAutoStartScreen(AppData* data) {
     GtkWidget* setBtn = gtk_button_new_with_label("set");
     GtkWidget* backBtn = gtk_button_new_with_label("back");
     
+    for (GtkWidget* btn : {clearBtn, setBtn, backBtn})
+        gtk_style_context_add_class(gtk_widget_get_style_context(btn), "nav-button");
     g_signal_connect(clearBtn, "clicked", G_CALLBACK(on_autostart_clear), data);
     g_signal_connect(setBtn, "clicked", G_CALLBACK(on_autostart_set), data);
     g_signal_connect(backBtn, "clicked", G_CALLBACK(on_show_twinmaster), data);

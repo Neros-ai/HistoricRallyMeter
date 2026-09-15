@@ -12,33 +12,9 @@
 
 NextPrevState computeNextPrevState(AppData* data) {
     NextPrevState out;
-    if (!data || !data->state || !data->poller) return out;
-
-    if (data->state->segment_current_number < 0 ||
-        data->state->segment_current_number >= static_cast<long>(data->state->stage_segments.size())) {
-        return out;
-    }
-
-    auto current_poll = data->poller->getMostRecent();
-    const Segment& cur_seg = data->state->stage_segments[data->state->segment_current_number];
-    int64_t seg_count_diff = segmentCountsCorrected(data, current_poll);
-    int64_t remaining_counts = cur_seg.distance_counts - seg_count_diff;
-    long remaining_m = countsToCentimeters(remaining_counts, data->state->calibration) / 100;
-    long travelled_m = countsToCentimeters(seg_count_diff, data->state->calibration) / 100;
-
-    long next_seg_idx = data->state->segment_current_number + 1;
-    bool near_end = (remaining_m >= 0 && remaining_m <= 500) &&
-                    (next_seg_idx < static_cast<long>(data->state->stage_segments.size()));
-    bool near_start = (travelled_m >= 0 && travelled_m <= 500) &&
-                      (data->state->segment_current_number > 0);
-
-    if (near_end) {
-        out.label = "next";
-        out.enabled = true;
-    } else if (near_start) {
-        out.label = "prev";
-        out.enabled = true;
-    }
+    if (!data || !data->state) return out;
+    out.next_enabled = nextAvailable(*data->state);
+    out.prev_enabled = prevAvailable(*data->state);
     return out;
 }
 
@@ -112,8 +88,8 @@ std::string buildTelemetryJson(AppData* data) {
         "\"ahead_behind_s\":%.1f,"
         "\"segment_number\":%ld,"
         "\"segment_count\":%zu,"
-        "\"next_prev_label\":\"%s\","
-        "\"next_prev_enabled\":%s,"
+        "\"next_enabled\":%s,"
+        "\"prev_enabled\":%s,"
         "\"units\":\"%s\"}",
         rally_clock.c_str(),
         trip_m,
@@ -125,8 +101,8 @@ std::string buildTelemetryJson(AppData* data) {
         ahead_behind_s,
         data->state->segment_current_number >= 0 ? data->state->segment_current_number + 1 : 0,
         data->state->stage_segments.size(),
-        np.label,
-        np.enabled ? "true" : "false",
+        np.next_enabled ? "true" : "false",
+        np.prev_enabled ? "true" : "false",
         data->state->units ? "mph" : "kph");
     return buf;
 }
@@ -136,6 +112,11 @@ std::string buildStateJson(AppData* data) {
     ss << std::fixed << std::setprecision(1);
     ss << "{\"type\":\"state\","
        << "\"segment_current_number\":" << data->state->segment_current_number << ","
+       // True when Reset Total would be asked about on the box, so the phone
+       // asks the same question instead of a plain "Reset total?".
+       << "\"total_reset_asks\":"
+       << (classifyTotalReset(*data->state) == TotalResetCase::StageRunning ? "true" : "false")
+       << ","
        << "\"segments\":[";
     for (size_t i = 0; i < data->state->segments.size(); i++) {
         const Segment& seg = data->state->segments[i];

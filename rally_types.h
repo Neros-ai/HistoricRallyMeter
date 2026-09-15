@@ -13,6 +13,7 @@
 
 // Forward declarations
 class ICounter;
+class SimCounter;
 class RallyState;
 class CounterPoller;
 class ToneGenerator;
@@ -105,7 +106,15 @@ struct AppData {
     GtkLabel* nextDistLabel;
     GtkLabel* nextUnitLabel;
     GtkLabel* nextSpeedLabel;
-    GtkWidget* nextPrevBtn;
+    GtkWidget* nextPrevBtn;  // "next" (the name predates the separate prev)
+    GtkWidget* prevBtn;
+    // Reset Total pressed with a stage running (usership 6): the counters and
+    // rally time AT THE PRESS, applied if the crew confirm -- the distance
+    // zero is the press, not the confirm. Stale after a minute.
+    bool totalResetPending = false;
+    uint64_t totalResetCntr1 = 0;
+    uint64_t totalResetCntr2 = 0;
+    int64_t totalResetPressMs = 0;
     GtkWidget* adjZeroBtn;
     GtkLabel* alarmCountdownLabel;
     // Read-only stage panel on the main navigator screen, and the text it is
@@ -171,9 +180,15 @@ struct AppData {
     GtkEntry* rallyDistEntry;
     GtkWidget* calibrationKeypad;   // Numeric keypad for calibration
     GtkLabel* sensorModeLabel;      // "Currently set to sensor 1 / both sensors"
-    GtkLabel* calibrationCurrentLabel;  // "Current Calibration: N pulses/KM"
+    GtkLabel* calibrationCurrentLabel;  // "Using Calibration N pulses/KM. Reset to"
     GtkEntry* resetPulsesEntry;  // operator-entered target for RB-CAL-03's reset
     GtkLabel* calibrationClockLabel;  // rally clock, shares the title row
+    // RB-CAL-06: Prop/Wheel RPM (pulses box on the "4. Save Calibration" line,
+    // reading under the keypad), and the reading it last showed --
+    // compared each tick so the label is only touched when the figure changes.
+    GtkEntry* propPulsesEntry = nullptr;
+    GtkLabel* propRpmLabel = nullptr;
+    std::string propRpmShown;
 
     // Calibration baseline values (set when "start" is pressed)
     uint64_t cal_start_cntr1 = 0;
@@ -221,6 +236,9 @@ struct AppData {
 
     // Sim Control Panel (3rd display, dev/testing only — created only when
     // RALLY_SIM_I2C=1). Drives the simulated counters in real time.
+    SimCounter* simCounter1 = nullptr;
+    SimCounter* simCounter2 = nullptr;
+    GtkWidget* controlWindow = nullptr;
     GtkWidget* controlSpeedButtons[6] = {};  // 25,30,35,40,45,50 km/h
     GtkWidget* controlStartBtn = nullptr;
     GtkWidget* controlStopBtn = nullptr;

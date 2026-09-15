@@ -842,7 +842,7 @@ void updateDriverDisplay(AppData* data) {
                 data->state->auto_start_early_departure ? "Early Departure:\nENABLED"
                                                         : "Early Departure:\nDISABLED");
             if (data->countdownContainer) gtk_widget_show(data->countdownContainer);
-        } else if (diff_ms <= 0 && diff_ms > -2000) {
+        } else if (diff_ms <= 0 && diff_ms > -AUTO_START_TRIGGER_WINDOW_MS) {
             if (data->countdownContainer) gtk_widget_hide(data->countdownContainer);
             data->autoStartTriggered = true;
             // Branches internally on auto_start_early_departure: an early

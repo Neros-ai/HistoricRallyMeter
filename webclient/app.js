@@ -50,9 +50,8 @@
     $('seg-num').textContent = msg.segment_number || 0;
     $('seg-count').textContent = msg.segment_count || 0;
 
-    const btn = $('btn-next-prev');
-    btn.textContent = msg.next_prev_label || '--->';
-    btn.disabled = !msg.next_prev_enabled;
+    $('btn-next').disabled = !msg.next_enabled;
+    $('btn-prev').disabled = !msg.prev_enabled;
   }
 
   // Reflects the box's own settings back into the controls. Skips whichever
@@ -208,12 +207,29 @@
     field.blur();
   });
 
-  $('btn-next-prev').addEventListener('click', () => send({ type: 'next_prev' }));
+  $('btn-next').addEventListener('click', () => send({ type: 'next' }));
+  $('btn-prev').addEventListener('click', () => send({ type: 'prev' }));
   $('btn-reset-trip').addEventListener('click', resetTrip);
   $('btn-reset-trip2').addEventListener('click', resetTrip);
-  $('btn-reset-total').addEventListener('click', () => {
+  // With a stage running, the box's own question (a missed start): the
+  // distance zero is the press, so the box is told at once and the reset
+  // applied only if the crew confirm.
+  $('btn-reset-total').addEventListener('click', resetTotal);
+  $('btn-reset-total-live').addEventListener('click', resetTotal);
+  function resetTotal() {
+    if (lastState && lastState.total_reset_asks) {
+      send({ type: 'reset_total_capture' });
+      $('stage-menu').classList.remove('hidden');
+      return;
+    }
     if (confirm('Reset total distance?')) send({ type: 'reset_total' });
+  }
+  const closeStageMenu = () => $('stage-menu').classList.add('hidden');
+  $('menu-abort').addEventListener('click', () => {
+    closeStageMenu();
+    send({ type: 'reset_total', choice: 'confirm' });
   });
+  $('menu-cancel').addEventListener('click', closeStageMenu);
 
   function resetTrip() {
     if (confirm('Reset trip distance?')) send({ type: 'reset_trip' });

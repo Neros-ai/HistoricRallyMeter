@@ -12,6 +12,7 @@
 #include "test_rally_clock.h"
 #include "test_edge_cases.h"
 #include "test_calibration_independent.h"
+#include "test_sim_counter.h"
 #include "test_counter_poller_real.h"
 #include "test_elapsed.h"
 #include "test_distance_adjust.h"
@@ -23,6 +24,8 @@
 #include "test_segment_entry_parsing.h"
 #include "test_simple_tone.h"
 #include "test_arrow_tone.h"
+#include "test_total_reset.h"
+#include "test_next_prev.h"
 
 int main() {
     TestRunner runner;
@@ -38,6 +41,7 @@ int main() {
     TestRallyClock clockTests;
     TestEdgeCases edgeCaseTests;
     TestCalibrationIndependent calIndepTests;
+    TestSimCounter simCounterTests;
     TestCounterPollerReal realPollerTests;
     TestElapsed elapsedTests;
     TestDistanceAdjust distanceAdjustTests;
@@ -49,6 +53,8 @@ int main() {
     TestSegmentEntryParsing segmentEntryParsingTests;
     TestSimpleTone simpleToneTests;
     TestArrowTone arrowToneTests;
+    TestTotalReset totalResetTests;
+    TestNextPrev nextPrevTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -61,6 +67,7 @@ int main() {
     runner.addSuite(clockTests.createSuite());
     runner.addSuite(edgeCaseTests.createSuite());
     runner.addSuite(calIndepTests.createSuite());
+    runner.addSuite(simCounterTests.createSuite());
     runner.addSuite(realPollerTests.createSuite());
     runner.addSuite(elapsedTests.createSuite());
     runner.addSuite(distanceAdjustTests.createSuite());
@@ -72,6 +79,8 @@ int main() {
     runner.addSuite(segmentEntryParsingTests.createSuite());
     runner.addSuite(simpleToneTests.createSuite());
     runner.addSuite(arrowToneTests.createSuite());
+    runner.addSuite(totalResetTests.createSuite());
+    runner.addSuite(nextPrevTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();

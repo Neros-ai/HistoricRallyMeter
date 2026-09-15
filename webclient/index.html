@@ -38,12 +38,17 @@
       <div><span>Total</span><strong id="total-m">0 m</strong><span id="total-avg">avg 0.0</span></div>
     </section>
 
-    <section class="actions">
-      <button id="btn-next-prev" type="button" disabled>---&gt;</button>
-      <button id="btn-reset-trip" type="button">Reset Trip</button>
+    <section class="actions live-tall">
+      <button id="btn-prev" type="button" disabled>prev</button>
+      <button id="btn-next" type="button" disabled>next</button>
     </section>
 
-    <section class="adjust-row">
+    <section class="actions live-tall">
+      <button id="btn-reset-trip" type="button">Reset Trip</button>
+      <button id="btn-reset-total-live" type="button">Reset Total</button>
+    </section>
+
+    <section class="adjust-row live-tall">
       <span class="adjust-label">Adjust</span>
       <button id="btn-dist-minus" type="button">&minus;10</button>
       <input id="dist-set-m" type="number" min="0" max="999999" step="1"
@@ -139,6 +144,19 @@
       <button id="btn-reset-total" type="button">Reset Total</button>
     </section>
   </main>
+
+  <!-- Reset Total with a stage running (a missed start): the box's question. -->
+  <div id="stage-menu" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-box">
+      <p class="modal-title">A stage is running</p>
+      <p class="modal-note">Total and Trip reset to zero from the press<br>
+        The stage clock keeps running</p>
+      <div class="modal-actions">
+        <button id="menu-abort" type="button">CONFIRM DISTANCE RESET</button>
+        <button id="menu-cancel" type="button">Back</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/app.js"></script>
 </body>

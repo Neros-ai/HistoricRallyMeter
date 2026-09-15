@@ -480,6 +480,37 @@ public:
             return true;
         });
 
+        suite->addTest("prop pulses per turn defaults to 8", []() {
+            RallyState state;
+            ASSERT_EQ(state.prop_pulses_per_rev, 8);
+            return true;
+        });
+
+        suite->addTest("prop pulses per turn survives a save/load round trip", []() {
+            RallyState state;
+            state.prop_pulses_per_rev = 12;
+            std::string path = "/tmp/rb_test_prop_ppr.json";
+            ConfigFile::save(state, path);
+            RallyState loaded;
+            ConfigFile::load(loaded, path);
+            ASSERT_EQ(loaded.prop_pulses_per_rev, 12);
+            std::remove(path.c_str());
+            return true;
+        });
+
+        suite->addTest("an out-of-range prop pulses per turn falls back to 8", []() {
+            // A hand-edited 0 would otherwise divide by zero on every tick.
+            RallyState state;
+            std::string path = "/tmp/rb_test_prop_ppr_bad.json";
+            std::ofstream f(path);
+            f << "{\n  \"prop_pulses_per_rev\": 0\n}\n";
+            f.close();
+            ConfigFile::load(state, path);
+            ASSERT_EQ(state.prop_pulses_per_rev, 8);
+            std::remove(path.c_str());
+            return true;
+        });
+
         return suite;
     }
 };

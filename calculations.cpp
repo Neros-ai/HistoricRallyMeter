@@ -323,6 +323,99 @@ bool retimeSegmentBoundaryBackward(std::vector<Segment>& segs, long index,
     return true;
 }
 
+bool mergeSegmentBack(std::vector<Segment>& segs, long index, long calibration) {
+    if (index <= 0 || index >= static_cast<long>(segs.size())) return false;
+    Segment& prev = segs[index - 1];
+    Segment& cur = segs[index];
+    prev.distance_counts += cur.distance_counts;
+    cur.distance_counts = 0.0;
+    // The merged segment now ends where the undone one did, so it takes that
+    // segment's auto-advance: an automatic change point stays automatic, and
+    // a manual one (a timing point) still waits for "next".
+    prev.autoNext = cur.autoNext;
+    resyncSegmentMeters(prev, calibration);
+    resyncSegmentMeters(cur, calibration);
+    return true;
+}
+
+int64_t segmentStartStageCounts(const std::vector<Segment>& segs, long index) {
+    double sum = 0.0;
+    for (long i = 0; i < index && i < static_cast<long>(segs.size()); i++) {
+        sum += segs[i].distance_counts;
+    }
+    return static_cast<int64_t>(sum);
+}
+
+long segmentIndexAtStageCounts(const std::vector<Segment>& segs, int64_t stage_counts) {
+    if (segs.empty()) return -1;
+    long idx = 0;
+    double end = segs[0].distance_counts;
+    while (idx + 1 < static_cast<long>(segs.size()) && segs[idx].autoNext &&
+           static_cast<double>(stage_counts) >= end) {
+        idx++;
+        end += segs[idx].distance_counts;
+    }
+    return idx;
+}
+
+void rebaseSegmentAt(RallyState& state, uint64_t c1, uint64_t c2,
+                     int64_t counts_into_segment) {
+    uint64_t into = counts_into_segment > 0 ? static_cast<uint64_t>(counts_into_segment) : 0;
+    // Both counters by the same amount: calculateDistanceCounts averages the
+    // two deltas in two-wheel mode and reads counter 1 alone otherwise, and
+    // either way comes back to `into`.
+    state.segment_start_cntr1 = c1 >= into ? c1 - into : 0;
+    state.segment_start_cntr2 = c2 >= into ? c2 - into : 0;
+    state.segment_start_adjust_cm = state.total_distance_adjust_cm;
+}
+
+bool nextAvailable(const RallyState& state) {
+    long i = state.segment_current_number;
+    return i >= 0 && i + 1 < static_cast<long>(state.stage_segments.size());
+}
+
+bool prevAvailable(const RallyState& state) {
+    long i = state.segment_current_number;
+    return state.undo_valid &&
+           state.undo_stage_start_ms == state.total_start_time_ms &&
+           i == state.undo_from_index + 1 &&
+           i < static_cast<long>(state.stage_segments.size());
+}
+
+void recordSegmentChange(RallyState& state, long from_index, bool automatic) {
+    if (from_index < 0 || from_index + 1 >= static_cast<long>(state.stage_segments.size())) {
+        state.undo_valid = false;
+        return;
+    }
+    state.undo_valid = true;
+    state.undo_from_index = from_index;
+    state.undo_from_counts = state.stage_segments[from_index].distance_counts;
+    state.undo_to_counts = state.stage_segments[from_index + 1].distance_counts;
+    state.undo_automatic = automatic;
+    state.undo_stage_start_ms = state.total_start_time_ms;
+}
+
+bool undoSegmentChange(RallyState& state, uint64_t c1, uint64_t c2, int64_t stage_counts) {
+    if (!prevAvailable(state)) return false;
+    auto& segs = state.stage_segments;
+    const long i = state.undo_from_index;
+    if (state.undo_automatic) {
+        mergeSegmentBack(segs, i + 1, state.calibration);
+        state.segment_current_number = i;
+    } else {
+        segs[i].distance_counts = state.undo_from_counts;
+        segs[i + 1].distance_counts = state.undo_to_counts;
+        resyncSegmentMeters(segs[i], state.calibration);
+        resyncSegmentMeters(segs[i + 1], state.calibration);
+        const int64_t point = segmentStartStageCounts(segs, i + 1);
+        state.segment_current_number = stage_counts < point ? i : i + 1;
+    }
+    const long cur = state.segment_current_number;
+    rebaseSegmentAt(state, c1, c2, stage_counts - segmentStartStageCounts(segs, cur));
+    state.undo_valid = false;   // once only
+    return true;
+}
+
 long adjustedDistanceMeters(long raw_cm, long adjust_cm) {
     long corrected_cm = raw_cm + adjust_cm;
     if (corrected_cm < 0) corrected_cm = 0;
@@ -493,7 +586,7 @@ double pulsesPerKm(long calibration) {
 std::string calibrationReadoutLine(long distance_m, int64_t counts_avg,
                                    int64_t counts_s1, int64_t counts_s2) {
     std::stringstream ss;
-    ss << "Device distance: " << distance_m << "m."
+    ss << "Device distance: " << distance_m << "m"
        << " Pulses " << counts_avg
        << " S1=" << counts_s1 << " S2=" << counts_s2;
     return ss.str();
@@ -502,6 +595,22 @@ std::string calibrationReadoutLine(long distance_m, int64_t counts_avg,
 long calibrationFromPulsesPerKm(double pulses_per_km) {
     if (pulses_per_km <= 0.0) return 0;
     return static_cast<long>((1e9 / pulses_per_km) + 0.5);
+}
+
+double propRpmFromCounts(uint64_t cntr_now, uint64_t cntr_then,
+                         int64_t elapsed_ms, int pulses_per_rev) {
+    if (elapsed_ms <= 0 || !validPropPulsesPerRev(pulses_per_rev)) return -1.0;
+    uint32_t pulses = static_cast<uint32_t>(cntr_now) - static_cast<uint32_t>(cntr_then);
+    return pulses * 1000.0 / elapsed_ms / pulses_per_rev * 60.0;
+}
+
+bool validPropPulsesPerRev(long pulses_per_rev) {
+    return pulses_per_rev >= 1 && pulses_per_rev <= 64;
+}
+
+std::string propRpmReading(double rpm) {
+    if (rpm < 0.0) return "---";
+    return std::to_string(std::lround(rpm));
 }
 
 std::string stageSummary(const std::vector<Segment>& segments) {
@@ -729,6 +838,96 @@ bool autoStartHoldsTimeError(uint64_t auto_start_rally_time_s,
     if (!auto_start_early_departure) return false;
     if (auto_start_triggered) return false;
     return diff_ms > 0 && diff_ms <= 24LL * 3600 * 1000;
+}
+
+bool autoStartTargetReachable(int64_t target_ms, int64_t now_ms) {
+    return now_ms < target_ms;
+}
+
+TotalResetCase classifyTotalReset(const RallyState& state) {
+    // Any autostart armed and not yet fired: the driver display is counting
+    // down to a start, and Total is the waiting-for-autostart reset --
+    // immediate, no question -- even with the previous stage still on the
+    // gauge (owner's ruling).
+    if (state.auto_start_rally_time_s != 0) {
+        return state.auto_start_early_departure ? TotalResetCase::AwaitingEarlyDeparture
+                                                : TotalResetCase::AwaitingTimedStart;
+    }
+    // Only a stage still running: one driven out to its end is over, and a
+    // Total press then is the plain idle reset.
+    if (!state.stage_complete && state.segment_current_number >= 0) {
+        return TotalResetCase::StageRunning;
+    }
+    return TotalResetCase::Idle;
+}
+
+bool stageAbortable(const RallyState& state) {
+    return state.auto_start_rally_time_s != 0 || state.segment_current_number >= 0;
+}
+
+void rebaseTotalDistance(RallyState& state, uint64_t c1, uint64_t c2) {
+    state.total_start_cntr1 = c1;
+    state.total_start_cntr2 = c2;
+    state.segment_start_cntr1 = c1;
+    state.segment_start_cntr2 = c2;
+    state.total_distance_adjust_cm = 0;
+    // Taken after the clear: the segment restarts against a correction of
+    // zero like everything else re-based here.
+    state.segment_start_adjust_cm = state.total_distance_adjust_cm;
+}
+
+void rebaseTripDistance(RallyState& state, uint64_t c1, uint64_t c2) {
+    state.trip_start_cntr1 = c1;
+    state.trip_start_cntr2 = c2;
+    state.trip_distance_adjust_cm = 0;
+}
+
+void resetTrip(RallyState& state, uint64_t c1, uint64_t c2, int64_t now_ms) {
+    rebaseTripDistance(state, c1, c2);
+    state.trip_start_time_ms = now_ms;
+}
+
+void rebaseTripToSegment(RallyState& state, uint64_t c1, uint64_t c2) {
+    rebaseTripDistance(state, c1, c2);
+    state.trip_start_time_ms = state.segment_start_time_ms;
+}
+
+void applyTotalResetAwaitingEarlyDeparture(RallyState& state, uint64_t c1, uint64_t c2,
+                                           int64_t now_ms) {
+    rebaseTotalDistance(state, c1, c2);
+    rebaseTripDistance(state, c1, c2);
+    // As arming does: segment 1 measures from this instant in both
+    // quantities. The stage clock is not touched -- the minute starts it --
+    // and neither is the stage itself: arming loaded it, and ending it here
+    // is what blanked the driver panel's speeds for the rest of the countdown.
+    state.segment_start_time_ms = now_ms;
+}
+
+void applyDistanceResetKeepingClock(RallyState& state, uint64_t c1, uint64_t c2,
+                                    int64_t press_ms) {
+    rebaseTotalDistance(state, c1, c2);
+    resetTrip(state, c1, c2, press_ms);
+    // Distance zero is the stage start, so the stage is back at its first
+    // segment -- whose time, like the stage's, runs from the clock zero.
+    state.segment_current_number = state.stage_segments.empty() ? -1 : 0;
+    state.stage_complete = state.stage_segments.empty();
+    state.segment_start_time_ms = state.total_start_time_ms;
+    // The distance the last change was measured on has gone.
+    state.undo_valid = false;
+}
+
+void applyTotalResetToIdle(RallyState& state, uint64_t c1, uint64_t c2,
+                           int64_t now_ms, bool with_trip) {
+    rebaseTotalDistance(state, c1, c2);
+    state.total_start_time_ms = now_ms;
+    state.segment_start_time_ms = now_ms;
+    if (with_trip) resetTrip(state, c1, c2, now_ms);
+    // No segment is current, not the first one: with the clock and the
+    // distance both restarting here, a segment index left mid-roadbook would
+    // sum the earlier segments into the ideal position against zero elapsed
+    // and show an error the instant the button was pressed.
+    state.segment_current_number = -1;
+    state.stage_complete = true;
 }
 
 int gaugeZoneHysteretic(double seconds, int previous_zone) {

@@ -1,5 +1,6 @@
 #include "config_file.h"
 #include "rally_state.h"
+#include "calculations.h"
 #include <fstream>
 #include <string>
 #include <sstream>
@@ -209,6 +210,8 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.web_enabled = extractBool(line);
         } else if (line.find("\"web_port\"") != std::string::npos) {
             state.web_port = static_cast<int>(extractLong(line));
+        } else if (line.find("\"prop_pulses_per_rev\"") != std::string::npos) {
+            state.prop_pulses_per_rev = static_cast<int>(extractLong(line));
         } else if (line.find("\"auto_start_early_departure\"") != std::string::npos) {
             state.auto_start_early_departure = extractBool(line);
         } else if (line.find("\"stage_complete\"") != std::string::npos) {
@@ -269,6 +272,12 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
     if (!state.segment_start_adjust_recorded) {
         state.segment_start_adjust_cm = state.total_distance_adjust_cm;
         state.segment_start_adjust_recorded = true;
+    }
+
+    // A hand-edited 0 would leave the Prop RPM readout dividing by zero on
+    // every tick; the screen's own entry never lets one through.
+    if (!validPropPulsesPerRev(state.prop_pulses_per_rev)) {
+        state.prop_pulses_per_rev = RallyState().prop_pulses_per_rev;
     }
 }
 
@@ -343,6 +352,7 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"simple_tone_mode\": " << (state.simple_tone_mode ? "true" : "false") << ",\n";
     file << "  \"web_enabled\": " << (state.web_enabled ? "true" : "false") << ",\n";
     file << "  \"web_port\": " << state.web_port << ",\n";
+    file << "  \"prop_pulses_per_rev\": " << state.prop_pulses_per_rev << ",\n";
     
     file << "  \"beep_assist_enabled\": " << (state.beep_assist_enabled ? "true" : "false") << ",\n";
     file << "  \"beep_advance_m\": " << state.beep_advance_m << ",\n";

@@ -273,6 +273,19 @@ public:
             return true;
         });
 
+        suite->addTest("At HH:MM arms its printed minute only before it", []() {
+            // Menu opened at 10:00:58 printing "At 10:01": the press must arm
+            // 10:01, never 10:02 -- and from 10:01:00 on, nothing, even inside
+            // the window where a late arming would still fire.
+            int64_t minute = 1000LL * 60000;
+            ASSERT_TRUE(autoStartTargetReachable(minute, minute - 2000));
+            ASSERT_TRUE(autoStartTargetReachable(minute, minute - 1));
+            ASSERT_FALSE(autoStartTargetReachable(minute, minute));
+            ASSERT_FALSE(autoStartTargetReachable(minute, minute + AUTO_START_TRIGGER_WINDOW_MS - 1));
+            ASSERT_FALSE(autoStartTargetReachable(minute, minute + 30000));
+            return true;
+        });
+
         suite->addTest("an out-of-range autostart time is refused, not multiplied", []() {
             // auto_start_rally_time_s is a uint64_t read from a hand-editable
             // config file. Multiplying it out unchecked is signed overflow --

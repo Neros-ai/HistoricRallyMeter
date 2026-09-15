@@ -160,6 +160,10 @@ public:
     // Embedded web server for phone browsers
     bool web_enabled = true;
     int web_port = 8080;
+
+    // Pulses per turn of the prop-shaft sensor on counter 1, for the Prop
+    // RPM readout on the calibration screen (RB-CAL-06). Display only.
+    int prop_pulses_per_rev = 8;
     
     // Driver window position/size (remembered across sessions)
     int driver_window_x = -1;      // -1 = not set
@@ -167,6 +171,18 @@ public:
     int driver_window_width = 1280;
     int driver_window_height = 400;
     int driver_window_monitor = 0;
+
+    // The last speed change of the running stage -- a "next" press or the
+    // box's own auto-advance -- so "prev" can undo it (see
+    // undoSegmentChange). Taken just before the change, from the stage's own
+    // roadbook. Not persisted: an undo is for the moment, not across a
+    // restart.
+    bool undo_valid = false;
+    long undo_from_index = -1;           // the segment the change left
+    double undo_from_counts = 0.0;       // its length before the change
+    double undo_to_counts = 0.0;         // the next segment's, before it
+    bool undo_automatic = false;         // auto-advance rather than "next"
+    int64_t undo_stage_start_ms = 0;     // which stage it belongs to
     
     RallyState();
 };
