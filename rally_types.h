@@ -183,7 +183,8 @@ struct AppData {
     GtkLabel* calibrationCurrentLabel;  // "Current Calibration: N pulses/KM"
     GtkEntry* resetPulsesEntry;  // operator-entered target for RB-CAL-03's reset
     GtkLabel* calibrationClockLabel;  // rally clock, shares the title row
-    // RB-CAL-06: Prop RPM under the keypad, and the reading it last showed --
+    // RB-CAL-06: Prop/Wheel RPM (pulses box on the "4. Save Calibration" line,
+    // reading under the keypad), and the reading it last showed --
     // compared each tick so the label is only touched when the figure changes.
     GtkEntry* propPulsesEntry = nullptr;
     GtkLabel* propRpmLabel = nullptr;

@@ -55,6 +55,7 @@ static void applyCopilotCSS() {
         "button.memory-populated { background-image: none; background-color: #FFFFFF; color: #000000; }"
         ".adjust-button { font-size: 28px; font-weight: bold; font-family: monospace; }"
         ".instruction-label { font-size: 16px; color: #CCCCCC; }"
+        ".compact-entry { min-height: 0; padding-top: 0; padding-bottom: 0; }"
         ".tone-mode-row label, .tone-mode-row checkbutton { font-size: 20px; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
@@ -1136,35 +1137,38 @@ GtkWidget* createCalibrationScreen(AppData* data) {
         "3. Press Sensor button to select counter.",
         "4. Save Calibration",
     };
+    // The instructions sit at the foot of the column rather than a fixed
+    // distance under the rows above: whatever height is spare becomes the gap
+    // above INSTRUCTIONS, and the last line's foot is the column's foot --
+    // level with the Prop/Wheel RPM reading, which sits at the foot of the
+    // keypad's column.
+    GtkWidget* instrBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_box_pack_end(GTK_BOX(leftBox), instrBox, FALSE, FALSE, 0);
+    GtkWidget* lastInstructionRow = nullptr;
     for (int i = 0; i < 5; i++) {
         GtkWidget* lbl = gtk_label_new(instructions[i]);
         gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "instruction-label");
         gtk_widget_set_halign(lbl, GTK_ALIGN_START);
-        if (i == 0) gtk_widget_set_margin_top(lbl, 22);
-        gtk_box_pack_start(GTK_BOX(leftBox), lbl, FALSE, FALSE, 0);
+        if (i == 4) {
+            lastInstructionRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+            gtk_box_pack_start(GTK_BOX(lastInstructionRow), lbl, FALSE, FALSE, 0);
+            gtk_box_pack_start(GTK_BOX(instrBox), lastInstructionRow, FALSE, FALSE, 0);
+        } else {
+            gtk_box_pack_start(GTK_BOX(instrBox), lbl, FALSE, FALSE, 0);
+        }
     }
 
-    // Right side: numeric keypad. Nudged down from the top of its column so
-    // it doesn't sit flush against the title row now that the row is taller
-    // (title + clock) than a plain title alone.
-    // The keypad and, under it, the Prop RPM block share one column, so the
-    // keypad keeps exactly the position it had on its own.
-    GtkWidget* rightCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
-    gtk_box_pack_end(GTK_BOX(data->calibrationMainBox), rightCol, FALSE, FALSE, 10);
-    data->calibrationKeypad = createNumericKeypad(data);
-    gtk_widget_set_margin_top(data->calibrationKeypad, 12);
-    // The Prop RPM line is wider than the keypad; pinning the keypad to the
-    // column's right edge keeps it where it sat on its own, and the wider
-    // line grows leftwards instead.
-    gtk_widget_set_halign(data->calibrationKeypad, GTK_ALIGN_END);
-    gtk_box_pack_start(GTK_BOX(rightCol), data->calibrationKeypad, FALSE, FALSE, 0);
-
-    // RB-CAL-06: Prop RPM. Counter 1 read as a prop-shaft sensor -- engine
-    // rpm in a direct-drive top gear. The pulses-per-turn box takes this
-    // screen's keypad like the other entries here.
+    // RB-CAL-06: Prop/Wheel RPM. Counter 1 read as a prop-shaft or wheel
+    // sensor -- engine rpm in a direct-drive top gear. Its heading and
+    // pulses-per-turn box sit at the right-hand end of "4. Save Calibration";
+    // the reading itself goes under the keypad (below). Both under the keypad
+    // took two lines and pushed the button bar off the screen, and heading
+    // and reading on one line there is too wide beside the calibration rows.
+    // The pulses-per-turn box takes this screen's keypad like the other
+    // entries here.
     GtkWidget* propRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
-    gtk_box_pack_start(GTK_BOX(rightCol), propRow, FALSE, FALSE, 0);
-    GtkWidget* propLabel = gtk_label_new("Prop RPM at");
+    gtk_box_pack_end(GTK_BOX(lastInstructionRow), propRow, FALSE, FALSE, 0);
+    GtkWidget* propLabel = gtk_label_new("Prop/Wheel RPM at");
     gtk_style_context_add_class(gtk_widget_get_style_context(propLabel), "instruction-label");
     gtk_box_pack_start(GTK_BOX(propRow), propLabel, FALSE, FALSE, 0);
 
@@ -1175,6 +1179,10 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     gtk_entry_set_text(data->propPulsesEntry,
                        std::to_string(data->state->prop_pulses_per_rev).c_str());
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->propPulsesEntry)), "instruction-label");
+    // Only as tall as the text, so "4. Save Calibration" keeps the same line
+    // spacing as the three instructions above it.
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->propPulsesEntry)), "compact-entry");
+    gtk_widget_set_valign(GTK_WIDGET(data->propPulsesEntry), GTK_ALIGN_CENTER);
     g_signal_connect(data->propPulsesEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
     g_signal_connect(data->propPulsesEntry, "changed", G_CALLBACK(on_prop_pulses_changed), data);
     gtk_box_pack_start(GTK_BOX(propRow), GTK_WIDGET(data->propPulsesEntry), FALSE, FALSE, 0);
@@ -1183,10 +1191,25 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     gtk_style_context_add_class(gtk_widget_get_style_context(pulsesLabel), "instruction-label");
     gtk_box_pack_start(GTK_BOX(propRow), pulsesLabel, FALSE, FALSE, 0);
 
+    // Right side: numeric keypad. Nudged down from the top of its column so
+    // it doesn't sit flush against the title row now that the row is taller
+    // (title + clock) than a plain title alone.
+    // The Prop/Wheel RPM reading shares the keypad's column, under it; it is
+    // narrower than the keypad (~170 px against 190), so the keypad keeps
+    // exactly the position it had on its own.
+    GtkWidget* rightCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_box_pack_end(GTK_BOX(data->calibrationMainBox), rightCol, FALSE, FALSE, 10);
+    data->calibrationKeypad = createNumericKeypad(data);
+    gtk_widget_set_margin_top(data->calibrationKeypad, 12);
+    gtk_box_pack_start(GTK_BOX(rightCol), data->calibrationKeypad, FALSE, FALSE, 0);
+
     // The figure is right-aligned in a fixed width ("12,345" is the widest)
     // and "rpm" is its own label, so the unit stays put as the figure grows.
+    // At the foot of the column, so it sits level with its heading on the last
+    // instruction line (the instructions are at the foot of theirs).
     GtkWidget* rpmRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_box_pack_start(GTK_BOX(rightCol), rpmRow, FALSE, FALSE, 0);
+    gtk_widget_set_halign(rpmRow, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(rightCol), rpmRow, FALSE, FALSE, 0);
     data->propRpmLabel = GTK_LABEL(gtk_label_new(NULL));
     gtk_label_set_markup(data->propRpmLabel, "<span foreground=\"#FFDD00\">---</span>");
     data->propRpmShown = "---";
@@ -1197,7 +1220,7 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     GtkWidget* rpmUnit = gtk_label_new("rpm");
     gtk_style_context_add_class(gtk_widget_get_style_context(rpmUnit), "clock-label");
     gtk_box_pack_start(GTK_BOX(rpmRow), rpmUnit, FALSE, FALSE, 0);
-    
+
     // Bottom: navigation buttons
     GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
     gtk_box_pack_end(GTK_BOX(screen), buttonBox, FALSE, FALSE, 5);

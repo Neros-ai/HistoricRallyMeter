@@ -460,9 +460,9 @@ std::string calibrationReadoutLine(long distance_m, int64_t counts_avg,
 // a non-positive input rather than dividing by zero.
 long calibrationFromPulsesPerKm(double pulses_per_km);
 
-// Prop RPM under the calibration screen's keypad (RB-CAL-06): counter-1
+// Prop/Wheel RPM on the calibration screen (RB-CAL-06): counter-1
 // pulses per second over the poller's ~2 s span, divided by the pulses per
-// turn of the prop sensor. It is engine rpm only in a direct-drive top gear.
+// turn of the prop or wheel sensor. It is engine rpm only in a direct-drive top gear.
 // The counter is 32-bit, so the difference is taken modulo 2^32 and a wrap
 // reads as the pulses actually counted. Returns -1 when there is no elapsed
 // time yet or the pulses per turn is out of range.

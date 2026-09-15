@@ -70,7 +70,7 @@ public:
                 && calibrationFromPulsesPerKm(-5.0) == 0;
         });
 
-        // RB-CAL-06: Prop RPM under the keypad.
+        // RB-CAL-06: Prop/Wheel RPM on the calibration screen.
         suite->addTest("prop rpm is counter-1 pulses/s / pulses per turn x 60", []() {
             // 478 pulses in 2 s at 8 pulses a turn: 239 Hz -> 1792.5 rpm.
             return std::abs(propRpmFromCounts(10478, 10000, 2000, 8) - 1792.5) < 1e-9;
