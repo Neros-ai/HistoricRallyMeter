@@ -68,6 +68,12 @@ header h1 { font-size: 1rem; margin: 0; }
   border: 2px solid #fff;
 }
 .actions button:disabled { opacity: 0.35; }
+/* Live page: prev/next, the two resets and the -10/+10 line are pressed on
+   the move, so they are 1.5x the normal height -- the extra half goes on the
+   padding, the font stays as it is. */
+.actions.live-tall button { padding-block: 1.65rem; }
+.adjust-row.live-tall button { padding-block: 1.35rem; }
+.adjust-row.live-tall input[type="number"] { padding-block: 1.25rem; }
 .table-wrap { overflow-x: auto; margin-bottom: 0.75rem; }
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 th, td { border: 1px solid #444; padding: 0.4rem; text-align: left; }
