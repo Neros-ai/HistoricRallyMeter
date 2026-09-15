@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+#
+# install-rallybox — put the Rallybox version of HistoricRallyMeter on this
+# machine in a folder of its own, next to (never on top of) an original
+# HistoricRallyMeter install. On the Pi, paste:
+#
+#   curl -fsSL https://raw.githubusercontent.com/Neros-ai/HistoricRallyMeter/box/install-rallybox | bash
+#
+# It asks which folder to use (default ~/Rallybox) and refuses the original's
+# folder, downloads and builds Rallybox there, offers to copy the original's
+# calibration and settings across, and adds a desktop icon called "Rallybox"
+# beside the original's. Afterwards, update with ./update in that folder.
+#
+# For unattended use each question can be answered in advance:
+#   RALLYBOX_DIR=/path  RALLYBOX_COPY_SETTINGS=y|n  (RALLYBOX_REPO overrides
+#   where it downloads from).
+
+set -euo pipefail
+
+REPO="${RALLYBOX_REPO:-https://github.com/Neros-ai/HistoricRallyMeter.git}"
+BRANCH=box
+DEFAULT_DIR="$HOME/Rallybox"
+ORIGINAL_DIR="$HOME/HistoricRallyMeter"
+
+# Questions are read from the terminal even when this script arrives through
+# a pipe (curl ... | bash); with no terminal the default is taken.
+ask() {  # ask "question" "default"
+    local answer=""
+    if (exec </dev/tty) 2>/dev/null; then
+        read -r -p "$1 [$2] " answer </dev/tty || answer=""
+    fi
+    printf '%s' "${answer:-$2}"
+}
+
+echo "Rallybox installer — installs alongside the original HistoricRallyMeter, never over it."
+echo
+
+DEST="${RALLYBOX_DIR:-$(ask "Install Rallybox into which folder?" "$DEFAULT_DIR")}"
+DEST="${DEST/#\~/$HOME}"
+DEST="$(realpath -m "$DEST")"
+
+if [ "$DEST" = "$(realpath -m "$ORIGINAL_DIR")" ]; then
+    echo "That is the original HistoricRallyMeter's folder. Choose another — Rallybox must not replace it." >&2
+    exit 1
+fi
+if [ -e "$DEST" ]; then
+    if [ -d "$DEST/.git" ] && [ "$(git -C "$DEST" symbolic-ref --short -q HEAD || true)" = "$BRANCH" ]; then
+        echo "Rallybox is already installed in $DEST. To update it:"
+        echo "  cd \"$DEST\" && ./update"
+        exit 0
+    fi
+    echo "$DEST already exists. Choose a new folder name." >&2
+    exit 1
+fi
+
+# Build tools: the same list as the README. Already there if the original runs.
+missing=()
+for pkg in build-essential pkg-config libgtk-3-dev libasound2-dev libqrencode4 git; do
+    dpkg -s "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
+done
+if [ ${#missing[@]} -gt 0 ]; then
+    echo "Installing build tools: ${missing[*]}"
+    SUDO=""; [ "$(id -u)" -eq 0 ] || SUDO=sudo
+    $SUDO apt update
+    $SUDO apt install -y "${missing[@]}"
+fi
+
+echo "Downloading Rallybox into $DEST ..."
+git clone --branch "$BRANCH" "$REPO" "$DEST"
+cd "$DEST"
+echo "Building (a minute or two) ..."
+make all
+
+if [ -f "$ORIGINAL_DIR/rally_config.json" ]; then
+    copy="${RALLYBOX_COPY_SETTINGS:-$(ask "Copy the original's calibration and settings into Rallybox? (y/n)" "y")}"
+    case "$copy" in
+        [Yy]*) cp "$ORIGINAL_DIR/rally_config.json" "$DEST/rally_config.json"
+               echo "Settings copied (the original's file is unchanged)." ;;
+        *)     echo "Settings not copied — Rallybox starts with defaults." ;;
+    esac
+fi
+
+# The GTK setting that stops the second display dimming (README step 5).
+if [ ! -f "$HOME/.config/gtk-3.0/gtk.css" ]; then
+    mkdir -p "$HOME/.config/gtk-3.0"
+    cp gtk-example-gtk.css "$HOME/.config/gtk-3.0/gtk.css"
+fi
+
+# Its own icon, named Rallybox, so the original's icon is left alone.
+if [ -d "$HOME/Desktop" ]; then
+    cat > "$HOME/Desktop/Rallybox.desktop" <<EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Rallybox
+Comment=Rallybox version of HistoricRallyMeter
+Exec=bash -c 'cd "$DEST" && ./HistoricRallyMeter'
+Icon=$DEST/historic_rally_meter_icon.png
+Terminal=false
+Categories=Utility;
+StartupNotify=true
+EOF
+    chmod +x "$HOME/Desktop/Rallybox.desktop"
+    echo "Desktop icon added: Rallybox"
+fi
+
+if [ ! -e /dev/i2c-1 ]; then
+    echo
+    echo "Note: /dev/i2c-1 is missing — enable I2C and set 400 kHz as in README steps 2 and 3."
+fi
+
+echo
+echo "Rallybox is installed in $DEST."
+echo "  Start it:   the Rallybox desktop icon, or  cd \"$DEST\" && ./HistoricRallyMeter"
+echo "  Update it:  cd \"$DEST\" && ./update"
+echo "Run only one of Rallybox and the original at a time — they share the sensors and screens."

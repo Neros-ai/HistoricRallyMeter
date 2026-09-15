@@ -181,6 +181,23 @@ cp HistoricRallyMeter.desktop ~/Desktop/
 chmod +x ~/Desktop/HistoricRallyMeter.desktop
 ```
 
+## Installing the Rallybox version alongside the original
+
+The Rallybox version (the `box` branch of the Neros-ai fork) installs in a
+folder of its own, next to an original `~/HistoricRallyMeter` install and
+never over it. On the Pi, paste:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Neros-ai/HistoricRallyMeter/box/install-rallybox | bash
+```
+
+It asks which folder to use (default `~/Rallybox`), builds Rallybox there,
+offers to copy the original's calibration and settings, and adds a desktop
+icon called **Rallybox**. Update it later with `./update` in its folder — the
+script follows the Rallybox line there, and release tags in an original
+install as before. Run only one of the two at a time: they share the
+counters, the screens and the phone page's port.
+
 ## Build Commands
 
 | Command | Description |

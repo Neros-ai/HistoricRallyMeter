@@ -4,12 +4,34 @@
 #
 # Checks out the highest vX.Y.Z version tag from origin and rebuilds. Your
 # rally_config.json is git-ignored, so your settings are preserved across updates.
+#
+# A Rallybox install (see install-rallybox) follows its own `box` branch
+# instead: switching it to a release tag would quietly put the original
+# program back in the Rallybox folder. An original install is unaffected.
 
 set -euo pipefail
 
 # Always operate in the directory this script lives in (the project root),
 # regardless of where it was invoked from.
 cd "$(dirname "$(readlink -f "$0")")"
+
+# Rallybox: on the box branch -- or knocked off it onto a tag by an earlier
+# update, which leaves the local box branch behind.
+BRANCH="$(git symbolic-ref --short -q HEAD || true)"
+if [ "$BRANCH" = "box" ] || { [ -z "$BRANCH" ] && git show-ref --verify --quiet refs/heads/box; }; then
+    [ "$BRANCH" = "box" ] || git checkout --quiet box
+    echo "Rallybox install: fetching the latest Rallybox version ..."
+    git pull --ff-only origin box
+
+    echo "Building ..."
+    make clean
+    make all
+
+    echo
+    echo "Update complete — now on Rallybox $(git rev-parse --short HEAD)."
+    echo "Run ./HistoricRallyMeter from this directory to start."
+    exit 0
+fi
 
 echo "Fetching latest release information ..."
 git fetch --tags --force --prune origin
