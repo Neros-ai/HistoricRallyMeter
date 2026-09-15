@@ -90,7 +90,10 @@ std::string buildTelemetryJson(AppData* data) {
         "\"segment_count\":%zu,"
         "\"next_enabled\":%s,"
         "\"prev_enabled\":%s,"
-        "\"units\":\"%s\"}",
+        "\"units\":\"%s\","
+        // The ahead/behind tone the box is playing right now, so the phone
+        // plays the same one (RB-WEB-02).
+        "\"tone\":%s}",
         rally_clock.c_str(),
         trip_m,
         total_m,
@@ -103,7 +106,8 @@ std::string buildTelemetryJson(AppData* data) {
         data->state->stage_segments.size(),
         np.next_enabled ? "true" : "false",
         np.prev_enabled ? "true" : "false",
-        data->state->units ? "mph" : "kph");
+        data->state->units ? "mph" : "kph",
+        toneCadenceJson(data->currentTone).c_str());
     return buf;
 }
 

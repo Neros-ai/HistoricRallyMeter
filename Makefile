@@ -11,7 +11,7 @@ TEST_TARGET = run_tests
 # Main application sources
 SOURCES = main.cpp i2c_counter.cpp sim_counter.cpp rally_state.cpp config_file.cpp counter_poller.cpp \
           calculations.cpp ui_driver.cpp ui_copilot.cpp ui_control.cpp callbacks.cpp tone_generator.cpp \
-          simple_tone.cpp arrow_tone.cpp \
+          simple_tone.cpp arrow_tone.cpp tone_cadence.cpp \
           webserver/rally_web_server.cpp webserver/web_telemetry.cpp webserver/web_commands.cpp \
           webserver/qr_display.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
@@ -21,9 +21,11 @@ OBJECTS_DEBUG = $(SOURCES:.cpp=_debug.o)
 HEADERS = $(wildcard *.h)
 
 # Test sources (calculations, rally_state, config_file for unit tests)
-TEST_SOURCES = tests/test_main.cpp calculations.cpp rally_state.cpp config_file.cpp simple_tone.cpp arrow_tone.cpp
+TEST_SOURCES = tests/test_main.cpp calculations.cpp rally_state.cpp config_file.cpp simple_tone.cpp arrow_tone.cpp \
+               tone_cadence.cpp
 TEST_OBJECTS = tests/test_main.o calculations_test.o rally_state_test.o config_file_test.o \
-               sim_counter_test.o counter_poller_test.o simple_tone_test.o arrow_tone_test.o
+               sim_counter_test.o counter_poller_test.o simple_tone_test.o arrow_tone_test.o \
+               tone_cadence_test.o
 
 # Default target
 all: $(TARGET)
@@ -77,6 +79,9 @@ simple_tone_test.o: simple_tone.cpp simple_tone.h
 
 arrow_tone_test.o: arrow_tone.cpp arrow_tone.h calculations.h
 	$(CXX) $(CXXFLAGS_TEST) -c arrow_tone.cpp -o arrow_tone_test.o
+
+tone_cadence_test.o: tone_cadence.cpp tone_cadence.h arrow_tone.h simple_tone.h
+	$(CXX) $(CXXFLAGS_TEST) -c tone_cadence.cpp -o tone_cadence_test.o
 
 clean:
 	rm -f $(TARGET) $(TARGET_DEBUG) $(OBJECTS) $(OBJECTS_DEBUG) $(TEST_TARGET) $(TEST_OBJECTS)

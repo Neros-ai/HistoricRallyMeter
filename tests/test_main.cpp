@@ -26,6 +26,7 @@
 #include "test_arrow_tone.h"
 #include "test_total_reset.h"
 #include "test_next_prev.h"
+#include "test_tone_cadence.h"
 
 int main() {
     TestRunner runner;
@@ -55,6 +56,7 @@ int main() {
     TestArrowTone arrowToneTests;
     TestTotalReset totalResetTests;
     TestNextPrev nextPrevTests;
+    TestToneCadence toneCadenceTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -81,6 +83,7 @@ int main() {
     runner.addSuite(arrowToneTests.createSuite());
     runner.addSuite(totalResetTests.createSuite());
     runner.addSuite(nextPrevTests.createSuite());
+    runner.addSuite(toneCadenceTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();

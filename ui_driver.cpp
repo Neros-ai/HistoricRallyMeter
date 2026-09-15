@@ -724,25 +724,14 @@ void updateDriverDisplay(AppData* data) {
             gtk_label_set_text(data->speedAdjustArrowsLabel, "");
         }
 
+        // One decision for the box's speaker and the phone (RB-WEB-02).
+        data->currentTone = decideToneCadence(
+            data->state->tone_enabled, data->state->simple_tone_mode, arrow,
+            data->simpleToneState, seconds, stage_dist_m, past_stage_end);
         if (data->toneGen) {
-            if (!data->state->tone_enabled) {
-                data->toneGen->setCadence(0, 0);
-            } else if (data->state->simple_tone_mode) {
-                SimpleToneResult simple = updateSimpleTone(
-                    data->simpleToneState, seconds, stage_dist_m, past_stage_end);
-                if (simple.active) {
-                    ToneWaveform wave = simple.triangle_wave ? ToneWaveform::Triangle : ToneWaveform::Sine;
-                    data->toneGen->setCadence(SIMPLE_TONE_SUSTAIN_MS, 0, simple.freq_hz, wave);
-                } else {
-                    data->toneGen->setCadence(0, 0);
-                }
-            } else {
-                if (arrow.tone_active) {
-                    data->toneGen->setCadence(arrow.tone_ms, arrow.silence_ms, arrow.freq_hz);
-                } else {
-                    data->toneGen->setCadence(0, 0);
-                }
-            }
+            const ToneCadence& t = data->currentTone;
+            data->toneGen->setCadence(t.tone_ms, t.silence_ms, t.freq_hz,
+                t.triangle ? ToneWaveform::Triangle : ToneWaveform::Sine);
         }
 
         // Redraw gauge
@@ -755,6 +744,7 @@ void updateDriverDisplay(AppData* data) {
         if (data->nextTargetSpeedLabel) gtk_label_set_text(data->nextTargetSpeedLabel, "");
         gtk_label_set_text(data->aheadBehindLabel, "--:--.--");
         gtk_label_set_text(data->speedAdjustArrowsLabel, "");
+        data->currentTone = ToneCadence{};
         if (data->toneGen) data->toneGen->setCadence(0, 0);
         data->aheadBehindSeconds = 0.0;
         data->segmentProgress = 0.0;

@@ -442,6 +442,7 @@ void zeroTimeBaselines(AppData* data) {
     // became zero.
     data->beepCursorsStale = true;
 
+    data->currentTone = ToneCadence{};  // the phone falls silent too (RB-WEB-02)
     if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
 }
 
@@ -530,6 +531,7 @@ void performAbortStage(AppData* data) {
     // No stage, nothing to be ahead or behind of: the driver's needle goes
     // back to zero and the tone stops.
     data->aheadBehindSeconds = 0.0;
+    data->currentTone = ToneCadence{};  // the phone falls silent too (RB-WEB-02)
     if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
     ConfigFile::save(*data->state);
     notifyWebState(data);

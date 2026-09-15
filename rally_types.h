@@ -10,6 +10,7 @@
 #endif
 
 #include "simple_tone.h"
+#include "tone_cadence.h"
 
 // Forward declarations
 class ICounter;
@@ -230,6 +231,9 @@ struct AppData {
     
     // Tone generator for speed adjustment alerts
     ToneGenerator* toneGen = nullptr;
+    // RB-WEB-02: the cadence toneGen was last set to, kept so the phone's
+    // telemetry can play the same ahead/behind tone.
+    ToneCadence currentTone;
     
     int updateCount = 0;
     int64_t lastUpdateCountTime_ms = 0;
