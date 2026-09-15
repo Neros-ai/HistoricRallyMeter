@@ -751,6 +751,10 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     GtkWidget* recallHeader = gtk_label_new("Recall");
     gtk_widget_set_size_request(setHeader, 66, -1);
     gtk_widget_set_size_request(recallHeader, 66, -1);
+    // The segment table's own heading size ("Recall" at the 20 px menu font
+    // would be wider than its 66 px column).
+    gtk_style_context_add_class(gtk_widget_get_style_context(setHeader), "segment-label");
+    gtk_style_context_add_class(gtk_widget_get_style_context(recallHeader), "segment-label");
     gtk_box_pack_start(GTK_BOX(memHeaderRow), setHeader, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(memHeaderRow), recallHeader, FALSE, FALSE, 0);
     
@@ -761,12 +765,14 @@ GtkWidget* createStageSetupScreen(AppData* data) {
         
         GtkWidget* setBtn = gtk_button_new_with_label(std::to_string(i).c_str());
         gtk_widget_set_size_request(setBtn, 66, 43);
+        gtk_style_context_add_class(gtk_widget_get_style_context(setBtn), "nav-button");
         g_signal_connect(setBtn, "clicked", G_CALLBACK(on_memory_set), data);
         g_object_set_data(G_OBJECT(setBtn), "slot", GINT_TO_POINTER(i));
         gtk_box_pack_start(GTK_BOX(row), setBtn, FALSE, FALSE, 0);
         
         GtkWidget* recallBtn = gtk_button_new_with_label(std::to_string(i).c_str());
         gtk_widget_set_size_request(recallBtn, 66, 43);
+        gtk_style_context_add_class(gtk_widget_get_style_context(recallBtn), "nav-button");
         g_signal_connect(recallBtn, "clicked", G_CALLBACK(on_memory_recall), data);
         g_object_set_data(G_OBJECT(recallBtn), "slot", GINT_TO_POINTER(i));
         gtk_box_pack_start(GTK_BOX(row), recallBtn, FALSE, FALSE, 0);
@@ -781,7 +787,12 @@ GtkWidget* createStageSetupScreen(AppData* data) {
         }
     }
     
-    GtkWidget* clearMemBtn = gtk_button_new_with_label("clear memory");
+    // Two lines: at the menu font one line (~174 px) is wider than the two
+    // memory columns it sits under (142 px), and this screen has no width to
+    // give -- widening Beep Assist by 40 px has pushed the keypad off before.
+    GtkWidget* clearMemBtn = gtk_button_new_with_label("clear\nmemory");
+    gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(clearMemBtn))), GTK_JUSTIFY_CENTER);
+    gtk_style_context_add_class(gtk_widget_get_style_context(clearMemBtn), "nav-button");
     g_signal_connect(clearMemBtn, "clicked", G_CALLBACK(on_memory_clear), data);
     gtk_box_pack_start(GTK_BOX(memBox), clearMemBtn, FALSE, FALSE, 5);
 
@@ -1019,6 +1030,7 @@ GtkWidget* createStageSetupScreen(AppData* data) {
 
     GtkWidget* backBtn = gtk_button_new_with_label("back");
     gtk_widget_set_size_request(backBtn, -1, 40);
+    gtk_style_context_add_class(gtk_widget_get_style_context(backBtn), "nav-button");
     gtk_widget_set_valign(backBtn, GTK_ALIGN_END);
     g_signal_connect(backBtn, "clicked", G_CALLBACK(on_show_twinmaster), data);
     gtk_box_pack_end(GTK_BOX(rightCol), backBtn, FALSE, FALSE, 0);
@@ -1094,10 +1106,14 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     updateSensorModeLabel(data);
     
     GtkWidget* sensor1Btn = gtk_button_new_with_label("Set sensor 1");
+    // Menu font. Fits since the caption dropped "Currently": the row is
+    // ~950 px at 20 px against a ~1,050 px column.
+    gtk_style_context_add_class(gtk_widget_get_style_context(sensor1Btn), "nav-button");
     g_signal_connect(sensor1Btn, "clicked", G_CALLBACK(on_set_sensor_1), data);
     gtk_box_pack_start(GTK_BOX(sensorRow), sensor1Btn, FALSE, FALSE, 20);
     
     GtkWidget* sensorBothBtn = gtk_button_new_with_label("Set both sensors and avg.");
+    gtk_style_context_add_class(gtk_widget_get_style_context(sensorBothBtn), "nav-button");
     g_signal_connect(sensorBothBtn, "clicked", G_CALLBACK(on_set_sensor_both), data);
     gtk_box_pack_start(GTK_BOX(sensorRow), sensorBothBtn, FALSE, FALSE, 5);
 
@@ -1125,6 +1141,8 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(currentCalRow), GTK_WIDGET(data->resetPulsesEntry), FALSE, FALSE, 0);
 
     GtkWidget* resetPulsesBtn = gtk_button_new_with_label("Reset");
+    // Menu font: ~1,030 px with a 4-digit calibration, inside the column.
+    gtk_style_context_add_class(gtk_widget_get_style_context(resetPulsesBtn), "nav-button");
     g_signal_connect(resetPulsesBtn, "clicked", G_CALLBACK(on_reset_calibration_pulses), data);
     gtk_box_pack_start(GTK_BOX(currentCalRow), resetPulsesBtn, FALSE, FALSE, 0);
 
@@ -1231,6 +1249,9 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     GtkWidget* saveBtn = gtk_button_new_with_label("Save Calibration");
     GtkWidget* backBtn = gtk_button_new_with_label("Back");
     
+    // The main screen's menu-bar font, not GTK's small default.
+    for (GtkWidget* btn : {startBtn, saveBtn, backBtn})
+        gtk_style_context_add_class(gtk_widget_get_style_context(btn), "nav-button");
     g_signal_connect(startBtn, "clicked", G_CALLBACK(on_calibration_start), data);
     g_signal_connect(saveBtn, "clicked", G_CALLBACK(on_save_calibration), data);
     g_signal_connect(backBtn, "clicked", G_CALLBACK(on_show_twinmaster), data);
@@ -1261,6 +1282,7 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     
     GtkWidget* exitBtn = gtk_button_new_with_label("exit app");
     g_signal_connect(exitBtn, "clicked", G_CALLBACK(on_exit_app), data);
+    gtk_style_context_add_class(gtk_widget_get_style_context(exitBtn), "nav-button");
     gtk_box_pack_end(GTK_BOX(titleRow), exitBtn, FALSE, FALSE, 0);
     
     // Main horizontal container: left side for content, right side for keypad
@@ -1356,6 +1378,7 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     gtk_style_context_add_class(gtk_widget_get_style_context(unitsRowLabel), "clock-label");
     data->unitToggleBtn = GTK_BUTTON(gtk_button_new_with_label(data->state->units ? "MPH" : "KPH"));
     gtk_widget_set_valign(GTK_WIDGET(data->unitToggleBtn), GTK_ALIGN_CENTER);
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->unitToggleBtn)), "nav-button");
     gtk_box_pack_start(GTK_BOX(unitsRow), unitsRowLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(unitsRow), GTK_WIDGET(data->unitToggleBtn), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(leftBox), unitsRow, FALSE, FALSE, 0);
@@ -1392,6 +1415,8 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     GtkWidget* saveBtn = gtk_button_new_with_label("set and save");
     GtkWidget* backBtn = gtk_button_new_with_label("back");
     
+    for (GtkWidget* btn : {saveBtn, backBtn})
+        gtk_style_context_add_class(gtk_widget_get_style_context(btn), "nav-button");
     g_signal_connect(saveBtn, "clicked", G_CALLBACK(on_save_datetime), data);
     g_signal_connect(backBtn, "clicked", G_CALLBACK(on_show_twinmaster), data);
     
@@ -1464,6 +1489,8 @@ GtkWidget* createAutoStartScreen(AppData* data) {
     GtkWidget* setBtn = gtk_button_new_with_label("set");
     GtkWidget* backBtn = gtk_button_new_with_label("back");
     
+    for (GtkWidget* btn : {clearBtn, setBtn, backBtn})
+        gtk_style_context_add_class(gtk_widget_get_style_context(btn), "nav-button");
     g_signal_connect(clearBtn, "clicked", G_CALLBACK(on_autostart_clear), data);
     g_signal_connect(setBtn, "clicked", G_CALLBACK(on_autostart_set), data);
     g_signal_connect(backBtn, "clicked", G_CALLBACK(on_show_twinmaster), data);

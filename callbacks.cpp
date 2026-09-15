@@ -976,6 +976,16 @@ void on_show_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     gtk_entry_set_text(data->timeEntry, buf);
 }
 
+// Keypad keys take the co-pilot's menu-bar font (.nav-button, 20 px) rather
+// than GTK's small default -- the keypad sits beside the menu bar on every
+// screen that has one.
+static void useMenuFont(GtkWidget* keypad) {
+    GList* keys = gtk_container_get_children(GTK_CONTAINER(keypad));
+    for (GList* k = keys; k; k = k->next)
+        gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(k->data)), "nav-button");
+    g_list_free(keys);
+}
+
 // Create numeric keypad widget
 GtkWidget* createNumericKeypad(AppData* data) {
     GtkWidget* keypad = gtk_grid_new();
@@ -990,7 +1000,7 @@ GtkWidget* createNumericKeypad(AppData* data) {
         g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_digit), data);
         gtk_grid_attach(GTK_GRID(keypad), btn, i % 3, i / 3, 1, 1);
     }
-    
+
     // Row 5: Clear and Backspace
     GtkWidget* clearBtn = gtk_button_new_with_label("C");
     gtk_widget_set_size_request(clearBtn, 60, 42);
@@ -1001,7 +1011,8 @@ GtkWidget* createNumericKeypad(AppData* data) {
     gtk_widget_set_size_request(bkspBtn, 130, 42);
     g_signal_connect(bkspBtn, "clicked", G_CALLBACK(on_keypad_backspace), data);
     gtk_grid_attach(GTK_GRID(keypad), bkspBtn, 1, 4, 2, 1);
-    
+
+    useMenuFont(keypad);
     return keypad;
 }
 
@@ -1028,7 +1039,8 @@ GtkWidget* createDateTimeKeypad(AppData* data) {
     gtk_widget_set_size_request(bkspBtn, 130, 42);
     g_signal_connect(bkspBtn, "clicked", G_CALLBACK(on_keypad_backspace), data);
     gtk_grid_attach(GTK_GRID(keypad), bkspBtn, 1, 4, 2, 1);
-    
+
+    useMenuFont(keypad);
     return keypad;
 }
 
