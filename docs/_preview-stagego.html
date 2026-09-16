@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rallybox Manual — stage go (preview)</title>
+<style>
+  :root { --ink: #111; --rule: #bbb; --shade: #f4f4f4; }
+  body {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 11pt; line-height: 1.45; color: var(--ink);
+    max-width: 180mm; margin: 0 auto; padding: 15mm;
+    background: #fff;
+  }
+  h2 { font-size: 13pt; margin: 8mm 0 2mm; }
+  h3 { font-size: 11pt; margin: 5mm 0 1mm; }
+  p { margin: 0 0 2.5mm; }
+  ol, ul { margin: 0 0 2.5mm; padding-left: 6mm; }
+  li { margin-bottom: 1mm; }
+  .screen { margin: 0 0 4mm; }
+  .screen img {
+    display: block; width: 100%; height: auto;
+    border: 1px solid var(--rule);
+  }
+  .screen figcaption { font-size: 9pt; color: #555; margin-top: 1mm; }
+  @page { size: A4 portrait; margin: 15mm; }
+  @media print { body { max-width: none; margin: 0; padding: 0; font-size: 10pt; } }
+</style>
+</head>
+<body>
+
+<h2 id="stage-go">stage go</h2>
+
+<figure class="screen">
+  <img src="manual-images/stage-go.png" alt="The Stage Go question">
+  <figcaption>The question the <code>stage go</code> button asks.</figcaption>
+</figure>
+
+<p>Stage Go displays the loaded stage details for review and offers three ways
+to start.</p>
+
+<ul>
+<li><code>Now</code> starts the stage immediately.</li>
+<li><code>At HH:MM</code> sets an autostart at the next round minute and permits
+early departure.</li>
+<li><code>Later</code> up to 3 hours in the future. Can be set while a stage is
+in progress. No early departure.</li>
+</ul>
+
+<h3>Now</h3>
+
+<p>Starts the stage immediately and has the following characteristics:</p>
+
+<ul>
+<li>locks the current stage data for the remainder of the stage.</li>
+<li>cancels any stage running and other future programmed autostarts.</li>
+<li>resets Total and Trip distances to zero and the counter starts the timer
+immediately.</li>
+</ul>
+
+<p>Advantages: can be used with a flying start if late to a stage, though the
+difference between the start time and the actual time at the start line will
+need to be corrected for. Disadvantages: start time accuracy is only as good as
+the navigator's reactions.</p>
+
+<h3>At HH:MM</h3>
+
+<p>Starts the stage on the next whole minute, which is automatically shown on
+the button. It has the following characteristics:</p>
+
+<ul>
+<li>locks the current stage data for the upcoming stage.</li>
+<li>cancels any stage running and other future programmed autostarts.</li>
+<li>displays stage speed and countdown to the start in the driver's
+display.</li>
+<li>early departure is enabled, allowing the car to pull away early if the car
+will struggle to get up to speed or will be obstructed. This works because the
+timer resets at the autostart minute but the distance is reset when the option
+is selected.</li>
+<li>pressing Total ahead of departure will zero any pre-departure
+movements.</li>
+<li>if after the HH:MM menu option appears you wait until after the minute has
+passed, you will be told you need to trigger the menu again as the start time
+elapsed.</li>
+</ul>
+
+<p>Advantages: can make an early departure; simple one button press when lining
+up for the start; perfect start time. Disadvantages: can only be pressed within
+59 seconds of the start.</p>
+
+<h3>Later</h3>
+
+<p>Starts the stage a predetermined time up to 3 hours in the future, even if a
+stage is currently under way. To use it tap the autostart entry box, type the
+start time as <code>hh:mm:ss</code> on the keypad, press <code>set</code> to
+store; <code>back</code> to return to main screen. Press <code>Clear</code> to
+remove the autostart. It has the following characteristics:</p>
+
+<ul>
+<li>it does NOT lock the current stage data for the upcoming stage. Whatever
+stage data is loaded when the autostart fires will only be locked at that
+time.</li>
+<li>it does NOT cancel any stage running. You can continue with the existing
+stage.</li>
+<li>it displays a countdown, but the driver display will continue to display the
+current stage information.</li>
+<li>early departure is NOT enabled, because the distances and timer reset at the
+autostart time.</li>
+</ul>
+
+<p>Advantages: can be configured while another stage is in progress; can be
+configured more than 1 minute in advance; can make last minute changes to
+segment instructions; perfect start time. Disadvantages: no early start; very
+early reconfiguration means the driver display is obscured by the
+countdown.</p>
+
+<h3>ABORT STAGE</h3>
+
+<p>Ends the stage after confirmation. The driver's needle returns to zero and
+the tone stops. Total and Trip keep their readings, and any autostart that has
+been set is cancelled.</p>
+
+<h3>Back</h3>
+
+<p>Closes the question and changes nothing.</p>
+
+
+</body>
+</html>
