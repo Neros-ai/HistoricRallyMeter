@@ -162,6 +162,47 @@ public:
             return L.captionBaseline > L.boxY;
         });
 
+        // ---- the embedded (single-display) variant ----
+        // The same gauge drawn in the co-pilot window's right-hand panel.
+        // Its dial is two thirds the driver display's, so it gets its own
+        // font scale and a lower hub; the driver display must not move.
+
+        suite->addTest("the embedded gauge's fonts are smaller than the driver display's", []() {
+            CompactGaugeLayout driver = computeCompactGaugeLayout(800, 480, false);
+            CompactGaugeLayout embedded = computeCompactGaugeLayout(544, 345, true);
+            return std::abs(embedded.fscale - 0.70) < 0.001
+                && embedded.fscale < driver.fscale
+                && embedded.curTopSize < driver.curTopSize;
+        });
+
+        suite->addTest("the driver display's gauge is unchanged by the embedded variant", []() {
+            // The whole point of the parameter: everything the driver display
+            // sees must be identical with it left at its default.
+            CompactGaugeLayout before = computeCompactGaugeLayout(800, 480);
+            CompactGaugeLayout driver = computeCompactGaugeLayout(800, 480, false);
+            return std::abs(before.centerY - driver.centerY) < 0.001
+                && std::abs(before.centerY - 405.0) < 0.001
+                && std::abs(driver.fscale - 1.0) < 0.001
+                && std::abs(driver.labelSize - 16.0) < 0.001;
+        });
+
+        suite->addTest("the embedded hub sits lower than the shared formula puts it", []() {
+            // Current is top-aligned to the dial's top edge and the rally
+            // clock above it is pinned, so only dropping the hub separates
+            // them -- no font scale can do it.
+            CompactGaugeLayout embedded = computeCompactGaugeLayout(544, 345, true);
+            return std::abs(embedded.centerY - (345.0 - 75.0 + 25.0)) < 0.001;
+        });
+
+        suite->addTest("captions never shrink below 12px", []() {
+            // 16 * 0.70 is 11.2px, unreadable at arm's length. The floor
+            // applies everywhere but only ever bites on the embedded gauge.
+            CompactGaugeLayout embedded = computeCompactGaugeLayout(544, 345, true);
+            CompactGaugeLayout driver = computeCompactGaugeLayout(800, 480);
+            return embedded.labelSize >= 12.0
+                && std::abs(driver.labelSize - 16.0) < 0.001;
+        });
+
         // Needle geometry tests -- from RB-DRV-04/05, a separate lineage cut
         // from main directly (no CompactGaugeLayout on that side), merged
         // into this same suite/file at the RB-DRV land point.

@@ -58,6 +58,12 @@ void on_save_calibration(GtkWidget* widget, gpointer user_data);
 // stock "reset to 1m per pulse" with one that works for any device.
 void on_reset_calibration_pulses(GtkWidget* widget, gpointer user_data);
 void on_save_datetime(GtkWidget* widget, gpointer user_data);
+// Rally-clock trim buttons. Direction (+1 / -1 tenths) is read from the
+// button's "trim-steps" data, so both buttons share one handler pair.
+// These act and save on their own -- they are deliberately outside
+// on_save_datetime(), which carries the operator's press-timing error.
+void on_trim_rally_pressed(GtkWidget* widget, gpointer user_data);
+void on_trim_rally_released(GtkWidget* widget, gpointer user_data);
 gboolean on_force_single_display_toggle(GtkSwitch* sw, gboolean state, gpointer user_data);
 gboolean on_tone_enabled_toggle(GtkSwitch* sw, gboolean state, gpointer user_data);
 void on_tone_type_toggled(GtkWidget* widget, gpointer user_data);

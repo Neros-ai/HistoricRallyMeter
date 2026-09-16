@@ -33,6 +33,19 @@ std::string formatTime(int64_t time_ms);
 // Format duration as HH:MM:SS
 std::string formatDuration(int64_t duration_ms);
 
+// Format time as HH:MM:SS.t -- the whole-second clock plus a tenths digit.
+// Used only on the Date/Time Setup screen, where the tenth is what makes the
+// +0.1/-0.1 trim visible: the two clocks there are read against each other,
+// and a whole-second readout hides nine out of ten trim presses.
+std::string formatTimeTenths(int64_t time_ms);
+
+// One press of the rally-clock trim. Returns the new rally/system offset
+// after nudging it by `steps` tenths of a second (+1 makes the rally clock
+// read later, -1 earlier). Deliberately does not round the offset to whole
+// seconds: the rally clock is allowed to tick out of phase with the system
+// clock, and snapping it would silently discard the operator's fine setting.
+int64_t trimRallyOffsetMs(int64_t offset_ms, int steps);
+
 // Calculate current speed from 10-second rolling average
 double calculateCurrentSpeed(const RallyState& state, const CounterPoll& current, 
                             const CounterPoll& tenth);
@@ -532,7 +545,14 @@ struct CompactGaugeLayout {
     double footSize;        // fps/cpu footer font size
 };
 
-CompactGaugeLayout computeCompactGaugeLayout(double width, double height);
+// `embedded` selects the single-display variant, where the gauge is drawn in
+// the co-pilot window's right-hand panel instead of on the driver display: the
+// fonts are pinned to a smaller scale that suits the smaller dial, and the hub
+// drops so the dial clears the rally clock above it. The driver display's own
+// gauge must be unaffected, which is why this is a parameter and not a change
+// to the shared arithmetic.
+CompactGaugeLayout computeCompactGaugeLayout(double width, double height,
+                                             bool embedded = false);
 
 // Caption for the driver gauge's distance column. The caption carries the
 // unit rather than each value repeating it, so it has to follow the

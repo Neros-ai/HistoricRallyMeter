@@ -1346,6 +1346,8 @@ void updateDateTimeDisplay(AppData* data) {
     snprintf(buf, sizeof(buf), "%04d/%02d/%02d",
              tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday);
     gtk_label_set_text(data->systemClockLabel, buf);
+    // System clock stays whole seconds; only the rally clock shows tenths,
+    // since the rally clock is the one the +0.1/-0.1 trim moves.
     snprintf(buf, sizeof(buf), "%02d:%02d:%02d",
              tm->tm_hour, tm->tm_min, tm->tm_sec);
     if (data->systemTimeLabel) gtk_label_set_text(data->systemTimeLabel, buf);
@@ -1358,8 +1360,7 @@ void updateDateTimeDisplay(AppData* data) {
     snprintf(buf, sizeof(buf), "%04d/%02d/%02d",
              rally_tm->tm_year + 1900, rally_tm->tm_mon + 1, rally_tm->tm_mday);
     gtk_label_set_text(data->rallyClockLabel, buf);
-    snprintf(buf, sizeof(buf), "%02d:%02d:%02d",
-             rally_tm->tm_hour, rally_tm->tm_min, rally_tm->tm_sec);
+    snprintf(buf, sizeof(buf), "%s", formatTimeTenths(rally_ms).c_str());
     if (data->rallyTimeLabel) gtk_label_set_text(data->rallyTimeLabel, buf);
 
     if (data->webUrlLabel && data->webServer && data->state->web_enabled) {
@@ -1728,6 +1729,66 @@ void on_tone_type_toggled(GtkWidget* widget, gpointer user_data) {
     bool is_type2 = (GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "tone_type")) == 2);
     data->state->simple_tone_mode = is_type2;
     ConfigFile::save(*data->state);
+}
+
+// --- Rally-clock trim (+0.1 / -0.1) --------------------------------------
+// Separate from on_save_datetime() on purpose. That button applies the typed
+// date/time at the instant it is pressed, so whatever fraction of a second
+// the operator was late by is baked into the offset for the rest of the
+// rally. The trim is the fine adjustment that corrects it, and it neither
+// reads nor needs the entry boxes.
+//
+// Hold-to-repeat: the first press applies one tenth immediately, and holding
+// past TRIM_REPEAT_DELAY_MS repeats every TRIM_REPEAT_INTERVAL_MS, so a whole
+// second is about a second and a half of holding.
+static const guint TRIM_REPEAT_DELAY_MS = 500;
+static const guint TRIM_REPEAT_INTERVAL_MS = 150;
+
+// Saves on every step rather than once on release: a released signal can be
+// missed if the pointer grab breaks, and the config write is a few hundred
+// bytes -- losing a trim silently would be the worse failure.
+static void applyRallyTrim(AppData* data, int steps) {
+    data->state->rallyTimeOffset_ms = static_cast<long>(
+        trimRallyOffsetMs(data->state->rallyTimeOffset_ms, steps));
+    ConfigFile::save(*data->state);
+    updateDateTimeDisplay(data);
+}
+
+static gboolean trim_repeat_tick(gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    applyRallyTrim(data, data->trimRepeatSteps);
+    return G_SOURCE_CONTINUE;
+}
+
+static gboolean trim_repeat_start(gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    applyRallyTrim(data, data->trimRepeatSteps);
+    // Hand over from the one-shot delay timer to the faster repeat timer.
+    // The field must be reassigned before returning G_SOURCE_REMOVE, or the
+    // release handler would try to cancel a source that is already gone.
+    data->trimRepeatTimer = g_timeout_add(TRIM_REPEAT_INTERVAL_MS,
+                                          trim_repeat_tick, data);
+    return G_SOURCE_REMOVE;
+}
+
+void on_trim_rally_pressed(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    int steps = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "trim-steps"));
+    if (steps == 0) return;
+    if (data->trimRepeatTimer) g_source_remove(data->trimRepeatTimer);
+    data->trimRepeatSteps = steps;
+    applyRallyTrim(data, steps);
+    data->trimRepeatTimer = g_timeout_add(TRIM_REPEAT_DELAY_MS,
+                                          trim_repeat_start, data);
+}
+
+void on_trim_rally_released(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (data->trimRepeatTimer) {
+        g_source_remove(data->trimRepeatTimer);
+        data->trimRepeatTimer = 0;
+    }
+    data->trimRepeatSteps = 0;
 }
 
 void on_save_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {

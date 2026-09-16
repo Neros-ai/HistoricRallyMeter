@@ -66,6 +66,24 @@ std::string formatTime(int64_t time_ms) {
     return std::string(buf);
 }
 
+std::string formatTimeTenths(int64_t time_ms) {
+    time_t seconds = time_ms / 1000;
+    int tenths = static_cast<int>((time_ms % 1000) / 100);
+    if (tenths < 0) {          // defensive: C++ truncates toward zero, so a
+        tenths += 10;          // pre-epoch timestamp would otherwise give a
+        seconds -= 1;          // negative tenth against the wrong second.
+    }
+    struct tm* tm = localtime(&seconds);
+    char buf[24];
+    snprintf(buf, sizeof(buf), "%02d:%02d:%02d.%d",
+             tm->tm_hour, tm->tm_min, tm->tm_sec, tenths);
+    return std::string(buf);
+}
+
+int64_t trimRallyOffsetMs(int64_t offset_ms, int steps) {
+    return offset_ms + static_cast<int64_t>(steps) * 100;
+}
+
 std::string formatDuration(int64_t duration_ms) {
     int64_t total_seconds = duration_ms / 1000;
     int tenths = (duration_ms % 1000) / 100;
@@ -625,22 +643,36 @@ std::string stageSummary(const std::vector<Segment>& segments) {
     return ss.str();
 }
 
-CompactGaugeLayout computeCompactGaugeLayout(double width, double height) {
+CompactGaugeLayout computeCompactGaugeLayout(double width, double height, bool embedded) {
     constexpr double REF_RADIUS = 256.0;  // gauge radius in the 1280x400 layout
+    // Single-display mode only. The embedded dial's radius is 247 against the
+    // driver display's 375 -- two thirds the size -- but both exceed
+    // REF_RADIUS, so the shared formula gave them near-identical fonts:
+    // driver-sized text around a two-thirds-size dial. Pinned rather than
+    // derived because the co-pilot panel is always the same physical size.
+    constexpr double EMBEDDED_FSCALE = 0.70;
+    // ...and the hub goes down by this much, so the dial's top edge clears
+    // the rally clock pinned in the panel's top-right corner. Conditional:
+    // the driver display's own gauge must not move.
+    constexpr double EMBEDDED_HUB_DROP = 25.0;
+    // No caption may shrink below this, whatever the gauge does. At the
+    // embedded scale 16 * 0.70 is 11.2px, unreadable at arm's length; on the
+    // driver display 16 * 1.0 already clears it, so this changes nothing there.
+    constexpr double CAPTION_FLOOR = 12.0;
 
     CompactGaugeLayout L{};
     // The gauge fills the panel width (bezel ~18px + a small margin); the hub
     // sits low, leaving room for the readout box and the footer beneath it.
     L.radius  = std::min(width / 2 - 25, height - 95);
     L.centerX = width / 2;
-    L.centerY = height - 75;
+    L.centerY = height - 75 + (embedded ? EMBEDDED_HUB_DROP : 0.0);
     // Clamped at 1.0: a larger gauge must not scale the fonts UP, or the
     // values run off the panel.
-    L.fscale  = std::min(1.0, L.radius / REF_RADIUS);
+    L.fscale  = embedded ? EMBEDDED_FSCALE : std::min(1.0, L.radius / REF_RADIUS);
 
     L.valSize    = 44 * L.fscale;
     L.curTopSize = 50 * L.fscale;  // RB-DRV-08: Current/Target/Total/Trip's enlarged size
-    L.labelSize  = 16 * L.fscale;
+    L.labelSize  = std::max(CAPTION_FLOOR, 16 * L.fscale);
     L.labelGap   = 8 * L.fscale;
     L.rowGap     = 48 * L.fscale;
 

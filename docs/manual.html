@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rallybox User Manual</title>
+<style>
+  :root { --ink: #111; --rule: #bbb; --shade: #f4f4f4; }
+  body {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 11pt; line-height: 1.45; color: var(--ink);
+    max-width: 180mm; margin: 0 auto; padding: 15mm;
+    background: #fff;
+  }
+  h1 {
+    font-size: 17pt; margin: 0 0 4mm; padding-bottom: 2mm;
+    border-bottom: 2px solid var(--ink);
+  }
+  h2 { font-size: 13pt; margin: 8mm 0 2mm; }
+  h3 { font-size: 11pt; margin: 5mm 0 1mm; }
+  p { margin: 0 0 2.5mm; }
+  ol, ul { margin: 0 0 2.5mm; padding-left: 6mm; }
+  li { margin-bottom: 1mm; }
+  table {
+    border-collapse: collapse; width: 100%;
+    margin: 0 0 4mm; font-size: 10pt;
+  }
+  th, td {
+    border: 1px solid var(--rule); padding: 1.5mm 2mm;
+    text-align: left; vertical-align: top;
+  }
+  th { background: var(--shade); font-weight: bold; }
+  .controls td:first-child {
+    width: 33%; font-family: "DejaVu Sans Mono", Consolas, monospace;
+    font-size: 9.5pt;
+  }
+  .screen { margin: 0 0 4mm; }
+  .screen img {
+    display: block; width: 100%; height: auto;
+    border: 1px solid var(--rule);
+  }
+  .screen figcaption {
+    font-size: 9pt; color: #555; margin-top: 1mm;
+  }
+  .note {
+    margin: 0 0 3mm; padding: 2mm 3mm;
+    border-left: 3px solid var(--ink); background: var(--shade);
+    font-size: 10pt;
+  }
+  .toc ol { padding-left: 6mm; }
+  .toc a { color: var(--ink); text-decoration: none; }
+
+  @page { size: A4 portrait; margin: 15mm; }
+  @media print {
+    body { max-width: none; margin: 0; padding: 0; font-size: 10pt; }
+    h1 { page-break-before: always; }
+    h1:first-of-type { page-break-before: avoid; }
+    .screen-page { page-break-before: always; page-break-after: always; }
+    h2, h3 { page-break-after: avoid; }
+    .screen, table, .note { page-break-inside: avoid; }
+    .toc { page-break-after: always; }
+    a { text-decoration: none; color: var(--ink); }
+  }
+</style>
+</head>
+<body>
+
+<h1 id="top">Rallybox User Manual</h1>
+
+<p>Rallybox is a rally meter for classic-car regularity rallies. It measures
+the distance the car has travelled, compares it with the schedule the crew
+have entered, and tells the driver how many seconds ahead of or behind that
+schedule the car is.</p>
+
+<p>The box has two screens. The co-pilot screen, on the left, is where the
+navigator sets the stage up and works the controls. The driver screen, on the
+right, shows a gauge and nothing the driver has to operate. A phone on the
+same network can show the same readings and work most of the same controls.</p>
+
+<p>This manual describes the box first and the phone app second.</p>
+
+<nav class="toc">
+<h2>Contents</h2>
+<ol>
+  <li><a href="#part-box">The box</a>
+    <ol>
+      <li><a href="#main-screen">The co-pilot main screen</a></li>
+      <li><a href="#driver-screen">The driver screen</a></li>
+      <li><a href="#datetime">date/time</a></li>
+      <li><a href="#calibration">calibration</a></li>
+      <li><a href="#segments">segments</a></li>
+      <li><a href="#stage-go">stage go</a></li>
+      <li><a href="#driver-zero">driver Zero</a></li>
+    </ol>
+  </li>
+  <li><a href="#part-phone">The phone app</a></li>
+  <li><a href="#situations">What to do in seven situations</a></li>
+</ol>
+</nav>
+
+<!-- PART 1 -->
+
+<h1 id="part-box">Part 1 — The box</h1>
+
+<section class="screen-page">
+
+<h2 id="datetime">date/time</h2>
+
+<figure class="screen">
+  <img src="manual-images/datetime.png" alt="The date/time screen">
+  <figcaption>The date/time screen.</figcaption>
+</figure>
+
+<h3>Setting Rally Clock</h3>
+
+<p>The <strong>System Clock</strong> is the Raspberry Pi's own clock. The
+<strong>Rally Clock</strong> is the one every stage is timed against.
+<strong>Set Rally Clk</strong> is used to update the Rally Clock and is
+prepopulated ready for editing.</p>
+
+<ol>
+<li>Tap the date box and delete what is there with <code>&lt;-</code>.</li>
+<li>Type the date on the keypad as <code>yyyy/mm/dd</code>, using the
+<code>/</code> key for the separators.</li>
+<li>Tap the time box, delete what is there, and type the time as
+<code>hh:mm:ss</code>, using the <code>:</code> key.</li>
+<li>Press <code>Save new rally clock entry</code>.</li>
+</ol>
+
+<p><strong>IMPORTANT:</strong> Both date and time boxes must be complete and
+formatted correctly otherwise the changes will not be saved.</p>
+
+<h3>Trimming the Rally Clock</h3>
+
+<p>The time you type becomes true at the instant you press the button, so
+whatever fraction of a second you were late by stays in the Rally Clock for the
+rest of the rally. The <code>-0.1</code> and <code>+0.1</code> buttons under
+the time box correct it, a tenth of a second per press: <code>+0.1</code> makes
+the Rally Clock read later, <code>-0.1</code> earlier. Hold a button down to
+repeat, about a second and a half for a whole second of adjustment.</p>
+
+<p>The Rally Clock shows a tenths digit so you can see the trim take effect.
+The System Clock stays at whole seconds, and the two are not tied together —
+the Rally Clock is free to change its second at any point, which is what lets
+it hold an offset that is not a whole number of seconds.</p>
+
+<p>Each press is saved immediately. The <code>Save new rally clock entry</code>
+button is not involved, and does not need to be pressed afterwards.</p>
+
+<h3>Force Single Display</h3>
+
+<p>This switch puts everything on the co-pilot screen, with a small driver
+gauge in the right-hand panel, for use where only one display is fitted. It is
+saved as soon as it is switched, and takes effect the next time the box is
+started.</p>
+
+<h3>Speed units</h3>
+
+<p>The button shows the unit in use. Pressing it switches between KPH and MPH,
+and every speed on every screen, and on the phone, changes with it. It is saved
+as soon as it is pressed.</p>
+
+<h3>Phone Control Link</h3>
+
+<p>The address and QR code show where to reach the phone app. Point a phone
+camera at the code, or type the address into a phone browser. The phone must be
+on the same network as the box. Part 2 describes what the phone can do.</p>
+
+<h3>Exit App</h3>
+
+<p><code>exit app</code> saves the settings and closes the program. It does not
+switch the Raspberry Pi off.</p>
+
+</section>
+
+<!-- END -->
+
+</body>
+</html>
