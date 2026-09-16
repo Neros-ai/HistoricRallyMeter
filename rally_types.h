@@ -111,7 +111,8 @@ struct AppData {
     GtkWidget* prevBtn;
     // Reset Total pressed with a stage running (usership 6): the counters and
     // rally time AT THE PRESS, applied if the crew confirm -- the distance
-    // zero is the press, not the confirm. Stale after a minute.
+    // zero is the press, not the confirm. Cleared when the question is
+    // answered, either way.
     bool totalResetPending = false;
     uint64_t totalResetCntr1 = 0;
     uint64_t totalResetCntr2 = 0;
