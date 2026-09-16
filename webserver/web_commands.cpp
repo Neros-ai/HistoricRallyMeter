@@ -106,6 +106,13 @@ bool webHandleCommand(AppData* data, const char* json) {
         }
         return false;
     }
+    if (strcmp(type, "reset_total_cancel") == 0) {
+        // The crew answered Back on the phone. Drops the captured press and
+        // does nothing else -- see cancelTotalResetPress for why this is its
+        // own message rather than a reset_total.
+        cancelTotalResetPress(data);
+        return false;
+    }
     if (strcmp(type, "distance_adjust") == 0) {
         // Same arithmetic as the co-pilot's -10/+10 buttons, via the shared
         // helper. The step comes from the phone so the two ends can differ

@@ -232,7 +232,14 @@
     closeStageMenu();
     send({ type: 'reset_total', choice: 'confirm' });
   });
-  $('menu-cancel').addEventListener('click', closeStageMenu);
+  // Back: the box is holding the position of the press, so it has to be told
+  // the press is abandoned. Its own message, not a "reset_total" carrying a
+  // cancel: with no stage running that message means "just do it" above, so a
+  // Back arriving after the stage ended would zero Total.
+  $('menu-cancel').addEventListener('click', () => {
+    closeStageMenu();
+    send({ type: 'reset_total_cancel' });
+  });
 
   function resetTrip() {
     if (confirm('Reset trip distance?')) send({ type: 'reset_trip' });

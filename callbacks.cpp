@@ -123,6 +123,10 @@ void captureTotalResetPress(AppData* data) {
     data->totalResetPending = true;
 }
 
+void cancelTotalResetPress(AppData* data) {
+    data->totalResetPending = false;
+}
+
 // Usership 6, a missed start: the stage clock is already running and the car
 // has only now reached the line. Highly unusual mid-stage, so it is
 // confirmed -- and the safe way out is the default one.
