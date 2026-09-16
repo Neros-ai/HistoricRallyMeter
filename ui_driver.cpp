@@ -61,11 +61,21 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // The hub sits low, leaving just enough room for the readout box + footer.
     // Wide layout keeps larger margins for the scale labels alongside the
     // left speeds pane.
+    // Compact geometry comes from computeCompactGaugeLayout() rather than
+    // being recomputed here: the hub's position now differs between the
+    // driver display and the co-pilot's embedded panel, and two copies of
+    // that rule would let the dial and the text it is laid out around drift
+    // apart.
+    const bool embeddedGauge = data->singleDisplayMode;
+    CompactGaugeLayout L{};
+    if (data->driverCompactMode) {
+        L = computeCompactGaugeLayout(width, height, embeddedGauge);
+    }
     double radius = data->driverCompactMode
-        ? std::min(width / 2 - 25, height - 95)
+        ? L.radius
         : (std::min(width / 2, height) - 25) * 0.8;
-    double centerX = data->driverCompactMode ? width / 2 : width - radius - 20;
-    double centerY = data->driverCompactMode ? height - 75 : (height + radius) / 2;
+    double centerX = data->driverCompactMode ? L.centerX : width - radius - 20;
+    double centerY = data->driverCompactMode ? L.centerY : (height + radius) / 2;
 
     // Every quantity below is a pure function of this one reading,
     // recomputed fresh every frame -- there is no discrete "scale" to
@@ -85,7 +95,9 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // Font scale, 1.0 at the reference gauge radius. Used by the tick
     // numerals here and by the value rows in the compact branch below.
     constexpr double REF_RADIUS = 256.0;
-    double fscale = std::min(1.0, radius / REF_RADIUS);
+    double fscale = data->driverCompactMode
+        ? L.fscale
+        : std::min(1.0, radius / REF_RADIUS);
 
     // Background
     cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
@@ -219,10 +231,6 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // centre of the dial. The wide layout keeps the original smaller box
     // below the hub, where there is nothing to cover.
     {
-        CompactGaugeLayout L{};
-        if (data->driverCompactMode) {
-            L = computeCompactGaugeLayout(width, height);
-        }
         double digital_size = data->driverCompactMode ? L.valSize : 22.0;
         cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
         cairo_set_font_size(cr, digital_size);
@@ -361,8 +369,6 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // Compact layout: draw the speed values inside the gauge area.
     // Fonts match the wide layout at full size and shrink with the gauge.
     if (data->driverCompactMode) {
-        CompactGaugeLayout L = computeCompactGaugeLayout(width, height);
-
         cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
         cairo_text_extents_t te;
 
@@ -513,7 +519,12 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         // Single-display mode: rally clock hard top-right, bright white
         // (replaces the alarm panel's clock)
         if (data->singleDisplayMode && data->copilotRallyClockLabel) {
-            double clock_size = std::max(20.0, 28 * L.fscale);
+            // Pinned, not scaled with the gauge's own fonts. This clock
+            // stands in for the alarm panel's clock that single-display mode
+            // replaces -- it is not one of the gauge's readings, and shrinking
+            // it with them left nothing fixed to judge their size against.
+            // 27px is what the box drew it at before the fonts were rescaled.
+            double clock_size = 27.0;
             cairo_set_font_size(cr, clock_size);
             cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
             const char* clock_text = gtk_label_get_text(data->copilotRallyClockLabel);

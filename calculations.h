@@ -532,7 +532,14 @@ struct CompactGaugeLayout {
     double footSize;        // fps/cpu footer font size
 };
 
-CompactGaugeLayout computeCompactGaugeLayout(double width, double height);
+// `embedded` selects the single-display variant, where the gauge is drawn in
+// the co-pilot window's right-hand panel instead of on the driver display: the
+// fonts are pinned to a smaller scale that suits the smaller dial, and the hub
+// drops so the dial clears the rally clock above it. The driver display's own
+// gauge must be unaffected, which is why this is a parameter and not a change
+// to the shared arithmetic.
+CompactGaugeLayout computeCompactGaugeLayout(double width, double height,
+                                             bool embedded = false);
 
 // Caption for the driver gauge's distance column. The caption carries the
 // unit rather than each value repeating it, so it has to follow the
