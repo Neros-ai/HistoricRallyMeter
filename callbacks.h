@@ -29,12 +29,12 @@ enum class TotalResetChoice { Cancel, ConfirmDistanceReset };
 // confirmed. Called on the press, before asking -- by the box and the phone.
 void captureTotalResetPress(AppData* data);
 // Reset Total, free of any widget so the box and the phone share it. Returns
-// false, changing nothing, when a stage is running and the choice is Cancel --
-// which is what the phone sends, having no way to ask.
+// false when a stage is running and the choice is Cancel -- the phone's way
+// of saying the crew answered Back -- and drops the captured press with it,
+// so nothing is left armed to zero a later confirm at a stale position.
 bool applyTotalReset(AppData* data, TotalResetChoice choice);
 void on_trip_reset(GtkWidget* widget, gpointer user_data);
 void on_stage_go(GtkWidget* widget, gpointer user_data);
-void on_next_segment(GtkWidget* widget, gpointer user_data);
 // The co-pilot's next and prev buttons (and the phone's), live at any point
 // in a segment. See mergeSegmentBack for what prev does.
 void on_next_press(GtkWidget* widget, gpointer user_data);

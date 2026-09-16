@@ -63,7 +63,15 @@ bool applyTotalReset(AppData* data, TotalResetChoice choice) {
         applyTotalResetToIdle(state, poll.cntr1, poll.cntr2, now_ms, true);
         break;
     case TotalResetCase::StageRunning: {
-        if (choice != TotalResetChoice::ConfirmDistanceReset) return false;
+        if (choice != TotalResetChoice::ConfirmDistanceReset) {
+            // The captured press is abandoned with the question. The box's
+            // own Back clears it in on_total_reset; the phone's cancel
+            // arrives here instead, and leaving it armed let a later confirm
+            // that had not captured for itself zero the distance at a press
+            // from minutes before.
+            data->totalResetPending = false;
+            return false;
+        }
         // Zeroed where the button was pressed: the car kept rolling while the
         // crew read the question. With no press recorded, the counters now.
         const bool pressed = data->totalResetPending;
@@ -781,20 +789,6 @@ void on_adj_driver_zero(GtkWidget* widget, gpointer user_data) {
         ConfigFile::save(*data->state);
     } else if (response == RESPONSE_RESET_ZERO) {
         data->state->ahead_behind_zero_offset_ms = 0;
-        ConfigFile::save(*data->state);
-    }
-}
-
-void on_next_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
-    if (data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size()) - 1) {
-        auto current_poll = data->poller->getMostRecent();
-        data->state->segment_current_number++;
-        data->state->segment_start_cntr1 = current_poll.cntr1;
-        data->state->segment_start_cntr2 = current_poll.cntr2;
-        data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
-        data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
-        rebaseTripToSegment(*data->state, current_poll.cntr1, current_poll.cntr2);
         ConfigFile::save(*data->state);
     }
 }

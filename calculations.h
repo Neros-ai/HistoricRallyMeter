@@ -213,9 +213,12 @@ void rebaseTripDistance(RallyState& state, uint64_t c1, uint64_t c2);
 // Trip's distance and time together -- the Trip button.
 void resetTrip(RallyState& state, uint64_t c1, uint64_t c2, int64_t now_ms);
 // A segment change: Trip becomes the new segment's odometer, measured from the
-// segment's own start. The correction goes with the old baseline -- a -10
-// made in the last segment was spent there, and carrying it over left Trip
-// reading short all through the next one.
+// segment's own start. Trip's correction expires with its old baseline; Total
+// keeps the correction. Only Trip's copy goes: total_distance_adjust_cm is
+// untouched here, so a -10 made in the last segment still holds on Total, on
+// stage distance and on every roadbook comparison. Trip's copy expires because
+// Trip is no longer measuring the stretch that -10 belonged to -- carrying it
+// over left Trip reading short all through the next segment.
 void rebaseTripToSegment(RallyState& state, uint64_t c1, uint64_t c2);
 // Contingency 4: the car crept at the line with "on the minute" primed. Total
 // and Trip distance zero here; the clock still starts at the minute, and the
