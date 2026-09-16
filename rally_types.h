@@ -206,6 +206,11 @@ struct AppData {
     GtkLabel* rallyTimeLabel;
     GtkEntry* dateEntry;
     GtkEntry* timeEntry;
+    // Rally-clock trim (+0.1 / -0.1). The timer drives press-and-hold
+    // auto-repeat; trimRepeatSteps carries the held button's direction so
+    // one pair of handlers serves both buttons.
+    guint trimRepeatTimer = 0;
+    int trimRepeatSteps = 0;
     
     // Auto Start setup screen
     GtkWidget* autoStartScreen;

@@ -66,6 +66,24 @@ std::string formatTime(int64_t time_ms) {
     return std::string(buf);
 }
 
+std::string formatTimeTenths(int64_t time_ms) {
+    time_t seconds = time_ms / 1000;
+    int tenths = static_cast<int>((time_ms % 1000) / 100);
+    if (tenths < 0) {          // defensive: C++ truncates toward zero, so a
+        tenths += 10;          // pre-epoch timestamp would otherwise give a
+        seconds -= 1;          // negative tenth against the wrong second.
+    }
+    struct tm* tm = localtime(&seconds);
+    char buf[24];
+    snprintf(buf, sizeof(buf), "%02d:%02d:%02d.%d",
+             tm->tm_hour, tm->tm_min, tm->tm_sec, tenths);
+    return std::string(buf);
+}
+
+int64_t trimRallyOffsetMs(int64_t offset_ms, int steps) {
+    return offset_ms + static_cast<int64_t>(steps) * 100;
+}
+
 std::string formatDuration(int64_t duration_ms) {
     int64_t total_seconds = duration_ms / 1000;
     int tenths = (duration_ms % 1000) / 100;

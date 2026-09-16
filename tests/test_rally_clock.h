@@ -67,6 +67,76 @@ public:
             return true;
         });
         
+        // --- Rally-clock trim (+0.1 / -0.1) -------------------------------
+        // The trim exists because on_save_datetime() bakes in the operator's
+        // press-timing error: the typed time becomes true at the instant the
+        // button is pressed, so the rally clock can sit up to half a second
+        // out. These tests pin the trim's arithmetic, not its buttons.
+
+        suite->addTest("+0.1 moves the rally clock 100ms later", []() {
+            ASSERT_EQ(trimRallyOffsetMs(0, 1), 100);
+            return true;
+        });
+
+        suite->addTest("-0.1 moves the rally clock 100ms earlier", []() {
+            ASSERT_EQ(trimRallyOffsetMs(0, -1), -100);
+            return true;
+        });
+
+        suite->addTest("trim accumulates: ten presses make a whole second", []() {
+            int64_t offset = 0;
+            for (int i = 0; i < 10; ++i) offset = trimRallyOffsetMs(offset, 1);
+            ASSERT_EQ(offset, 1000);
+            return true;
+        });
+
+        suite->addTest("trim never snaps the offset to a whole second", []() {
+            // Deliberate: the rally clock is allowed to tick out of phase
+            // with the system clock. Rounding here would throw away the
+            // operator's fine setting the moment they nudged it.
+            ASSERT_EQ(trimRallyOffsetMs(1234, 1), 1334);
+            ASSERT_EQ(trimRallyOffsetMs(-1234, -1), -1334);
+            return true;
+        });
+
+        suite->addTest("trim survives an offset of hours without drift", []() {
+            // +1 hour, then a single tenth off it.
+            ASSERT_EQ(trimRallyOffsetMs(3600000, -1), 3599900);
+            return true;
+        });
+
+        suite->addTest("clock with tenths reads HH:MM:SS.t", []() {
+            std::string formatted = formatTimeTenths(1234567890123);
+            ASSERT_EQ(formatted.length(), 10u);
+            ASSERT_EQ(formatted[2], ':');
+            ASSERT_EQ(formatted[5], ':');
+            ASSERT_EQ(formatted[8], '.');
+            return true;
+        });
+
+        suite->addTest("tenths digit tracks the millisecond, seconds unchanged", []() {
+            // Same second, four different tenths -- the whole-second part must
+            // not move, which is what makes the two clocks comparable on the
+            // Date/Time screen.
+            int64_t base_ms = 1234567890000;
+            std::string whole = formatTime(base_ms);
+            ASSERT_EQ(formatTimeTenths(base_ms).substr(0, 8), whole);
+            ASSERT_EQ(formatTimeTenths(base_ms)[9], '0');
+            ASSERT_EQ(formatTimeTenths(base_ms + 400)[9], '4');
+            ASSERT_EQ(formatTimeTenths(base_ms + 999)[9], '9');
+            ASSERT_EQ(formatTimeTenths(base_ms + 999).substr(0, 8), whole);
+            return true;
+        });
+
+        suite->addTest("a trimmed offset shows up in the tenths digit", []() {
+            // One -0.1 press against a clock reading x.4 leaves x.3.
+            int64_t rally_ms = 1234567890400;
+            int64_t trimmed = rally_ms + trimRallyOffsetMs(0, -1);
+            ASSERT_EQ(formatTimeTenths(rally_ms)[9], '4');
+            ASSERT_EQ(formatTimeTenths(trimmed)[9], '3');
+            return true;
+        });
+
         // Test Total reset
         suite->addTest("Total reset sets counters to current", []() {
             RallyState state;

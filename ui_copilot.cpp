@@ -29,6 +29,13 @@ static void applyCopilotCSS() {
         ".title-label { font-size: 22px; }"
         ".info-label { font-size: 20px; }"
         ".clock-label { font-size: 30px; font-family: monospace; }"
+        // Date/Time screen: line the clock readouts up with the entry boxes
+        // underneath them. A GtkEntry indents its text by its own padding plus
+        // its 1px border, so plain labels above it start ~9px to the left and
+        // the three rows look ragged. Pin the entry's padding here rather than
+        // inherit the theme's, then pad the labels to match it exactly.
+        ".dt-clock-entry { padding-left: 8px; padding-right: 8px; }"
+        ".dt-clock-value { padding-left: 9px; }"
         ".dist-heading { font-size: 28px; font-weight: bold; font-family: monospace; }"
         ".dist-value { font-size: 64px; font-weight: bold; font-family: monospace; }"
         ".dist-unit { font-size: 20px; font-weight: bold; font-family: monospace; }"
@@ -1392,10 +1399,12 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     gtk_grid_attach(GTK_GRID(clockGrid), sysLabel, 0, 0, 1, 1);
     data->systemClockLabel = GTK_LABEL(gtk_label_new(""));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->systemClockLabel)), "clock-label");
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->systemClockLabel)), "dt-clock-value");
     gtk_label_set_xalign(data->systemClockLabel, 0.0);
     gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->systemClockLabel), 1, 0, 1, 1);
     data->systemTimeLabel = GTK_LABEL(gtk_label_new(""));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->systemTimeLabel)), "clock-label");
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->systemTimeLabel)), "dt-clock-value");
     gtk_label_set_xalign(data->systemTimeLabel, 0.0);
     gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->systemTimeLabel), 2, 0, 1, 1);
 
@@ -1406,12 +1415,37 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     gtk_grid_attach(GTK_GRID(clockGrid), rallyLabel, 0, 1, 1, 1);
     data->rallyClockLabel = GTK_LABEL(gtk_label_new(""));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->rallyClockLabel)), "clock-label");
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->rallyClockLabel)), "dt-clock-value");
     gtk_label_set_xalign(data->rallyClockLabel, 0.0);
     gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->rallyClockLabel), 1, 1, 1, 1);
     data->rallyTimeLabel = GTK_LABEL(gtk_label_new(""));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->rallyTimeLabel)), "clock-label");
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->rallyTimeLabel)), "dt-clock-value");
     gtk_label_set_xalign(data->rallyTimeLabel, 0.0);
     gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->rallyTimeLabel), 2, 1, 1, 1);
+
+    // The rally-clock trim: a side-by-side -0.1 / +0.1 pair below the Set
+    // Rally Clk entries, in the time column (attached after row 2 below).
+    // Anything in a fourth column -- the pair beside the clocks, or a caption
+    // next to them -- widens the whole grid and shoves the QR block out over
+    // the keypad. Under the time entry the pair costs no width at all.
+    GtkWidget* trimBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_widget_set_halign(trimBox, GTK_ALIGN_START);
+    gtk_widget_set_margin_top(trimBox, 6);
+    GtkWidget* trimUpBtn = gtk_button_new_with_label("+0.1");
+    GtkWidget* trimDownBtn = gtk_button_new_with_label("-0.1");
+    g_object_set_data(G_OBJECT(trimUpBtn), "trim-steps", GINT_TO_POINTER(1));
+    g_object_set_data(G_OBJECT(trimDownBtn), "trim-steps", GINT_TO_POINTER(-1));
+    // Minus on the left, plus on the right -- the way a value slider reads.
+    for (GtkWidget* btn : {trimDownBtn, trimUpBtn}) {
+        gtk_style_context_add_class(gtk_widget_get_style_context(btn), "nav-button");
+        // "pressed"/"released" rather than "clicked": hold-to-repeat needs
+        // to know when the button goes down and when it comes back up.
+        g_signal_connect(btn, "pressed", G_CALLBACK(on_trim_rally_pressed), data);
+        g_signal_connect(btn, "released", G_CALLBACK(on_trim_rally_released), data);
+        gtk_box_pack_start(GTK_BOX(trimBox), btn, FALSE, FALSE, 0);
+    }
+    gtk_grid_attach(GTK_GRID(clockGrid), trimBox, 2, 3, 1, 1);
 
     // Row 2: Set rally clock — date box under the date column, time box under time
     GtkWidget* setLabel = gtk_label_new("Set Rally Clk:");
@@ -1425,6 +1459,7 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     gtk_entry_set_width_chars(data->dateEntry, 10);
     gtk_widget_set_margin_top(GTK_WIDGET(data->dateEntry), 6);
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->dateEntry)), "clock-label");
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->dateEntry)), "dt-clock-entry");
     g_signal_connect(data->dateEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
     gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->dateEntry), 1, 2, 1, 1);
 
@@ -1433,6 +1468,7 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     gtk_entry_set_width_chars(data->timeEntry, 8);
     gtk_widget_set_margin_top(GTK_WIDGET(data->timeEntry), 6);
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->timeEntry)), "clock-label");
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->timeEntry)), "dt-clock-entry");
     g_signal_connect(data->timeEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
     gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->timeEntry), 2, 2, 1, 1);
     
@@ -1440,8 +1476,11 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     GtkWidget* optionsLabel = gtk_label_new("Options:");
     gtk_style_context_add_class(gtk_widget_get_style_context(optionsLabel), "clock-label");
     gtk_widget_set_halign(optionsLabel, GTK_ALIGN_START);
-    gtk_widget_set_margin_top(optionsLabel, 10);
-    gtk_box_pack_start(GTK_BOX(leftBox), optionsLabel, FALSE, FALSE, 0);
+    gtk_widget_set_margin_top(optionsLabel, 6);
+    // In the clock grid's label column on the trim row, not packed into
+    // leftBox below it: that puts "Options:" level with the -0.1 / +0.1
+    // buttons instead of on a line of its own underneath them.
+    gtk_grid_attach(GTK_GRID(clockGrid), optionsLabel, 0, 3, 1, 1);
     
     GtkWidget* forceSingleRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
     GtkWidget* forceSingleLabel = gtk_label_new("force single display mode");
@@ -1466,27 +1505,34 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(unitsRow), unitsRowLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(unitsRow), GTK_WIDGET(data->unitToggleBtn), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(leftBox), unitsRow, FALSE, FALSE, 0);
+    // Speed units above force-single-display. Packed in the other order because
+    // the units row is built second; index 1 is straight after the clock grid.
+    gtk_box_reorder_child(GTK_BOX(leftBox), unitsRow, 1);
 
-    // Middle column: phone web access (URL + QR) placed in the open space to the
-    // right of the clock rows (top-aligned, URL level with the System Clock row),
-    // between the narrowed left column and the keypad, so it neither overflows the
-    // left column nor pushes the keypad off-screen.
+    // Middle column: phone web access (QR, with the URL underneath) in the open
+    // space to the right of the clock rows, between the narrowed left column and
+    // the keypad.
+    //
+    // QR above URL, not the other way round: the URL is a long single line
+    // ("172.17.0.2:8080/"), and level with the clocks it ran into the trim
+    // buttons and the top clock row. Under the QR it has the QR's full width.
+    // The whole block is bottom-aligned so it sits just above the bottom
+    // menu bar, well clear of the clock rows and the trim buttons.
     GtkWidget* webBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
-    gtk_widget_set_valign(webBox, GTK_ALIGN_START);
+    gtk_widget_set_valign(webBox, GTK_ALIGN_END);
     gtk_widget_set_halign(webBox, GTK_ALIGN_CENTER);
     gtk_box_pack_start(GTK_BOX(mainBox), webBox, TRUE, TRUE, 0);
+
+    data->webQrArea = gtk_drawing_area_new();
+    gtk_widget_set_size_request(data->webQrArea, 132, 132);
+    gtk_widget_set_halign(data->webQrArea, GTK_ALIGN_CENTER);
+    g_signal_connect(data->webQrArea, "draw", G_CALLBACK(on_qr_draw), data);
+    gtk_box_pack_start(GTK_BOX(webBox), data->webQrArea, FALSE, FALSE, 0);
 
     data->webUrlLabel = GTK_LABEL(gtk_label_new(""));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->webUrlLabel)), "clock-label");
     gtk_label_set_selectable(data->webUrlLabel, TRUE);
     gtk_box_pack_start(GTK_BOX(webBox), GTK_WIDGET(data->webUrlLabel), FALSE, FALSE, 0);
-
-    data->webQrArea = gtk_drawing_area_new();
-    gtk_widget_set_size_request(data->webQrArea, 132, 132);
-    gtk_widget_set_halign(data->webQrArea, GTK_ALIGN_CENTER);
-    gtk_widget_set_margin_top(data->webQrArea, 6);
-    g_signal_connect(data->webQrArea, "draw", G_CALLBACK(on_qr_draw), data);
-    gtk_box_pack_start(GTK_BOX(webBox), data->webQrArea, FALSE, FALSE, 0);
 
     // Right side: datetime keypad
     data->datetimeKeypad = createDateTimeKeypad(data);
@@ -1496,7 +1542,11 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
     gtk_box_pack_end(GTK_BOX(screen), buttonBox, FALSE, FALSE, 5);
     
-    GtkWidget* saveBtn = gtk_button_new_with_label("set and save");
+    // "save rally clock", not "set and save": it only ever applied the two
+    // entry boxes above. The single-display switch and the KPH/MPH button on
+    // this screen each save themselves the moment they are touched, so
+    // "set and save" implied a dependency on this button that never existed.
+    GtkWidget* saveBtn = gtk_button_new_with_label("Save new rally clock entry");
     GtkWidget* backBtn = gtk_button_new_with_label("back");
     
     for (GtkWidget* btn : {saveBtn, backBtn})

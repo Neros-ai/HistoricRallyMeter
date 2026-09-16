@@ -402,15 +402,17 @@ All fonts to be 20px
 +----------------------------------------------------------------------------------------------------------+
 |  System Clock:  yyyy/mm/dd  hh:mm:ss                                                                      |
 |                                          historicrallymeter.local:8080          7    8    9               |
-|  Rally  Clock:  yyyy/mm/dd  hh:mm:ss      (or device IP if mDNS unavailable)    4    5    6               |
+|  Rally  Clock:  yyyy/mm/dd  hh:mm:ss.t    (or device IP if mDNS unavailable)    4    5    6               |
 |                                                                                 1    2    3               |
-|  Set Rally Clk: [yyyy/mm/dd] [hh:mm:ss]         +------------+                  /    0    :               |
-|                                                 |            |                 [C]  [   <--   ]           |
-|  Options:                                       |  QR code   |                                            |
+|  Set Rally Clk: [yyyy/mm/dd] [hh:mm:ss]                                         /    0    :               |
+|                                                                                [C]  [   <--   ]           |
+|  Options:       [-0.1] [+0.1]                   +------------+                                            |
+|  speed units          [ KPH ]                   |  QR code   |                                            |
 |  force single display mode        ( o)          |  132x132   |                                            |
-|  speed units          [ KPH ]                   +------------+                                            |
+|                                                 +------------+                                            |
+|                                              historicrallymeter.local:8080                                |
 +----------------------------------------------------------------------------------------------------------+
-|                                [set and save]                          [back]                            |
+|                        [Save new rally clock entry]                    [back]                            |
 +----------------------------------------------------------------------------------------------------------+
 ```
 Display a numeric keypad for entry on the right, it is a different keypad to other screens as it has "/" and ":" 
