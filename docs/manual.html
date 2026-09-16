@@ -47,8 +47,6 @@
     border-left: 3px solid var(--ink); background: var(--shade);
     font-size: 10pt;
   }
-  .toc ol { padding-left: 6mm; }
-  .toc a { color: var(--ink); text-decoration: none; }
 
   @page { size: A4 portrait; margin: 15mm; }
   @media print {
@@ -58,49 +56,99 @@
     .screen-page { page-break-before: always; page-break-after: always; }
     h2, h3 { page-break-after: avoid; }
     .screen, table, .note { page-break-inside: avoid; }
-    .toc { page-break-after: always; }
     a { text-decoration: none; color: var(--ink); }
   }
 </style>
 </head>
 <body>
 
+<div style="page-break-after: always">
+
 <h1 id="top">Rallybox User Manual</h1>
 
-<p>Rallybox is a rally meter for classic-car regularity rallies. It measures
-the distance the car has travelled, compares it with the schedule the crew
-have entered, and tells the driver how many seconds ahead of or behind that
-schedule the car is.</p>
+<figure class="screen">
+  <img src="manual-images/main-screen.png" alt="The co-pilot screen in two-display mode">
+  <figcaption>Co-pilot screen, two-display mode.</figcaption>
+</figure>
 
-<p>The box has two screens. The co-pilot screen, on the left, is where the
-navigator sets the stage up and works the controls. The driver screen, on the
-right, shows a gauge and nothing the driver has to operate. A phone on the
-same network can show the same readings and work most of the same controls.</p>
+<figure class="screen">
+  <img src="manual-images/driver-screen.png" alt="The driver display" style="width: 62.5%; margin-left: auto; margin-right: auto">
+  <figcaption>Driver display.</figcaption>
+</figure>
 
-<p>This manual describes the box first and the phone app second.</p>
+<figure class="screen">
+  <img src="manual-images/single-display.png" alt="The co-pilot screen in single-display mode">
+  <figcaption>Co-pilot screen, single-display mode.</figcaption>
+</figure>
 
-<nav class="toc">
-<h2>Contents</h2>
-<ol>
-  <li><a href="#part-box">The box</a>
-    <ol>
-      <li><a href="#main-screen">The co-pilot main screen</a></li>
-      <li><a href="#driver-screen">The driver screen</a></li>
-      <li><a href="#datetime">date/time</a></li>
-      <li><a href="#calibration">calibration</a></li>
-      <li><a href="#segments">segments</a></li>
-      <li><a href="#stage-go">stage go</a></li>
-      <li><a href="#driver-zero">driver Zero</a></li>
-    </ol>
-  </li>
-  <li><a href="#part-phone">The phone app</a></li>
-  <li><a href="#situations">What to do in seven situations</a></li>
-</ol>
-</nav>
+</div>
 
 <!-- PART 1 -->
 
-<h1 id="part-box">Part 1 — The box</h1>
+<section class="screen-page">
+
+<h2 id="main-screen">The co-pilot main screen</h2>
+
+<figure class="screen">
+  <img src="manual-images/main-screen.png" alt="The co-pilot main screen">
+</figure>
+
+<h3>Total</h3>
+
+<p>Total displays distance and elapsed time since start. Pressing Total resets
+the distance to zero.</p>
+
+<ul>
+<li>Awaiting an autostart it also resets Trip but does not reset the
+timer.</li>
+<li>During a stage it also resets Trip but does not reset the timer.
+Confirmation is required.</li>
+<li>Outside of a stage it resets the timer but not the Trip.</li>
+</ul>
+
+<h3>Trip</h3>
+
+<p>Trip displays an intermediate distance and time since it was last pressed.
+If a stage is active it also resets itself with auto speed changes or when
+<code>next</code> or <code>prev</code> are pressed. During a stage or awaiting
+an autostart Trip will also be reset by Total.</p>
+
+<h3>next</h3>
+
+<p><code>next</code> is pressed during a stage to move to next speed where the
+auto speed change check box has not been ticked, or to override the system if
+the speed change appears earlier than programmed. The following change point
+does not move and removes its same distance from the start.</p>
+
+<p>The counter shows the distance still to run before the speed change and the
+speed it changes to. <code>&gt; END</code> signifies there are no further speed
+changes, and <code>---.---</code> means no stage is loaded.</p>
+
+<h3>prev</h3>
+
+<p><code>prev</code> undoes the last speed change, whether the crew made it or
+the box made it automatically; it works only in the section after the change and
+only once, and is grey when there is nothing to undo.</p>
+
+<h3>−10, set and +10</h3>
+
+<p>These correct the measured distance. <code>-10</code> and <code>+10</code>
+move Total and Trip by ten metres each press. <code>set</code> changes Total to
+the figure typed into the box (Trip is not affected). Changes made during a
+stage reestimate the average speeds and timing error.</p>
+
+<h3>Alarm KM</h3>
+
+<p>Pressing one of the numbers 2 to 13 sets an alarm when the car has travelled
+that many kilometres. A countdown of the distance appears under the pad, and
+<code>clear</code> cancels it.</p>
+
+<h3>The stage table</h3>
+
+<p>Shows each leg of the loaded stage with its target speed, its length, and the
+running total at its end.</p>
+
+</section>
 
 <section class="screen-page">
 
@@ -113,10 +161,9 @@ same network can show the same readings and work most of the same controls.</p>
 
 <h3>Setting Rally Clock</h3>
 
-<p>The <strong>System Clock</strong> is the Raspberry Pi's own clock. The
-<strong>Rally Clock</strong> is the one every stage is timed against.
-<strong>Set Rally Clk</strong> is used to update the Rally Clock and is
-prepopulated ready for editing.</p>
+<p>The System Clock is the Raspberry Pi's own clock. The Rally Clock is the one
+every stage is timed against. Set Rally Clk is used to update the Rally Clock
+and is prepopulated ready for editing.</p>
 
 <ol>
 <li>Tap the date box and delete what is there with <code>&lt;-</code>.</li>
@@ -127,44 +174,34 @@ prepopulated ready for editing.</p>
 <li>Press <code>Save new rally clock entry</code>.</li>
 </ol>
 
-<p><strong>IMPORTANT:</strong> Both date and time boxes must be complete and
-formatted correctly otherwise the changes will not be saved.</p>
+<p>IMPORTANT: Both date and time boxes must be complete and formatted correctly
+otherwise the changes will not be saved. Do not enter tenths of seconds.</p>
 
 <h3>Trimming the Rally Clock</h3>
 
-<p>The time you type becomes true at the instant you press the button, so
-whatever fraction of a second you were late by stays in the Rally Clock for the
-rest of the rally. The <code>-0.1</code> and <code>+0.1</code> buttons under
-the time box correct it, a tenth of a second per press: <code>+0.1</code> makes
-the Rally Clock read later, <code>-0.1</code> earlier. Hold a button down to
-repeat, about a second and a half for a whole second of adjustment.</p>
-
-<p>The Rally Clock shows a tenths digit so you can see the trim take effect.
-The System Clock stays at whole seconds, and the two are not tied together —
-the Rally Clock is free to change its second at any point, which is what lets
-it hold an offset that is not a whole number of seconds.</p>
-
-<p>Each press is saved immediately. The <code>Save new rally clock entry</code>
-button is not involved, and does not need to be pressed afterwards.</p>
-
-<h3>Force Single Display</h3>
-
-<p>This switch puts everything on the co-pilot screen, with a small driver
-gauge in the right-hand panel, for use where only one display is fitted. It is
-saved as soon as it is switched, and takes effect the next time the box is
-started.</p>
+<p>Small adjustments to the rally clock may be made by pressing the
+<code>-0.1</code> and <code>+0.1</code> buttons to adjust the time by a tenth
+of a second. Hold a button down to repeat. Each press is saved
+immediately.</p>
 
 <h3>Speed units</h3>
 
-<p>The button shows the unit in use. Pressing it switches between KPH and MPH,
-and every speed on every screen, and on the phone, changes with it. It is saved
-as soon as it is pressed.</p>
+<p>The button shows the unit in use. Pressing toggles between KPH and MPH and
+the selection is saved automatically.</p>
+
+<h3>Force Single Display Mode</h3>
+
+<p>When set to ON the driver's gauge will be incorporated into the co-driver
+screen when the program is next rebooted. The driver's display is
+disabled.</p>
 
 <h3>Phone Control Link</h3>
 
-<p>The address and QR code show where to reach the phone app. Point a phone
-camera at the code, or type the address into a phone browser. The phone must be
-on the same network as the box. Part 2 describes what the phone can do.</p>
+<p>When the rally box is tethered to a mobile phone (prior to starting this
+program), the phone can be used to control the device and play the timing
+tones. The IP address shown on the device can be typed directly into the
+phone's browser or entered using the camera and QR code. Part 2 describes what
+the phone can do.</p>
 
 <h3>Exit App</h3>
 
@@ -172,6 +209,293 @@ on the same network as the box. Part 2 describes what the phone can do.</p>
 switch the Raspberry Pi off.</p>
 
 </section>
+
+<section class="screen-page">
+
+<h2 id="calibration">calibration</h2>
+
+<figure class="screen">
+  <img src="manual-images/calibration.png" alt="The calibration screen">
+  <figcaption>The calibration screen.</figcaption>
+</figure>
+
+<h3>Calibrating over a set distance</h3>
+
+<ol>
+<li>Press <code>Start/Zero</code> to zero the counters.</li>
+<li>Drive the measured kilometre or any known distance.</li>
+<li>Enter the actual distance driven (not the device distance) into the Actual
+distance covered box. This must be at least 500 m.</li>
+<li>Press <code>Set sensor 1</code> or <code>Set both sensors and avg.</code> to
+choose which counter is used. This will remain displayed in yellow.</li>
+<li>Press <code>Save Calibration</code>.</li>
+</ol>
+
+<p>The saved calibration will be displayed in yellow, for example Calibration
+9999 pulses/KM.</p>
+
+<h3>Adjusting an existing calibration</h3>
+
+<p>Where the calibration is incorrect it can be adjusted directly by entering a
+new pulses per kilometre figure into the Reset to box and pressing
+<code>Reset</code>. No driving is needed. A figure of zero or less is ignored.
+It is not necessary to press <code>Save Calibration</code>.</p>
+
+<h3>Prop/Wheel RPM</h3>
+
+<p>The reading under the keypad is the propshaft or wheel speed in revolutions
+per minute, taken from sensor 1. For it to be correct, type the number of pulses
+the sensor gives per revolution into the box ahead of the rpm reading.</p>
+
+<h3>Back</h3>
+
+<p><code>Back</code> returns to the main screen.</p>
+
+</section>
+
+<section class="screen-page">
+
+<h2 id="segments">segments</h2>
+
+<figure class="screen">
+  <img src="manual-images/segments.png" alt="The stage setup screen">
+  <figcaption>The stage setup screen.</figcaption>
+</figure>
+
+<h3>Entering new stage information</h3>
+
+<p>If there are existing speeds and distances shown, press <code>del</code>
+beside each line first.</p>
+
+<ol>
+<li>Tap the KPH box and type the target speed.</li>
+<li>Tap the metres box and type the length of the leg.</li>
+<li>Tick <code>Auto</code> for the box to change to the next speed by itself at
+the end of the leg. Leave it clear to change speed by pressing
+<code>next</code>.</li>
+<li>Press <code>add</code> and the entered information will populate the
+table.</li>
+</ol>
+
+<p>Several legs can be entered at once by separating the figures with
+semicolons, e.g. <code>30;40</code> with <code>1000;2000</code> adds 1000 m at
+30, then 2000 m at 40.</p>
+
+<p>The table shows each leg with the time it should take. In a dual display
+configuration the total distance as well as the interim distances of the current
+loaded stage will show in the co-driver main window.</p>
+
+<h3>Saving and Recalling saved stages</h3>
+
+<p>Pressing <code>Set</code> 1 to 5 will save the stage on screen into that
+memory for later use, and you will be asked to confirm that you want to
+overwrite the memory slot if it is in use. The corresponding Recall button will
+invert colours. <code>Recall</code> 1 to 5 loads it back into current memory and
+displays the details.</p>
+
+<h3>Clear Memory</h3>
+
+<p>Pressing this will clear all saved stages after confirmation. It does not
+delete the current stage information, which stays on the screen.</p>
+
+<h3>Tone</h3>
+
+<p>The driver's aural error tones can be enabled or disabled using the
+<code>tone off/on</code> switch. Type 1 pulses faster the larger the correction
+needed. Type 2 is a continuous tone whose pitch follows the seconds of
+error.</p>
+
+<h3>Beep Assist KM</h3>
+
+<p>Beep Assist is an aural navigation assistant which gives warnings ahead
+of upcoming navigations and alerts to identify measured distance
+inaccuracies.</p>
+
+<p>The total roadbook elapsed distance at each box in a stage should be entered
+into the top entry field (not the distance between each box) and this will be
+saved and recalled alongside the stage speeds and distance information.</p>
+
+<ul>
+<li>Navigation assistance is designed to prevent a navigator missing an action
+by sounding an alert at a preconfigured distance, in metres, ahead of a roadbook
+box. 100 metres is a sensible advance configuration choice. Navigation gives a
+double beep.</li>
+<li>Timing assistance is designed to identify deviation away from perfect
+timings due to distance inaccuracies caused by wheel spin, corner cutting or
+sensor skipping. The alert sounds when the car should be passing a roadbook box.
+Zero seconds is a sensible Advance configuration choice, though it can be
+configured to beep early. Timing gives a single beep.</li>
+</ul>
+
+<p>Beep Assist can be disabled using the <code>Off/On</code> switch. If it is
+enabled, the respective Navigation and Timing tick boxes need to be checked for
+it to sound. The advance configurations (metres and seconds) do not get saved
+and recalled.</p>
+
+<h3>back</h3>
+
+<p><code>back</code> returns to the main screen.</p>
+
+</section>
+
+<section class="screen-page">
+
+<h2 id="stage-go">stage go</h2>
+
+<figure class="screen">
+  <img src="manual-images/stage-go.png" alt="The Stage Go question">
+  <figcaption>The question the <code>stage go</code> button asks.</figcaption>
+</figure>
+
+<p>Stage Go displays the loaded stage details for review and offers three ways
+to start.</p>
+
+<ul>
+<li><code>Now</code> starts the stage immediately.</li>
+<li><code>At HH:MM</code> sets an autostart at the next round minute and permits
+early departure.</li>
+<li><code>Later</code> up to 3 hours in the future. Can be set while a stage is
+in progress. No early departure.</li>
+</ul>
+
+<h3>Now</h3>
+
+<p>Starts the stage immediately and has the following characteristics:</p>
+
+<ul>
+<li>locks the current stage data for the remainder of the stage.</li>
+<li>cancels any stage running and other future programmed autostarts.</li>
+<li>resets Total and Trip distances to zero and the counter starts the timer
+immediately.</li>
+</ul>
+
+<p>Advantages: can be used with a flying start if late to a stage, though the
+difference between the start time and the actual time at the start line will
+need to be corrected for. Disadvantages: start time accuracy is only as good as
+the navigator's reactions.</p>
+
+<h3>At HH:MM</h3>
+
+<p>Starts the stage on the next whole minute, which is automatically shown on
+the button. It has the following characteristics:</p>
+
+<ul>
+<li>locks the current stage data for the upcoming stage.</li>
+<li>cancels any stage running and other future programmed autostarts.</li>
+<li>displays stage speed and countdown to the start in the driver's
+display.</li>
+<li>early departure is enabled, allowing the car to pull away early if the car
+will struggle to get up to speed or will be obstructed. This works because the
+timer resets at the autostart minute but the distance is reset when the option
+is selected.</li>
+<li>pressing Total ahead of departure will zero any pre-departure
+movements.</li>
+<li>if after the HH:MM menu option appears you wait until after the minute has
+passed, you will be told you need to trigger the menu again as the start time
+elapsed.</li>
+</ul>
+
+<p>Advantages: can make an early departure; simple one button press when lining
+up for the start; perfect start time. Disadvantages: can only be pressed within
+59 seconds of the start.</p>
+
+<h3>Later</h3>
+
+<p>Starts the stage a predetermined time up to 3 hours in the future, even if a
+stage is currently under way. To use it tap the autostart entry box, type the
+start time as <code>hh:mm:ss</code> on the keypad, press <code>set</code> to
+store; <code>back</code> to return to main screen. Press <code>Clear</code> to
+remove the autostart. It has the following characteristics:</p>
+
+<ul>
+<li>it does NOT lock the current stage data for the upcoming stage. Whatever
+stage data is loaded when the autostart fires will only be locked at that
+time.</li>
+<li>it does NOT cancel any stage running. You can continue with the existing
+stage.</li>
+<li>it displays a countdown, but the driver display will continue to display the
+current stage information.</li>
+<li>early departure is NOT enabled, because the distances and timer reset at the
+autostart time.</li>
+</ul>
+
+<p>Advantages: can be configured while another stage is in progress; can be
+configured more than 1 minute in advance; can make last minute changes to
+segment instructions; perfect start time. Disadvantages: no early start; very
+early reconfiguration means the driver display is obscured by the
+countdown.</p>
+
+<h3>ABORT STAGE</h3>
+
+<p>Ends the stage after confirmation. The driver's needle returns to zero and
+the tone stops. Total and Trip keep their readings, and any autostart that has
+been set is cancelled.</p>
+
+<h3>Back</h3>
+
+<p>Closes the question and changes nothing.</p>
+
+</section>
+
+<section class="screen-page">
+
+<h2 id="driver-zero">driver Zero</h2>
+
+<p>This option is used to rebase the driver's gauge to show zero error when the
+driver targets an error other than zero.</p>
+
+<p>The popup window will show the ahead/behind value (the true error) and the
+current adjustment (how much is currently adjusted).</p>
+
+<ul>
+<li><code>Yes</code> sets the offset to zero.</li>
+<li><code>Reset to 0.0</code> removes the offset. The gauge shows the true error
+again.</li>
+<li><code>No</code> changes nothing.</li>
+</ul>
+
+<p>Only the driver's gauge changes. The distances, the schedule and the clock
+stay as they are, and starting a stage clears the offset.</p>
+
+<figure class="screen">
+  <img src="manual-images/driver-zero.png" alt="The Adjust Driver Zero question">
+</figure>
+
+<figure class="screen">
+  <img src="manual-images/driver-gauge.png" alt="The driver display with a large timing error" style="width: 62.5%; margin-left: auto; margin-right: auto">
+</figure>
+
+</section>
+
+<section class="screen-page">
+
+<h2 id="phone-app">The phone app</h2>
+
+<p>When the rally box is tethered to a mobile phone the phone can be used to
+control the device. The IP address shown on the date/time page of the device can
+be typed directly into the phone's browser or entered using the camera and QR
+code. The phone page will show connected in green when active.</p>
+
+<p>The Live page replicates the functions of the main page on the co-pilot's
+screen; the Setup page replicates the functions of the segments page.</p>
+
+<p>The error tones can be played via the phone when the sound on button at the
+top is illuminated.</p>
+
+<div style="display: flex; gap: 6mm; align-items: flex-start">
+  <figure class="screen" style="flex: 1; margin: 0">
+    <img src="manual-images/phone-live.png" alt="The phone app, Live tab">
+    <figcaption>Live.</figcaption>
+  </figure>
+  <figure class="screen" style="flex: 1; margin: 0">
+    <img src="manual-images/phone-setup.png" alt="The phone app, Setup tab">
+    <figcaption>Setup.</figcaption>
+  </figure>
+</div>
+
+</section>
+
+
 
 <!-- END -->
 
