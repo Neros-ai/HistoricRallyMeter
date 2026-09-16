@@ -28,6 +28,13 @@ enum class TotalResetChoice { Cancel, ConfirmDistanceReset };
 // distance reset zeroes where the button was pressed, not where the crew
 // confirmed. Called on the press, before asking -- by the box and the phone.
 void captureTotalResetPress(AppData* data);
+// The crew answered Back: the press is abandoned, so the captured position
+// goes with it. The box's own dialog clears it inline; the phone has to say
+// so, and says it with "reset_total_cancel" -- deliberately NOT a
+// "reset_total" carrying a cancel, because with no stage running that message
+// means "just do it" (webclient/app.js), so a Back arriving after the stage
+// ended would zero Total instead of cancelling.
+void cancelTotalResetPress(AppData* data);
 // Reset Total, free of any widget so the box and the phone share it. Returns
 // false when a stage is running and the choice is Cancel -- the phone's way
 // of saying the crew answered Back -- and drops the captured press with it,
