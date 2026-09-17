@@ -30,3 +30,10 @@ copilot.png
 frame.png
 phone_qr.png
 sim_check.png
+
+# Per-page previews of the user manual. Each page is rendered on its own as
+# docs/_preview-<page>.html while it is being reviewed at print size, then
+# thrown away; they are regenerated on demand and nothing references them.
+# One (_preview-datetime.html) was swept in by a `git add` during RB-DTM-02
+# and reached PR #44 before it was spotted.
+docs/_preview-*.html
