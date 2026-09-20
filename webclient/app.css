@@ -37,7 +37,8 @@ header { justify-content: flex-end; }
 .tabs { display: flex; gap: 0.5rem; padding: 0.5rem 1rem; }
 .tab {
   flex: 1;
-  padding: 0.6rem;
+  padding: 1.05rem 0.6rem;
+  font-size: 1rem;
   background: #222;
   color: #fff;
   border: 1px solid #666;
@@ -52,28 +53,54 @@ header { justify-content: flex-end; }
   margin-bottom: 0.75rem;
   font-size: 1.1rem;
 }
-.ahead-behind {
-  text-align: center;
-  padding: 1rem 0.5rem;
+/* Live page: the gauge, Total and Trip are one grid with equal-height rows, so
+   the gauge box always matches the Total box without a fixed height. Gap is
+   the one between prev and Reset Trip. */
+.live-boxes {
+  display: grid;
+  grid-auto-rows: 1fr;
+  gap: 1rem;
   margin-bottom: 1rem;
+}
+.ahead-behind {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.5rem;
   border: 2px solid #666;
 }
-.ahead-behind .label { font-size: 0.9rem; color: #ccc; margin-bottom: 0.5rem; }
 .ahead-behind .value { font-size: 2.4rem; font-weight: bold; font-variant-numeric: tabular-nums; }
 .ahead-behind.ahead .value { color: #6f6; }
 .ahead-behind.behind .value { color: #f66; }
-.speed-grid, .dist-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.dist-box {
+  display: flex;
+  align-items: center;
   gap: 0.75rem;
-  margin-bottom: 1rem;
-}
-.speed-grid div, .dist-grid div {
-  border: 1px solid #444;
+  border: 2px solid #666;
   padding: 0.75rem;
 }
-.speed-grid span, .dist-grid span { display: block; color: #aaa; font-size: 0.85rem; }
-.speed-grid strong, .dist-grid strong { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.dist-box .dl { flex: 0 0 3.6rem; color: #aaa; font-size: 1.1rem; }
+.dist-box > strong {
+  font-size: 2.4rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* Right-hand column: the average on top, the speed under it. */
+.dist-box .rt { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 0.15rem; }
+.dist-box .avg { color: #aaa; font-size: 0.95rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dist-box .avg b { color: #fff; font-weight: normal; }
+.dist-box .sp { display: flex; align-items: baseline; gap: 0.4rem; white-space: nowrap; }
+.dist-box .sl { color: #aaa; font-size: 0.85rem; }
+.dist-box .sp strong { font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+/* Target in the driver display's Target colour. */
+.dist-box .sp.tgt .sl, .dist-box .sp.tgt strong { color: #FFDD00; }
+/* The narrowest phones (360px): the distance and right column are tight, so
+   the big figures step down together. */
+@media (max-width: 380px) {
+  .ahead-behind .value, .dist-box > strong { font-size: 2rem; }
+  .dist-box .dl { flex-basis: 3rem; font-size: 1rem; }
+  .dist-box { gap: 0.5rem; padding: 0.75rem 0.6rem; }
+}
 .actions { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .actions button {
   flex: 1;

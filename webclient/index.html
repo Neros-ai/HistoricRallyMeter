@@ -30,20 +30,29 @@
       <strong id="rally-clock">--:--:--</strong>
     </section>
 
-    <section id="ahead-behind" class="ahead-behind">
-      <div class="label">AHEAD / BEHIND</div>
-      <div id="ahead-value" class="value">0.0 s</div>
-    </section>
+    <!-- Gauge, Total and Trip share one grid whose rows are all as tall as
+         the tallest, so the gauge box matches the Total box by layout. -->
+    <div class="live-boxes">
+      <section id="ahead-behind" class="ahead-behind">
+        <div id="ahead-value" class="value">0.0 s</div>
+      </section>
 
-    <section class="speed-grid">
-      <div><span>Current</span><strong id="cur-kph">0.0</strong> <small id="unit-label">kph</small></div>
-      <div><span>Target</span><strong id="target-kph">0.0</strong> <small id="unit-label2">kph</small></div>
-    </section>
+      <section class="dist-box">
+        <span class="dl">Total</span><strong id="total-m">0 m</strong>
+        <span class="rt">
+          <span class="avg">avg <b id="total-avg">0.0</b></span>
+          <span class="sp"><span class="sl" id="unit-label">kph</span><strong id="cur-kph">0.0</strong></span>
+        </span>
+      </section>
 
-    <section class="dist-grid">
-      <div><span>Trip</span><strong id="trip-m">0 m</strong><span id="trip-avg">avg 0.0</span></div>
-      <div><span>Total</span><strong id="total-m">0 m</strong><span id="total-avg">avg 0.0</span></div>
-    </section>
+      <section class="dist-box">
+        <span class="dl">Trip</span><strong id="trip-m">0 m</strong>
+        <span class="rt">
+          <span class="avg">avg <b id="trip-avg">0.0</b></span>
+          <span class="sp tgt"><span class="sl">tgt</span><strong id="target-kph">0.0</strong></span>
+        </span>
+      </section>
+    </div>
 
     <section class="actions live-tall">
       <button id="btn-prev" type="button" disabled>prev</button>

@@ -40,13 +40,12 @@
     units = msg.units || 'kph';
     if (units !== previousUnits && lastState) renderStagePanel(lastState);
     $('unit-label').textContent = units;
-    $('unit-label2').textContent = units;
     $('cur-kph').textContent = Number(msg.cur_kph || 0).toFixed(1);
     $('target-kph').textContent = Number(msg.target_kph || 0).toFixed(1);
     $('trip-m').textContent = formatDist(msg.trip_m);
     $('total-m').textContent = formatDist(msg.total_m);
-    $('trip-avg').textContent = 'avg ' + Number(msg.trip_avg_kph || 0).toFixed(1);
-    $('total-avg').textContent = 'avg ' + Number(msg.total_avg_kph || 0).toFixed(1);
+    $('trip-avg').textContent = Number(msg.trip_avg_kph || 0).toFixed(1);
+    $('total-avg').textContent = Number(msg.total_avg_kph || 0).toFixed(1);
     $('seg-num').textContent = msg.segment_number || 0;
     $('seg-count').textContent = msg.segment_count || 0;
 
