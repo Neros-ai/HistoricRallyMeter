@@ -18,6 +18,13 @@ NextPrevState computeNextPrevState(AppData* data) {
     return out;
 }
 
+// For a figure that is genuinely KPH whatever the box is set to -- the
+// segment's target speed, which is stored in KPH. calculateCurrentSpeed and
+// calculateAverageSpeed already return MPH when state.units is set, so they
+// must NOT come through here: doing so converted them a second time and the
+// phone showed current speed and both averages 38% low beside a correct
+// target. The box's own panels never had the fault; they use those functions
+// directly.
 static double displayKph(AppData* data, double kph) {
     if (data->state->units) return kph * 0.621371;
     return kph;
@@ -97,10 +104,10 @@ std::string buildTelemetryJson(AppData* data) {
         rally_clock.c_str(),
         trip_m,
         total_m,
-        displayKph(data, cur_speed),
-        displayKph(data, trip_avg),
-        displayKph(data, total_avg),
-        displayKph(data, target_kph),
+        cur_speed,      // already in the box's units
+        trip_avg,       // already in the box's units
+        total_avg,      // already in the box's units
+        displayKph(data, target_kph),   // stored in KPH; convert
         ahead_behind_s,
         data->state->segment_current_number >= 0 ? data->state->segment_current_number + 1 : 0,
         data->state->stage_segments.size(),
