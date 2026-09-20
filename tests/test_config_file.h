@@ -25,6 +25,83 @@ public:
     TestSuite* createSuite() {
         auto* suite = new TestSuite("Config File Tests");
         
+        // RB-DEV-07. The segment number and the stage it indexes are always
+        // written together, so a file this app wrote is consistent -- but a
+        // truncated write or a hand-edited file can leave the number past the
+        // end. calculateAheadBehindFromStageStart rejects a negative index and
+        // an empty stage, not an over-large one, and would read off the end.
+        suite->addTest("a segment number past the end of the stage is clamped", [this]() {
+            cleanup();
+            writeTestFile(R"({
+  "calibration": 180018,
+  "segment_current_number": 7,
+  "stage_segments": [
+    {
+      "target_speed_kph": 50.000000,
+      "target_speed_counts_per_hour": 277750.002778,
+      "distance_m": 1000.000000,
+      "distance_counts": 5555.000056,
+      "autoNext": true
+    },
+    {
+      "target_speed_kph": 30.000000,
+      "target_speed_counts_per_hour": 166650.001667,
+      "distance_m": 500.000000,
+      "distance_counts": 2777.500028,
+      "autoNext": true
+    }
+  ]
+})");
+            RallyState state;
+            ConfigFile::load(state, test_config_file);
+            ASSERT_EQ(state.stage_segments.size(), 2u);
+            ASSERT_EQ(state.segment_current_number, 1);   // the last real one
+            cleanup();
+            return true;
+        });
+
+        suite->addTest("a segment number with no stage at all reads as no stage", [this]() {
+            cleanup();
+            writeTestFile(R"({
+  "calibration": 180018,
+  "segment_current_number": 3
+})");
+            RallyState state;
+            ConfigFile::load(state, test_config_file);
+            ASSERT_EQ(state.segment_current_number, -1);
+            cleanup();
+            return true;
+        });
+
+        suite->addTest("a segment number inside the stage is left alone", [this]() {
+            cleanup();
+            writeTestFile(R"({
+  "calibration": 180018,
+  "segment_current_number": 1,
+  "stage_segments": [
+    {
+      "target_speed_kph": 50.000000,
+      "target_speed_counts_per_hour": 277750.002778,
+      "distance_m": 1000.000000,
+      "distance_counts": 5555.000056,
+      "autoNext": true
+    },
+    {
+      "target_speed_kph": 30.000000,
+      "target_speed_counts_per_hour": 166650.001667,
+      "distance_m": 500.000000,
+      "distance_counts": 2777.500028,
+      "autoNext": true
+    }
+  ]
+})");
+            RallyState state;
+            ConfigFile::load(state, test_config_file);
+            ASSERT_EQ(state.segment_current_number, 1);
+            cleanup();
+            return true;
+        });
+
         // Test loading from valid JSON file with all fields
         suite->addTest("Load valid JSON with all fields", [this]() {
             // Test that RallyState can hold the expected values

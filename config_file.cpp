@@ -274,6 +274,19 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
         state.segment_start_adjust_recorded = true;
     }
 
+    // The two are always written together, so a file this app wrote is
+    // consistent -- but a truncated write (power cut, a half-synced copy) or a
+    // hand-edited file can leave a segment number past the end of the stage it
+    // indexes. calculateAheadBehindFromStageStart rejects a negative index and
+    // an empty stage but not an over-large index, and would read off the end.
+    // Clamp on the way in, where the untrusted value arrives.
+    if (state.segment_current_number >= static_cast<long>(state.stage_segments.size())) {
+        state.segment_current_number =
+            state.stage_segments.empty()
+                ? -1
+                : static_cast<long>(state.stage_segments.size()) - 1;
+    }
+
     // A hand-edited 0 would leave the Prop RPM readout dividing by zero on
     // every tick; the screen's own entry never lets one through.
     if (!validPropPulsesPerRev(state.prop_pulses_per_rev)) {
