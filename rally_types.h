@@ -10,6 +10,7 @@
 #endif
 
 #include "simple_tone.h"
+#include "arrow_tone.h"
 #include "tone_cadence.h"
 
 // Forward declarations
@@ -80,6 +81,7 @@ struct AppData {
     // (simple_tone.h). Deliberately not persisted -- restarting the app
     // with a fresh latch is correct, matching aheadBehindSeconds above.
     SimpleToneState simpleToneState;
+    ArrowToneState arrowToneState;
 
     // Compact (800x480-style) driver layout: values drawn inside the gauge
     GtkWidget* driverSpeedsBox = nullptr;  // left pane, hidden in compact mode

@@ -17,6 +17,17 @@
 // audio. tone_active/tone_ms/silence_ms/freq_hz are additionally gated by
 // the 250m/stage-end/30s zone (same as the rest of this function) and are
 // only meaningful when the caller is in arrow-tone audio mode.
+// Runtime (non-persisted) state, exactly as SimpleToneState is for the other
+// tone mode. Lives in AppData; the default-constructed value is the correct
+// "nothing latched yet" start.
+struct ArrowToneState {
+    double lastCommittedSeconds = 0.0;
+};
+
+// The error has to move this far before the tone's decision follows it. Same
+// value, and the same purpose, as the simple tone's latch.
+constexpr double ARROW_TONE_UPDATE_THRESHOLD_S = 0.2;
+
 struct ArrowToneResult {
     int num_arrows;         // 0-3; 0 = no correction needed or gated off
     bool increase_speed;    // true = speed up (behind), false = slow down (ahead); valid only if num_arrows > 0
@@ -26,7 +37,21 @@ struct ArrowToneResult {
     double freq_hz;
 };
 
-ArrowToneResult computeArrowBasedTone(double secondsAheadBehind,
+// The ARROWS follow secondsAheadBehind directly, as they always have -- the
+// on-screen indicator is unchanged by this.
+//
+// The TONE is decided from a latched copy instead (state.lastCommittedSeconds,
+// moved only when the error shifts by more than
+// ARROW_TONE_UPDATE_THRESHOLD_S). Every gate below is a hard edge on a figure
+// that is recomputed every 10ms: the 0.1s floor, the 30s ceiling, and the
+// 3/10 kph steps that pick the cadence. An error parked on any of them
+// alternated on every tick, so the tone chattered -- loudest when the crew are
+// driving WELL and sitting on the 0.1s floor. The gauge had the same fault and
+// was given a deadband (RB-DRV-10); the simple tone has had this latch since
+// it was written; the arrow tone had neither. Leaving the zone clears the
+// latch, so a new stage starts fresh.
+ArrowToneResult computeArrowBasedTone(ArrowToneState& state,
+                                        double secondsAheadBehind,
                                         double targetSpeedCountsPerHour,
                                         long calibration,
                                         bool unitsMph,

@@ -2,19 +2,19 @@
 #include "calculations.h"
 #include <cmath>
 
-ArrowToneResult computeArrowBasedTone(double secondsAheadBehind,
-                                        double targetSpeedCountsPerHour,
-                                        long calibration,
-                                        bool unitsMph,
-                                        double stageDistanceMeters,
-                                        bool pastStageEnd) {
-    ArrowToneResult result{0, false, false, 0, 0, 0.0};
+namespace {
+// The arrow count and cadence for one error figure. Shared by the arrows
+// (fed the raw error) and the tone (fed the latched one), so the two can
+// never drift apart in how they classify the same number.
+struct Classified {
+    int num_arrows;
+    bool increase_speed;
+};
 
+Classified classify(double secondsAheadBehind, double target_kph_raw, bool unitsMph) {
+    Classified out{0, false};
     double abs_seconds = std::abs(secondsAheadBehind);
-    double target_kph_raw = countsPerHourToKPH(targetSpeedCountsPerHour, calibration);
-    if (abs_seconds <= 0.1 || target_kph_raw <= 0.0) {
-        return result;
-    }
+    if (abs_seconds <= 0.1) return out;
 
     double target_time_s = 500.0 / (target_kph_raw / 3.6);
     double adjusted_time_s = (secondsAheadBehind < 0)
@@ -35,28 +35,65 @@ ArrowToneResult computeArrowBasedTone(double secondsAheadBehind,
 
     double abs_diff = std::abs(speed_diff);
     if (abs_diff >= 10.0) {
-        result.num_arrows = 3;
+        out.num_arrows = 3;
     } else if (abs_diff >= 3.0) {
-        result.num_arrows = 2;
+        out.num_arrows = 2;
     } else if (abs_diff > 0) {
-        result.num_arrows = 1;
+        out.num_arrows = 1;
     }
-    result.increase_speed = (speed_diff > 0);
+    out.increase_speed = (speed_diff > 0);
+    return out;
+}
+}  // namespace
 
-    if (result.num_arrows == 0) {
+ArrowToneResult computeArrowBasedTone(ArrowToneState& state,
+                                        double secondsAheadBehind,
+                                        double targetSpeedCountsPerHour,
+                                        long calibration,
+                                        bool unitsMph,
+                                        double stageDistanceMeters,
+                                        bool pastStageEnd) {
+    ArrowToneResult result{0, false, false, 0, 0, 0.0};
+
+    double target_kph_raw = countsPerHourToKPH(targetSpeedCountsPerHour, calibration);
+    if (target_kph_raw <= 0.0) {
+        state.lastCommittedSeconds = 0.0;
         return result;
     }
 
+    // The arrows: straight off the live error, exactly as before.
+    Classified live = classify(secondsAheadBehind, target_kph_raw, unitsMph);
+    result.num_arrows = live.num_arrows;
+    result.increase_speed = live.increase_speed;
+
     bool in_tone_zone = (stageDistanceMeters >= 250.0) && !pastStageEnd;
-    if (!in_tone_zone || abs_seconds > 30.0) {
-        return result;  // arrows/direction stay valid for the label; tone_active stays false
+    if (!in_tone_zone) {
+        // As the simple tone does: a fresh zone starts with a fresh latch, so
+        // a new stage is never judged against the last one's error.
+        state.lastCommittedSeconds = 0.0;
+        return result;
+    }
+
+    // The tone: off the latch, which only follows a move worth following.
+    if (std::abs(secondsAheadBehind - state.lastCommittedSeconds)
+            > ARROW_TONE_UPDATE_THRESHOLD_S) {
+        state.lastCommittedSeconds = secondsAheadBehind;
+    }
+    const double committed = state.lastCommittedSeconds;
+    if (std::abs(committed) > 30.0) {
+        return result;  // arrows/direction stay valid for the label
+    }
+
+    Classified latched = classify(committed, target_kph_raw, unitsMph);
+    if (latched.num_arrows == 0) {
+        return result;
     }
 
     result.tone_active = true;
-    result.freq_hz = result.increase_speed ? 1046.50 : 1396.91;
-    if (result.num_arrows >= 3) {
+    result.freq_hz = latched.increase_speed ? 1046.50 : 1396.91;
+    if (latched.num_arrows >= 3) {
         result.tone_ms = 700; result.silence_ms = 300;
-    } else if (result.num_arrows == 2) {
+    } else if (latched.num_arrows == 2) {
         result.tone_ms = 500; result.silence_ms = 200;
     } else {
         result.tone_ms = 100; result.silence_ms = 100;

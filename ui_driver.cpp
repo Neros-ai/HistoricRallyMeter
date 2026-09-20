@@ -720,6 +720,7 @@ void updateDriverDisplay(AppData* data) {
         bool past_stage_end = (static_cast<double>(total_count_diff_ab) >= total_stage_counts);
 
         ArrowToneResult arrow = computeArrowBasedTone(
+            data->arrowToneState,
             seconds, seg.target_speed_counts_per_hour, data->state->calibration,
             data->state->units, stage_dist_m, past_stage_end);
 
