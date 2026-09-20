@@ -30,6 +30,42 @@ public:
     TestSuite* createSuite() {
         auto* suite = new TestSuite("Total Reset Tests");
 
+        // RB-NAV-18. Stage Go, an autostart firing and arming an early
+        // departure all re-zero the distance through zeroDistanceBaselines,
+        // which used to assign the baselines itself and so missed the alarm
+        // that rebaseTotalDistance shifts. It now composes the two helpers,
+        // which between them must set exactly what it set before -- and the
+        // alarm with it.
+        suite->addTest("the helper pair re-zeroes everything a stage start re-zeroes", []() {
+            RallyState s;
+            s.counters = false;
+            s.total_start_cntr1 = s.total_start_cntr2 = 1000;
+            s.trip_start_cntr1  = s.trip_start_cntr2  = 2000;
+            s.segment_start_cntr1 = s.segment_start_cntr2 = 2500;
+            s.total_distance_adjust_cm = -1000;
+            s.trip_distance_adjust_cm  = -1000;
+            s.segment_start_adjust_cm  = -500;
+            s.alarm_distance_km = 20;
+            s.alarm_target_counts = 25000;
+
+            rebaseTotalDistance(s, 6000, 6000);
+            rebaseTripDistance(s, 6000, 6000);
+
+            ASSERT_EQ(s.total_start_cntr1, 6000u);
+            ASSERT_EQ(s.total_start_cntr2, 6000u);
+            ASSERT_EQ(s.trip_start_cntr1, 6000u);
+            ASSERT_EQ(s.trip_start_cntr2, 6000u);
+            ASSERT_EQ(s.segment_start_cntr1, 6000u);
+            ASSERT_EQ(s.segment_start_cntr2, 6000u);
+            ASSERT_EQ(s.total_distance_adjust_cm, 0);
+            ASSERT_EQ(s.trip_distance_adjust_cm, 0);
+            ASSERT_EQ(s.segment_start_adjust_cm, 0);
+            // The whole point: 5000 counts were covered, so the alarm has its
+            // remaining 20000 rather than the old absolute 25000.
+            ASSERT_EQ(s.alarm_target_counts, 20000);
+            return true;
+        });
+
         // RB-NAV-14. The alarm stores the odometer reading it fires at,
         // measured from the Total counter's zero -- and a reset moves that
         // zero. Left alone, a 20 km alarm set at 5 km fired 25 km after the

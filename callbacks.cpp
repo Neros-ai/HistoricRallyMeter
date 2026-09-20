@@ -352,19 +352,16 @@ static void recalculateSegmentCounts(RallyState& state) {
 void zeroDistanceBaselines(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
 
-    data->state->total_start_cntr1 = current_poll.cntr1;
-    data->state->total_start_cntr2 = current_poll.cntr2;
-    data->state->trip_start_cntr1 = current_poll.cntr1;
-    data->state->trip_start_cntr2 = current_poll.cntr2;
-    data->state->segment_start_cntr1 = current_poll.cntr1;
-    data->state->segment_start_cntr2 = current_poll.cntr2;
-
-    // Both counters restart here, so both corrections describe a baseline
-    // that no longer exists.
-    data->state->total_distance_adjust_cm = 0;
-    data->state->trip_distance_adjust_cm = 0;
-    // Same ordering point as on_total_reset: after the clear.
-    data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
+    // Through the shared helpers rather than field by field (RB-NAV-18).
+    // This function used to assign the same baselines itself, which is how it
+    // came to miss the alarm: rebaseTotalDistance takes the covered distance
+    // off the alarm's target as it moves the Total zero, and a hand-written
+    // copy of its assignments did not. Between them the two helpers set
+    // exactly what this function set before -- Total, Trip and segment
+    // counters, both corrections cleared, segment_start_adjust taken after
+    // the clear -- so the only behavioural change is the alarm.
+    rebaseTotalDistance(*data->state, current_poll.cntr1, current_poll.cntr2);
+    rebaseTripDistance(*data->state, current_poll.cntr1, current_poll.cntr2);
 
     // Waypoints are measured from the Total counter's zero, so re-zeroing it
     // puts every distance waypoint back in front of the car. Navigation beeps
