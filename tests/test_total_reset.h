@@ -30,6 +30,44 @@ public:
     TestSuite* createSuite() {
         auto* suite = new TestSuite("Total Reset Tests");
 
+        // RB-NAV-14. The alarm stores the odometer reading it fires at,
+        // measured from the Total counter's zero -- and a reset moves that
+        // zero. Left alone, a 20 km alarm set at 5 km fired 25 km after the
+        // reset instead of the 20 km that was actually left to run.
+        suite->addTest("a Total reset leaves the alarm's remaining distance alone", []() {
+            RallyState s;
+            s.counters = false;                 // counter 1 alone
+            s.total_start_cntr1 = s.total_start_cntr2 = 1000;
+            s.alarm_distance_km = 20;
+            s.alarm_target_counts = 25000;      // set when 5000 counts were up
+            // Reset with the car at 6000: 5000 counts covered since the zero.
+            rebaseTotalDistance(s, 6000, 6000);
+            ASSERT_EQ(s.alarm_target_counts, 20000);   // still 20000 to run
+            return true;
+        });
+
+        suite->addTest("a Total reset past the alarm leaves it at zero, not negative", []() {
+            RallyState s;
+            s.counters = false;
+            s.total_start_cntr1 = s.total_start_cntr2 = 1000;
+            s.alarm_distance_km = 20;
+            s.alarm_target_counts = 5000;
+            rebaseTotalDistance(s, 20000, 20000);      // 19000 covered
+            ASSERT_EQ(s.alarm_target_counts, 0);
+            return true;
+        });
+
+        suite->addTest("a Total reset with no alarm set touches nothing", []() {
+            RallyState s;
+            s.counters = false;
+            s.total_start_cntr1 = s.total_start_cntr2 = 1000;
+            s.alarm_distance_km = 0;
+            s.alarm_target_counts = 0;
+            rebaseTotalDistance(s, 6000, 6000);
+            ASSERT_EQ(s.alarm_target_counts, 0);
+            return true;
+        });
+
         suite->addTest("an on-the-minute autostart outranks a running stage", []() {
             // Arming it loaded the new stage: the crew are at its line.
             RallyState s;

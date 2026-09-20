@@ -909,6 +909,18 @@ bool stageAbortable(const RallyState& state) {
 }
 
 void rebaseTotalDistance(RallyState& state, uint64_t c1, uint64_t c2) {
+    // The alarm stores the odometer reading it fires at, measured from the
+    // Total counter's zero -- and that zero is about to move. Take the
+    // distance already covered off the target so what is LEFT to run is
+    // unchanged: a 20 km alarm set at 5 km still has 20 km to go after a
+    // reset, instead of firing 25 km later. Beep Assist's waypoints were
+    // given the same treatment; the alarm was missed.
+    if (state.alarm_distance_km > 0) {
+        const int64_t covered = calculateDistanceCounts(state, c1, c2,
+            state.total_start_cntr1, state.total_start_cntr2);
+        state.alarm_target_counts -= covered;
+        if (state.alarm_target_counts < 0) state.alarm_target_counts = 0;
+    }
     state.total_start_cntr1 = c1;
     state.total_start_cntr2 = c2;
     state.segment_start_cntr1 = c1;
