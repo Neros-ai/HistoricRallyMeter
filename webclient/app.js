@@ -241,8 +241,10 @@
     send({ type: 'reset_total_cancel' });
   });
 
+  // The box's Reset Trip never asks, so neither does the phone: a confirm()
+  // costs a second the crew do not have, mid-stage or not.
   function resetTrip() {
-    if (confirm('Reset trip distance?')) send({ type: 'reset_trip' });
+    send({ type: 'reset_trip' });
   }
 
   $('btn-add-seg').addEventListener('click', () => {
