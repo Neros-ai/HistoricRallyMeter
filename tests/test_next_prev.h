@@ -21,6 +21,44 @@ public:
     TestSuite* createSuite() {
         auto* suite = new TestSuite("Next / Prev Tests");
 
+        // RB-SEG-07. A press the NEXT segment can absorb is the ordinary
+        // case and must not change: it shrinks, the stage total is unmoved.
+        suite->addTest("a press the next segment can absorb leaves the stage length alone", []() {
+            auto segs = roadbook();                 // 1000 / 2000 / 1500 = 4500
+            // In segment 1 (Auto off), pressed at 2500 -- well past its own
+            // 1000, but inside segment 2, which ends at 3000.
+            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, 2500, 600000));
+            ASSERT_NEAR(segs[0].distance_counts, 2500.0, 0.001);
+            ASSERT_NEAR(segs[1].distance_counts,  500.0, 0.001);
+            ASSERT_NEAR(segs[2].distance_counts, 1500.0, 0.001);
+            double total = segs[0].distance_counts + segs[1].distance_counts
+                         + segs[2].distance_counts;
+            ASSERT_NEAR(total, 4500.0, 0.001);      // finish unmoved
+            return true;
+        });
+
+        // RB-SEG-07. Past the END of the next segment it cannot absorb the
+        // press. It used to be clamped to zero and the remainder dropped --
+        // the stage total grew by less than the overshoot, the missed
+        // segment's speed was never driven, and every later change point
+        // moved. Owner's ruling: keep it whole and let the stage run long.
+        suite->addTest("a press past the next segment keeps that segment whole", []() {
+            auto segs = roadbook();                 // 1000 / 2000 / 1500 = 4500
+            // In segment 1, pressed at 3500 -- past segment 2's end at 3000.
+            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, 3500, 600000));
+            ASSERT_NEAR(segs[0].distance_counts, 3500.0, 0.001);
+            ASSERT_NEAR(segs[1].distance_counts, 2000.0, 0.001);  // untouched
+            ASSERT_NEAR(segs[2].distance_counts, 1500.0, 0.001);
+            double total = segs[0].distance_counts + segs[1].distance_counts
+                         + segs[2].distance_counts;
+            ASSERT_NEAR(total, 7000.0, 0.001);      // 3500 + the rest, in full
+            // Nothing is thrown away: the two later segments keep their whole
+            // roadbook lengths, so their speeds are still driven.
+            ASSERT_EQ(segmentStartStageCounts(segs, 1), 3500);
+            ASSERT_EQ(segmentStartStageCounts(segs, 2), 5500);
+            return true;
+        });
+
         suite->addTest("prev merges the segment back and keeps the next known point", []() {
             auto segs = roadbook();
             // "next" pressed too early, at 600: boundary 1 moved to 600.

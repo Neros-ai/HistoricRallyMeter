@@ -316,10 +316,21 @@ bool retimeSegmentBoundaryForward(std::vector<Segment>& segs, long index,
     // boundary after it does not move.
     double surrendered = cur.distance_counts - static_cast<double>(driven_counts);
     cur.distance_counts = static_cast<double>(driven_counts);
-    next.distance_counts += surrendered;
-    // A "next" pressed past the end of the segment hands back a negative
-    // distance, which would leave the next segment shorter than nothing.
-    if (next.distance_counts < 0.0) next.distance_counts = 0.0;
+    // A "next" pressed past the end of the NEXT segment asks it to give back
+    // more distance than it has. Clamping it at zero dropped the difference:
+    // nothing accounted for it, so the stage total grew, the finish moved out
+    // by the overshoot and every later change point went with it -- and the
+    // segment's target speed was never driven either way.
+    //
+    // Owner's ruling (2026-09-20): at that point the crew are already deep in
+    // a navigation error, and nothing can put the stage back as written. The
+    // honest answer is to keep the missed segment whole and let the stage run
+    // long, so its speed is still driven and no distance disappears. A press
+    // the next segment CAN absorb is unchanged: it shrinks and the finish
+    // stays put, which is the ordinary case.
+    if (next.distance_counts + surrendered >= 0.0) {
+        next.distance_counts += surrendered;
+    }
     resyncSegmentMeters(cur, calibration);
     resyncSegmentMeters(next, calibration);
     return true;
