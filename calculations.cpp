@@ -441,6 +441,15 @@ bool undoSegmentChange(RallyState& state, uint64_t c1, uint64_t c2, int64_t stag
     }
     const long cur = state.segment_current_number;
     rebaseSegmentAt(state, c1, c2, stage_counts - segmentStartStageCounts(segs, cur));
+    // "next" zeroes Trip at the press (rebaseTripToSegment), so undoing that
+    // press has to put Trip back too -- otherwise it keeps counting from the
+    // mistake and reads short for the rest of the segment, which is the very
+    // number the co-pilot judges the next change point by. Trip belongs to
+    // the segment, so it takes the segment's own baseline, not "now".
+    state.trip_start_cntr1 = state.segment_start_cntr1;
+    state.trip_start_cntr2 = state.segment_start_cntr2;
+    state.trip_start_time_ms = state.segment_start_time_ms;
+    state.trip_distance_adjust_cm = 0;
     state.undo_valid = false;   // once only
     return true;
 }

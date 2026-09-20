@@ -59,6 +59,43 @@ public:
             return true;
         });
 
+        // RB-NAV-15. "next" zeroes Trip; undoing it has to put Trip back to
+        // the segment's own baseline, or Trip reads short for the rest of the
+        // segment -- and Trip is what the co-pilot judges the next change
+        // point by.
+        suite->addTest("prev puts Trip back to the segment it lands in", []() {
+            RallyState state;
+            state.calibration = 600000;
+            state.counters = false;
+            state.stage_segments = roadbook();
+            state.total_start_time_ms = 1000;
+            // A "next" was pressed in segment 0 at 600 and moved us to 1.
+            ASSERT_TRUE(retimeSegmentBoundaryForward(state.stage_segments, 0, 600,
+                                                     state.calibration));
+            state.segment_current_number = 1;
+            state.undo_valid = true;
+            state.undo_automatic = false;
+            state.undo_from_index = 0;
+            state.undo_from_counts = 1000;      // segment 0 before the press
+            state.undo_to_counts   = 2000;      // segment 1 before the press
+            state.undo_stage_start_ms = state.total_start_time_ms;
+            // Trip was zeroed at the press and has been counting since.
+            state.trip_start_cntr1 = 900;
+            state.trip_start_cntr2 = 900;
+            state.trip_start_time_ms = 55555;
+            state.trip_distance_adjust_cm = 250;
+
+            // prev, with the car at 800 counts into the stage.
+            ASSERT_TRUE(undoSegmentChange(state, 800, 800, 800));
+            ASSERT_EQ(state.segment_current_number, 0);
+            // Trip now measures from the segment, not from the mistaken press.
+            ASSERT_EQ(state.trip_start_cntr1, state.segment_start_cntr1);
+            ASSERT_EQ(state.trip_start_cntr2, state.segment_start_cntr2);
+            ASSERT_EQ(state.trip_start_time_ms, state.segment_start_time_ms);
+            ASSERT_EQ(state.trip_distance_adjust_cm, 0);
+            return true;
+        });
+
         suite->addTest("prev merges the segment back and keeps the next known point", []() {
             auto segs = roadbook();
             // "next" pressed too early, at 600: boundary 1 moved to 600.
