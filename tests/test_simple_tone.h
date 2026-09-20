@@ -125,18 +125,34 @@ public:
                 && ahead.triangle_wave == false;
         });
 
-        suite->addTest("a move of 0.2s or less does not re-latch, holding the old tone", []() {
+        suite->addTest("a move of 0.2s or less does not re-latch, holding the pitch", []() {
             SimpleToneState st;
             // Latch onto -0.30 (just past the band, behind direction).
             SimpleToneResult r1 = updateSimpleTone(st, -0.30, 1000.0, false);
             if (!(r1.active == true && r1.triangle_wave == true)) return false;
             double latched_freq = r1.freq_hz;
-            // Raw is now -0.15 -- which is INSIDE the quiet band on its own
-            // -- but only 0.15s away from the -0.30 latch, so the latch
-            // (and its pitch) must hold rather than re-evaluating at -0.15
-            // (which alone would be silent).
-            SimpleToneResult r2 = updateSimpleTone(st, -0.15, 1000.0, false);
+            // Raw is now -0.25: still outside the band, so still sounding, and
+            // only 0.05s from the latch, so the PITCH must hold rather than
+            // sliding with every 10ms wobble. That steadiness is what the
+            // latch is for; it no longer has any say in whether the tone
+            // sounds at all.
+            SimpleToneResult r2 = updateSimpleTone(st, -0.25, 1000.0, false);
             return r2.active == true && std::abs(r2.freq_hz - latched_freq) < 0.01;
+        });
+
+        // The band is one edge on the live error, whichever way it is crossed.
+        suite->addTest("0.20 sounds and 0.19 does not, in both directions", []() {
+            SimpleToneState st;
+            for (double e : {0.0, 0.10, 0.19}) {
+                if (updateSimpleTone(st, e, 1000.0, false).active) return false;
+            }
+            if (!updateSimpleTone(st, 0.20, 1000.0, false).active) return false;
+            // Coming back down: the same point, not a lower one.
+            if (!updateSimpleTone(st, 0.20, 1000.0, false).active) return false;
+            if (updateSimpleTone(st, 0.19, 1000.0, false).active) return false;
+            // Behind schedule behaves identically.
+            if (!updateSimpleTone(st, -0.20, 1000.0, false).active) return false;
+            return updateSimpleTone(st, -0.19, 1000.0, false).active == false;
         });
 
         suite->addTest("a move of more than 0.2s re-latches, even crossing to silence", []() {

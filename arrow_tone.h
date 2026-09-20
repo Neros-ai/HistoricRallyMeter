@@ -1,6 +1,8 @@
 #ifndef ARROW_TONE_H
 #define ARROW_TONE_H
 
+#include <cstdint>
+
 // The existing ahead/behind tone: converts the raw time-error seconds into
 // the speed change needed to close the gap over the next 500m (using the
 // current segment's target speed), then maps that speed_diff to an arrow
@@ -22,11 +24,26 @@
 // "nothing latched yet" start.
 struct ArrowToneState {
     double lastCommittedSeconds = 0.0;
+
 };
 
 // The error has to move this far before the tone's decision follows it. Same
 // value, and the same purpose, as the simple tone's latch.
 constexpr double ARROW_TONE_UPDATE_THRESHOLD_S = 0.2;
+
+// The audio threshold, applied to the LIVE error in both directions: at or
+// above this the tone sounds, below it there is silence. One edge, no
+// hysteresis and no debounce: 0.20 sounds and 0.19 does not, whichever way the
+// error is moving and however long it has been there (owner's ruling
+// 2026-09-20). Deliberately simple -- the alternatives were considered and
+// rejected as not worth the complication.
+constexpr double ARROW_TONE_SOUND_THRESHOLD_S = 0.2;
+
+
+// The ARROW-COUNT floor, upstream's, unchanged: below this no arrows are
+// shown and no cadence is defined. It stays at 0.1 so the on-screen arrows
+// behave exactly as upstream's do.
+constexpr double ARROW_TONE_ARROW_FLOOR_S = 0.1;
 
 struct ArrowToneResult {
     int num_arrows;         // 0-3; 0 = no correction needed or gated off

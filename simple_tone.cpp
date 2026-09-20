@@ -46,12 +46,25 @@ SimpleToneResult updateSimpleTone(SimpleToneState& state,
         return {false, 0.0, false};
     }
 
+    // Whether it sounds is one comparison on the LIVE error: at or above
+    // QUIET_BAND_S it sounds, below it there is silence. Same point in both
+    // directions, no memory of how the error got there (owner's ruling
+    // 2026-09-20 -- the same rule the arrow tone now uses, so the two modes
+    // fall silent at the same place).
+    //
+    // Judging this on the LATCH instead, as it used to, made the point depend
+    // on history: the latch only moves in steps wider than the band itself, so
+    // where it happened to land decided whether 0.20 sounded.
+    if (std::abs(secondsAheadBehind) < QUIET_BAND_S) {
+        state.lastCommittedSeconds = secondsAheadBehind;  // keeps the pitch armed
+        return {false, 0.0, false};
+    }
+
     if (std::abs(secondsAheadBehind - state.lastCommittedSeconds) > UPDATE_THRESHOLD_S) {
         state.lastCommittedSeconds = secondsAheadBehind;
     }
 
-    double committed_abs = std::abs(state.lastCommittedSeconds);
-    if (committed_abs <= QUIET_BAND_S || committed_abs > MAX_ERROR_S) {
+    if (std::abs(state.lastCommittedSeconds) > MAX_ERROR_S) {
         return {false, 0.0, false};
     }
 

@@ -4,6 +4,8 @@
 #include "test_framework.h"
 #include "../arrow_tone.h"
 
+#include <cmath>
+
 // Tests for the existing speed/arrow-based ahead/behind tone, extracted
 // out of ui_driver.cpp into a pure function. calibration=1e9 makes
 // countsPerHourToKPH an identity function, so targetSpeedCountsPerHour=100
@@ -28,6 +30,50 @@ public:
                                                           false, 1000.0, false);
                 ASSERT_FALSE(r.tone_active);
             }
+            return true;
+        });
+
+        // One edge, judged on the live error: 0.20 sounds and 0.19 does not,
+        // whichever direction the error is travelling. Judging it on the latch
+        // instead made the point depend on history -- an error closing onto
+        // zero left the latch stranded above the edge and the tone nagged a
+        // crew who were exactly on time.
+        suite->addTest("an error closing onto zero goes silent", [CAL, TARGET_100KPH]() {
+            ArrowToneState st;
+            ASSERT_TRUE(computeArrowBasedTone(st, -1.0, TARGET_100KPH, CAL, false,
+                                              1000.0, false).tone_active);
+            // Closed smoothly, 10ms-tick sized steps, as the crew actually do it.
+            for (int i = 99; i >= 0; i--) {
+                double s = -(i / 100.0);
+                ArrowToneResult r = computeArrowBasedTone(st, s, TARGET_100KPH, CAL,
+                                                          false, 1000.0, false);
+                ASSERT_EQ(r.tone_active,
+                          std::abs(s) >= ARROW_TONE_SOUND_THRESHOLD_S);
+            }
+            ASSERT_FALSE(computeArrowBasedTone(st, 0.0, TARGET_100KPH, CAL, false,
+                                               1000.0, false).tone_active);
+            return true;
+        });
+
+        suite->addTest("0.20 sounds and 0.19 does not, in both directions", [CAL, TARGET_100KPH]() {
+            ArrowToneState st;
+            // Rising: silent right up to the edge, sounding at it.
+            for (double s : {0.0, 0.10, 0.15, 0.19}) {
+                ASSERT_FALSE(computeArrowBasedTone(st, s, TARGET_100KPH, CAL, false,
+                                                   1000.0, false).tone_active);
+            }
+            ASSERT_TRUE(computeArrowBasedTone(st, 0.20, TARGET_100KPH, CAL, false,
+                                              1000.0, false).tone_active);
+            // Falling: the same point, not a lower one.
+            ASSERT_TRUE(computeArrowBasedTone(st, 0.20, TARGET_100KPH, CAL, false,
+                                              1000.0, false).tone_active);
+            ASSERT_FALSE(computeArrowBasedTone(st, 0.19, TARGET_100KPH, CAL, false,
+                                               1000.0, false).tone_active);
+            // And negative errors behave identically.
+            ASSERT_TRUE(computeArrowBasedTone(st, -0.20, TARGET_100KPH, CAL, false,
+                                              1000.0, false).tone_active);
+            ASSERT_FALSE(computeArrowBasedTone(st, -0.19, TARGET_100KPH, CAL, false,
+                                               1000.0, false).tone_active);
             return true;
         });
 

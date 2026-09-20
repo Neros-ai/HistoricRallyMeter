@@ -14,7 +14,7 @@ struct Classified {
 Classified classify(double secondsAheadBehind, double target_kph_raw, bool unitsMph) {
     Classified out{0, false};
     double abs_seconds = std::abs(secondsAheadBehind);
-    if (abs_seconds <= 0.1) return out;
+    if (abs_seconds <= ARROW_TONE_ARROW_FLOOR_S) return out;
 
     double target_time_s = 500.0 / (target_kph_raw / 3.6);
     double adjusted_time_s = (secondsAheadBehind < 0)
@@ -74,7 +74,18 @@ ArrowToneResult computeArrowBasedTone(ArrowToneState& state,
         return result;
     }
 
-    // The tone: off the latch, which only follows a move worth following.
+    // Whether it sounds at all is one comparison on the LIVE error: at or above
+    // ARROW_TONE_SOUND_THRESHOLD_S it sounds, below it there is silence. Same
+    // point in both directions, no memory of how the error got there.
+    //
+    // The latch survives for the CADENCE only: it decides which of the three
+    // rhythms plays, so small wobble cannot shuffle between them. While silent
+    // it simply follows the live error, which keeps it armed with the right
+    // value for the tick the tone starts on.
+    if (std::abs(secondsAheadBehind) < ARROW_TONE_SOUND_THRESHOLD_S) {
+        state.lastCommittedSeconds = secondsAheadBehind;
+        return result;
+    }
     if (std::abs(secondsAheadBehind - state.lastCommittedSeconds)
             > ARROW_TONE_UPDATE_THRESHOLD_S) {
         state.lastCommittedSeconds = secondsAheadBehind;
