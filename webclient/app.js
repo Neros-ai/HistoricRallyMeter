@@ -392,11 +392,18 @@
     }
   }
 
-  // Silence rather than a stuck tone if the box stops talking.
+  // Silence rather than a stuck tone if the box stops talking. Telemetry
+  // arrives ten times a second, so this only fires on a real gap -- but at one
+  // second it was firing on ordinary ones. A phone in a moving car, on the
+  // box's own wifi, drops a second of traffic often enough that the tone cut
+  // out and came back while the box's speaker played straight through. Three
+  // seconds still silences a genuinely dead link within a few beats of the
+  // cadence, which is all this is for.
+  const TONE_WATCHDOG_MS = 3000;
   function toneHeard(c) {
     applyTone(c);
     clearTimeout(toneWatchdog);
-    toneWatchdog = setTimeout(stopTone, 1000);
+    toneWatchdog = setTimeout(stopTone, TONE_WATCHDOG_MS);
   }
 
   function showSound() {
