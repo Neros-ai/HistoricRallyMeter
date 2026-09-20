@@ -123,12 +123,38 @@ header { justify-content: flex-end; }
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 th, td { border: 1px solid #444; padding: 0.4rem; text-align: left; }
 td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; padding: 0.35rem; }
+/* Setup roadbook (RB-WEB-09): the Target kph and Distance entries have no box
+   of their own -- the entry is the whole cell, so it is as tall as the row,
+   and the figure is larger. */
+#seg-table td:has(> input.spd), #seg-table td:has(> input.dist) { padding: 0; }
+#seg-table input.spd, #seg-table input.dist {
+  display: block;
+  height: 100%;
+  min-height: 3.4rem;
+  background: transparent;
+  border: none;
+  padding: 0.6rem 0.4rem;
+  font-size: 1.4rem;
+  font-variant-numeric: tabular-nums;
+}
+#seg-table input.spd:focus, #seg-table input.dist:focus { outline: 2px solid #FFDD00; outline-offset: -2px; }
+#btn-add-seg {
+  display: block;
+  width: 100%;
+  padding: 1.05rem;
+  margin-top: 0.75rem;
+  font-size: 1.1rem;
+  font-weight: bold;
+  background: #222;
+  color: #fff;
+  border: 2px solid #fff;
+}
 /* One row per action, its label on the same line as its five slots, so the
    row reads as "Recall: 1 2 3 4 5" -- the action itself, rather than a grid
    plus a separate verb button to press afterwards. */
 .memory-row { display: flex; flex-wrap: nowrap; gap: 0.4rem; align-items: center; margin: 0.4rem 0; }
-.mem-label { flex: 0 0 4.5rem; }
-.mem-slot { flex: 1 1 0; min-width: 2.2rem; padding: 0.6rem 0.3rem; background: #222; color: #fff; border: 1px solid #666; }
+.mem-label { flex: 0 0 4.5rem; font-size: 1.1rem; }
+.mem-slot { flex: 1 1 0; min-width: 2.2rem; padding: 0.9rem 0.3rem; font-size: 1.4rem; font-weight: bold; background: #222; color: #fff; border: 1px solid #666; }
 /* A slot holding a saved stage, marked the way the box marks it. */
 .mem-slot.populated { border-color: #FFDD00; color: #FFDD00; }
 .mem-slot:active { background: #555; }
