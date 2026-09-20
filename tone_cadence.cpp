@@ -41,3 +41,14 @@ std::string toneCadenceJson(const ToneCadence& cadence) {
              (on && cadence.triangle) ? "triangle" : "sine");
     return buf;
 }
+
+std::string beepEventJson(const BeepEvent& beep) {
+    char buf[192];
+    snprintf(buf, sizeof(buf),
+             "{\"seq\":%lu,\"freq_hz\":%.2f,\"ms\":%d,\"amp\":%.2f,"
+             "\"wave\":\"%s\",\"twice\":%s,\"gap_ms\":%d}",
+             beep.seq, beep.freq_hz, beep.duration_ms, beep.amplitude,
+             beep.triangle ? "triangle" : "sine",
+             beep.twice ? "true" : "false", beep.gap_ms);
+    return buf;
+}

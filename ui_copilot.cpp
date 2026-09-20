@@ -112,6 +112,11 @@ static constexpr ToneWaveform BEEP_ASSIST_TIMING_WAVE = ToneWaveform::Sine;
 static constexpr int BEEP_ASSIST_NAV_DURATION_MS = 100;
 static constexpr int BEEP_ASSIST_TIMING_DURATION_MS = 250;
 
+// Navigation mode's gap between the two beeps of its "bing bong", start to
+// start. Shared: the box's second beep is fired off a GTK timer below, and the
+// phone is sent this so it can schedule its own pair.
+static constexpr int BEEP_ASSIST_NAV_GAP_MS = 150;
+
 // Plays and reports one beep -- shared by the independent navigation and
 // timing checks in updateCopilotDisplay() so a tick where both are due
 // fires both, back to back, rather than one silently eating the other's
@@ -136,15 +141,29 @@ static void fireBeepAssist(AppData* data, double waypoint_m, double travelled_m,
                   << std::endl;
     }
     flashBeepWarning(data, navigation);
+
+    const double freq_hz = navigation ? BEEP_ASSIST_NAV_FREQ_HZ : BEEP_ASSIST_TIMING_FREQ_HZ;
+    const ToneWaveform wave = navigation ? BEEP_ASSIST_NAV_WAVE : BEEP_ASSIST_TIMING_WAVE;
+    const int duration_ms = navigation ? BEEP_ASSIST_NAV_DURATION_MS
+                                       : BEEP_ASSIST_TIMING_DURATION_MS;
+
+    // Publish it for the phone whether or not this box has a speaker: the
+    // sandbox has no ALSA device and toneGen is null there, and the phone is
+    // exactly how you hear Beep Assist in that case.
+    data->lastBeep.seq++;
+    data->lastBeep.freq_hz = freq_hz;
+    data->lastBeep.duration_ms = duration_ms;
+    data->lastBeep.amplitude = BEEP_ASSIST_AMP;
+    data->lastBeep.triangle = (wave == ToneWaveform::Triangle);
+    data->lastBeep.twice = navigation;
+    data->lastBeep.gap_ms = navigation ? BEEP_ASSIST_NAV_GAP_MS : 0;
+
     if (data->toneGen) {
-        double freq_hz = navigation ? BEEP_ASSIST_NAV_FREQ_HZ : BEEP_ASSIST_TIMING_FREQ_HZ;
-        ToneWaveform wave = navigation ? BEEP_ASSIST_NAV_WAVE : BEEP_ASSIST_TIMING_WAVE;
-        int duration_ms = navigation ? BEEP_ASSIST_NAV_DURATION_MS : BEEP_ASSIST_TIMING_DURATION_MS;
         data->toneGen->playBeep(freq_hz, wave, duration_ms, BEEP_ASSIST_AMP);
         if (navigation) {
             // g_timeout_add, not a blocking sleep -- this runs on the GTK
-            // main thread and must not stall the UI for 150ms.
-            g_timeout_add(150, [](gpointer d) -> gboolean {
+            // main thread and must not stall the UI for the gap.
+            g_timeout_add(BEEP_ASSIST_NAV_GAP_MS, [](gpointer d) -> gboolean {
                 static_cast<AppData*>(d)->toneGen->playBeep(
                     BEEP_ASSIST_NAV_FREQ_HZ, BEEP_ASSIST_NAV_WAVE,
                     BEEP_ASSIST_NAV_DURATION_MS, BEEP_ASSIST_AMP);

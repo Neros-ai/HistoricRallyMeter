@@ -65,6 +65,33 @@ public:
                 == "{\"tone_ms\":0,\"silence_ms\":0,\"freq_hz\":0.00,\"wave\":\"sine\"}";
         });
 
+        // RB-WEB-06. Beep Assist plays to the box's own speaker, so the phone
+        // is told each beep by sequence number instead.
+        suite->addTest("a navigation beep carries its pair and gap", []() {
+            BeepEvent b;
+            b.seq = 4; b.freq_hz = 3200.0; b.duration_ms = 100; b.amplitude = 0.45;
+            b.twice = true; b.gap_ms = 150;
+            return beepEventJson(b)
+                == "{\"seq\":4,\"freq_hz\":3200.00,\"ms\":100,\"amp\":0.45,"
+                   "\"wave\":\"sine\",\"twice\":true,\"gap_ms\":150}";
+        });
+
+        suite->addTest("a timing beep is a single beep", []() {
+            BeepEvent b;
+            b.seq = 1; b.freq_hz = 3200.0; b.duration_ms = 250; b.amplitude = 0.45;
+            return beepEventJson(b)
+                == "{\"seq\":1,\"freq_hz\":3200.00,\"ms\":250,\"amp\":0.45,"
+                   "\"wave\":\"sine\",\"twice\":false,\"gap_ms\":0}";
+        });
+
+        // Seq 0 is the "nothing has beeped this run" value a phone records
+        // without playing, so it must be distinguishable from a real beep.
+        suite->addTest("nothing beeped yet is sequence zero", []() {
+            return beepEventJson(BeepEvent{})
+                == "{\"seq\":0,\"freq_hz\":0.00,\"ms\":0,\"amp\":0.00,"
+                   "\"wave\":\"sine\",\"twice\":false,\"gap_ms\":0}";
+        });
+
         return suite;
     }
 };

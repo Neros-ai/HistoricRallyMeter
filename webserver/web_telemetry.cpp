@@ -82,7 +82,9 @@ std::string buildTelemetryJson(AppData* data) {
     NextPrevState np = computeNextPrevState(data);
     std::string rally_clock = formatTime(current_time_ms);
 
-    char buf[1024];
+    // Sized for every field below plus the tone and beep objects; snprintf
+    // would truncate silently and hand the phone unparseable JSON.
+    char buf[1536];
     snprintf(buf, sizeof(buf),
         "{\"type\":\"telemetry\","
         "\"rally_clock\":\"%s\","
@@ -100,7 +102,10 @@ std::string buildTelemetryJson(AppData* data) {
         "\"units\":\"%s\","
         // The ahead/behind tone the box is playing right now, so the phone
         // plays the same one (RB-WEB-02).
-        "\"tone\":%s}",
+        "\"tone\":%s,"
+        // The last Beep Assist beep, by sequence number, so the phone sounds
+        // the waypoints too (RB-WEB-06).
+        "\"beep\":%s}",
         rally_clock.c_str(),
         trip_m,
         total_m,
@@ -114,7 +119,8 @@ std::string buildTelemetryJson(AppData* data) {
         np.next_enabled ? "true" : "false",
         np.prev_enabled ? "true" : "false",
         data->state->units ? "mph" : "kph",
-        toneCadenceJson(data->currentTone).c_str());
+        toneCadenceJson(data->currentTone).c_str(),
+        beepEventJson(data->lastBeep).c_str());
     return buf;
 }
 

@@ -242,6 +242,10 @@ struct AppData {
     // RB-WEB-02: the cadence toneGen was last set to, kept so the phone's
     // telemetry can play the same ahead/behind tone.
     ToneCadence currentTone;
+    // The last Beep Assist beep to fire, for the phone (RB-WEB-06). Runtime
+    // only: seq 0 at every app start, so a phone connecting before the first
+    // waypoint has nothing to replay.
+    BeepEvent lastBeep;
     
     int updateCount = 0;
     int64_t lastUpdateCountTime_ms = 0;

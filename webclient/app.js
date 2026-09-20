@@ -54,6 +54,7 @@
     $('btn-prev').disabled = !msg.prev_enabled;
 
     toneHeard(msg.tone);
+    beepHeard(msg.beep);
   }
 
   // Reflects the box's own settings back into the controls. Skips whichever
@@ -394,6 +395,53 @@
     osc.connect(gain).connect(ctx.destination);
     osc.start(t0);
     osc.stop(t0 + 0.06);
+  }
+
+  // One Beep Assist beep, at the box's own frequency, waveform, length and
+  // volume. Scheduled at an absolute time so navigation mode's pair keeps its
+  // gap exactly, rather than relying on a page timer the phone may throttle.
+  function playBeepAt(b, at) {
+    const ctx = audioCtx;
+    if (!ctx) return;
+    const ms = Number(b.ms) || 0;
+    const on = ms / 1000;
+    if (on <= 0) return;
+    const amp = Number(b.amp) || 0.2;
+    const fade = Math.min(0.005, on / 2);
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = b.wave === 'triangle' ? 'triangle' : 'sine';
+    osc.frequency.value = Number(b.freq_hz) || 0;
+    if (!osc.frequency.value) return;
+    gain.gain.setValueAtTime(0, at);
+    gain.gain.linearRampToValueAtTime(amp, at + fade);
+    gain.gain.setValueAtTime(amp, at + Math.max(fade, on - fade));
+    gain.gain.linearRampToValueAtTime(0, at + on);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(at);
+    osc.stop(at + on + 0.02);
+  }
+
+  // Beep Assist. The box plays these to its own speaker, which the phone never
+  // sees, so it is told each one by sequence number (see BeepEvent in
+  // tone_cadence.h) and plays it when the number advances. The first sequence
+  // number of a session is recorded and NOT played: a phone connecting
+  // mid-rally must not announce a waypoint the car has already passed.
+  let lastBeepSeq = null;
+  function beepHeard(b) {
+    if (!b) return;
+    const seq = Number(b.seq) || 0;
+    if (lastBeepSeq === null) { lastBeepSeq = seq; return; }
+    if (seq <= lastBeepSeq) return;
+    lastBeepSeq = seq;
+    if (!soundOn) return;
+    wakeAudio();
+    const ctx = audio();
+    if (!ctx) return;
+    // A hair ahead of now, so the envelope's first point is never already past.
+    const at = ctx.currentTime + 0.02;
+    playBeepAt(b, at);
+    if (b.twice) playBeepAt(b, at + (Number(b.gap_ms) || 150) / 1000);
   }
 
   function stopTone() {
