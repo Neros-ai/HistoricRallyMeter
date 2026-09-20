@@ -420,6 +420,9 @@ void recordSegmentChange(RallyState& state, long from_index, bool automatic) {
     state.undo_from_index = from_index;
     state.undo_from_counts = state.stage_segments[from_index].distance_counts;
     state.undo_to_counts = state.stage_segments[from_index + 1].distance_counts;
+    // Taken before the caller moves it on: both "next" and an auto-advance
+    // set segment_start_time_ms to the moment of the change.
+    state.undo_from_segment_start_ms = state.segment_start_time_ms;
     state.undo_automatic = automatic;
     state.undo_stage_start_ms = state.total_start_time_ms;
 }
@@ -441,6 +444,13 @@ bool undoSegmentChange(RallyState& state, uint64_t c1, uint64_t c2, int64_t stag
     }
     const long cur = state.segment_current_number;
     rebaseSegmentAt(state, c1, c2, stage_counts - segmentStartStageCounts(segs, cur));
+    // rebaseSegmentAt rewinds the segment's DISTANCE baseline but not its
+    // clock, which the change being undone overwrote with its own moment. Put
+    // that back first (RB-NAV-17): everything below, and Trip's average above
+    // all, is a distance measured against this time.
+    if (state.segment_current_number == state.undo_from_index) {
+        state.segment_start_time_ms = state.undo_from_segment_start_ms;
+    }
     // "next" zeroes Trip at the press (rebaseTripToSegment), so undoing that
     // press has to put Trip back too -- otherwise it keeps counting from the
     // mistake and reads short for the rest of the segment, which is the very

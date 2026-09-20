@@ -181,6 +181,12 @@ public:
     long undo_from_index = -1;           // the segment the change left
     double undo_from_counts = 0.0;       // its length before the change
     double undo_to_counts = 0.0;         // the next segment's, before it
+    // The segment's own clock baseline before the change. "next" overwrites
+    // segment_start_time_ms with the moment of the press, and the undo has to
+    // put it back: the distance baseline is rewound to the segment's real
+    // start, so a clock left at the press makes every average derived from the
+    // pair -- Trip's above all -- read wildly high. See RB-NAV-17.
+    int64_t undo_from_segment_start_ms = 0;
     bool undo_automatic = false;         // auto-advance rather than "next"
     int64_t undo_stage_start_ms = 0;     // which stage it belongs to
     

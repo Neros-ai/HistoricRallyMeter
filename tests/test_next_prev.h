@@ -69,30 +69,66 @@ public:
             state.counters = false;
             state.stage_segments = roadbook();
             state.total_start_time_ms = 1000;
-            // A "next" was pressed in segment 0 at 600 and moved us to 1.
+            // Segment 0 really began at 1000; the mistaken "next" is at
+            // 601000 -- ten minutes later. Distinct, non-zero times, or the
+            // assertions below compare 0 with 0 and prove nothing (RB-NAV-17).
+            state.segment_start_time_ms = 1000;
+            state.segment_current_number = 0;
+            recordSegmentChange(state, 0, false);
+            // The press: retime, step on, and move both segment baselines to
+            // the press -- what on_next_press does.
             ASSERT_TRUE(retimeSegmentBoundaryForward(state.stage_segments, 0, 600,
                                                      state.calibration));
             state.segment_current_number = 1;
-            state.undo_valid = true;
-            state.undo_automatic = false;
-            state.undo_from_index = 0;
-            state.undo_from_counts = 1000;      // segment 0 before the press
-            state.undo_to_counts   = 2000;      // segment 1 before the press
-            state.undo_stage_start_ms = state.total_start_time_ms;
+            state.segment_start_time_ms = 601000;
             // Trip was zeroed at the press and has been counting since.
             state.trip_start_cntr1 = 900;
             state.trip_start_cntr2 = 900;
-            state.trip_start_time_ms = 55555;
+            state.trip_start_time_ms = 601000;
             state.trip_distance_adjust_cm = 250;
 
             // prev, with the car at 800 counts into the stage.
             ASSERT_TRUE(undoSegmentChange(state, 800, 800, 800));
             ASSERT_EQ(state.segment_current_number, 0);
+            // RB-NAV-17: the segment's clock goes back to the segment's real
+            // start, not the press it just undid.
+            ASSERT_EQ(state.segment_start_time_ms, 1000);
             // Trip now measures from the segment, not from the mistaken press.
             ASSERT_EQ(state.trip_start_cntr1, state.segment_start_cntr1);
             ASSERT_EQ(state.trip_start_cntr2, state.segment_start_cntr2);
             ASSERT_EQ(state.trip_start_time_ms, state.segment_start_time_ms);
+            ASSERT_EQ(state.trip_start_time_ms, 1000);
             ASSERT_EQ(state.trip_distance_adjust_cm, 0);
+            // The pair must describe the same journey: distance measured from
+            // the segment's start, over time measured from the same instant.
+            // Mismatched, Trip's average reads hundreds of times too high.
+            // Back in segment 0, which starts at stage zero, 800 counts in.
+            ASSERT_EQ(state.segment_start_cntr1, 0u);
+            return true;
+        });
+
+        // RB-NAV-17. The same undo after an AUTOMATIC change: the merged
+        // segment runs from where the earlier one began, so its clock does
+        // too.
+        suite->addTest("prev after an auto-advance restores the segment's clock", []() {
+            RallyState state;
+            state.calibration = 600000;
+            state.counters = false;
+            state.stage_segments = roadbook();
+            state.stage_segments[0].autoNext = true;
+            state.total_start_time_ms = 1000;
+            state.segment_start_time_ms = 1000;
+            state.segment_current_number = 0;
+            recordSegmentChange(state, 0, true);
+            // The auto-advance fired at the roadbook boundary, 1000 counts in.
+            state.segment_current_number = 1;
+            state.segment_start_time_ms = 121000;
+            state.trip_start_time_ms = 121000;
+
+            ASSERT_TRUE(undoSegmentChange(state, 1200, 1200, 1200));
+            ASSERT_EQ(state.segment_current_number, 0);
+            ASSERT_EQ(state.segment_start_time_ms, 1000);
+            ASSERT_EQ(state.trip_start_time_ms, 1000);
             return true;
         });
 
