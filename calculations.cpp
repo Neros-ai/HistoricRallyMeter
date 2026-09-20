@@ -861,6 +861,15 @@ double averageSpeedForDisplay(double average_speed, bool hold_at_zero) {
     return hold_at_zero ? 0.0 : average_speed;
 }
 
+int64_t elapsedForDisplay(int64_t elapsed_s, bool hold_at_zero) {
+    // Arming an "At HH:MM" start zeroes the distance at the press but leaves
+    // the clock for the minute, so the elapsed figure beside Total and Trip
+    // was still running from the PREVIOUS stage: "0 m" against something like
+    // "47:12" for the whole countdown, on the panel the co-pilot reads at the
+    // line. The averages beside them are already held this way.
+    return hold_at_zero ? 0 : elapsed_s;
+}
+
 bool stageDistanceComplete(const std::vector<Segment>& segs, int64_t stage_counts) {
     if (segs.empty()) return true;
     double total = 0.0;

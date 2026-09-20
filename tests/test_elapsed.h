@@ -14,6 +14,23 @@ public:
     TestSuite* createSuite() {
         auto* suite = new TestSuite("Elapsed Interval Formatting");
 
+        // RB-NAV-16. Arming an "At HH:MM" start zeroes the distance at the
+        // press and leaves the clock for the minute, so the elapsed figure
+        // beside Total and Trip was still running from the previous stage --
+        // "0 m" against "47:12" for the whole countdown. The averages beside
+        // them are already held this way.
+        suite->addTest("the countdown holds the elapsed time at zero", []() {
+            ASSERT_EQ(elapsedForDisplay(2832, true), 0);
+            ASSERT_EQ(elapsedForDisplay(0, true), 0);
+            return true;
+        });
+
+        suite->addTest("outside the countdown the elapsed time runs", []() {
+            ASSERT_EQ(elapsedForDisplay(2832, false), 2832);
+            ASSERT_EQ(elapsedForDisplay(0, false), 0);
+            return true;
+        });
+
         suite->addTest("formats minutes and seconds with no padding", []() {
             return formatElapsedInterval(0) == "0:00"
                 && formatElapsedInterval(48) == "0:48"

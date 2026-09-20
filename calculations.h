@@ -146,6 +146,11 @@ std::string formatStageStatusTable(const std::vector<Segment>& segs, bool units,
 // so the honest figure is zero, matching the time-error box beside it.
 double averageSpeedForDisplay(double average_speed, bool hold_at_zero);
 
+// The same hold for the elapsed times beside Total and Trip: zero while an
+// early-departure countdown is running, so the panel does not show a zeroed
+// distance against the previous stage's clock. See RB-NAV-16.
+int64_t elapsedForDisplay(int64_t elapsed_s, bool hold_at_zero);
+
 // True once the car has covered the whole of `segs` -- the stage's own
 // distance, summed from its segments, against the counts driven since the
 // stage started. The point at which the stage is over and its roadbook is

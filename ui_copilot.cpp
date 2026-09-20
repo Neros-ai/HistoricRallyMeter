@@ -312,7 +312,8 @@ void updateCopilotDisplay(AppData* data) {
         countsToCentimeters(total_count_diff, data->state->calibration),
         data->state->total_distance_adjust_cm);
     int64_t total_duration_ms = current_time_ms - data->state->total_start_time_ms;
-    int64_t total_secs = total_duration_ms / 1000;
+    int64_t total_secs = elapsedForDisplay(total_duration_ms / 1000,
+                                           autoStartHoldActive(data));
     
     std::stringstream ss;
     const char* total_unit = "m";
@@ -330,7 +331,8 @@ void updateCopilotDisplay(AppData* data) {
         countsToCentimeters(trip_count_diff, data->state->calibration),
         data->state->trip_distance_adjust_cm);
     int64_t trip_duration_ms = current_time_ms - data->state->trip_start_time_ms;
-    int64_t trip_secs = trip_duration_ms / 1000;
+    int64_t trip_secs = elapsedForDisplay(trip_duration_ms / 1000,
+                                          autoStartHoldActive(data));
     
     const char* trip_unit = "m";
     std::string trip_str = formatDistanceAutoUnit(trip_m, &trip_unit);
