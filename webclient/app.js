@@ -316,10 +316,67 @@
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (!Ctx) return null;
       audioCtx = new Ctx();
+      // The engine changes state on its own -- suspended by a screen lock,
+      // running again after a resume settles -- so let it drive the label
+      // rather than waiting for the next telemetry frame.
+      //
+      // Every departure from 'running' also retires the current audio graph.
+      // A phone that suspends the engine for minutes can hand back a context
+      // that reports 'running' while the oscillator inside it is finished, and
+      // applyTone's key check would keep that corpse forever: the cadence has
+      // not changed, so it took the early return and rebuilt nothing. That was
+      // the "says Sound is on but there is no sound until I refresh" fault.
+      audioCtx.onstatechange = () => {
+        if (audioCtx && audioCtx.state !== 'running') audioGen++;
+        clockSample = null;   // the clock stops legitimately while suspended
+        showSound();
+      };
     }
     if (audioCtx.state === 'suspended') audioCtx.resume();
     return audioCtx;
   }
+
+  // A phone suspends the audio engine whenever it locks the screen or the page
+  // goes to the background, and nothing brought it back by itself: telemetry
+  // kept arriving, the page kept "playing" into a suspended context, and the
+  // tone was silently absent -- no warning, nothing on screen -- until the
+  // screen happened to be touched again. Resuming is only permitted once the
+  // page has been touched at all (the browser's autoplay rule, handled by the
+  // pointerdown/click handlers at the end of this file); after that first
+  // touch, this puts the engine back whenever it has drifted out.
+  //
+  // Called on every telemetry frame, so it is throttled -- but on a clock, not
+  // on an "in flight" flag. A resume() promise that never settles (iOS does
+  // this when it decides the page has no user activation) would leave such a
+  // flag stuck on and this function a permanent no-op.
+  // Bumped whenever the engine leaves 'running'; a tone stamped with an older
+  // generation is stale and must be rebuilt rather than retuned.
+  let audioGen = 0;
+  let lastResumeAt = 0;
+  function wakeAudio() {
+    if (!audioCtx || audioCtx.state !== 'suspended') return;
+    const now = Date.now();
+    if (now - lastResumeAt < 500) return;
+    lastResumeAt = now;
+    try {
+      const r = audioCtx.resume();
+      if (r && r.then) r.then(showSound, showSound);
+    } catch (e) { /* state stays suspended; the label says so */ }
+  }
+  // Returning after a long absence. A phone freezes a backgrounded page
+  // outright, and the socket can come back half-open: no close event fires, so
+  // the reconnect below never runs and the header still reads "connected" while
+  // nothing arrives. Silence with a live-looking page was the result. If no
+  // telemetry has landed for a few seconds, rebuild the connection from here.
+  const STALE_LINK_MS = 4000;
+  let lastTelemetryAt = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { showSound(); return; }
+    clockSample = null;   // the page was frozen; do not read that as a stall
+    if (soundOn) wakeAudio();
+    showSound();
+    if (Date.now() - lastTelemetryAt > STALE_LINK_MS) connect();
+  });
 
   // The box's button click: 1200 Hz sine, 50 ms, 0.20 -- ToneGenerator::playBeep's defaults.
   function playClick() {
@@ -351,17 +408,38 @@
     t.osc.stop(now + 0.02);
   }
 
-  // One beep of the cadence, with short fades so its edges don't click --
-  // the box's generator fades its edges for the same reason.
-  function pulse(t) {
+  // One beep of the cadence at an absolute time on the audio clock, with short
+  // fades so its edges don't click -- the box's generator fades its edges for
+  // the same reason.
+  function envelopeAt(t, at) {
     const g = t.gain.gain;
-    const now = audioCtx.currentTime;
     const on = t.toneMs / 1000;
-    g.cancelScheduledValues(now);
-    g.setValueAtTime(0, now);
-    g.linearRampToValueAtTime(TONE_LEVEL, now + 0.005);
-    g.setValueAtTime(TONE_LEVEL, now + Math.max(0.005, on - 0.005));
-    g.linearRampToValueAtTime(0, now + on);
+    const fade = Math.min(0.005, on / 2);
+    g.setValueAtTime(0, at);
+    g.linearRampToValueAtTime(TONE_LEVEL, at + fade);
+    g.setValueAtTime(TONE_LEVEL, at + Math.max(fade, on - fade));
+    g.linearRampToValueAtTime(0, at + on);
+  }
+
+  // The beeps are queued on the AudioContext's own clock, up to
+  // SCHEDULE_AHEAD_S in advance, instead of being drawn one at a time by a page
+  // timer. A backgrounded page has its timers throttled to roughly once a
+  // second, which broke up the rhythm of every cadence quicker than that -- the
+  // 100/100 gentle tick worst of all. The audio clock is not throttled, so the
+  // rhythm stays exact and the page timer only has to wake often enough to top
+  // the queue up. While the engine is suspended its clock does not advance, so
+  // on resume the queue is behind: clamping to currentTime picks the cadence
+  // straight back up rather than firing a burst of overdue beeps.
+  const SCHEDULE_AHEAD_S = 1.5;
+  const SCHEDULE_TICK_MS = 250;
+
+  function topUpSchedule(t) {
+    if (!audioCtx || tone !== t) return;
+    if (t.nextAt < audioCtx.currentTime) t.nextAt = audioCtx.currentTime;
+    while (t.nextAt < audioCtx.currentTime + SCHEDULE_AHEAD_S) {
+      envelopeAt(t, t.nextAt);
+      t.nextAt += t.periodS;
+    }
   }
 
   // Restarted only when the cadence changes; telemetry repeats it 10 times a
@@ -378,8 +456,15 @@
   // WAVEFORM still rebuilds: it is rare, and it only happens across the silent
   // quiet band, where there is nothing playing to interrupt.
   function applyTone(c) {
-    const sounding = soundOn && !!audioCtx && !!c && c.tone_ms > 0 && c.freq_hz > 0;
+    // audioLive(), not just "a context exists": there is no point building an
+    // oscillator on an engine measured to be dead, and treating it as silent
+    // keeps the button honest instead of reporting a tone nobody can hear.
+    const sounding = soundOn && audioLive() && !!c && c.tone_ms > 0 && c.freq_hz > 0;
     const key = sounding ? [c.tone_ms, c.silence_ms, c.wave].join('|') : '';
+    if (tone && tone.gen !== audioGen) {
+      // Same cadence, but the graph predates a suspend: rebuild, don't retune.
+      stopTone();
+    }
     if ((tone ? tone.key : '') === key) {
       if (tone && c && tone.freq !== c.freq_hz) {
         tone.osc.frequency.setValueAtTime(c.freq_hz, audioCtx.currentTime);
@@ -397,11 +482,13 @@
     gain.gain.value = 0;
     osc.connect(gain).connect(ctx.destination);
     osc.start();
-    const t = { osc: osc, gain: gain, key: key, freq: c.freq_hz, toneMs: c.tone_ms, timer: null };
+    const t = { osc: osc, gain: gain, key: key, freq: c.freq_hz, toneMs: c.tone_ms,
+                periodS: (c.tone_ms + c.silence_ms) / 1000, nextAt: ctx.currentTime,
+                gen: audioGen, timer: null };
     tone = t;
     if (c.silence_ms > 0) {
-      pulse(t);
-      t.timer = setInterval(() => pulse(t), c.tone_ms + c.silence_ms);
+      topUpSchedule(t);
+      t.timer = setInterval(() => topUpSchedule(t), SCHEDULE_TICK_MS);
     } else {
       // Continuous (the simple tone): fade in and hold.
       gain.gain.setValueAtTime(0, ctx.currentTime);
@@ -418,16 +505,106 @@
   // cadence, which is all this is for.
   const TONE_WATCHDOG_MS = 3000;
   function toneHeard(c) {
+    lastTelemetryAt = Date.now();
+    if (soundOn) wakeAudio();
+    checkAudioAlive();
+    showSound();
     applyTone(c);
     clearTimeout(toneWatchdog);
     toneWatchdog = setTimeout(stopTone, TONE_WATCHDOG_MS);
   }
 
+  // True only when the audio engine is actually able to make a sound. A
+  // browser will not start one until the page has been touched, and the phone
+  // suspends it again on every screen lock, so "Sound on" was a lie for the
+  // commonest reason the phone is silent.
+  // state === 'running' is the browser's INTENT, not proof of output: a phone
+  // can hand back a context that says 'running' while its render thread is
+  // dead, which is silence with no warning. The engine's own clock is the
+  // proof -- a live context advances currentTime in step with wall time, a
+  // stalled one freezes it -- so audioStalled below is measured, not assumed.
+  function audioLive() {
+    return !!audioCtx && audioCtx.state === 'running' && !audioStalled;
+  }
+
+  // Sampled on every telemetry frame; judged once a second, because a shorter
+  // window cannot tell a stall from ordinary scheduling jitter.
+  const STALL_WINDOW_MS = 1000;
+  const STALL_RATIO = 0.5;   // less than half of wall time elapsed => stalled
+  let clockSample = null;    // { ctx, wall } or null = start a fresh window
+  let audioStalled = false;
+  function checkAudioAlive() {
+    if (!audioCtx || audioCtx.state !== 'running') {
+      clockSample = null;
+      return;
+    }
+    const wallNow = Date.now();
+    const ctxNow = audioCtx.currentTime;
+    if (!clockSample) { clockSample = { ctx: ctxNow, wall: wallNow }; return; }
+    const wallElapsed = wallNow - clockSample.wall;
+    if (wallElapsed < STALL_WINDOW_MS) return;
+    const ctxElapsed = (ctxNow - clockSample.ctx) * 1000;
+    clockSample = { ctx: ctxNow, wall: wallNow };
+    const stalled = ctxElapsed < wallElapsed * STALL_RATIO;
+    if (stalled === audioStalled) return;
+    audioStalled = stalled;
+    if (stalled) {
+      // Retire the graph and ask for a resume. If the engine will not come
+      // back by itself the button now says so, and a tap rebuilds it.
+      audioGen++;
+      stopTone();
+      wakeAudio();
+    }
+    showSound();
+  }
+
+  // Called from the telemetry path as well, so it must not touch the DOM unless
+  // something actually changed.
+  let shownSound = null;
   function showSound() {
-    $('sound-toggle').textContent = soundOn ? 'Sound on' : 'Sound off';
-    $('sound-toggle').classList.toggle('off', !soundOn);
+    const blocked = soundOn && !audioLive();
+    // "Sound is on/off" rather than "Sound on/off": the shorter form reads as a
+    // button that will DO that when pressed, which had the crew pressing it to
+    // turn sound on when it was already on. "Tap for sound" stays an
+    // instruction, because in that state pressing it is exactly what is needed.
+    const label = !soundOn ? 'Sound is off' : (blocked ? 'Tap for sound' : 'Sound is on');
+    // The engine's own word for what it is doing, shown only while it is not
+    // playing: "Tap for sound" says what to do about it, this says why. Without
+    // it a phone that refuses to start audio is undiagnosable from here.
+    const why = blocked
+      ? (!audioCtx ? 'no engine' : (audioStalled ? 'engine stalled' : audioCtx.state))
+      : '';
+    if (shownSound === label + '|' + why) return;
+    shownSound = label + '|' + why;
+    const btn = $('sound-toggle');
+    btn.textContent = label;
+    btn.title = why ? 'audio engine: ' + why : '';
+    btn.classList.toggle('off', !soundOn);
+    btn.classList.toggle('blocked', blocked);
+    const note = $('audio-state');
+    if (note) note.textContent = why ? 'audio: ' + why : '';
   }
   $('sound-toggle').addEventListener('click', () => {
+    // While it reads "Tap for sound" the button is an instruction, NOT the
+    // mute: a press there means "make the sound work". Toggling as well muted
+    // the phone on the very press meant to un-silence it, because the
+    // page-wide unlock handler and this one both fired on the same tap.
+    if (soundOn && !audioLive()) {
+      // A context that has gone suspended and will not come back is a known
+      // phone trap: the cure is a fresh one built inside the gesture that asked
+      // for it, which is this tap. Cheap, and only on an explicit press.
+      if (audioCtx && !audioLive()) {
+        stopTone();
+        try { audioCtx.close(); } catch (e) { /* already closing */ }
+        audioCtx = null;
+        audioStalled = false;
+        clockSample = null;
+        audioGen++;
+      }
+      audio();
+      showSound();
+      return;
+    }
     soundOn = !soundOn;
     try { localStorage.setItem('rallySound', soundOn ? 'on' : 'off'); } catch (e) { /* private mode */ }
     if (soundOn) audio(); else stopTone();
@@ -438,10 +615,11 @@
   // Any touch unlocks the audio; every button pressed here clicks, as every
   // button on the box does. Capture phase, so the click sounds before any
   // confirm() the button opens.
-  document.addEventListener('pointerdown', () => { if (soundOn) audio(); }, true);
+  document.addEventListener('pointerdown', () => { if (soundOn) audio(); showSound(); }, true);
   document.addEventListener('click', (e) => {
     if (soundOn) audio();
     if (e.target.closest && e.target.closest('button')) playClick();
+    showSound();
   }, true);
 
   connect();

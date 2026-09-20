@@ -8,9 +8,13 @@
 </head>
 <body>
   <header>
-    <h1>Historic Rally Meter</h1>
+    <!-- No title here: the header is the narrowest row on the phone and the
+         name bought nothing the browser tab does not already say. The space
+         goes to the sound state and connection instead. -->
     <div class="header-right">
-      <button id="sound-toggle" class="sound-toggle" type="button">Sound on</button>
+      <button id="sound-toggle" class="sound-toggle" type="button">Sound is on</button>
+      <!-- Why the phone is silent, when it is: the audio engine's own state. -->
+      <div id="audio-state" class="audio-state"></div>
       <div id="conn" class="conn">connecting…</div>
     </div>
   </header>

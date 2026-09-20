@@ -13,7 +13,10 @@ header {
   padding: 0.75rem 1rem;
   border-bottom: 1px solid #444;
 }
-header h1 { font-size: 1rem; margin: 0; }
+/* The title row is gone (RB-WEB-07), so the controls are the only thing in
+   the header: keep them where they were rather than letting space-between
+   drop them to the left. */
+header { justify-content: flex-end; }
 .conn { font-size: 0.8rem; color: #aaa; }
 /* This phone's own mute for the box's tone and clicks (RB-WEB-02). */
 .header-right { display: flex; align-items: center; gap: 0.6rem; }
@@ -26,6 +29,10 @@ header h1 { font-size: 1rem; margin: 0; }
   border: 1px solid #666;
 }
 .sound-toggle.off { color: #aaa; border-style: dashed; }
+/* Sound is wanted but the browser has not let the audio engine start yet: an
+   instruction, not a mute, so it reads as something to act on. */
+.sound-toggle.blocked { color: #fc0; border-color: #fc0; }
+.audio-state { font-size: 0.7rem; color: #fc0; }
 .conn.ok { color: #6f6; }
 .tabs { display: flex; gap: 0.5rem; padding: 0.5rem 1rem; }
 .tab {
