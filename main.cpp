@@ -381,6 +381,11 @@ int main(int argc, char* argv[]) {
         if (app_data.simCounter2) app_data.simCounter2->setPaused(true);
         app_data.state = &state;
         app_data.poller = new CounterPoller();
+        // Sim feed can jump after a VM clock step; the hardware glitch guard
+        // must not run or one leap freezes the sandbox speed controls.
+        if (usingSimCounters()) {
+            app_data.poller->setSpuriousCheckEnabled(false);
+        }
         std::cerr << "[DEBUG] Step 7: CounterPoller created OK" << std::endl;
         std::cerr << "[DEBUG] Step 8: Creating ToneGenerator..." << std::endl;
         app_data.toneGen = new ToneGenerator();

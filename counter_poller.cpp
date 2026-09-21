@@ -24,11 +24,14 @@ bool CounterPoller::poll(ICounter* cntr1, ICounter* cntr2, uint8_t reg) {
         uint32_t val1 = cntr1->readRegister(reg);
         uint32_t val2 = cntr2->readRegister(reg);
         
-        // Spurious I2C read protection:
+        // Spurious I2C read protection (real hardware only):
         // 1. Reject reads that jump forward unreasonably far (e.g. 0xFFFF glitches)
         // 2. Reject reads that go BACKWARDS (counter should only increment)
         // Both indicate I2C bus errors returning corrupted data.
-        if (has_previous_read) {
+        // Skipped for the simulated counters: a single rejected jump freezes
+        // last_good and every later poll is discarded, so the VNC speed
+        // harness appears broken while the sim keeps counting unseen.
+        if (spurious_check_enabled && has_previous_read) {
             bool bad1 = false, bad2 = false;
             
             if (val1 < last_good_cntr1) {

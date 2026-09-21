@@ -8,8 +8,33 @@
   // The last state message, kept so a units change arriving on telemetry can
   // re-title the stage panel without waiting for the next state broadcast.
   let lastState = null;
+  let activeTab = 'live';
+  let driverGauge = null;
 
   const $ = (id) => document.getElementById(id);
+
+  function ensureDriverGauge() {
+    if (driverGauge) return driverGauge;
+    const canvas = $('driver-gauge');
+    if (!canvas || typeof RallyDriverGauge !== 'function') return null;
+    driverGauge = new RallyDriverGauge(canvas);
+    driverGauge.resize();
+    return driverGauge;
+  }
+
+  function showTab(name) {
+    activeTab = name;
+    $('tab-live').classList.toggle('active', name === 'live');
+    $('tab-setup').classList.toggle('active', name === 'setup');
+    $('tab-driver').classList.toggle('active', name === 'driver');
+    $('view-live').classList.toggle('hidden', name !== 'live');
+    $('view-setup').classList.toggle('hidden', name !== 'setup');
+    $('view-driver').classList.toggle('hidden', name !== 'driver');
+    if (name === 'driver') {
+      const g = ensureDriverGauge();
+      if (g) g.resize();
+    }
+  }
 
   function wsUrl() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -46,6 +71,11 @@
     $('total-m').textContent = formatDist(msg.total_m);
     $('trip-avg').textContent = Number(msg.trip_avg_kph || 0).toFixed(1);
     $('total-avg').textContent = Number(msg.total_avg_kph || 0).toFixed(1);
+    // Driver tab footer (HTML under the gauge — keeps dial clear).
+    $('drv-trip-m').textContent = formatDist(msg.trip_m);
+    $('drv-total-m').textContent = formatDist(msg.total_m);
+    $('drv-trip-avg').textContent = Number(msg.trip_avg_kph || 0).toFixed(1);
+    $('drv-total-avg').textContent = Number(msg.total_avg_kph || 0).toFixed(1);
     $('seg-num').textContent = msg.segment_number || 0;
     $('seg-count').textContent = msg.segment_count || 0;
 
@@ -54,6 +84,14 @@
 
     toneHeard(msg.tone);
     beepHeard(msg.beep);
+
+    // Driver canvas: only paint while that tab is open (keeps Live/Setup cheap).
+    if (activeTab === 'driver') {
+      const g = ensureDriverGauge();
+      if (g) g.update(msg);
+    } else if (driverGauge) {
+      driverGauge.last = Object.assign({}, driverGauge.last, msg);
+    }
   }
 
   // Reflects the box's own settings back into the controls. Skips whichever
@@ -179,46 +217,41 @@
     ws.onmessage = onMessage;
   }
 
-  $('tab-live').addEventListener('click', () => {
-    $('tab-live').classList.add('active');
-    $('tab-setup').classList.remove('active');
-    $('view-live').classList.remove('hidden');
-    $('view-setup').classList.add('hidden');
-  });
-  $('tab-setup').addEventListener('click', () => {
-    $('tab-setup').classList.add('active');
-    $('tab-live').classList.remove('active');
-    $('view-setup').classList.remove('hidden');
-    $('view-live').classList.add('hidden');
+  $('tab-live').addEventListener('click', () => showTab('live'));
+  $('tab-setup').addEventListener('click', () => showTab('setup'));
+  $('tab-driver').addEventListener('click', () => showTab('driver'));
+  window.addEventListener('resize', () => {
+    if (activeTab === 'driver' && driverGauge) driverGauge.resize();
   });
 
   // ---- Distance correction ----
   // The co-pilot's Total row, verbatim: -10 and +10 nudge both Total and Trip
   // (one wheel measurement, so a slip correction belongs to both), and "set"
-  // pins Total alone to a roadbook figure.
-  $('btn-dist-minus').addEventListener('click', () => send({ type: 'distance_adjust', delta_m: -10 }));
-  $('btn-dist-plus').addEventListener('click', () => send({ type: 'distance_adjust', delta_m: 10 }));
-  $('btn-dist-set').addEventListener('click', () => {
-    const field = $('dist-set-m');
-    // An empty box is someone who has not typed a figure yet, not a request
-    // to pin Total to zero -- Reset Total is the button for that.
-    if (field.value.trim() === '') return;
-    const meters = Number(field.value);
-    if (!Number.isFinite(meters) || meters < 0) return;
-    send({ type: 'distance_set', meters: meters });
-    field.value = '';
-    field.blur();
-  });
+  // pins Total alone to a roadbook figure. Live and Driver each have a row.
+  function wireAdjust(minusId, plusId, setId, fieldId) {
+    $(minusId).addEventListener('click', () => send({ type: 'distance_adjust', delta_m: -10 }));
+    $(plusId).addEventListener('click', () => send({ type: 'distance_adjust', delta_m: 10 }));
+    $(setId).addEventListener('click', () => {
+      const field = $(fieldId);
+      // An empty box is someone who has not typed a figure yet, not a request
+      // to pin Total to zero -- press Total to reset.
+      if (field.value.trim() === '') return;
+      const meters = Number(field.value);
+      if (!Number.isFinite(meters) || meters < 0) return;
+      send({ type: 'distance_set', meters: meters });
+      field.value = '';
+      field.blur();
+    });
+  }
+  wireAdjust('btn-dist-minus', 'btn-dist-plus', 'btn-dist-set', 'dist-set-m');
+  wireAdjust('drv-dist-minus', 'drv-dist-plus', 'drv-dist-set', 'drv-dist-set-m');
 
   $('btn-next').addEventListener('click', () => send({ type: 'next' }));
   $('btn-prev').addEventListener('click', () => send({ type: 'prev' }));
-  $('btn-reset-trip').addEventListener('click', resetTrip);
-  $('btn-reset-trip2').addEventListener('click', resetTrip);
+
   // With a stage running, the box's own question (a missed start): the
   // distance zero is the press, so the box is told at once and the reset
   // applied only if the crew confirm.
-  $('btn-reset-total').addEventListener('click', resetTotal);
-  $('btn-reset-total-live').addEventListener('click', resetTotal);
   function resetTotal() {
     if (lastState && lastState.total_reset_asks) {
       send({ type: 'reset_total_capture' });
@@ -227,6 +260,30 @@
     }
     if (confirm('Reset total distance?')) send({ type: 'reset_total' });
   }
+  // The box's Reset Trip never asks, so neither does the phone: a confirm()
+  // costs a second the crew do not have, mid-stage or not.
+  function resetTrip() {
+    send({ type: 'reset_trip' });
+  }
+
+  // Press Total / Trip boxes on Live and Driver (and Setup's remaining buttons).
+  function wirePressReset(el, action) {
+    if (!el) return;
+    el.addEventListener('click', action);
+    el.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        action();
+      }
+    });
+  }
+  wirePressReset($('box-total'), resetTotal);
+  wirePressReset($('box-trip'), resetTrip);
+  wirePressReset($('drv-box-total'), resetTotal);
+  wirePressReset($('drv-box-trip'), resetTrip);
+  $('btn-reset-trip2').addEventListener('click', resetTrip);
+  $('btn-reset-total').addEventListener('click', resetTotal);
+
   const closeStageMenu = () => $('stage-menu').classList.add('hidden');
   $('menu-abort').addEventListener('click', () => {
     closeStageMenu();
@@ -240,12 +297,6 @@
     closeStageMenu();
     send({ type: 'reset_total_cancel' });
   });
-
-  // The box's Reset Trip never asks, so neither does the phone: a confirm()
-  // costs a second the crew do not have, mid-stage or not.
-  function resetTrip() {
-    send({ type: 'reset_trip' });
-  }
 
   $('btn-add-seg').addEventListener('click', () => {
     const kph = prompt('Target speed (kph):', '75');

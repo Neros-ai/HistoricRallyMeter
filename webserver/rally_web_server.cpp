@@ -253,6 +253,10 @@ static bool handleHttpRequest(WebServerState* impl, int fd, const std::string& r
         sendHttpResponse(fd, 200, "OK", "application/javascript; charset=utf-8", readStaticFile("/app.js"));
         return false;
     }
+    if (path == "/gauge.js") {
+        sendHttpResponse(fd, 200, "OK", "application/javascript; charset=utf-8", readStaticFile("/gauge.js"));
+        return false;
+    }
     sendHttpResponse(fd, 404, "Not Found", "text/plain", "Not found");
     return false;
 }
