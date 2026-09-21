@@ -22,9 +22,15 @@ private:
     uint32_t last_good_cntr1 = 0;
     uint32_t last_good_cntr2 = 0;
     bool has_previous_read = false;
+    // When true (RALLY_SIM_I2C), skip the jump/backwards guard. The sim can
+    // leap by thousands of counts after a VM clock step or a long GTK stall;
+    // rejecting that once freezes last_good forever and the harness looks dead.
+    bool spurious_check_enabled = true;
     
 public:
     CounterPoller();
+
+    void setSpuriousCheckEnabled(bool enabled) { spurious_check_enabled = enabled; }
     
     bool poll(ICounter* cntr1, ICounter* cntr2, uint8_t reg);
     

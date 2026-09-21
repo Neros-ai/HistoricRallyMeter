@@ -22,6 +22,7 @@
   <nav class="tabs">
     <button id="tab-live" class="tab active" type="button">Live</button>
     <button id="tab-setup" class="tab" type="button">Setup</button>
+    <button id="tab-driver" class="tab" type="button">Driver</button>
   </nav>
 
   <main id="view-live" class="view">
@@ -30,14 +31,20 @@
       <strong id="rally-clock">--:--:--</strong>
     </section>
 
-    <!-- Gauge, Total and Trip share one grid whose rows are all as tall as
-         the tallest, so the gauge box matches the Total box by layout. -->
+    <section class="actions live-tall">
+      <button id="btn-prev" type="button" disabled>prev</button>
+      <button id="btn-next" type="button" disabled>next</button>
+    </section>
+
+    <!-- Ahead/behind, Total and Trip share one grid. Press Total/Trip to reset
+         (same as Driver); the separate Reset buttons are gone. -->
     <div class="live-boxes">
       <section id="ahead-behind" class="ahead-behind">
         <div id="ahead-value" class="value">0.0 s</div>
       </section>
 
-      <section class="dist-box">
+      <section class="dist-box press-reset" id="box-total" role="button" tabindex="0"
+               title="Reset Total" aria-label="Total distance, press to reset">
         <span class="dl">Total</span><strong id="total-m">0 m</strong>
         <span class="rt">
           <span class="avg">avg <b id="total-avg">0.0</b></span>
@@ -45,7 +52,8 @@
         </span>
       </section>
 
-      <section class="dist-box">
+      <section class="dist-box press-reset" id="box-trip" role="button" tabindex="0"
+               title="Reset Trip" aria-label="Trip distance, press to reset">
         <span class="dl">Trip</span><strong id="trip-m">0 m</strong>
         <span class="rt">
           <span class="avg">avg <b id="trip-avg">0.0</b></span>
@@ -53,16 +61,6 @@
         </span>
       </section>
     </div>
-
-    <section class="actions live-tall">
-      <button id="btn-prev" type="button" disabled>prev</button>
-      <button id="btn-next" type="button" disabled>next</button>
-    </section>
-
-    <section class="actions live-tall">
-      <button id="btn-reset-trip" type="button">Reset Trip</button>
-      <button id="btn-reset-total-live" type="button">Reset Total</button>
-    </section>
 
     <section class="adjust-row live-tall">
       <span class="adjust-label">Adjust</span>
@@ -161,6 +159,37 @@
     </section>
   </main>
 
+  <!-- Sample / side-branch: recognisable twin of the compact driver gauge.
+       Display-only; drawn only while this tab is active (RB-WEB-11). -->
+  <main id="view-driver" class="view view-driver hidden">
+    <canvas id="driver-gauge" width="390" height="360" aria-label="Driver gauge"></canvas>
+    <!-- From the gauge down: same Total/Trip (press to reset) and Adjust as Live. -->
+    <div class="driver-footer">
+      <section class="dist-box press-reset" id="drv-box-total" role="button" tabindex="0"
+               title="Reset Total" aria-label="Total distance, press to reset">
+        <span class="dl">Total</span><strong id="drv-total-m">0 m</strong>
+        <span class="rt">
+          <span class="avg">avg<b id="drv-total-avg">0.0</b></span>
+        </span>
+      </section>
+      <section class="dist-box press-reset" id="drv-box-trip" role="button" tabindex="0"
+               title="Reset Trip" aria-label="Trip distance, press to reset">
+        <span class="dl">Trip</span><strong id="drv-trip-m">0 m</strong>
+        <span class="rt">
+          <span class="avg">avg<b id="drv-trip-avg">0.0</b></span>
+        </span>
+      </section>
+      <section class="adjust-row live-tall">
+        <span class="adjust-label">Adjust</span>
+        <button id="drv-dist-minus" type="button">&minus;10</button>
+        <input id="drv-dist-set-m" type="number" min="0" max="999999" step="1"
+               inputmode="numeric" placeholder="Total m">
+        <button id="drv-dist-set" type="button">set</button>
+        <button id="drv-dist-plus" type="button">+10</button>
+      </section>
+    </div>
+  </main>
+
   <!-- Reset Total with a stage running (a missed start): the box's question. -->
   <div id="stage-menu" class="modal hidden" role="dialog" aria-modal="true">
     <div class="modal-box">
@@ -174,6 +203,7 @@
     </div>
   </div>
 
+  <script src="/gauge.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
