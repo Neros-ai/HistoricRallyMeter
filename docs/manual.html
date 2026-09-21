@@ -7,7 +7,7 @@
 <style>
   :root { --ink: #111; --rule: #bbb; --shade: #f4f4f4; }
   body {
-    font-family: Georgia, "Times New Roman", serif;
+    font-family: Univers, "Univers Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
     font-size: 11pt; line-height: 1.45; color: var(--ink);
     max-width: 180mm; margin: 0 auto; padding: 15mm;
     background: #fff;
@@ -16,7 +16,7 @@
     font-size: 17pt; margin: 0 0 4mm; padding-bottom: 2mm;
     border-bottom: 2px solid var(--ink);
   }
-  h2 { font-size: 13pt; margin: 8mm 0 2mm; }
+  h2 { font-size: 13pt; margin: 8mm 0 2mm; text-transform: uppercase; }
   h3 { font-size: 11pt; margin: 5mm 0 1mm; }
   p { margin: 0 0 2.5mm; }
   ol, ul { margin: 0 0 2.5mm; padding-left: 6mm; }
@@ -471,27 +471,36 @@ stay as they are, and starting a stage clears the offset.</p>
 
 <h2 id="phone-app">The phone app</h2>
 
-<p>When the rally box is tethered to a mobile phone the phone can be used to
-control the device. The IP address shown on the date/time page of the device can
-be typed directly into the phone's browser or entered using the camera and QR
-code. The phone page will show connected in green when active.</p>
+<p><b>Connecting:</b> The rally box must first be tethered to the phone using the
+box's wifi connector. This web app can then be connected using the IP address
+shown on the date/time page of the box. The phone page will show connected in
+green when active.</p>
 
-<p>The Live page replicates the functions of the main page on the co-pilot's
-screen; the Setup page replicates the functions of the segments page.</p>
+<p><b>Sounds:</b> The top of the phone screen (see below) will display Tap For
+Sound in orange if the link is inactive. Otherwise it toggles between Sound is
+On and Sound is Off.</p>
 
-<p>The error tones can be played via the phone when the sound on button at the
-top is illuminated.</p>
+<p>Three tabs: <b>Live</b> (co-pilot Main), <b>Setup</b> (Segments), and
+<b>Driver</b> (driver gauge). On Live and Driver, press the <b>Total</b> or
+<b>Trip</b> box to reset that distance; Adjust (−10 / set / +10) sits under
+those boxes on both tabs. Live keeps prev/next under the rally clock.</p>
 
-<div style="display: flex; gap: 6mm; align-items: flex-start">
-  <figure class="screen" style="flex: 1; margin: 0">
+<div style="display: flex; gap: 6mm; align-items: flex-start; justify-content: flex-start">
+  <figure class="screen" style="flex: 0 0 43.2%; margin: 0">
+    <p style="margin: 0 0 2mm"><b>Live: replicates Main.</b></p>
     <img src="manual-images/phone-live.png" alt="The phone app, Live tab">
-    <figcaption>Live.</figcaption>
   </figure>
-  <figure class="screen" style="flex: 1; margin: 0">
+  <figure class="screen" style="flex: 0 0 43.2%; margin: 0">
+    <p style="margin: 0 0 2mm"><b>Setup: replicates Segments.</b></p>
     <img src="manual-images/phone-setup.png" alt="The phone app, Setup tab">
-    <figcaption>Setup.</figcaption>
   </figure>
 </div>
+
+<figure class="screen" style="margin-top: 4mm">
+  <p style="margin: 0 0 2mm"><b>Driver: replicates the driver display.</b></p>
+  <img src="manual-images/phone-driver.png" alt="The phone app, Driver tab"
+       style="width: 43.2%; margin-left: 0; margin-right: auto">
+</figure>
 
 </section>
 
