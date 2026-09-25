@@ -272,15 +272,22 @@ void on_distance_adjust(GtkWidget* widget, gpointer user_data) {
         static_cast<long>(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "delta_m"))));
 }
 
+static void on_dialog_response_button(GtkWidget* button, gpointer user_data) {
+    GtkWidget* dialog = static_cast<GtkWidget*>(user_data);
+    gint response = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "response_id"));
+    gtk_dialog_response(GTK_DIALOG(dialog), response);
+}
+
 void on_distance_set(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
 
+    // No dialog-supplied buttons: Set/Cancel are placed beside the keypad
+    // below instead of in the standard bottom action area, which on the box's
+    // 400px-tall panel pushes the buttons off the bottom of the physical screen.
     GtkWidget* dialog = gtk_dialog_new_with_buttons(
         "Set Total Distance",
         GTK_WINDOW(gtk_widget_get_toplevel(widget)),
         GTK_DIALOG_MODAL,
-        "Set", GTK_RESPONSE_OK,
-        "Cancel", GTK_RESPONSE_CANCEL,
         nullptr);
 
     GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
@@ -305,13 +312,43 @@ void on_distance_set(GtkWidget* widget, gpointer user_data) {
     gtk_box_pack_start(GTK_BOX(promptRow), GTK_WIDGET(entry), TRUE, TRUE, 0);
 
     // The main screen has no keypad of its own, and the box has no physical
-    // keyboard, so the dialog brings one with it.
+    // keyboard, so the dialog brings one with it. Set/Cancel sit to the
+    // right of the keypad (Set above Cancel) rather than below it.
     GtkEntry* previous_entry = data->activeEntry;
     data->activeEntry = entry;
-    gtk_box_pack_start(GTK_BOX(content), createNumericKeypad(data), FALSE, FALSE, 3);
+
+    GtkWidget* keypadRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_pack_start(GTK_BOX(content), keypadRow, FALSE, FALSE, 3);
+    gtk_box_pack_start(GTK_BOX(keypadRow), createNumericKeypad(data), FALSE, FALSE, 0);
+
+    GtkWidget* actionCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_box_pack_start(GTK_BOX(keypadRow), actionCol, FALSE, FALSE, 0);
+
+    GtkWidget* setBtn = gtk_button_new_with_label("Set");
+    g_object_set_data(G_OBJECT(setBtn), "response_id", GINT_TO_POINTER(GTK_RESPONSE_OK));
+    g_signal_connect(setBtn, "clicked", G_CALLBACK(on_dialog_response_button), dialog);
+    gtk_box_pack_start(GTK_BOX(actionCol), setBtn, TRUE, TRUE, 0);
+
+    GtkWidget* cancelBtn = gtk_button_new_with_label("Cancel");
+    g_object_set_data(G_OBJECT(cancelBtn), "response_id", GINT_TO_POINTER(GTK_RESPONSE_CANCEL));
+    g_signal_connect(cancelBtn, "clicked", G_CALLBACK(on_dialog_response_button), dialog);
+    gtk_box_pack_start(GTK_BOX(actionCol), cancelBtn, TRUE, TRUE, 0);
 
     applyDialogStyle(dialog);
+    gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_NONE);
     gtk_widget_show_all(dialog);
+
+    // Anchored near the top of the co-pilot panel rather than vertically
+    // centered: centering leaves less headroom below for the keypad and
+    // action buttons, which is what was running off the bottom of the
+    // physical screen.
+    GtkWidget* parentWindow = gtk_widget_get_toplevel(widget);
+    gint parent_x = 0, parent_y = 0, parent_w = 0;
+    gtk_window_get_position(GTK_WINDOW(parentWindow), &parent_x, &parent_y);
+    gtk_window_get_size(GTK_WINDOW(parentWindow), &parent_w, nullptr);
+    gint dialog_w = 0;
+    gtk_window_get_size(GTK_WINDOW(dialog), &dialog_w, nullptr);
+    gtk_window_move(GTK_WINDOW(dialog), parent_x + (parent_w - dialog_w) / 2, parent_y + 10);
 
     if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_OK) {
         const char* text = gtk_entry_get_text(entry);
