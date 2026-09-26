@@ -194,7 +194,8 @@ void updateCopilotDisplay(AppData* data) {
     // Alarm check runs regardless of which screen is visible
     int64_t total_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
-        data->state->total_start_cntr1, data->state->total_start_cntr2);
+        data->state->total_start_cntr1, data->state->total_start_cntr2,
+        data->state->total_carry_cntr1, data->state->total_carry_cntr2);
 
     // Beep Assist. Checked here rather than on the stage-setup screen so the
     // beeps keep coming while the operator is on any screen at all.
@@ -345,7 +346,8 @@ void updateCopilotDisplay(AppData* data) {
     // Trip distance
     int64_t trip_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
-        data->state->trip_start_cntr1, data->state->trip_start_cntr2);
+        data->state->trip_start_cntr1, data->state->trip_start_cntr2,
+        data->state->trip_carry_cntr1, data->state->trip_carry_cntr2);
     long trip_m = adjustedDistanceMeters(
         countsToCentimeters(trip_count_diff, data->state->calibration),
         data->state->trip_distance_adjust_cm);

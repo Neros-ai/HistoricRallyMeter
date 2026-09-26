@@ -588,6 +588,38 @@ public:
             return true;
         });
 
+        suite->addTest("power-loss carry, last-seen counts and cleared flags survive save/load", []() {
+            RallyState state;
+            state.total_carry_cntr1 = 4000;
+            state.total_carry_cntr2 = 2000;
+            state.trip_carry_cntr1 = 1500;
+            state.trip_carry_cntr2 = 500;
+            state.segment_carry_cntr1 = 300;
+            state.segment_carry_cntr2 = 100;
+            state.last_cntr1 = 123456;
+            state.last_cntr2 = 654321;
+            state.cntr1_pls_cleared = true;
+            state.cntr2_pls_cleared = false;
+            std::string path = "/tmp/rb_dev_10_roundtrip_test.json";
+            ConfigFile::save(state, path);
+
+            RallyState loaded;
+            ConfigFile::load(loaded, path);
+            std::remove(path.c_str());
+
+            ASSERT_EQ(loaded.total_carry_cntr1, 4000);
+            ASSERT_EQ(loaded.total_carry_cntr2, 2000);
+            ASSERT_EQ(loaded.trip_carry_cntr1, 1500);
+            ASSERT_EQ(loaded.trip_carry_cntr2, 500);
+            ASSERT_EQ(loaded.segment_carry_cntr1, 300);
+            ASSERT_EQ(loaded.segment_carry_cntr2, 100);
+            ASSERT_EQ(loaded.last_cntr1, 123456u);
+            ASSERT_EQ(loaded.last_cntr2, 654321u);
+            ASSERT_TRUE(loaded.cntr1_pls_cleared);
+            ASSERT_FALSE(loaded.cntr2_pls_cleared);
+            return true;
+        });
+
         return suite;
     }
 };

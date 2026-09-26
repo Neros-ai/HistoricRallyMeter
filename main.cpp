@@ -266,9 +266,16 @@ static gboolean on_window_close_save(G_GNUC_UNUSED GtkWidget* widget, G_GNUC_UNU
               << "," << data->state->driver_window_y << ") "
               << "size: " << data->state->driver_window_width << "x" << data->state->driver_window_height
               << " monitor: " << data->state->driver_window_monitor << std::endl;
-    
+
+    // So a restart can tell a genuine power loss (count back to zero) from
+    // this app's own clean shutdown (count unchanged since last seen).
+    auto recent = data->poller->getMostRecent();
+    if (recent.time_ms != 0) {
+        data->state->last_cntr1 = recent.cntr1;
+        data->state->last_cntr2 = recent.cntr2;
+    }
     ConfigFile::save(*data->state);
-    
+
     gtk_main_quit();
     return TRUE;
 }
@@ -316,6 +323,13 @@ static std::unique_ptr<ICounter> makeCounter(int bus, int address) {
     return std::make_unique<I2CCounter>(bus, address);
 }
 
+// One chip, at startup. Leaves the chip's count mode alone -- these are
+// pulse counters. A power-loss flag this app has cleared before means the
+// count went back to zero: fold the distance already covered (live vs. the
+// last count this app saw) into each of the three carries and move that
+// chip's three start readings to the live count. A flag that has never been
+// cleared is left over from before this was tracked, not proof the count was
+// just wiped, so the start readings are left alone.
 int main(int argc, char* argv[]) {
     try {
         const int I2C_BUS = 1;
@@ -359,15 +373,30 @@ int main(int argc, char* argv[]) {
             std::cerr << "[DEBUG] RALLY_SIM_I2C=1: using simulated counters" << std::endl;
         }
         
-        if (state.total_start_cntr1 == 0 && state.total_start_cntr2 == 0) {
+        accountForChipPowerLoss(*counter1, CNTR_1_ADDRESS, REGISTER,
+            state.cntr1_pls_cleared, state.last_cntr1,
+            state.total_start_cntr1, state.total_carry_cntr1,
+            state.trip_start_cntr1, state.trip_carry_cntr1,
+            state.segment_start_cntr1, state.segment_carry_cntr1);
+        accountForChipPowerLoss(*counter2, CNTR_2_ADDRESS, REGISTER,
+            state.cntr2_pls_cleared, state.last_cntr2,
+            state.total_start_cntr2, state.total_carry_cntr2,
+            state.trip_start_cntr2, state.trip_carry_cntr2,
+            state.segment_start_cntr2, state.segment_carry_cntr2);
+        ConfigFile::save(state);
+
+        if (state.total_start_cntr1 == 0 && state.total_start_cntr2 == 0 &&
+            state.total_carry_cntr1 == 0 && state.total_carry_cntr2 == 0) {
             state.total_start_cntr1 = counter1->readRegister(REGISTER);
             state.total_start_cntr2 = counter2->readRegister(REGISTER);
         }
-        if (state.trip_start_cntr1 == 0 && state.trip_start_cntr2 == 0) {
+        if (state.trip_start_cntr1 == 0 && state.trip_start_cntr2 == 0 &&
+            state.trip_carry_cntr1 == 0 && state.trip_carry_cntr2 == 0) {
             state.trip_start_cntr1 = counter1->readRegister(REGISTER);
             state.trip_start_cntr2 = counter2->readRegister(REGISTER);
         }
-        if (state.segment_start_cntr1 == 0 && state.segment_start_cntr2 == 0) {
+        if (state.segment_start_cntr1 == 0 && state.segment_start_cntr2 == 0 &&
+            state.segment_carry_cntr1 == 0 && state.segment_carry_cntr2 == 0) {
             state.segment_start_cntr1 = counter1->readRegister(REGISTER);
             state.segment_start_cntr2 = counter2->readRegister(REGISTER);
         }

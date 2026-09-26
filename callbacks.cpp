@@ -224,9 +224,11 @@ static long rawDistanceCm(AppData* data, bool is_trip) {
     auto poll = data->poller->getMostRecent();
     int64_t counts = is_trip
         ? calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
-                                  data->state->trip_start_cntr1, data->state->trip_start_cntr2)
+                                  data->state->trip_start_cntr1, data->state->trip_start_cntr2,
+                                  data->state->trip_carry_cntr1, data->state->trip_carry_cntr2)
         : calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
-                                  data->state->total_start_cntr1, data->state->total_start_cntr2);
+                                  data->state->total_start_cntr1, data->state->total_start_cntr2,
+                                  data->state->total_carry_cntr1, data->state->total_carry_cntr2);
     return countsToCentimeters(counts, data->state->calibration);
 }
 
@@ -856,6 +858,7 @@ void on_next_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->state->segment_current_number++;
     data->state->segment_start_cntr1 = current_poll.cntr1;
     data->state->segment_start_cntr2 = current_poll.cntr2;
+    data->state->clearSegmentCarry();
     data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
     data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
     rebaseTripToSegment(*data->state, current_poll.cntr1, current_poll.cntr2);
@@ -884,7 +887,8 @@ void on_prev_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 // together -- and not just the odometer, which is all the raw counts show.
 int64_t stageCountsCorrected(AppData* data, const CounterPoll& poll) {
     int64_t raw = calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
-        data->state->total_start_cntr1, data->state->total_start_cntr2);
+        data->state->total_start_cntr1, data->state->total_start_cntr2,
+        data->state->total_carry_cntr1, data->state->total_carry_cntr2);
     // The whole correction belongs to this stage: the stage's own start zeroed
     // it along with the counters.
     return correctedDistanceCounts(raw, data->state->total_distance_adjust_cm,
@@ -893,7 +897,8 @@ int64_t stageCountsCorrected(AppData* data, const CounterPoll& poll) {
 
 int64_t segmentCountsCorrected(AppData* data, const CounterPoll& poll) {
     int64_t raw = calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
-        data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+        data->state->segment_start_cntr1, data->state->segment_start_cntr2,
+        data->state->segment_carry_cntr1, data->state->segment_carry_cntr2);
     // Only the correction made since this segment began: an earlier one
     // already moved the boundary it preceded.
     return correctedDistanceCounts(raw,
@@ -906,7 +911,27 @@ gboolean update_display(gpointer user_data) {
     
     // Poll counters (respects 5ms minimum interval)
     data->poller->poll(data->counter1, data->counter2, data->register_addr);
-    
+
+    // Keep last_cntr1/2 close to live on disk, so a crash or power cut to
+    // the Pi itself (not just a counter chip) still leaves a recent-enough
+    // "last seen" for the next startup's power-loss check. Throttled to
+    // once every 15 s of real change so this doesn't turn into a write on
+    // every ~5 ms poll tick.
+    {
+        auto recent = data->poller->getMostRecent();
+        if (recent.time_ms != 0) {
+            bool changed = data->state->last_cntr1 != recent.cntr1 ||
+                           data->state->last_cntr2 != recent.cntr2;
+            data->state->last_cntr1 = recent.cntr1;
+            data->state->last_cntr2 = recent.cntr2;
+            static int64_t last_persist_ms = 0;
+            if (changed && recent.time_ms - last_persist_ms >= 15000) {
+                ConfigFile::save(*data->state);
+                last_persist_ms = recent.time_ms;
+            }
+        }
+    }
+
     // The stage's own distance is what ends it. Once it is driven out the
     // roadbook stops being frozen, so the next edit or recall shows up
     // straight away -- the ahead/behind figure at the line is left alone
@@ -940,6 +965,7 @@ gboolean update_display(gpointer user_data) {
                     auto current_poll = data->poller->getMostRecent();
                     data->state->segment_start_cntr1 = current_poll.cntr1;
                     data->state->segment_start_cntr2 = current_poll.cntr2;
+                    data->state->clearSegmentCarry();
                     data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
                     data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
                     rebaseTripToSegment(*data->state, current_poll.cntr1, current_poll.cntr2);
@@ -1603,8 +1629,10 @@ void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
             
             int64_t total_count_diff = calculateDistanceCounts(*data->state,
                 current_poll.cntr1, current_poll.cntr2,
-                start_cntr1, start_cntr2);
-            
+                start_cntr1, start_cntr2,
+                data->cal_started ? 0 : data->state->total_carry_cntr1,
+                data->cal_started ? 0 : data->state->total_carry_cntr2);
+
             if (total_count_diff > 0) {
                 // new_cal = (input_meters * 1000 * 1000) / total_count_diff
                 data->state->calibration = (rally_distance_m * 1000000) / total_count_diff;
@@ -1699,7 +1727,8 @@ void on_alarm_set(GtkWidget* widget, gpointer user_data) {
     auto current_poll = data->poller->getMostRecent();
     int64_t total_counts = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
-        data->state->total_start_cntr1, data->state->total_start_cntr2);
+        data->state->total_start_cntr1, data->state->total_start_cntr2,
+        data->state->total_carry_cntr1, data->state->total_carry_cntr2);
     
     int64_t km_in_counts = static_cast<int64_t>((static_cast<double>(km) * 1000.0 * 1e6) / data->state->calibration);
     data->state->alarm_distance_km = km;

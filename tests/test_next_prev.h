@@ -278,6 +278,77 @@ public:
             return true;
         });
 
+        // RB-DEV-10. Every reset of a start-counter baseline must clear that
+        // baseline's carry, or a power loss from before the reset would keep
+        // padding the distance after it.
+        suite->addTest("rebaseTotalDistance clears both total and segment carry", []() {
+            RallyState state;
+            state.total_carry_cntr1 = 500;
+            state.total_carry_cntr2 = 700;
+            state.segment_carry_cntr1 = 300;
+            state.segment_carry_cntr2 = 400;
+            rebaseTotalDistance(state, 1000, 1000);
+            ASSERT_EQ(state.total_carry_cntr1, 0);
+            ASSERT_EQ(state.total_carry_cntr2, 0);
+            ASSERT_EQ(state.segment_carry_cntr1, 0);
+            ASSERT_EQ(state.segment_carry_cntr2, 0);
+            ASSERT_EQ(state.total_start_cntr1, 1000u);
+            ASSERT_EQ(state.segment_start_cntr1, 1000u);
+            return true;
+        });
+
+        suite->addTest("rebaseTripDistance clears trip carry only", []() {
+            RallyState state;
+            state.trip_carry_cntr1 = 200;
+            state.trip_carry_cntr2 = 300;
+            state.total_carry_cntr1 = 999;  // must survive: not this function's job
+            rebaseTripDistance(state, 2000, 2000);
+            ASSERT_EQ(state.trip_carry_cntr1, 0);
+            ASSERT_EQ(state.trip_carry_cntr2, 0);
+            ASSERT_EQ(state.total_carry_cntr1, 999);
+            return true;
+        });
+
+        suite->addTest("rebaseSegmentAt clears segment carry", []() {
+            RallyState state;
+            state.segment_carry_cntr1 = 150;
+            state.segment_carry_cntr2 = 250;
+            rebaseSegmentAt(state, 5000, 5000, 200);
+            ASSERT_EQ(state.segment_carry_cntr1, 0);
+            ASSERT_EQ(state.segment_carry_cntr2, 0);
+            return true;
+        });
+
+        suite->addTest("prev (undo) clears trip carry when it rebases Trip to the segment", []() {
+            RallyState state;
+            state.calibration = 600000;
+            state.counters = false;
+            state.stage_segments = roadbook();
+            state.total_start_time_ms = 1000;
+            state.segment_start_time_ms = 1000;
+            state.segment_current_number = 0;
+            recordSegmentChange(state, 0, false);
+            ASSERT_TRUE(retimeSegmentBoundaryForward(state.stage_segments, 0, 600,
+                                                     state.calibration));
+            state.segment_current_number = 1;
+            state.segment_start_time_ms = 601000;
+            state.trip_start_cntr1 = 900;
+            state.trip_start_cntr2 = 900;
+            state.trip_start_time_ms = 601000;
+            // A power loss happened during segment 1 and left a stale carry.
+            state.trip_carry_cntr1 = 400;
+            state.trip_carry_cntr2 = 400;
+            state.segment_carry_cntr1 = 300;
+            state.segment_carry_cntr2 = 300;
+
+            ASSERT_TRUE(undoSegmentChange(state, 800, 800, 800));
+            ASSERT_EQ(state.trip_carry_cntr1, 0);
+            ASSERT_EQ(state.trip_carry_cntr2, 0);
+            ASSERT_EQ(state.segment_carry_cntr1, 0);
+            ASSERT_EQ(state.segment_carry_cntr2, 0);
+            return true;
+        });
+
         return suite;
     }
 };

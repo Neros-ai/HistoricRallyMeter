@@ -7,10 +7,37 @@
 #include <utility>
 #include "rally_state.h"
 #include "rally_types.h"
+#include "i_counter.h"
 
-// Calculate distance in counts
+// Calculate distance in counts. carry1/carry2 are counts already covered on
+// a chip that lost power and had its count folded back in by
+// continueCountAfterPowerLoss(); both default to zero for the ordinary case.
 int64_t calculateDistanceCounts(const RallyState& state, uint64_t cntr1, uint64_t cntr2,
-                                  uint64_t start1, uint64_t start2);
+                                  uint64_t start1, uint64_t start2,
+                                  int64_t carry1 = 0, int64_t carry2 = 0);
+
+// A chip's count went back to zero after a power loss. Keep the distance
+// already covered (lastSeen - start, folded into carry) and continue
+// counting from the live value.
+void continueCountAfterPowerLoss(uint64_t live, uint64_t lastSeen,
+                                  uint64_t& start, int64_t& carry);
+
+// One chip. Leaves the chip's count mode alone -- these are pulse counters.
+// A power-loss flag this app has cleared before means the count went back to
+// zero: fold the distance already covered (live vs. the last count this app
+// saw) into each of the three carries and move that chip's three start
+// readings to the live count. A flag that has never been cleared is left
+// over from before this was tracked, not proof the count was just wiped, so
+// the start readings are left alone. Called once per chip at app startup
+// (main.cpp); also called directly by the Sim Control Panel's "Simulate
+// Power Loss" button (ui_control.cpp) so the recovery path can be exercised
+// without restarting the sandbox process, which would otherwise recreate a
+// fresh SimCounter and lose the simulated loss.
+void accountForChipPowerLoss(ICounter& counter, int chip_address, uint8_t register_addr,
+                              bool& plsCleared, uint64_t& last,
+                              uint64_t& totalStart, int64_t& totalCarry,
+                              uint64_t& tripStart, int64_t& tripCarry,
+                              uint64_t& segmentStart, int64_t& segmentCarry);
 
 // Convert counts to meters using calibration (high precision)
 double countsToMeters(int64_t counts, long calibration);
