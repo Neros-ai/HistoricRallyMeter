@@ -37,7 +37,8 @@ std::string buildTelemetryJson(AppData* data) {
 
     int64_t trip_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
-        data->state->trip_start_cntr1, data->state->trip_start_cntr2);
+        data->state->trip_start_cntr1, data->state->trip_start_cntr2,
+        data->state->trip_carry_cntr1, data->state->trip_carry_cntr2);
     long trip_m = adjustedDistanceMeters(
         countsToCentimeters(trip_count_diff, data->state->calibration),
         data->state->trip_distance_adjust_cm);
@@ -48,7 +49,8 @@ std::string buildTelemetryJson(AppData* data) {
 
     int64_t total_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
-        data->state->total_start_cntr1, data->state->total_start_cntr2);
+        data->state->total_start_cntr1, data->state->total_start_cntr2,
+        data->state->total_carry_cntr1, data->state->total_carry_cntr2);
     long total_m = adjustedDistanceMeters(
         countsToCentimeters(total_count_diff, data->state->calibration),
         data->state->total_distance_adjust_cm);
