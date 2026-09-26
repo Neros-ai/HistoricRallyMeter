@@ -403,6 +403,9 @@ void rebaseSegmentAt(RallyState& state, uint64_t c1, uint64_t c2,
     state.segment_start_cntr1 = c1 >= into ? c1 - into : 0;
     state.segment_start_cntr2 = c2 >= into ? c2 - into : 0;
     state.segment_start_adjust_cm = state.total_distance_adjust_cm;
+    // The new baseline is derived straight from the live counts, not from
+    // whatever carry described the segment being rebased away from.
+    state.clearSegmentCarry();
 }
 
 bool nextAvailable(const RallyState& state) {
@@ -467,6 +470,7 @@ bool undoSegmentChange(RallyState& state, uint64_t c1, uint64_t c2, int64_t stag
     state.trip_start_cntr2 = state.segment_start_cntr2;
     state.trip_start_time_ms = state.segment_start_time_ms;
     state.trip_distance_adjust_cm = 0;
+    state.clearTripCarry();
     state.undo_valid = false;   // once only
     return true;
 }
@@ -952,7 +956,8 @@ void rebaseTotalDistance(RallyState& state, uint64_t c1, uint64_t c2) {
     // given the same treatment; the alarm was missed.
     if (state.alarm_distance_km > 0) {
         const int64_t covered = calculateDistanceCounts(state, c1, c2,
-            state.total_start_cntr1, state.total_start_cntr2);
+            state.total_start_cntr1, state.total_start_cntr2,
+            state.total_carry_cntr1, state.total_carry_cntr2);
         state.alarm_target_counts -= covered;
         if (state.alarm_target_counts < 0) state.alarm_target_counts = 0;
     }
@@ -964,12 +969,17 @@ void rebaseTotalDistance(RallyState& state, uint64_t c1, uint64_t c2) {
     // Taken after the clear: the segment restarts against a correction of
     // zero like everything else re-based here.
     state.segment_start_adjust_cm = state.total_distance_adjust_cm;
+    // Both baselines just moved to c1/c2: any carry from a power loss before
+    // this reset described the old baseline and must not survive it.
+    state.clearTotalCarry();
+    state.clearSegmentCarry();
 }
 
 void rebaseTripDistance(RallyState& state, uint64_t c1, uint64_t c2) {
     state.trip_start_cntr1 = c1;
     state.trip_start_cntr2 = c2;
     state.trip_distance_adjust_cm = 0;
+    state.clearTripCarry();
 }
 
 void resetTrip(RallyState& state, uint64_t c1, uint64_t c2, int64_t now_ms) {
