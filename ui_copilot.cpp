@@ -1263,7 +1263,6 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     // Calibration is a rare, four-step procedure done at the roadside under
     // time pressure. Spelling the steps out costs six rows and saves a manual.
     const char* instructions[] = {
-        "INSTRUCTIONS:",
         "1. Press Start/Zero to reset counter to zero or skip to step 2 to use existing counters.",
         "2. Enter actual distance covered.",
         "3. Press Sensor button to select counter.",
@@ -1271,17 +1270,18 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     };
     // The instructions sit at the foot of the column rather than a fixed
     // distance under the rows above: whatever height is spare becomes the gap
-    // above INSTRUCTIONS, and the last line's foot is the column's foot --
+    // above step 1, and the last line's foot is the column's foot --
     // level with the Prop/Wheel RPM reading, which sits at the foot of the
     // keypad's column.
     GtkWidget* instrBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_widget_set_margin_bottom(instrBox, 8);  // half a line up (16px font)
     gtk_box_pack_end(GTK_BOX(leftBox), instrBox, FALSE, FALSE, 0);
     GtkWidget* lastInstructionRow = nullptr;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 4; i++) {
         GtkWidget* lbl = gtk_label_new(instructions[i]);
         gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "instruction-label");
         gtk_widget_set_halign(lbl, GTK_ALIGN_START);
-        if (i == 4) {
+        if (i == 3) {
             lastInstructionRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
             gtk_box_pack_start(GTK_BOX(lastInstructionRow), lbl, FALSE, FALSE, 0);
             gtk_box_pack_start(GTK_BOX(instrBox), lastInstructionRow, FALSE, FALSE, 0);
@@ -1341,6 +1341,7 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     // instruction line (the instructions are at the foot of theirs).
     GtkWidget* rpmRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_widget_set_halign(rpmRow, GTK_ALIGN_END);
+    gtk_widget_set_margin_bottom(rpmRow, 8);  // half a line up, level with instructions
     gtk_box_pack_end(GTK_BOX(rightCol), rpmRow, FALSE, FALSE, 0);
     data->propRpmLabel = GTK_LABEL(gtk_label_new(NULL));
     gtk_label_set_markup(data->propRpmLabel, "<span foreground=\"#FFDD00\">---</span>");
