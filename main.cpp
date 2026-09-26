@@ -337,12 +337,19 @@ int main(int argc, char* argv[]) {
         const int CNTR_2_ADDRESS = 0x71;
         const uint8_t REGISTER = 0x07;
         
-        // Suppresses squeekboard auto-popup: any GTK text entry taking focus
-        // makes GTK announce an active input method over Wayland text-input,
-        // and squeekboard shows itself on that signal unconditionally (no
-        // persistent "stay hidden" state). Rallybox has its own on-screen
-        // keypad and never needs squeekboard. Set before gtk_init() so GTK's
-        // input-method module never activates in the first place.
+        // Suppresses squeekboard auto-popup. squeekboard shows itself
+        // whenever any GTK text entry announces an active input method over
+        // the Wayland text-input protocol, with no persistent "stay hidden"
+        // state -- Rallybox has its own on-screen keypad and never needs it.
+        // GTK_IM_MODULE=simple alone does not stop this: GTK3's Wayland
+        // backend instantiates its own text-input-aware context directly,
+        // bypassing the IM-module chooser that env var controls. Forcing
+        // GDK_BACKEND=x11 runs Rallybox as an XWayland client instead, which
+        // does not speak the Wayland text-input protocol at all, so
+        // squeekboard never sees an announcement to react to -- confirmed
+        // live on the box (RM03): keyboard suppressed, layout unaffected.
+        // Set before gtk_init() so GDK picks the backend on startup.
+        setenv("GDK_BACKEND", "x11", 1);
         setenv("GTK_IM_MODULE", "simple", 1);
 
         std::cerr << "[DEBUG] Step 1: calling gtk_init..." << std::endl;
