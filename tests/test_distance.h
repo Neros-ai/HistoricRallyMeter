@@ -138,7 +138,7 @@ public:
             
             return true;
         });
-        
+
         suite->addTest("groups a distance with thousands separators", []() {
             ASSERT_EQ(formatDistanceGrouped(27477), "27,477");
             ASSERT_EQ(formatDistanceGrouped(143), "143");
@@ -179,6 +179,72 @@ public:
             std::string s = formatDistanceAutoUnit(-1000000, &unit);
             ASSERT_STR_EQ(std::string(unit), "km");
             ASSERT_EQ(s, "-1,000");
+            return true;
+        });
+
+        suite->addTest("continueCountAfterPowerLoss carries the distance already covered", []() {
+            uint64_t start = 1000;
+            int64_t carry = 0;
+            // Chip was at 5000 when last seen, has gone back to zero and is
+            // now reading 10 live: the 4000 counts between start (1000) and
+            // last-seen (5000) must not be lost.
+            continueCountAfterPowerLoss(10, 5000, start, carry);
+            ASSERT_EQ(start, 10u);
+            ASSERT_EQ(carry, 4000);
+            return true;
+        });
+
+        suite->addTest("calculateDistanceCounts adds the carry to the raw delta", []() {
+            RallyState state;
+            state.counters = false;  // single gearbox counter
+            int64_t distance = calculateDistanceCounts(state, 30, 0, 10, 0, 4000, 0);
+            // 20 new counts since the post-loss start, plus the 4000 carried.
+            ASSERT_EQ(distance, 4020);
+            return true;
+        });
+
+        suite->addTest("calculateDistanceCounts averages both counters' carries in two-wheel mode", []() {
+            RallyState state;
+            state.counters = true;  // two-wheel average
+            // Counter 1: 20 new + 4000 carried = 4020. Counter 2: 40 new + 2000
+            // carried = 2040. Average = 3030.
+            int64_t distance = calculateDistanceCounts(state, 30, 60, 10, 20, 4000, 2000);
+            ASSERT_EQ(distance, 3030);
+            return true;
+        });
+
+        suite->addTest("a fresh RallyState has no carry and no cleared power-loss flags", []() {
+            RallyState state;
+            ASSERT_EQ(state.total_carry_cntr1, 0);
+            ASSERT_EQ(state.total_carry_cntr2, 0);
+            ASSERT_EQ(state.trip_carry_cntr1, 0);
+            ASSERT_EQ(state.trip_carry_cntr2, 0);
+            ASSERT_EQ(state.segment_carry_cntr1, 0);
+            ASSERT_EQ(state.segment_carry_cntr2, 0);
+            ASSERT_EQ(state.last_cntr1, 0u);
+            ASSERT_EQ(state.last_cntr2, 0u);
+            ASSERT_FALSE(state.cntr1_pls_cleared);
+            ASSERT_FALSE(state.cntr2_pls_cleared);
+            return true;
+        });
+
+        suite->addTest("clearTotalCarry/clearTripCarry/clearSegmentCarry each zero their own pair only", []() {
+            RallyState state;
+            state.total_carry_cntr1 = 10; state.total_carry_cntr2 = 20;
+            state.trip_carry_cntr1 = 30; state.trip_carry_cntr2 = 40;
+            state.segment_carry_cntr1 = 50; state.segment_carry_cntr2 = 60;
+            state.clearTotalCarry();
+            ASSERT_EQ(state.total_carry_cntr1, 0);
+            ASSERT_EQ(state.total_carry_cntr2, 0);
+            ASSERT_EQ(state.trip_carry_cntr1, 30);
+            ASSERT_EQ(state.segment_carry_cntr1, 50);
+            state.clearTripCarry();
+            ASSERT_EQ(state.trip_carry_cntr1, 0);
+            ASSERT_EQ(state.trip_carry_cntr2, 0);
+            ASSERT_EQ(state.segment_carry_cntr1, 50);
+            state.clearSegmentCarry();
+            ASSERT_EQ(state.segment_carry_cntr1, 0);
+            ASSERT_EQ(state.segment_carry_cntr2, 0);
             return true;
         });
 

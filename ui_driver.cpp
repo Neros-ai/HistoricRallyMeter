@@ -588,9 +588,10 @@ void updateDriverDisplay(AppData* data) {
     gtk_label_set_text(data->currentSpeedLabel, ss.str().c_str());
     
     // Trip average speed
-    int64_t trip_count_diff = calculateDistanceCounts(*data->state, 
+    int64_t trip_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
-        data->state->trip_start_cntr1, data->state->trip_start_cntr2);
+        data->state->trip_start_cntr1, data->state->trip_start_cntr2,
+        data->state->trip_carry_cntr1, data->state->trip_carry_cntr2);
     double trip_speed = calculateAverageSpeed(*data->state,
         data->state->trip_start_time_ms, current_time_ms, trip_count_diff,
         data->state->trip_distance_adjust_cm);
@@ -602,7 +603,8 @@ void updateDriverDisplay(AppData* data) {
     // Total average speed
     int64_t total_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
-        data->state->total_start_cntr1, data->state->total_start_cntr2);
+        data->state->total_start_cntr1, data->state->total_start_cntr2,
+        data->state->total_carry_cntr1, data->state->total_carry_cntr2);
     double total_speed = calculateAverageSpeed(*data->state,
         data->state->total_start_time_ms, current_time_ms, total_count_diff,
         data->state->total_distance_adjust_cm);

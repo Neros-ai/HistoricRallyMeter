@@ -51,3 +51,17 @@ void SimCounter::setPaused(bool paused_) {
     start_ms = now_ms();
     paused = paused_;
 }
+
+void SimCounter::simulatePowerLoss() {
+    start_count = 0;
+    start_ms = now_ms();
+    pending_power_loss = true;
+}
+
+bool SimCounter::powerLost() {
+    return pending_power_loss;
+}
+
+void SimCounter::clearPowerLoss() {
+    pending_power_loss = false;
+}
