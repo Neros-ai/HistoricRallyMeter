@@ -8,9 +8,18 @@
 #include "rally_state.h"
 #include "rally_types.h"
 
-// Calculate distance in counts
+// Calculate distance in counts. carry1/carry2 are counts already covered on
+// a chip that lost power and had its count folded back in by
+// continueCountAfterPowerLoss(); both default to zero for the ordinary case.
 int64_t calculateDistanceCounts(const RallyState& state, uint64_t cntr1, uint64_t cntr2,
-                                  uint64_t start1, uint64_t start2);
+                                  uint64_t start1, uint64_t start2,
+                                  int64_t carry1 = 0, int64_t carry2 = 0);
+
+// A chip's count went back to zero after a power loss. Keep the distance
+// already covered (lastSeen - start, folded into carry) and continue
+// counting from the live value.
+void continueCountAfterPowerLoss(uint64_t live, uint64_t lastSeen,
+                                  uint64_t& start, int64_t& carry);
 
 // Convert counts to meters using calibration (high precision)
 double countsToMeters(int64_t counts, long calibration);

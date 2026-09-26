@@ -11,17 +11,24 @@
 #include <stdexcept>
 
 int64_t calculateDistanceCounts(const RallyState& state, uint64_t cntr1, uint64_t cntr2,
-                                  uint64_t start1, uint64_t start2) {
-    int64_t delta1 = static_cast<int64_t>(cntr1) - static_cast<int64_t>(start1);
-    
+                                  uint64_t start1, uint64_t start2,
+                                  int64_t carry1, int64_t carry2) {
+    int64_t delta1 = static_cast<int64_t>(cntr1) - static_cast<int64_t>(start1) + carry1;
+
     if (state.counters) {
         // Two wheel: average
-        int64_t delta2 = static_cast<int64_t>(cntr2) - static_cast<int64_t>(start2);
+        int64_t delta2 = static_cast<int64_t>(cntr2) - static_cast<int64_t>(start2) + carry2;
         return (delta1 + delta2) / 2;
     } else {
         // One gearbox: just CNTR_1
         return delta1;
     }
+}
+
+void continueCountAfterPowerLoss(uint64_t live, uint64_t lastSeen,
+                                  uint64_t& start, int64_t& carry) {
+    carry += static_cast<int64_t>(lastSeen) - static_cast<int64_t>(start);
+    start = live;
 }
 
 // High precision: counts to meters
