@@ -18,6 +18,8 @@
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <net/if.h>
 
 struct WsClient {
     int fd = -1;
@@ -318,26 +320,33 @@ static gboolean onListen(GIOChannel*, GIOCondition, gpointer user_data) {
 }
 
 static std::string detectLanIp() {
-    int fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (fd < 0) return "127.0.0.1";
-    sockaddr_in remote{};
-    remote.sin_family = AF_INET;
-    remote.sin_port = htons(80);
-    inet_pton(AF_INET, "8.8.8.8", &remote.sin_addr);
-    if (connect(fd, reinterpret_cast<sockaddr*>(&remote), sizeof(remote)) < 0) {
-        close(fd);
-        return "127.0.0.1";
+    // Reads interface addresses directly rather than probing for a default
+    // route: the box's own hotspot has no upstream internet, so a
+    // route-based lookup (connect-to-8.8.8.8 trick) finds no default route
+    // and always falls back to 127.0.0.1 while acting as an AP.
+    struct ifaddrs* ifaddr = nullptr;
+    if (getifaddrs(&ifaddr) != 0) return "127.0.0.1";
+
+    std::string result = "127.0.0.1";
+    for (struct ifaddrs* ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next) {
+        if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET) continue;
+        if (!(ifa->ifa_flags & IFF_UP) || (ifa->ifa_flags & IFF_LOOPBACK)) continue;
+
+        char ip[INET_ADDRSTRLEN];
+        auto* sin = reinterpret_cast<sockaddr_in*>(ifa->ifa_addr);
+        inet_ntop(AF_INET, &sin->sin_addr, ip, sizeof(ip));
+        std::string name = ifa->ifa_name;
+
+        if (name.rfind("wlan", 0) == 0) {
+            freeifaddrs(ifaddr);
+            return ip;
+        }
+        if (result == "127.0.0.1") {
+            result = ip;
+        }
     }
-    sockaddr_in local{};
-    socklen_t len = sizeof(local);
-    if (getsockname(fd, reinterpret_cast<sockaddr*>(&local), &len) < 0) {
-        close(fd);
-        return "127.0.0.1";
-    }
-    close(fd);
-    char ip[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &local.sin_addr, ip, sizeof(ip));
-    return ip;
+    freeifaddrs(ifaddr);
+    return result;
 }
 
 } // namespace
