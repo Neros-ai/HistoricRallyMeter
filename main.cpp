@@ -330,30 +330,6 @@ static std::unique_ptr<ICounter> makeCounter(int bus, int address) {
 // chip's three start readings to the live count. A flag that has never been
 // cleared is left over from before this was tracked, not proof the count was
 // just wiped, so the start readings are left alone.
-static void accountForChipPowerLoss(ICounter& counter, int chip_address, uint8_t register_addr,
-                                     bool& plsCleared, uint64_t& last,
-                                     uint64_t& totalStart, int64_t& totalCarry,
-                                     uint64_t& tripStart, int64_t& tripCarry,
-                                     uint64_t& segmentStart, int64_t& segmentCarry) {
-    uint32_t live = counter.readRegister(register_addr);
-    bool lost = counter.powerLost();
-    if (lost && plsCleared) {
-        std::cerr << "Counter 0x" << std::hex << chip_address << std::dec
-                  << " lost power. Last count " << last << ", live count " << live << std::endl;
-        continueCountAfterPowerLoss(live, last, totalStart, totalCarry);
-        continueCountAfterPowerLoss(live, last, tripStart, tripCarry);
-        continueCountAfterPowerLoss(live, last, segmentStart, segmentCarry);
-    } else if (lost) {
-        std::cerr << "Counter 0x" << std::hex << chip_address << std::dec
-                  << " power-loss flag was already set. Start readings left unchanged." << std::endl;
-    }
-    if (lost) {
-        counter.clearPowerLoss();
-        plsCleared = true;
-    }
-    last = live;
-}
-
 int main(int argc, char* argv[]) {
     try {
         const int I2C_BUS = 1;

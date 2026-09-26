@@ -2,8 +2,10 @@
 #include "sim_counter.h"
 #include "rally_state.h"
 #include "calculations.h"
+#include "config_file.h"
 #include <sstream>
 #include <cstdlib>
+#include <iostream>
 
 // Convert a target speed in km/h to counts/second using the rally's
 // calibration (mm per 1000 counts), matching the conversion used everywhere
@@ -63,6 +65,55 @@ static void on_control_stop_clicked(GtkWidget*, gpointer user_data) {
     updateControlDisplay(data);
 }
 
+// RB-DEV-10 sandbox aid. A real power loss stops the chip counting for
+// however long the blip lasts -- that stretch of distance is genuinely
+// gone, never recoverable, since no pulses were ever captured. To show that
+// honestly rather than an instant, gapless swap, this pauses both sim
+// counters (frozen register, Current speed reads 0, Total/Trip hold still)
+// for POWER_LOSS_OUTAGE_MS, then resets them to zero and runs the same
+// recovery main() runs at startup, right away -- reload.sh would recreate a
+// fresh SimCounter from scratch and lose the simulated loss entirely, so
+// this cannot wait for a restart the way real hardware would. The first
+// time this ever fires on a given saved state, cntr*_pls_cleared is still
+// false (no loss has ever been recorded), so that click only clears the
+// flag with nothing to carry -- exactly the "flag left over from before
+// this was tracked" case accountForChipPowerLoss itself documents. Every
+// click after that folds the distance covered before the outage in.
+static const guint POWER_LOSS_OUTAGE_MS = 2000;
+
+static void recoverFromSimulatedPowerLoss(AppData* data) {
+    const uint8_t REGISTER = 0x07;
+    if (data->simCounter1) {
+        data->simCounter1->simulatePowerLoss();
+        data->simCounter1->setPaused(false);
+        accountForChipPowerLoss(*data->simCounter1, 0x70, REGISTER,
+            data->state->cntr1_pls_cleared, data->state->last_cntr1,
+            data->state->total_start_cntr1, data->state->total_carry_cntr1,
+            data->state->trip_start_cntr1, data->state->trip_carry_cntr1,
+            data->state->segment_start_cntr1, data->state->segment_carry_cntr1);
+    }
+    if (data->simCounter2) {
+        data->simCounter2->simulatePowerLoss();
+        data->simCounter2->setPaused(false);
+        accountForChipPowerLoss(*data->simCounter2, 0x71, REGISTER,
+            data->state->cntr2_pls_cleared, data->state->last_cntr2,
+            data->state->total_start_cntr2, data->state->total_carry_cntr2,
+            data->state->trip_start_cntr2, data->state->trip_carry_cntr2,
+            data->state->segment_start_cntr2, data->state->segment_carry_cntr2);
+    }
+    ConfigFile::save(*data->state);
+}
+
+static void on_control_power_loss_clicked(GtkWidget*, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (data->simCounter1) data->simCounter1->setPaused(true);
+    if (data->simCounter2) data->simCounter2->setPaused(true);
+    g_timeout_add(POWER_LOSS_OUTAGE_MS, [](gpointer d) -> gboolean {
+        recoverFromSimulatedPowerLoss(static_cast<AppData*>(d));
+        return G_SOURCE_REMOVE;
+    }, data);
+}
+
 // Apply CSS styling: a green panel, matching the box's bold-white-label
 // convention used by ui_copilot.cpp / ui_driver.cpp.
 static void applyControlCSS() {
@@ -77,6 +128,8 @@ static void applyControlCSS() {
         "window.control-window button.active-speed { background-color: #FFFFFF; color: #1B5E20; background-image: none; }"
         "window.control-window button.control-start-button { border-color: #76FF03; }"
         "window.control-window button.control-stop-button { background-color: #B71C1C; background-image: none; }"
+        "window.control-window button.control-power-loss-button { background-color: #E65100; "
+        "font-size: 16px; background-image: none; }"
         "window.control-window .beep-flash { font-size: 22px; background-color: #FFEB3B; "
         "color: #000000; padding: 6px; }",
         -1, NULL);
@@ -92,7 +145,7 @@ GtkWidget* createControlWindow(AppData* data) {
 
     GtkWidget* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "Control Panel");
-    gtk_window_set_default_size(GTK_WINDOW(window), 480, 400);
+    gtk_window_set_default_size(GTK_WINDOW(window), 480, 445);
     gtk_style_context_add_class(gtk_widget_get_style_context(window), "control-window");
     // Closing this window must not quit the app (driver/copilot are the
     // primary windows) — just hide it.
@@ -147,6 +200,14 @@ GtkWidget* createControlWindow(AppData* data) {
     g_object_set_data(G_OBJECT(data->controlStopBtn), "no_click_beep", GINT_TO_POINTER(1));
     g_signal_connect(data->controlStopBtn, "clicked", G_CALLBACK(on_control_stop_clicked), data);
     gtk_box_pack_start(GTK_BOX(hbox), data->controlStopBtn, TRUE, TRUE, 0);
+
+    // RB-DEV-10 sandbox aid, separate from the drive controls above.
+    GtkWidget* powerLossBtn = gtk_button_new_with_label("Simulate Power Loss (2s outage)");
+    gtk_style_context_add_class(gtk_widget_get_style_context(powerLossBtn), "control-power-loss-button");
+    gtk_widget_set_size_request(powerLossBtn, -1, 40);
+    g_object_set_data(G_OBJECT(powerLossBtn), "no_click_beep", GINT_TO_POINTER(1));
+    g_signal_connect(powerLossBtn, "clicked", G_CALLBACK(on_control_power_loss_clicked), data);
+    gtk_box_pack_start(GTK_BOX(vbox), powerLossBtn, FALSE, FALSE, 0);
 
     // Stands in for the beep sound, which the sandbox can't play (no ALSA
     // device) -- blank until a navigation/timing beep fires, then flashes.

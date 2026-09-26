@@ -5,6 +5,7 @@
 #include <ctime>
 #include <chrono>
 #include <iomanip>
+#include <iostream>
 #include <sstream>
 #include <algorithm>
 #include <vector>
@@ -29,6 +30,30 @@ void continueCountAfterPowerLoss(uint64_t live, uint64_t lastSeen,
                                   uint64_t& start, int64_t& carry) {
     carry += static_cast<int64_t>(lastSeen) - static_cast<int64_t>(start);
     start = live;
+}
+
+void accountForChipPowerLoss(ICounter& counter, int chip_address, uint8_t register_addr,
+                              bool& plsCleared, uint64_t& last,
+                              uint64_t& totalStart, int64_t& totalCarry,
+                              uint64_t& tripStart, int64_t& tripCarry,
+                              uint64_t& segmentStart, int64_t& segmentCarry) {
+    uint32_t live = counter.readRegister(register_addr);
+    bool lost = counter.powerLost();
+    if (lost && plsCleared) {
+        std::cerr << "Counter 0x" << std::hex << chip_address << std::dec
+                  << " lost power. Last count " << last << ", live count " << live << std::endl;
+        continueCountAfterPowerLoss(live, last, totalStart, totalCarry);
+        continueCountAfterPowerLoss(live, last, tripStart, tripCarry);
+        continueCountAfterPowerLoss(live, last, segmentStart, segmentCarry);
+    } else if (lost) {
+        std::cerr << "Counter 0x" << std::hex << chip_address << std::dec
+                  << " power-loss flag was already set. Start readings left unchanged." << std::endl;
+    }
+    if (lost) {
+        counter.clearPowerLoss();
+        plsCleared = true;
+    }
+    last = live;
 }
 
 // High precision: counts to meters

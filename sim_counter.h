@@ -17,6 +17,7 @@ private:
     std::function<int64_t()> now_ms;
     int64_t start_ms;
     bool paused = false;
+    bool pending_power_loss = false;
 
 public:
     // now_ms_fn returns a monotonic timestamp in milliseconds. Defaults to a
@@ -36,6 +37,15 @@ public:
     void setPaused(bool paused_);
 
     bool isPaused() const { return paused; }
+
+    // Dev/sandbox only: mimic the LS7866C's own power-loss behaviour --
+    // CNTR goes back to zero (counting continues from there) and the
+    // power-loss flag reads set until accountForChipPowerLoss() next clears
+    // it (at the app's next startup, same as real hardware). Rate and pause
+    // state are left alone: a power blip doesn't stop the simulated car.
+    void simulatePowerLoss();
+    bool powerLost() override;
+    void clearPowerLoss() override;
 
     static int64_t monotonicNowMs();
 };
