@@ -282,6 +282,14 @@ int main(int argc, char* argv[]) {
         const int CNTR_2_ADDRESS = 0x71;
         const uint8_t REGISTER = 0x07;
         
+        // Suppresses squeekboard auto-popup: any GTK text entry taking focus
+        // makes GTK announce an active input method over Wayland text-input,
+        // and squeekboard shows itself on that signal unconditionally (no
+        // persistent "stay hidden" state). Rallybox has its own on-screen
+        // keypad and never needs squeekboard. Set before gtk_init() so GTK's
+        // input-method module never activates in the first place.
+        setenv("GTK_IM_MODULE", "simple", 1);
+
         std::cerr << "[DEBUG] Step 1: calling gtk_init..." << std::endl;
         gtk_init(&argc, &argv);
         std::cerr << "[DEBUG] Step 1: gtk_init OK" << std::endl;
