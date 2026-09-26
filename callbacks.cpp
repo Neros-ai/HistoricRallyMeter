@@ -911,7 +911,27 @@ gboolean update_display(gpointer user_data) {
     
     // Poll counters (respects 5ms minimum interval)
     data->poller->poll(data->counter1, data->counter2, data->register_addr);
-    
+
+    // Keep last_cntr1/2 close to live on disk, so a crash or power cut to
+    // the Pi itself (not just a counter chip) still leaves a recent-enough
+    // "last seen" for the next startup's power-loss check. Throttled to
+    // once every 15 s of real change so this doesn't turn into a write on
+    // every ~5 ms poll tick.
+    {
+        auto recent = data->poller->getMostRecent();
+        if (recent.time_ms != 0) {
+            bool changed = data->state->last_cntr1 != recent.cntr1 ||
+                           data->state->last_cntr2 != recent.cntr2;
+            data->state->last_cntr1 = recent.cntr1;
+            data->state->last_cntr2 = recent.cntr2;
+            static int64_t last_persist_ms = 0;
+            if (changed && recent.time_ms - last_persist_ms >= 15000) {
+                ConfigFile::save(*data->state);
+                last_persist_ms = recent.time_ms;
+            }
+        }
+    }
+
     // The stage's own distance is what ends it. Once it is driven out the
     // roadbook stops being frozen, so the next edit or recall shows up
     // straight away -- the ahead/behind figure at the line is left alone
