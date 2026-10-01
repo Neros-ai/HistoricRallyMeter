@@ -4,7 +4,19 @@
 #include "test_framework.h"
 #include "../calculations.h"
 #include "../rally_state.h"
+#include "../i_counter.h"
 #include <string>
+
+// A counter chip with a settable live count and power-loss flag, for
+// handleCounterPowerLoss.
+struct FakePowerLossCounter : public ICounter {
+    uint32_t count;
+    bool lost;
+    FakePowerLossCounter(uint32_t c, bool l) : count(c), lost(l) {}
+    uint32_t readRegister(uint8_t) override { return count; }
+    bool powerLost() override { return lost; }
+    void clearPowerLoss() override { lost = false; }
+};
 
 class TestDistance {
 public:
@@ -182,69 +194,84 @@ public:
             return true;
         });
 
-        suite->addTest("continueCountAfterPowerLoss carries the distance already covered", []() {
-            uint64_t start = 1000;
-            int64_t carry = 0;
-            // Chip was at 5000 when last seen, has gone back to zero and is
-            // now reading 10 live: the 4000 counts between start (1000) and
-            // last-seen (5000) must not be lost.
-            continueCountAfterPowerLoss(10, 5000, start, carry);
-            ASSERT_EQ(start, 10u);
-            ASSERT_EQ(carry, 4000);
+        suite->addTest("Counter power loss restarts total, trip and segment from live counts", []() {
+            RallyState state;
+            state.counters = true;
+            state.total_start_cntr1 = 1000; state.total_start_cntr2 = 2000;
+            state.trip_start_cntr1 = 3000;  state.trip_start_cntr2 = 4000;
+            state.segment_start_cntr1 = 5000; state.segment_start_cntr2 = 6000;
+            state.total_start_time_ms = 1; state.trip_start_time_ms = 2; state.segment_start_time_ms = 3;
+            state.segment_current_number = 2;
+            state.alarm_distance_km = 5;
+            state.alarm_target_counts = 99999;
+            state.total_distance_adjust_cm = 150;
+            state.trip_distance_adjust_cm = -70;
+            state.segment_start_adjust_cm = 40;
+            state.stage_complete = false;
+            state.undo_valid = true;
+
+            // The chips restarted from zero and have counted a few pulses since
+            restartDistancesAfterPowerLoss(state, 12, 14, 777000);
+
+            ASSERT_EQ(state.total_start_cntr1, 12u);   ASSERT_EQ(state.total_start_cntr2, 14u);
+            ASSERT_EQ(state.trip_start_cntr1, 12u);    ASSERT_EQ(state.trip_start_cntr2, 14u);
+            ASSERT_EQ(state.segment_start_cntr1, 12u); ASSERT_EQ(state.segment_start_cntr2, 14u);
+            ASSERT_EQ(state.total_start_time_ms, 777000);
+            ASSERT_EQ(state.trip_start_time_ms, 777000);
+            ASSERT_EQ(state.segment_start_time_ms, 777000);
+            ASSERT_EQ(state.segment_current_number, -1);
+            ASSERT_EQ(state.alarm_distance_km, 0);
+            ASSERT_EQ(state.alarm_target_counts, 0);
+            ASSERT_EQ(state.total_distance_adjust_cm, 0);
+            ASSERT_EQ(state.trip_distance_adjust_cm, 0);
+            ASSERT_EQ(state.segment_start_adjust_cm, 0);
+            ASSERT_TRUE(state.stage_complete);
+            ASSERT_FALSE(state.undo_valid);
+
+            // Distance is zero at the restart and counts up from there
+            ASSERT_EQ(calculateDistanceCounts(state, 12, 14, state.total_start_cntr1, state.total_start_cntr2), 0);
+            ASSERT_EQ(calculateDistanceCounts(state, 32, 34, state.total_start_cntr1, state.total_start_cntr2), 20);
             return true;
         });
 
-        suite->addTest("calculateDistanceCounts adds the carry to the raw delta", []() {
+        suite->addTest("handleCounterPowerLoss leaves everything alone when neither flag is set", []() {
+            FakePowerLossCounter c1(500, false), c2(600, false);
             RallyState state;
-            state.counters = false;  // single gearbox counter
-            int64_t distance = calculateDistanceCounts(state, 30, 0, 10, 0, 4000, 0);
-            // 20 new counts since the post-loss start, plus the 4000 carried.
-            ASSERT_EQ(distance, 4020);
+            state.total_start_cntr1 = 100; state.total_start_cntr2 = 200;
+            state.segment_current_number = 1;
+            int saves = 0;
+            bool restarted = handleCounterPowerLoss(c1, c2, 0x07, state, 5000,
+                [&](const RallyState&) { saves++; });
+            ASSERT_FALSE(restarted);
+            ASSERT_EQ(saves, 0);
+            ASSERT_EQ(state.total_start_cntr1, 100u);
+            ASSERT_EQ(state.segment_current_number, 1);
             return true;
         });
 
-        suite->addTest("calculateDistanceCounts averages both counters' carries in two-wheel mode", []() {
+        suite->addTest("handleCounterPowerLoss restarts on either flag, saves, then clears it", []() {
+            FakePowerLossCounter c1(500, false), c2(7, true);
             RallyState state;
-            state.counters = true;  // two-wheel average
-            // Counter 1: 20 new + 4000 carried = 4020. Counter 2: 40 new + 2000
-            // carried = 2040. Average = 3030.
-            int64_t distance = calculateDistanceCounts(state, 30, 60, 10, 20, 4000, 2000);
-            ASSERT_EQ(distance, 3030);
-            return true;
-        });
-
-        suite->addTest("a fresh RallyState has no carry and no cleared power-loss flags", []() {
-            RallyState state;
-            ASSERT_EQ(state.total_carry_cntr1, 0);
-            ASSERT_EQ(state.total_carry_cntr2, 0);
-            ASSERT_EQ(state.trip_carry_cntr1, 0);
-            ASSERT_EQ(state.trip_carry_cntr2, 0);
-            ASSERT_EQ(state.segment_carry_cntr1, 0);
-            ASSERT_EQ(state.segment_carry_cntr2, 0);
-            ASSERT_EQ(state.last_cntr1, 0u);
-            ASSERT_EQ(state.last_cntr2, 0u);
-            ASSERT_FALSE(state.cntr1_pls_cleared);
-            ASSERT_FALSE(state.cntr2_pls_cleared);
-            return true;
-        });
-
-        suite->addTest("clearTotalCarry/clearTripCarry/clearSegmentCarry each zero their own pair only", []() {
-            RallyState state;
-            state.total_carry_cntr1 = 10; state.total_carry_cntr2 = 20;
-            state.trip_carry_cntr1 = 30; state.trip_carry_cntr2 = 40;
-            state.segment_carry_cntr1 = 50; state.segment_carry_cntr2 = 60;
-            state.clearTotalCarry();
-            ASSERT_EQ(state.total_carry_cntr1, 0);
-            ASSERT_EQ(state.total_carry_cntr2, 0);
-            ASSERT_EQ(state.trip_carry_cntr1, 30);
-            ASSERT_EQ(state.segment_carry_cntr1, 50);
-            state.clearTripCarry();
-            ASSERT_EQ(state.trip_carry_cntr1, 0);
-            ASSERT_EQ(state.trip_carry_cntr2, 0);
-            ASSERT_EQ(state.segment_carry_cntr1, 50);
-            state.clearSegmentCarry();
-            ASSERT_EQ(state.segment_carry_cntr1, 0);
-            ASSERT_EQ(state.segment_carry_cntr2, 0);
+            state.total_start_cntr1 = 100; state.total_start_cntr2 = 200;
+            state.segment_current_number = 1;
+            int saves = 0;
+            bool flag_still_set_at_save = false;
+            uint64_t saved_start2 = 0;
+            bool restarted = handleCounterPowerLoss(c1, c2, 0x07, state, 5000,
+                [&](const RallyState& s) {
+                    saves++;
+                    flag_still_set_at_save = c2.lost;
+                    saved_start2 = s.total_start_cntr2;
+                });
+            ASSERT_TRUE(restarted);
+            ASSERT_EQ(saves, 1);
+            ASSERT_TRUE(flag_still_set_at_save);   // saved before the flag was cleared
+            ASSERT_EQ(saved_start2, 7u);           // and what was saved is the restart
+            ASSERT_FALSE(c2.lost);
+            ASSERT_EQ(state.total_start_cntr1, 500u);
+            ASSERT_EQ(state.total_start_cntr2, 7u);
+            ASSERT_EQ(state.total_start_time_ms, 5000);
+            ASSERT_EQ(state.segment_current_number, -1);
             return true;
         });
 

@@ -40,7 +40,7 @@ public:
 
     // Dev/sandbox only: mimic the LS7866C's own power-loss behaviour --
     // CNTR goes back to zero (counting continues from there) and the
-    // power-loss flag reads set until accountForChipPowerLoss() next clears
+    // power-loss flag reads set until handleCounterPowerLoss() next clears
     // it (at the app's next startup, same as real hardware). Rate and pause
     // state are left alone: a power blip doesn't stop the simulated car.
     void simulatePowerLoss();

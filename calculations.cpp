@@ -12,13 +12,12 @@
 #include <stdexcept>
 
 int64_t calculateDistanceCounts(const RallyState& state, uint64_t cntr1, uint64_t cntr2,
-                                  uint64_t start1, uint64_t start2,
-                                  int64_t carry1, int64_t carry2) {
-    int64_t delta1 = static_cast<int64_t>(cntr1) - static_cast<int64_t>(start1) + carry1;
+                                  uint64_t start1, uint64_t start2) {
+    int64_t delta1 = static_cast<int64_t>(cntr1) - static_cast<int64_t>(start1);
 
     if (state.counters) {
         // Two wheel: average
-        int64_t delta2 = static_cast<int64_t>(cntr2) - static_cast<int64_t>(start2) + carry2;
+        int64_t delta2 = static_cast<int64_t>(cntr2) - static_cast<int64_t>(start2);
         return (delta1 + delta2) / 2;
     } else {
         // One gearbox: just CNTR_1
@@ -26,34 +25,48 @@ int64_t calculateDistanceCounts(const RallyState& state, uint64_t cntr1, uint64_
     }
 }
 
-void continueCountAfterPowerLoss(uint64_t live, uint64_t lastSeen,
-                                  uint64_t& start, int64_t& carry) {
-    carry += static_cast<int64_t>(lastSeen) - static_cast<int64_t>(start);
-    start = live;
+void restartDistancesAfterPowerLoss(RallyState& state, uint64_t cntr1, uint64_t cntr2,
+                                    int64_t now_ms) {
+    state.total_start_cntr1 = cntr1;
+    state.total_start_cntr2 = cntr2;
+    state.total_start_time_ms = now_ms;
+    state.trip_start_cntr1 = cntr1;
+    state.trip_start_cntr2 = cntr2;
+    state.trip_start_time_ms = now_ms;
+    state.segment_start_cntr1 = cntr1;
+    state.segment_start_cntr2 = cntr2;
+    state.segment_start_time_ms = now_ms;
+    state.segment_current_number = -1;
+    state.alarm_distance_km = 0;
+    state.alarm_target_counts = 0;
+    // Box-only state tied to the old baselines: the distance corrections, the
+    // running stage and its undo all described counts that no longer exist.
+    state.total_distance_adjust_cm = 0;
+    state.trip_distance_adjust_cm = 0;
+    state.segment_start_adjust_cm = 0;
+    state.stage_complete = true;
+    state.undo_valid = false;
 }
 
-void accountForChipPowerLoss(ICounter& counter, int chip_address, uint8_t register_addr,
-                              bool& plsCleared, uint64_t& last,
-                              uint64_t& totalStart, int64_t& totalCarry,
-                              uint64_t& tripStart, int64_t& tripCarry,
-                              uint64_t& segmentStart, int64_t& segmentCarry) {
-    uint32_t live = counter.readRegister(register_addr);
-    bool lost = counter.powerLost();
-    if (lost && plsCleared) {
-        std::cerr << "Counter 0x" << std::hex << chip_address << std::dec
-                  << " lost power. Last count " << last << ", live count " << live << std::endl;
-        continueCountAfterPowerLoss(live, last, totalStart, totalCarry);
-        continueCountAfterPowerLoss(live, last, tripStart, tripCarry);
-        continueCountAfterPowerLoss(live, last, segmentStart, segmentCarry);
-    } else if (lost) {
-        std::cerr << "Counter 0x" << std::hex << chip_address << std::dec
-                  << " power-loss flag was already set. Start readings left unchanged." << std::endl;
-    }
-    if (lost) {
-        counter.clearPowerLoss();
-        plsCleared = true;
-    }
-    last = live;
+bool handleCounterPowerLoss(ICounter& counter1, ICounter& counter2, uint8_t register_addr,
+                            RallyState& state, int64_t now_ms,
+                            const std::function<void(const RallyState&)>& save) {
+    bool lost1 = counter1.powerLost();
+    bool lost2 = counter2.powerLost();
+    if (!lost1 && !lost2) return false;
+
+    uint32_t live1 = counter1.readRegister(register_addr);
+    uint32_t live2 = counter2.readRegister(register_addr);
+    std::cerr << "Counter power-loss flag set (0x70: " << lost1 << ", 0x71: " << lost2
+              << "). Restarting total, trip and segment from live counts "
+              << live1 << " / " << live2 << std::endl;
+    restartDistancesAfterPowerLoss(state, live1, live2, now_ms);
+    // Saved before the flags are cleared: a crash in between leaves a flag
+    // set, and the next start simply restarts again.
+    save(state);
+    if (lost1) counter1.clearPowerLoss();
+    if (lost2) counter2.clearPowerLoss();
+    return true;
 }
 
 // High precision: counts to meters
@@ -428,9 +441,6 @@ void rebaseSegmentAt(RallyState& state, uint64_t c1, uint64_t c2,
     state.segment_start_cntr1 = c1 >= into ? c1 - into : 0;
     state.segment_start_cntr2 = c2 >= into ? c2 - into : 0;
     state.segment_start_adjust_cm = state.total_distance_adjust_cm;
-    // The new baseline is derived straight from the live counts, not from
-    // whatever carry described the segment being rebased away from.
-    state.clearSegmentCarry();
 }
 
 bool nextAvailable(const RallyState& state) {
@@ -495,7 +505,6 @@ bool undoSegmentChange(RallyState& state, uint64_t c1, uint64_t c2, int64_t stag
     state.trip_start_cntr2 = state.segment_start_cntr2;
     state.trip_start_time_ms = state.segment_start_time_ms;
     state.trip_distance_adjust_cm = 0;
-    state.clearTripCarry();
     state.undo_valid = false;   // once only
     return true;
 }
@@ -981,8 +990,7 @@ void rebaseTotalDistance(RallyState& state, uint64_t c1, uint64_t c2) {
     // given the same treatment; the alarm was missed.
     if (state.alarm_distance_km > 0) {
         const int64_t covered = calculateDistanceCounts(state, c1, c2,
-            state.total_start_cntr1, state.total_start_cntr2,
-            state.total_carry_cntr1, state.total_carry_cntr2);
+            state.total_start_cntr1, state.total_start_cntr2);
         state.alarm_target_counts -= covered;
         if (state.alarm_target_counts < 0) state.alarm_target_counts = 0;
     }
@@ -994,17 +1002,12 @@ void rebaseTotalDistance(RallyState& state, uint64_t c1, uint64_t c2) {
     // Taken after the clear: the segment restarts against a correction of
     // zero like everything else re-based here.
     state.segment_start_adjust_cm = state.total_distance_adjust_cm;
-    // Both baselines just moved to c1/c2: any carry from a power loss before
-    // this reset described the old baseline and must not survive it.
-    state.clearTotalCarry();
-    state.clearSegmentCarry();
 }
 
 void rebaseTripDistance(RallyState& state, uint64_t c1, uint64_t c2) {
     state.trip_start_cntr1 = c1;
     state.trip_start_cntr2 = c2;
     state.trip_distance_adjust_cm = 0;
-    state.clearTripCarry();
 }
 
 void resetTrip(RallyState& state, uint64_t c1, uint64_t c2, int64_t now_ms) {
