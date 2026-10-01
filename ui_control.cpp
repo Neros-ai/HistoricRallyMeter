@@ -65,20 +65,13 @@ static void on_control_stop_clicked(GtkWidget*, gpointer user_data) {
     updateControlDisplay(data);
 }
 
-// RB-DEV-10 sandbox aid. A real power loss stops the chip counting for
-// however long the blip lasts -- that stretch of distance is genuinely
-// gone, never recoverable, since no pulses were ever captured. To show that
-// honestly rather than an instant, gapless swap, this pauses both sim
-// counters (frozen register, Current speed reads 0, Total/Trip hold still)
-// for POWER_LOSS_OUTAGE_MS, then resets them to zero and runs the same
-// recovery main() runs at startup, right away -- reload.sh would recreate a
-// fresh SimCounter from scratch and lose the simulated loss entirely, so
-// this cannot wait for a restart the way real hardware would. The first
-// time this ever fires on a given saved state, cntr*_pls_cleared is still
-// false (no loss has ever been recorded), so that click only clears the
-// flag with nothing to carry -- exactly the "flag left over from before
-// this was tracked" case accountForChipPowerLoss itself documents. Every
-// click after that folds the distance covered before the outage in.
+// Sandbox aid (RB-DEV-13). Stands in for the whole meter being switched off
+// long enough for the counter chips to lose power: both sim counters pause
+// for POWER_LOSS_OUTAGE_MS (Total/Trip hold still), go back to zero with the
+// power-loss flag set, and then the same handling main() runs at startup
+// restarts total, trip and segment from zero. Run straight away rather than
+// at a restart, because reload.sh recreates the SimCounters from scratch and
+// would lose the simulated loss.
 static const guint POWER_LOSS_OUTAGE_MS = 2000;
 
 static void recoverFromSimulatedPowerLoss(AppData* data) {
@@ -86,22 +79,14 @@ static void recoverFromSimulatedPowerLoss(AppData* data) {
     if (data->simCounter1) {
         data->simCounter1->simulatePowerLoss();
         data->simCounter1->setPaused(false);
-        accountForChipPowerLoss(*data->simCounter1, 0x70, REGISTER,
-            data->state->cntr1_pls_cleared, data->state->last_cntr1,
-            data->state->total_start_cntr1, data->state->total_carry_cntr1,
-            data->state->trip_start_cntr1, data->state->trip_carry_cntr1,
-            data->state->segment_start_cntr1, data->state->segment_carry_cntr1);
     }
     if (data->simCounter2) {
         data->simCounter2->simulatePowerLoss();
         data->simCounter2->setPaused(false);
-        accountForChipPowerLoss(*data->simCounter2, 0x71, REGISTER,
-            data->state->cntr2_pls_cleared, data->state->last_cntr2,
-            data->state->total_start_cntr2, data->state->total_carry_cntr2,
-            data->state->trip_start_cntr2, data->state->trip_carry_cntr2,
-            data->state->segment_start_cntr2, data->state->segment_carry_cntr2);
     }
-    ConfigFile::save(*data->state);
+    handleCounterPowerLoss(*data->counter1, *data->counter2, REGISTER,
+        *data->state, getRallyTime_ms(*data->state),
+        [](const RallyState& s) { ConfigFile::save(s); });
 }
 
 static void on_control_power_loss_clicked(GtkWidget*, gpointer user_data) {
