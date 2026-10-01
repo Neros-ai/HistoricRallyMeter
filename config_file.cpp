@@ -6,6 +6,9 @@
 #include <sstream>
 #include <iomanip>
 #include <stdexcept>
+#include <cstdio>
+#include <fcntl.h>
+#include <unistd.h>
 
 static int64_t extractLong(const std::string& line) {
     size_t pos = line.find(':');
@@ -163,26 +166,6 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.segment_start_cntr2 = static_cast<uint32_t>(extractLong(line));
         } else if (line.find("\"segment_start_time_ms\"") != std::string::npos) {
             state.segment_start_time_ms = extractLong(line);
-        } else if (line.find("\"total_carry_cntr1\"") != std::string::npos) {
-            state.total_carry_cntr1 = extractLong(line);
-        } else if (line.find("\"total_carry_cntr2\"") != std::string::npos) {
-            state.total_carry_cntr2 = extractLong(line);
-        } else if (line.find("\"trip_carry_cntr1\"") != std::string::npos) {
-            state.trip_carry_cntr1 = extractLong(line);
-        } else if (line.find("\"trip_carry_cntr2\"") != std::string::npos) {
-            state.trip_carry_cntr2 = extractLong(line);
-        } else if (line.find("\"segment_carry_cntr1\"") != std::string::npos) {
-            state.segment_carry_cntr1 = extractLong(line);
-        } else if (line.find("\"segment_carry_cntr2\"") != std::string::npos) {
-            state.segment_carry_cntr2 = extractLong(line);
-        } else if (line.find("\"last_cntr1\"") != std::string::npos) {
-            state.last_cntr1 = static_cast<uint32_t>(extractLong(line));
-        } else if (line.find("\"last_cntr2\"") != std::string::npos) {
-            state.last_cntr2 = static_cast<uint32_t>(extractLong(line));
-        } else if (line.find("\"cntr1_pls_cleared\"") != std::string::npos) {
-            state.cntr1_pls_cleared = extractBool(line);
-        } else if (line.find("\"cntr2_pls_cleared\"") != std::string::npos) {
-            state.cntr2_pls_cleared = extractBool(line);
         } else if (line.find("\"segment_current_number\"") != std::string::npos) {
             state.segment_current_number = static_cast<int32_t>(extractLong(line));
         } else if (line.find("\"rallyTimeOffset_ms\"") != std::string::npos) {
@@ -348,7 +331,10 @@ static void writeSegmentArray(std::ofstream& file, const std::string& name,
 }
 
 void ConfigFile::save(const RallyState& state, const std::string& path) {
-    std::ofstream file(path);
+    // Write beside the config and rename over it, so a power cut mid-write
+    // leaves either the old file or the new one, never a partial one.
+    const std::string tmp_path = path + ".tmp";
+    std::ofstream file(tmp_path, std::ios::out | std::ios::trunc);
     if (!file.is_open()) {
         return;
     }
@@ -366,16 +352,6 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"segment_start_cntr1\": " << state.segment_start_cntr1 << ",\n";
     file << "  \"segment_start_cntr2\": " << state.segment_start_cntr2 << ",\n";
     file << "  \"segment_start_time_ms\": " << state.segment_start_time_ms << ",\n";
-    file << "  \"total_carry_cntr1\": " << state.total_carry_cntr1 << ",\n";
-    file << "  \"total_carry_cntr2\": " << state.total_carry_cntr2 << ",\n";
-    file << "  \"trip_carry_cntr1\": " << state.trip_carry_cntr1 << ",\n";
-    file << "  \"trip_carry_cntr2\": " << state.trip_carry_cntr2 << ",\n";
-    file << "  \"segment_carry_cntr1\": " << state.segment_carry_cntr1 << ",\n";
-    file << "  \"segment_carry_cntr2\": " << state.segment_carry_cntr2 << ",\n";
-    file << "  \"last_cntr1\": " << state.last_cntr1 << ",\n";
-    file << "  \"last_cntr2\": " << state.last_cntr2 << ",\n";
-    file << "  \"cntr1_pls_cleared\": " << (state.cntr1_pls_cleared ? "true" : "false") << ",\n";
-    file << "  \"cntr2_pls_cleared\": " << (state.cntr2_pls_cleared ? "true" : "false") << ",\n";
     file << "  \"segment_current_number\": " << state.segment_current_number << ",\n";
     file << "  \"rallyTimeOffset_ms\": " << state.rallyTimeOffset_ms << ",\n";
     file << "  \"ahead_behind_zero_offset_ms\": " << state.ahead_behind_zero_offset_ms << ",\n";
@@ -442,4 +418,21 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     }
     
     file << "}\n";
+    file.flush();
+    if (!file.good()) {
+        file.close();
+        std::remove(tmp_path.c_str());
+        return;
+    }
+    file.close();
+
+    // Push the data to the card before the rename makes it the config.
+    int fd = open(tmp_path.c_str(), O_RDONLY);
+    if (fd >= 0) {
+        fsync(fd);
+        close(fd);
+    }
+    if (std::rename(tmp_path.c_str(), path.c_str()) != 0) {
+        std::remove(tmp_path.c_str());
+    }
 }

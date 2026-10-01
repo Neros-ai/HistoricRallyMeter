@@ -588,35 +588,54 @@ public:
             return true;
         });
 
-        suite->addTest("power-loss carry, last-seen counts and cleared flags survive save/load", []() {
+        // Save replaces the file in one step and leaves no temporary behind
+        suite->addTest("Save renames a temporary file over the config", []() {
+            std::string path = "/tmp/rb_dev_13_atomic_save_test.json";
+            std::remove(path.c_str());
+            std::remove((path + ".tmp").c_str());
+            {
+                std::ofstream f(path);
+                f << "{ \"calibration\": 123 }\n";
+            }
+
             RallyState state;
-            state.total_carry_cntr1 = 4000;
-            state.total_carry_cntr2 = 2000;
-            state.trip_carry_cntr1 = 1500;
-            state.trip_carry_cntr2 = 500;
-            state.segment_carry_cntr1 = 300;
-            state.segment_carry_cntr2 = 100;
-            state.last_cntr1 = 123456;
-            state.last_cntr2 = 654321;
-            state.cntr1_pls_cleared = true;
-            state.cntr2_pls_cleared = false;
-            std::string path = "/tmp/rb_dev_10_roundtrip_test.json";
+            state.calibration = 910000;
+            state.segments.push_back({50.0, 100.0, 1000.0, 2000.0, true});
             ConfigFile::save(state, path);
+
+            std::ifstream tmp(path + ".tmp");
+            ASSERT_FALSE(tmp.is_open());
 
             RallyState loaded;
             ConfigFile::load(loaded, path);
             std::remove(path.c_str());
+            ASSERT_EQ(loaded.calibration, 910000);
+            ASSERT_EQ(loaded.segments.size(), 1u);
+            return true;
+        });
 
-            ASSERT_EQ(loaded.total_carry_cntr1, 4000);
-            ASSERT_EQ(loaded.total_carry_cntr2, 2000);
-            ASSERT_EQ(loaded.trip_carry_cntr1, 1500);
-            ASSERT_EQ(loaded.trip_carry_cntr2, 500);
-            ASSERT_EQ(loaded.segment_carry_cntr1, 300);
-            ASSERT_EQ(loaded.segment_carry_cntr2, 100);
-            ASSERT_EQ(loaded.last_cntr1, 123456u);
-            ASSERT_EQ(loaded.last_cntr2, 654321u);
-            ASSERT_TRUE(loaded.cntr1_pls_cleared);
-            ASSERT_FALSE(loaded.cntr2_pls_cleared);
+        // A config written by RB-DEV-10 still carries the retired power-loss
+        // keys; they are ignored and the rest of the file loads as before.
+        suite->addTest("retired power-loss carry keys are ignored on load", []() {
+            std::string path = "/tmp/rb_dev_13_legacy_carry_test.json";
+            {
+                std::ofstream f(path);
+                f << "{\n"
+                     "  \"calibration\": 654321,\n"
+                     "  \"total_start_cntr1\": 1000,\n"
+                     "  \"total_carry_cntr1\": 4000,\n"
+                     "  \"trip_carry_cntr2\": 500,\n"
+                     "  \"last_cntr1\": 123456,\n"
+                     "  \"cntr1_pls_cleared\": true,\n"
+                     "  \"rallyTimeOffset_ms\": 5000\n"
+                     "}\n";
+            }
+            RallyState loaded;
+            ConfigFile::load(loaded, path);
+            std::remove(path.c_str());
+            ASSERT_EQ(loaded.calibration, 654321);
+            ASSERT_EQ(loaded.total_start_cntr1, 1000u);
+            ASSERT_EQ(loaded.rallyTimeOffset_ms, 5000);
             return true;
         });
 
