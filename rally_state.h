@@ -186,7 +186,7 @@ public:
     // Settings > System (Nero2.0). Written by the logging plan; stored here so
     // the switches persist.
     bool stage_logging = true;
-    bool sensor_logging = false;
+    bool debug_logs_enabled = false;   // "Sensor logging": CSV of every counter poll in logs/
 
     // Embedded web server for phone browsers
     bool web_enabled = true;

@@ -101,6 +101,8 @@ void on_adj_driver_zero(GtkWidget* widget, gpointer user_data);
 void on_set_sensor_1(GtkWidget* widget, gpointer user_data);
 void on_set_sensor_both(GtkWidget* widget, gpointer user_data);
 void on_exit_app(GtkWidget* widget, gpointer user_data);
+void setDebugLogging(AppData* data, bool on);   // start a new logs/*.csv, or flush and close
+std::string appDirectory();                       // directory holding the executable
 void updateWebLinkDisplay(AppData* data);
 void on_show_menu(GtkWidget* widget, gpointer user_data);
 void on_menu_choice(GtkWidget* widget, gpointer user_data);

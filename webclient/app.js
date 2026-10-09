@@ -27,13 +27,58 @@
     $('tab-live').classList.toggle('active', name === 'live');
     $('tab-setup').classList.toggle('active', name === 'setup');
     $('tab-driver').classList.toggle('active', name === 'driver');
+    $('tab-logs').classList.toggle('active', name === 'logs');
     $('view-live').classList.toggle('hidden', name !== 'live');
     $('view-setup').classList.toggle('hidden', name !== 'setup');
     $('view-driver').classList.toggle('hidden', name !== 'driver');
+    $('view-logs').classList.toggle('hidden', name !== 'logs');
     if (name === 'driver') {
       const g = ensureDriverGauge();
       if (g) g.resize();
     }
+    if (name === 'logs') refreshLogs();
+  }
+
+  // ---- Logs tab ----
+  // The meter's debug log files (Design.md "Debug logs"). Fetched over plain
+  // HTTP so the list works even when the WebSocket is down.
+  function formatSize(bytes) {
+    bytes = Number(bytes) || 0;
+    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+    if (bytes >= 1024) return Math.round(bytes / 1024) + ' KB';
+    return bytes + ' B';
+  }
+
+  function refreshLogs() {
+    const list = $('logs-list');
+    const empty = $('logs-empty');
+    fetch('/api/logs', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((files) => {
+        list.textContent = '';
+        empty.classList.toggle('hidden', files.length > 0);
+        files.forEach((f) => {
+          const li = document.createElement('li');
+          const a = document.createElement('a');
+          a.href = '/logs/' + encodeURIComponent(f.name);
+          a.setAttribute('download', f.name);
+          const name = document.createElement('span');
+          name.className = 'log-name';
+          name.textContent = f.name;
+          const size = document.createElement('span');
+          size.className = 'log-size';
+          size.textContent = formatSize(f.size);
+          a.appendChild(name);
+          a.appendChild(size);
+          li.appendChild(a);
+          list.appendChild(li);
+        });
+      })
+      .catch(() => {
+        list.textContent = '';
+        empty.textContent = 'Could not reach the meter.';
+        empty.classList.remove('hidden');
+      });
   }
 
   function wsUrl() {
@@ -220,6 +265,8 @@
   $('tab-live').addEventListener('click', () => showTab('live'));
   $('tab-setup').addEventListener('click', () => showTab('setup'));
   $('tab-driver').addEventListener('click', () => showTab('driver'));
+  $('tab-logs').addEventListener('click', () => showTab('logs'));
+  $('btn-logs-refresh').addEventListener('click', refreshLogs);
   window.addEventListener('resize', () => {
     if (activeTab === 'driver' && driverGauge) driverGauge.resize();
   });

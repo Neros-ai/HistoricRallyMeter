@@ -2,6 +2,7 @@
 #include "web_commands.h"
 #include "web_telemetry.h"
 #include "rally_types.h"
+#include "debug_log.h"
 
 #include <gio/gio.h>
 
@@ -12,9 +13,11 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 #include <unistd.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 #include <fcntl.h>
 #include <arpa/inet.h>
@@ -217,6 +220,66 @@ static void sendHttpResponse(int fd, int code, const char* status,
     if (!body.empty()) send(fd, body.data(), body.size(), MSG_NOSIGNAL);
 }
 
+// Debug logs for the phone's Logs tab (Design.md "Debug logs").
+static std::string logsDir() { return getExecutableDir() + "/logs"; }
+
+static std::string buildLogsListJson() {
+    std::string json = "[";
+    bool first = true;
+    for (const auto& e : DebugLog::listFiles(logsDir())) {
+        if (!first) json += ",";
+        first = false;
+        json += "{\"name\":\"" + e.name + "\",\"size\":" + std::to_string(e.size) +
+                ",\"modified_ms\":" + std::to_string(e.modified_ms) + "}";
+    }
+    json += "]";
+    return json;
+}
+
+// Send the file on a worker thread so a multi-megabyte download over Wi-Fi
+// does not stall the 10 ms polling loop. The thread owns the fd from here
+// and touches nothing else. Returns false if the file cannot be opened.
+static bool sendLogFileAsync(int fd, const std::string& name) {
+    std::string path = logsDir() + "/" + name;
+    struct stat st;
+    if (stat(path.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) return false;
+    FILE* f = fopen(path.c_str(), "rb");
+    if (!f) return false;
+
+    char header[512];
+    snprintf(header, sizeof(header),
+             "HTTP/1.1 200 OK\r\n"
+             "Connection: close\r\n"
+             "Content-Type: text/csv; charset=utf-8\r\n"
+             "Content-Disposition: attachment; filename=\"%s\"\r\n"
+             "Content-Length: %lld\r\n"
+             "Cache-Control: no-cache\r\n"
+             "\r\n",
+             name.c_str(), static_cast<long long>(st.st_size));
+    std::string head(header);
+    long long remaining = st.st_size;
+
+    std::thread([fd, f, head, remaining]() mutable {
+        send(fd, head.data(), head.size(), MSG_NOSIGNAL);
+        char buf[16384];
+        while (remaining > 0) {
+            size_t want = static_cast<size_t>(std::min<long long>(remaining, static_cast<long long>(sizeof(buf))));
+            size_t n = fread(buf, 1, want, f);
+            if (n == 0) break;
+            size_t off = 0;
+            while (off < n) {
+                ssize_t s = send(fd, buf + off, n - off, MSG_NOSIGNAL);
+                if (s <= 0) { remaining = 0; break; }
+                off += static_cast<size_t>(s);
+            }
+            remaining -= static_cast<long long>(n);
+        }
+        fclose(f);
+        close(fd);
+    }).detach();
+    return true;
+}
+
 static bool handleHttpRequest(WebServerState* impl, int fd, const std::string& request) {
     std::string path = getRequestPath(request);
     if (path == "/ws") {
@@ -257,6 +320,20 @@ static bool handleHttpRequest(WebServerState* impl, int fd, const std::string& r
     }
     if (path == "/gauge.js") {
         sendHttpResponse(fd, 200, "OK", "application/javascript; charset=utf-8", readStaticFile("/gauge.js"));
+        return false;
+    }
+    if (path == "/api/logs") {
+        sendHttpResponse(fd, 200, "OK", "application/json", buildLogsListJson());
+        return false;
+    }
+    if (path.rfind("/logs/", 0) == 0) {
+        std::string name = path.substr(6);
+        if (!DebugLog::isSafeFileName(name)) {
+            sendHttpResponse(fd, 404, "Not Found", "text/plain", "Not found");
+            return false;
+        }
+        if (sendLogFileAsync(fd, name)) return true;   // the worker thread closes fd
+        sendHttpResponse(fd, 404, "Not Found", "text/plain", "Not found");
         return false;
     }
     sendHttpResponse(fd, 404, "Not Found", "text/plain", "Not found");
