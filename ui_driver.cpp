@@ -827,12 +827,12 @@ void updateDriverDisplay(AppData* data) {
             gtk_label_set_text(data->countdownLabel, buf);
             // Which kind of autostart is pending, so the crew can see at a
             // glance whether rolling before the minute is going to count.
-            // Two lines: on one line the caption is wider than the
+            // One word to a line: on one line the caption is wider than the
             // countdown box above it and ran across the Distance and Total
             // figures either side of it.
             gtk_label_set_text(data->earlyDepartureLabel,
-                data->state->auto_start_early_departure ? "Early Departure:\nENABLED"
-                                                        : "Early Departure:\nDISABLED");
+                data->state->auto_start_early_departure ? "Early\nDeparture\nENABLED"
+                                                        : "Early\nDeparture\nDISABLED");
             if (data->countdownContainer) gtk_widget_show(data->countdownContainer);
         } else if (diff_ms > 0) {
             // Armed, but not yet inside the popup window: the clock runs, no popup.
