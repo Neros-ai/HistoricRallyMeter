@@ -541,6 +541,8 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
 
 void updateDriverDisplay(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
+    // Speed is measured on the raw count so it stays positive in reverse.
+    auto current_raw_poll = data->poller->getMostRecentRaw();
     auto tenth_poll = data->poller->get10th();
     auto current_time_ms = getRallyTime_ms(*data->state);
 
@@ -570,7 +572,7 @@ void updateDriverDisplay(AppData* data) {
     }
     
     // Current speed (from rolling average, then EMA-smoothed for display)
-    double current_speed = calculateCurrentSpeed(*data->state, current_poll, tenth_poll);
+    double current_speed = calculateCurrentSpeed(*data->state, current_raw_poll, tenth_poll);
     if (current_speed < 0) {
         data->smoothedSpeed = -1.0;
     } else if (data->smoothedSpeed < 0) {

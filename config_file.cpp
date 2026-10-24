@@ -34,6 +34,16 @@ static double extractDouble(const std::string& line) {
     return 0.0;
 }
 
+static std::string extractString(const std::string& line) {
+    size_t colon = line.find(':');
+    if (colon == std::string::npos) return "";
+    size_t a = line.find('"', colon);
+    if (a == std::string::npos) return "";
+    size_t b = line.find('"', a + 1);
+    if (b == std::string::npos) return "";
+    return line.substr(a + 1, b - a - 1);
+}
+
 static bool extractBool(const std::string& line) {
     return line.find("true") != std::string::npos;
 }
@@ -160,6 +170,24 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.trip_start_cntr2 = static_cast<uint32_t>(extractLong(line));
         } else if (line.find("\"trip_start_time_ms\"") != std::string::npos) {
             state.trip_start_time_ms = extractLong(line);
+        } else if (line.find("\"reverse_shift1\"") != std::string::npos) {
+            state.reverse_shift1 = extractLong(line);
+        } else if (line.find("\"reverse_shift2\"") != std::string::npos) {
+            state.reverse_shift2 = extractLong(line);
+        } else if (line.find("\"trip_history_m\"") != std::string::npos) {
+            state.trip_history_m = extractString(line);
+        } else if (line.find("\"memory_") != std::string::npos
+                   && line.find("_start_") != std::string::npos) {
+            // "memory_N_start_time_s" / "memory_N_start_distance_m"
+            size_t k = line.find("\"memory_") + 8;
+            int n = (k < line.size()) ? line[k] - '0' : 0;
+            if (n >= 1 && n <= RallyState::MAX_MEMORY_SLOTS) {
+                auto& slot = state.memory_slots[n - 1];
+                if (line.find("_start_time_s") != std::string::npos)
+                    slot.start_time_s = static_cast<long>(extractLong(line));
+                else if (line.find("_start_distance_m") != std::string::npos)
+                    slot.start_distance_m = static_cast<long>(extractLong(line));
+            }
         } else if (line.find("\"segment_start_cntr1\"") != std::string::npos) {
             state.segment_start_cntr1 = static_cast<uint32_t>(extractLong(line));
         } else if (line.find("\"segment_start_cntr2\"") != std::string::npos) {
@@ -349,6 +377,16 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"trip_start_cntr1\": " << state.trip_start_cntr1 << ",\n";
     file << "  \"trip_start_cntr2\": " << state.trip_start_cntr2 << ",\n";
     file << "  \"trip_start_time_ms\": " << state.trip_start_time_ms << ",\n";
+    file << "  \"reverse_shift1\": " << state.reverse_shift1 << ",\n";
+    file << "  \"reverse_shift2\": " << state.reverse_shift2 << ",\n";
+    for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
+        file << "  \"memory_" << (i + 1) << "_start_time_s\": "
+             << state.memory_slots[i].start_time_s << ",\n";
+        file << "  \"memory_" << (i + 1) << "_start_distance_m\": "
+             << state.memory_slots[i].start_distance_m << ",\n";
+    }
+    // Digits, commas and minus signs only, so no escaping is needed.
+    file << "  \"trip_history_m\": \"" << state.trip_history_m << "\",\n";
     file << "  \"segment_start_cntr1\": " << state.segment_start_cntr1 << ",\n";
     file << "  \"segment_start_cntr2\": " << state.segment_start_cntr2 << ",\n";
     file << "  \"segment_start_time_ms\": " << state.segment_start_time_ms << ",\n";

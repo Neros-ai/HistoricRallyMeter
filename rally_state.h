@@ -2,6 +2,7 @@
 #define RALLY_STATE_H
 
 #include <cstdint>
+#include <string>
 #include <vector>
 #include "rally_types.h"
 
@@ -40,6 +41,15 @@ public:
     // False for a config written before the field existed; see ConfigFile::load.
     bool segment_start_adjust_recorded = false;
     long trip_distance_adjust_cm = 0;
+    // The last six Trip readings in whole metres, newest first, comma
+    // separated. Recorded each time Trip is zeroed (see rebaseTripDistance).
+    std::string trip_history_m;
+
+    // Reverse (Nero2.0): raw counter minus the distance ("virtual") count, per
+    // counter, kept so a restart after reversing still lines up with the saved
+    // baselines. Not the engaged flag: the box always starts going forward.
+    long long reverse_shift1 = 0;
+    long long reverse_shift2 = 0;
 
     // Seconds since 1/1/2020, 0 = not set. Seconds, not minutes: the setup
     // screen accepts HH:MM:SS and a minute-resolution store threw the seconds
@@ -117,12 +127,20 @@ public:
         // operator's live waypoint list alone rather than wipe it. Not
         // persisted -- load() decides it per file.
         bool waypoints_recorded = true;
+        // Nero2.0: when this stage starts (rally time of day, seconds from
+        // midnight; -1 = not set) and how far the crew have to drive to the
+        // start line (metres). Stored per memory; Home shows them and works
+        // out the speed to arrive early from them.
+        long start_time_s = -1;
+        long start_distance_m = 0;
 
         bool empty() const { return segments.empty(); }
         void clear() {
             segments.clear();
             beep_waypoints_m.clear();
             waypoints_recorded = true;
+            start_time_s = -1;
+            start_distance_m = 0;
         }
     };
 

@@ -248,6 +248,11 @@ void rebaseTotalDistance(RallyState& state, uint64_t c1, uint64_t c2);
 // Trip's distance zero, and its correction.
 void rebaseTripDistance(RallyState& state, uint64_t c1, uint64_t c2);
 // Trip's distance and time together -- the Trip button.
+// Put trip_m at the front of a comma-separated history, keeping at most
+// max_entries (the Home page shows six).
+std::string pushTripHistory(const std::string& history, long trip_m, size_t max_entries = 6);
+// Split a comma-separated history into metres, most recent first. Junk skipped.
+std::vector<long> parseTripHistory(const std::string& history);
 void resetTrip(RallyState& state, uint64_t c1, uint64_t c2, int64_t now_ms);
 // A segment change: Trip becomes the new segment's odometer, measured from the
 // segment's own start. Trip's correction expires with its old baseline; Total
@@ -425,6 +430,22 @@ std::string segmentRowHeading(double current_speed, bool has_current_segment);
 // whole figures. next_speed is already in the active display unit; is_mph
 // only selects which unit word follows it.
 std::string segmentSpeedTransition(double next_speed, bool has_next, bool is_mph);
+
+// Home's "50<>60 kph" line: this segment's speed, then the next one's. Empty
+// when there is no next segment. Speeds are given in km/h and shown in mph
+// when is_mph.
+std::string speedChangeLine(double cur_kph, double next_kph, bool has_next, bool is_mph);
+
+// Home's Stage arrival block: minutes until the stage starts, and the speed
+// that gets the car to the line one minute early -- distance_at_start_m
+// divided by (minutes - 1). Not valid (blank on screen) when there is no
+// time to cover the distance or no distance.
+struct StageArrival {
+    bool valid = false;
+    int minutes = 0;
+    int speed_kph = 0;
+};
+StageArrival stageArrival(double start_distance_m, double minutes_to_start);
 
 // Parse an operator-entered Beep Assist waypoint list. Values are kilometres
 // separated by commas, semicolons or whitespace, and are returned as metres

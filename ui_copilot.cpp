@@ -11,6 +11,7 @@
 #include "calculations.h"
 #include "tone_generator.h"
 #include "nero_frame.h"
+#include "ui_home.h"
 #include <sstream>
 #include <iostream>
 #include <cstdlib>
@@ -73,6 +74,13 @@ static void applyCopilotCSS() {
         ".compact-entry { min-height: 0; padding-top: 0; padding-bottom: 0; }"
         ".tone-mode-row label, .tone-mode-row checkbutton { font-size: 20px; }"
         // Nero2.0 menu page: 40 px key name over a 20 px grey caption.
+        // Keys that must stay inside a narrow column ("A-B, B-C", +10).
+        "button.key-small { font-size: 22px; }"
+        ".home-clock { font-size: 42px; font-family: monospace; }"
+        ".home-picker-title { font-size: 22px; color: #00FFFF; }"
+        // An engaged key (freeze, reverse, the loaded stage in the picker).
+        "button.key-lit { background-image: none; background-color: #FFFFFF; }"
+        "button.key-lit label { color: #000000; }"
         ".menu-item { font-size: 40px; }"
         ".menu-caption { font-size: 20px; color: #CCCCCC; }",
         -1, NULL);
@@ -322,8 +330,8 @@ void updateCopilotDisplay(AppData* data) {
         return;
     }
     
-    // Update Adj. driver Zero button label
-    {
+    // Update Adj. driver Zero button label (old layout; the Nero2.0 key is fixed text)
+    if (data->singleDisplayMode) {
         double offset_s = data->state->ahead_behind_zero_offset_ms / 1000.0;
         char lbl[64];
         snprintf(lbl, sizeof(lbl), "driver Zero (%.2f)", offset_s);
@@ -425,6 +433,9 @@ void updateCopilotDisplay(AppData* data) {
         gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
         gtk_widget_set_sensitive(data->prevBtn, FALSE);
     }
+
+    // Nero2.0 Home: redraw the figures and stage panel from the labels above.
+    updateHomeDisplay(data);
 }
 
 // Create TwinMaster screen - two-column layout for 1280x400
@@ -1690,7 +1701,10 @@ GtkWidget* createCopilotWindow(AppData* data) {
     gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(data->copilotStack));
     
     // Create all screens
-    data->twinMasterScreen = createTwinMasterScreen(data);
+    // Two displays get the Nero2.0 Home page; the single-display box keeps the
+    // embedded-gauge layout until the driver-display plan reworks it.
+    data->twinMasterScreen = data->singleDisplayMode ? createTwinMasterScreen(data)
+                                                      : createHomeScreen(data);
     data->stageSetupScreen = createStageSetupScreen(data);
     data->calibrationScreen = createCalibrationScreen(data);
     data->dateTimeScreen = createDateTimeScreen(data);
