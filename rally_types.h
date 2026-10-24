@@ -29,6 +29,9 @@ struct Segment {
     double distance_m = 0.0;                      // user-entered distance in meters (calibration-independent)
     double distance_counts = 0.0;                 // distance in counts (recalculated on calibration change)
     bool autoNext = true;
+    // Nero2.0: false on a leg that carries the speed above it (the table shows
+    // a ditto mark); true where the speed changes. Row 1 always counts as a change.
+    bool changesSpeed = true;
 };
 
 // Counter polling data with 10-second rolling average

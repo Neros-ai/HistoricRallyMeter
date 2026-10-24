@@ -133,6 +133,9 @@ public:
         // out the speed to arrive early from them.
         long start_time_s = -1;
         long start_distance_m = 0;
+        // The roadbook number of the first row, and the distance it starts at.
+        long first_number = 1;
+        double first_from_m = 0.0;
 
         bool empty() const { return segments.empty(); }
         void clear() {
@@ -141,6 +144,8 @@ public:
             waypoints_recorded = true;
             start_time_s = -1;
             start_distance_m = 0;
+            first_number = 1;
+            first_from_m = 0.0;
         }
     };
 

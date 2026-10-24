@@ -29,6 +29,7 @@
 #include "test_tone_cadence.h"
 #include "test_nero_frame.h"
 #include "test_home_logic.h"
+#include "test_stage_rows.h"
 
 int main() {
     TestRunner runner;
@@ -61,6 +62,7 @@ int main() {
     TestToneCadence toneCadenceTests;
     TestNeroFrame neroFrameTests;
     TestHomeLogic homeLogicTests;
+    TestStageRows stageRowsTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -90,6 +92,7 @@ int main() {
     runner.addSuite(toneCadenceTests.createSuite());
     runner.addSuite(neroFrameTests.createSuite());
     runner.addSuite(homeLogicTests.createSuite());
+    runner.addSuite(stageRowsTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();
