@@ -983,6 +983,12 @@ AutoStartArming autoStartDisarmed() {
     return AutoStartArming{};
 }
 
+bool autoStartCountdownVisible(bool early_departure, int64_t diff_ms) {
+    if (diff_ms <= 0 || diff_ms > 24LL * 3600 * 1000) return false;
+    if (early_departure) return true;
+    return diff_ms <= AUTO_START_POPUP_WINDOW_MS;
+}
+
 bool autoStartHoldsTimeError(uint64_t auto_start_rally_time_s,
                              bool auto_start_early_departure,
                              bool auto_start_triggered,

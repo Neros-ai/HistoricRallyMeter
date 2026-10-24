@@ -817,7 +817,7 @@ void updateDriverDisplay(AppData* data) {
     if (data->state->auto_start_rally_time_s > 0 && !data->autoStartTriggered) {
         const int64_t diff_ms = autoStartDiff_ms;
 
-        if (diff_ms > 0 && diff_ms <= 24LL * 3600 * 1000) {
+        if (autoStartCountdownVisible(data->state->auto_start_early_departure, diff_ms)) {
             int total_secs = static_cast<int>(diff_ms / 1000);
             int h = total_secs / 3600;
             int m = (total_secs % 3600) / 60;
@@ -834,6 +834,9 @@ void updateDriverDisplay(AppData* data) {
                 data->state->auto_start_early_departure ? "Early Departure:\nENABLED"
                                                         : "Early Departure:\nDISABLED");
             if (data->countdownContainer) gtk_widget_show(data->countdownContainer);
+        } else if (diff_ms > 0) {
+            // Armed, but not yet inside the popup window: the clock runs, no popup.
+            if (data->countdownContainer) gtk_widget_hide(data->countdownContainer);
         } else if (diff_ms <= 0 && diff_ms > -AUTO_START_TRIGGER_WINDOW_MS) {
             if (data->countdownContainer) gtk_widget_hide(data->countdownContainer);
             data->autoStartTriggered = true;
