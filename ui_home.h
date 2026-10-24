@@ -22,6 +22,7 @@ struct HomeUi {
     std::string stageNo = "-";
     bool autoArmed = false;
     std::string autoTime;       // hh:mm:ss, or empty
+    bool autoTimePast = false;  // the stage start time has already gone by and no stage is armed or running
     struct Row { std::string kph, at; bool now = false; };
     Row rows[3];
     bool arrivalValid = false;
