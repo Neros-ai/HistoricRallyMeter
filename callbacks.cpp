@@ -550,7 +550,10 @@ void performAutoStart(AppData* data) {
 }
 
 void performStageGo(AppData* data) {
-    data->autoFiredTime_s = 0;   // a manual start: not an autostart's time
+    // The moment of the press is the stage's start time, shown on Home like an
+    // autostart's. (performAutoStart overwrites this with the armed moment.)
+    data->autoFiredTime_s = autoStartSecondsFromTargetMs(getRallyTime_ms(*data->state),
+                                                         getAutoStartEpochMs());
     // Distance and clock together: this is the ordinary "start now" case.
     zeroDistanceBaselines(data);
     zeroTimeBaselines(data);
