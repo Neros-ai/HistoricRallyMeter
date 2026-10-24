@@ -169,9 +169,10 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         if (kind == FLAG) {
             drawFlag(cr, ww / 2.0 - 20, 1, 40, 30);
             white(cr);
-            drawText(cr, data->home && data->home->minuteCaption
-                         ? gtk_label_get_text(GTK_LABEL(data->home->minuteCaption)) : "",
-                     ww / 2.0, 50, 24, CENTRE);
+            // Read from the clock every time the key is drawn, never from a
+            // stored copy, so it can not be stale or blank: it is always the
+            // coming minute.
+            drawText(cr, nextMinuteCaption(data), ww / 2.0, 50, 24, CENTRE);
         } else {
             drawFlag(cr, ww / 2.0 - 50, 12, 40, 30);
             drawWatch(cr, ww / 2.0 + 10, 9, 34, true);
