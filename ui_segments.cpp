@@ -19,7 +19,9 @@ namespace {
 // gaps = 656 + 80 = 736, inside the 756 px list.
 // Narrowed a little from the mockup's 50 86 86 86 40 60 40 44 60 60 44 so the
 // number entry (3 digits) and the scroll bar both fit inside the 756 px list.
-constexpr int COLS[11] = {62, 80, 80, 76, 40, 60, 40, 44, 56, 56, 44};
+// from m, to m and dist m are wide enough for "99,999" in an entry (92 / 92 / 84);
+// the 3-digit # column gave up a little to pay for it.
+constexpr int COLS[11] = {56, 92, 92, 84, 40, 60, 40, 44, 56, 56, 44};
 constexpr int COL_GAP = 8;
 // The stage column is 200 px (was 240); the 40 px it gave up widen the table.
 constexpr int LEFT_W = 1012, TOP_H = 322, NEWPT_H = 56;
