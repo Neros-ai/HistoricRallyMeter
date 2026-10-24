@@ -2,6 +2,10 @@
 
 #include <cstdio>
 
+bool simpleToneForError(double seconds_ahead_behind, int behind_type, int ahead_type) {
+    return (seconds_ahead_behind < 0.0 ? behind_type : ahead_type) == 2;
+}
+
 ToneCadence decideToneCadence(bool tone_enabled, bool simple_tone_mode,
                               const ArrowToneResult& arrow,
                               SimpleToneState& simple_state,

@@ -15,6 +15,7 @@
 #include "ui_segments.h"
 #include "ui_datetime.h"
 #include "ui_calibration.h"
+#include "ui_settings.h"
 #include <sstream>
 #include <iostream>
 #include <cstdlib>
@@ -93,6 +94,8 @@ static void applyCopilotCSS() {
         ".cal-fig { color: #FFFFFF; }"
         ".cal-entry { font-size: 30px; color: #FFFFFF; }"
         "button.key-tiny { font-size: 15px; padding: 0; }"
+        ".set-name { font-size: 19px; }"
+        ".set-entry { font-size: 22px; }"
         ".home-clock { font-size: 42px; font-family: monospace; }"
         ".home-picker-title { font-size: 22px; color: #00FFFF; }"
         // An engaged key (freeze, reverse, the loaded stage in the picker).
@@ -336,6 +339,11 @@ void updateCopilotDisplay(AppData* data) {
         return;
     }
     
+    if (visible_child == data->settingsScreen) {
+        updateSettingsDisplay(data);
+        return;
+    }
+
     // Nero2.0 Segments: clock and the Autostart tick
     if (visible_child == data->stageSetupScreen) {
         updateSegmentsDisplay(data);
@@ -953,6 +961,9 @@ GtkWidget* createCopilotWindow(AppData* data) {
     gtk_stack_add_named(data->copilotStack, data->dateTimeScreen, "datetime");
     gtk_stack_add_named(data->copilotStack, data->autoStartScreen, "autostart");
     
+    data->settingsScreen = createSettingsScreen(data);
+    gtk_stack_add_named(data->copilotStack, data->settingsScreen, "settings");
+
     // The menu page last: it greys any key whose page is not in the stack.
     data->menuScreen = createMenuScreen(data);
     gtk_stack_add_named(data->copilotStack, data->menuScreen, "menu");

@@ -30,6 +30,7 @@
 #include "test_nero_frame.h"
 #include "test_home_logic.h"
 #include "test_stage_rows.h"
+#include "test_settings.h"
 
 int main() {
     TestRunner runner;
@@ -63,6 +64,7 @@ int main() {
     TestNeroFrame neroFrameTests;
     TestHomeLogic homeLogicTests;
     TestStageRows stageRowsTests;
+    TestSettings settingsTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -93,6 +95,7 @@ int main() {
     runner.addSuite(neroFrameTests.createSuite());
     runner.addSuite(homeLogicTests.createSuite());
     runner.addSuite(stageRowsTests.createSuite());
+    runner.addSuite(settingsTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();

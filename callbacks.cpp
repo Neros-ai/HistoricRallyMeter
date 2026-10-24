@@ -1453,37 +1453,6 @@ gboolean on_force_single_display_toggle(G_GNUC_UNUSED GtkSwitch* sw, gboolean st
     return FALSE;  // allow default handler to update the switch visual state
 }
 
-// "tone mode off/on" switch on the Stage Setup screen -- master enable
-// for the ahead/behind tone, independent of which type is selected.
-// Takes effect immediately: ui_driver.cpp reads the flag fresh every
-// 10ms tick, same as force_single_display's mechanism but without
-// needing a restart (nothing here depends on window/monitor layout).
-gboolean on_tone_enabled_toggle(G_GNUC_UNUSED GtkSwitch* sw, gboolean state,
-                                gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
-    data->state->tone_enabled = state;
-    ConfigFile::save(*data->state);
-    return FALSE;  // allow default handler to update the switch visual state
-}
-
-// "Type 1[ ] 2[ ]" checkboxes on the Stage Setup screen -- mutually
-// exclusive via a cross-reference on each widget (set in
-// createStageSetupScreen) rather than a new AppData field pair,
-// matching the "app_data"/"mode" g_object_set_data() pattern this file
-// already uses (see on_beep_mode_toggled, on_segment_auto_toggled).
-// Only acts when a box becomes CHECKED; unchecking the other box (which
-// this triggers) is a no-op re-entry, since that call sees active=false
-// and returns immediately -- no infinite loop.
-void on_tone_type_toggled(GtkWidget* widget, gpointer user_data) {
-    if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget))) return;
-    AppData* data = static_cast<AppData*>(user_data);
-    GtkWidget* other = GTK_WIDGET(g_object_get_data(G_OBJECT(widget), "other_type_check"));
-    if (other) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(other), FALSE);
-    bool is_type2 = (GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "tone_type")) == 2);
-    data->state->simple_tone_mode = is_type2;
-    ConfigFile::save(*data->state);
-}
-
 // --- Rally-clock trim (+0.1 / -0.1) --------------------------------------
 // Separate from on_save_datetime() on purpose. That button applies the typed
 // date/time at the instant it is pressed, so whatever fraction of a second
@@ -1711,29 +1680,6 @@ void on_beep_waypoints_changed(G_GNUC_UNUSED GtkTextBuffer* buffer, gpointer use
     if (data->beepWaypointCommitTimer) g_source_remove(data->beepWaypointCommitTimer);
     data->beepWaypointCommitTimer =
         g_timeout_add(BEEP_WAYPOINT_COMMIT_MS, on_beep_waypoints_commit_timeout, data);
-}
-
-gboolean on_beep_enable_toggled(G_GNUC_UNUSED GtkWidget* widget, gboolean state, gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
-    data->state->beep_assist_enabled = state;
-    // While Beep Assist was off the cursors stood still, so they now point at
-    // waypoints the car passed long ago. Without this, switching on at 40 km
-    // with waypoints at 5/10/15/20 km fires all four back to back.
-    data->beepCursorsStale = true;
-    ConfigFile::save(*data->state);
-    return FALSE;  // let the switch draw the new state
-}
-
-void on_beep_mode_toggled(GtkWidget* widget, gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
-    bool active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
-    if (GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "mode")) == 1)
-        data->state->beep_timing_mode = active;
-    else
-        data->state->beep_navigation_mode = active;
-    // A mode that was off never advanced its cursor either -- same replay.
-    if (active) data->beepCursorsStale = true;
-    ConfigFile::save(*data->state);
 }
 
 void on_beep_advance_changed(GtkWidget* widget, gpointer user_data) {

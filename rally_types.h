@@ -101,6 +101,8 @@ struct AppData {
     GtkStack* copilotStack;  // Stack for multiple screens
     GtkLabel* copilotRallyClockLabel;
     GtkWidget* menuScreen = nullptr;  // Nero2.0 full-screen menu page
+    GtkWidget* settingsScreen = nullptr;   // Nero2.0 Settings page
+    GtkLabel* settingsInfoLabel = nullptr; // "Screen N fps  CPU N C"
     // Nero2.0 Date/Time and Calibration pages
     GtkWidget* sensor1Btn = nullptr;
     GtkWidget* sensorBothBtn = nullptr;
