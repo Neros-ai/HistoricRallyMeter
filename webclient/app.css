@@ -409,3 +409,8 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .card.arr small { display: block; color: #ccc; font-size: 0.75rem; }
 .card.arr b { font-size: 1.8rem; }
 .card.hist { font-family: monospace; }
+
+/* Seg: the distance list box sits above its add distance key, full width. */
+.add-row { flex-direction: column; align-items: stretch; }
+.add-row input { width: 100%; flex: none; height: 3rem; }
+.add-row .key { width: 100%; }
