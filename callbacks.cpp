@@ -9,9 +9,11 @@
 #include "ui_control.h"
 #include "nero_frame.h"
 #include "ui_segments.h"
+#include "debug_log.h"
 #include "ui_datetime.h"
 #include "counter_poller.h"
 #include "tone_generator.h"
+#include <unistd.h>
 #include <cmath>
 #include <sstream>
 #include <iomanip>
@@ -945,7 +947,21 @@ gboolean update_display(gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     
     // Poll counters (respects 5ms minimum interval)
-    data->poller->poll(data->counter1, data->counter2, data->register_addr);
+    bool polled = data->poller->poll(data->counter1, data->counter2, data->register_addr);
+
+    // Sensor log: one row per actual counter read -- the raw counts and the
+    // Total and Trip as the displays show them (RB-DEV-14, from upstream ae9753c).
+    if (polled && data->debugLog && data->debugLog->isRunning()) {
+        auto p = data->poller->getMostRecent();
+        auto raw = data->poller->getMostRecentRaw();
+        int64_t total_counts = calculateDistanceCounts(*data->state, p.cntr1, p.cntr2,
+            data->state->total_start_cntr1, data->state->total_start_cntr2);
+        int64_t trip_counts = calculateDistanceCounts(*data->state, p.cntr1, p.cntr2,
+            data->state->trip_start_cntr1, data->state->trip_start_cntr2);
+        data->debugLog->record(p.time_ms, static_cast<uint32_t>(raw.cntr1), static_cast<uint32_t>(raw.cntr2),
+            countsToCentimeters(total_counts, data->state->calibration) / 100,
+            countsToCentimeters(trip_counts, data->state->calibration) / 100);
+    }
 
     // The stage's own distance is what ends it. Once it is driven out the
     // roadbook stops being frozen, so the next edit or recall shows up
@@ -1436,6 +1452,30 @@ void on_menu_choice(GtkWidget* widget, gpointer user_data) {
     else if (page == "datetime")    on_show_datetime(widget, data);
     else if (page == "calibration") on_show_calibration(widget, data);
     else gtk_stack_set_visible_child_name(data->copilotStack, item->page);
+}
+
+std::string appDirectory() {
+    char buf[4096];
+    ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (n <= 0) return ".";
+    buf[n] = '\0';
+    std::string path(buf);
+    size_t slash = path.rfind('/');
+    return slash == std::string::npos ? "." : path.substr(0, slash);
+}
+
+// Start a new sensor log in logs/ beside the executable, or flush and close
+// the current one.
+void setDebugLogging(AppData* data, bool on) {
+    if (!data->debugLog) return;
+    if (on) {
+        auto now = std::chrono::system_clock::now();
+        int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now.time_since_epoch()).count();
+        data->debugLog->start(appDirectory() + "/logs", now_ms);
+    } else {
+        data->debugLog->stop();
+    }
 }
 
 void on_exit_app(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {

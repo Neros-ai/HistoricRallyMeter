@@ -251,8 +251,10 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.tone_type_ahead = static_cast<int>(extractLong(line)) == 2 ? 2 : 1;
         } else if (line.find("\"stage_logging\"") != std::string::npos) {
             state.stage_logging = extractBool(line);
-        } else if (line.find("\"sensor_logging\"") != std::string::npos) {
-            state.sensor_logging = extractBool(line);
+        } else if (line.find("\"debug_logs_enabled\"") != std::string::npos
+                   || line.find("\"sensor_logging\"") != std::string::npos) {
+            // "Sensor logging" on Settings; the key keeps Papworth's name.
+            state.debug_logs_enabled = extractBool(line);
         } else if (line.find("\"web_enabled\"") != std::string::npos) {
             state.web_enabled = extractBool(line);
         } else if (line.find("\"web_port\"") != std::string::npos) {
@@ -430,7 +432,7 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"tone_type_behind\": " << state.tone_type_behind << ",\n";
     file << "  \"tone_type_ahead\": " << state.tone_type_ahead << ",\n";
     file << "  \"stage_logging\": " << (state.stage_logging ? "true" : "false") << ",\n";
-    file << "  \"sensor_logging\": " << (state.sensor_logging ? "true" : "false") << ",\n";
+    file << "  \"debug_logs_enabled\": " << (state.debug_logs_enabled ? "true" : "false") << ",\n";
     file << "  \"web_enabled\": " << (state.web_enabled ? "true" : "false") << ",\n";
     file << "  \"web_port\": " << state.web_port << ",\n";
     file << "  \"prop_pulses_per_rev\": " << state.prop_pulses_per_rev << ",\n";

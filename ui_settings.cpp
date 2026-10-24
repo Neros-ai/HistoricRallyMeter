@@ -52,7 +52,7 @@ void apply(AppData* d, Setting id, int idx) {
         if (s.units != (idx == 1) && d->unitToggleBtn) gtk_button_clicked(d->unitToggleBtn);
         break;
     case STAGE_LOG:   s.stage_logging = (idx == 1); break;
-    case SENSOR_LOG:  s.sensor_logging = (idx == 1); break;
+    case SENSOR_LOG:  s.debug_logs_enabled = (idx == 1); setDebugLogging(d, s.debug_logs_enabled); break;
     case FORCE_SINGLE:
         on_force_single_display_toggle(nullptr, idx == 1, d);   // saves itself; applies at next start
         break;
@@ -168,7 +168,7 @@ GtkWidget* createSettingsScreen(AppData* d) {
 
     gtk_box_pack_end(GTK_BOX(row(right, "Speed units")), seg(d, UNITS, "kph", "mph", s.units ? 1 : 0), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(right, "Stage data logging")), seg(d, STAGE_LOG, "off", "on", s.stage_logging ? 1 : 0), FALSE, FALSE, 0);
-    gtk_box_pack_end(GTK_BOX(row(right, "Sensor logging")), seg(d, SENSOR_LOG, "off", "on", s.sensor_logging ? 1 : 0), FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(row(right, "Sensor logging")), seg(d, SENSOR_LOG, "off", "on", s.debug_logs_enabled ? 1 : 0), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(right, "Force single display")), seg(d, FORCE_SINGLE, "off", "on", s.force_single_display ? 1 : 0), FALSE, FALSE, 0);
 
     d->settingsInfoLabel = GTK_LABEL(gtk_label_new(""));

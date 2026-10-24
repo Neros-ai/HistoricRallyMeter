@@ -180,6 +180,34 @@ header { justify-content: flex-end; }
 .actions.live-tall button { padding-block: 1.65rem; }
 .adjust-row.live-tall button { padding-block: 1.35rem; }
 .adjust-row.live-tall input[type="number"] { padding-block: 1.25rem; }
+/* Logs tab: one tall row per file, the whole row is the download link. */
+.logs-head { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; }
+.logs-note { flex: 1; font-size: 0.9rem; color: #bbb; }
+.logs-head button {
+  padding: 0.9rem 1.1rem;
+  font-size: 1rem;
+  font-weight: bold;
+  background: #222;
+  color: #fff;
+  border: 1px solid #666;
+}
+.logs-list { list-style: none; margin: 0; padding: 0; }
+.logs-list li { margin-bottom: 0.5rem; }
+.logs-list a {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.05rem 0.9rem;
+  background: #222;
+  border: 1px solid #666;
+  color: #fff;
+  text-decoration: none;
+  font-size: 1.05rem;
+}
+.logs-list a:active { background: #444; }
+.log-name { font-weight: bold; font-variant-numeric: tabular-nums; }
+.log-size { color: #bbb; font-size: 0.9rem; }
+.logs-empty { color: #bbb; }
 .table-wrap { overflow-x: auto; margin-bottom: 0.75rem; }
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 th, td { border: 1px solid #444; padding: 0.4rem; text-align: left; }

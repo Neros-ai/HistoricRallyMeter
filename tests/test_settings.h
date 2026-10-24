@@ -25,15 +25,15 @@ public:
             const char* path = "test_settings_cfg.json";
             RallyState a;
             a.tone_type_behind = 2; a.tone_type_ahead = 1;
-            a.stage_logging = false; a.sensor_logging = true;
+            a.stage_logging = false; a.debug_logs_enabled = true;
             a.beep_navigation_mode = true; a.beep_timing_mode = false;
             ConfigFile::save(a, path);
             RallyState b;
-            b.stage_logging = true; b.sensor_logging = false;
+            b.stage_logging = true; b.debug_logs_enabled = false;
             ConfigFile::load(b, path);
             std::remove(path);
             return b.tone_type_behind == 2 && b.tone_type_ahead == 1
-                && !b.stage_logging && b.sensor_logging
+                && !b.stage_logging && b.debug_logs_enabled
                 && b.beep_navigation_mode && !b.beep_timing_mode;
         });
 
@@ -48,7 +48,7 @@ public:
 
         suite->addTest("defaults: stage logging on, sensor logging off, type 1 both sides", []() {
             RallyState s;
-            return s.stage_logging && !s.sensor_logging
+            return s.stage_logging && !s.debug_logs_enabled
                 && s.tone_type_behind == 1 && s.tone_type_ahead == 1;
         });
 
