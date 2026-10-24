@@ -46,6 +46,10 @@ void restartDistancesAfterPowerLoss(RallyState& state, uint64_t cntr1, uint64_t 
     state.segment_start_adjust_cm = 0;
     state.stage_complete = true;
     state.undo_valid = false;
+    // The chips restarted from zero, so the raw-minus-distance shift described
+    // counts that no longer exist.
+    state.reverse_shift1 = 0;
+    state.reverse_shift2 = 0;
 }
 
 bool handleCounterPowerLoss(ICounter& counter1, ICounter& counter2, uint8_t register_addr,
@@ -531,6 +535,24 @@ std::string segmentSpeedTransition(double next_speed, bool has_next, bool is_mph
     return std::string(buf);
 }
 
+std::string speedChangeLine(double cur_kph, double next_kph, bool has_next, bool is_mph) {
+    if (!has_next) return "";
+    const double f = is_mph ? 0.621371 : 1.0;
+    char buf[48];
+    snprintf(buf, sizeof(buf), "%.0f<>%.0f %s", cur_kph * f, next_kph * f, is_mph ? "mph" : "kph");
+    return std::string(buf);
+}
+
+StageArrival stageArrival(double start_distance_m, double minutes_to_start) {
+    StageArrival a;
+    if (start_distance_m <= 0.0 || minutes_to_start <= 1.0) return a;
+    a.valid = true;
+    a.minutes = static_cast<int>(std::lround(minutes_to_start));
+    a.speed_kph = static_cast<int>(std::lround((start_distance_m / 1000.0) /
+                                               ((minutes_to_start - 1.0) / 60.0)));
+    return a;
+}
+
 std::vector<double> parseBeepWaypointsKm(const std::string& text) {
     std::vector<double> waypoints;
 
@@ -1004,7 +1026,44 @@ void rebaseTotalDistance(RallyState& state, uint64_t c1, uint64_t c2) {
     state.segment_start_adjust_cm = state.total_distance_adjust_cm;
 }
 
+std::vector<long> parseTripHistory(const std::string& history) {
+    std::vector<long> out;
+    std::stringstream ss(history);
+    std::string item;
+    while (std::getline(ss, item, ',')) {
+        try {
+            size_t used = 0;
+            long v = std::stol(item, &used);
+            if (used > 0) out.push_back(v);
+        } catch (...) {
+            // not a number: skip
+        }
+    }
+    return out;
+}
+
+std::string pushTripHistory(const std::string& history, long trip_m, size_t max_entries) {
+    std::vector<long> entries = parseTripHistory(history);
+    entries.insert(entries.begin(), trip_m);
+    if (entries.size() > max_entries) entries.resize(max_entries);
+    std::string out;
+    for (size_t i = 0; i < entries.size(); i++) {
+        if (i) out += ',';
+        out += std::to_string(entries[i]);
+    }
+    return out;
+}
+
 void rebaseTripDistance(RallyState& state, uint64_t c1, uint64_t c2) {
+    // Every Trip rebase -- the Trip key, next/prev, auto-next, a stage start --
+    // goes through here, so this is the one place the reading is recorded:
+    // as it reads on the display (correction included) at the moment it is
+    // zeroed. Taken against the OLD baseline, before it is replaced.
+    int64_t trip_counts = calculateDistanceCounts(state, c1, c2,
+        state.trip_start_cntr1, state.trip_start_cntr2);
+    long trip_m = adjustedDistanceMeters(
+        countsToCentimeters(trip_counts, state.calibration), state.trip_distance_adjust_cm);
+    state.trip_history_m = pushTripHistory(state.trip_history_m, trip_m);
     state.trip_start_cntr1 = c1;
     state.trip_start_cntr2 = c2;
     state.trip_distance_adjust_cm = 0;

@@ -20,6 +20,7 @@ class RallyState;
 class CounterPoller;
 class ToneGenerator;
 class RallyWebServer;
+struct HomeUi;  // Nero2.0 Home page widgets and texts (ui_home.h)
 
 // Segment structure (high precision)
 struct Segment {
@@ -97,6 +98,10 @@ struct AppData {
     GtkStack* copilotStack;  // Stack for multiple screens
     GtkLabel* copilotRallyClockLabel;
     GtkWidget* menuScreen = nullptr;  // Nero2.0 full-screen menu page
+    HomeUi* home = nullptr;           // Nero2.0 Home page; null in single-display mode
+    // Freeze (Home): the co-pilot readouts hold their figures. The driver
+    // display and the phone never see it.
+    bool homeFrozen = false;
     
     // TwinMaster screen
     GtkWidget* twinMasterScreen;

@@ -2,6 +2,7 @@
 #define CALLBACKS_H
 
 #include <gtk/gtk.h>
+#include <string>
 #include "rally_types.h"
 #include "calculations.h"   // AutoStartArming
 
@@ -119,6 +120,16 @@ void on_autostart_set(GtkWidget* widget, gpointer user_data);
 void on_autostart_clear(GtkWidget* widget, gpointer user_data);
 void updateAutoStartDisplay(AppData* data);
 void performStageGo(AppData* data);
+
+// Home's two flag keys (Nero2.0), which replace the Stage Go dialog. The
+// next-minute key arms an early departure on the coming whole minute, exactly
+// as the dialog's "At hh:mm" button did; late arrival starts the stage now.
+void startStageAtNextMinute(AppData* data);
+// "hh:mm" of the minute the next-minute key would arm, for its caption.
+std::string nextMinuteCaption(AppData* data);
+// Load memory slot 1-5 as the stage (what a Recall key does). No-op for an
+// empty or out-of-range slot.
+void recallMemorySlot(AppData* data, int slot_1_based);
 // ABORT STAGE, from the Stage Go dialog: no stage running, the driver's
 // needle at zero, Total and Trip left as they read, and any armed autostart
 // cancelled, of either kind.
