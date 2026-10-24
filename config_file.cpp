@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <stdexcept>
 #include <cstdio>
+#include <cstdlib>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -20,6 +21,20 @@ static int64_t extractLong(const std::string& line) {
         return std::stoll(val);
     }
     return 0;
+}
+
+// A counter baseline. These are 64-bit counts in the distance ("virtual")
+// frame, which goes below zero once the car has reversed past where a baseline
+// was taken, so a baseline can be negative -- stored here as a signed number,
+// and still read if an older file wrote the same bits as a huge unsigned one.
+// (std::stoll threw on those and the app would not start.)
+static uint64_t extractCounter(const std::string& line) {
+    size_t pos = line.find(':');
+    if (pos == std::string::npos) return 0;
+    const char* p = line.c_str() + pos + 1;
+    while (*p == ' ') p++;
+    if (*p == '-') return static_cast<uint64_t>(std::strtoll(p, nullptr, 10));
+    return static_cast<uint64_t>(std::strtoull(p, nullptr, 10));
 }
 
 static double extractDouble(const std::string& line) {
@@ -161,15 +176,15 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
         } else if (line.find("\"counters\"") != std::string::npos) {
             state.counters = extractBool(line);
         } else if (line.find("\"total_start_cntr1\"") != std::string::npos) {
-            state.total_start_cntr1 = static_cast<uint32_t>(extractLong(line));
+            state.total_start_cntr1 = extractCounter(line);
         } else if (line.find("\"total_start_cntr2\"") != std::string::npos) {
-            state.total_start_cntr2 = static_cast<uint32_t>(extractLong(line));
+            state.total_start_cntr2 = extractCounter(line);
         } else if (line.find("\"total_start_time_ms\"") != std::string::npos) {
             state.total_start_time_ms = extractLong(line);
         } else if (line.find("\"trip_start_cntr1\"") != std::string::npos) {
-            state.trip_start_cntr1 = static_cast<uint32_t>(extractLong(line));
+            state.trip_start_cntr1 = extractCounter(line);
         } else if (line.find("\"trip_start_cntr2\"") != std::string::npos) {
-            state.trip_start_cntr2 = static_cast<uint32_t>(extractLong(line));
+            state.trip_start_cntr2 = extractCounter(line);
         } else if (line.find("\"trip_start_time_ms\"") != std::string::npos) {
             state.trip_start_time_ms = extractLong(line);
         } else if (line.find("\"reverse_shift1\"") != std::string::npos) {
@@ -196,9 +211,9 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
                     slot.start_distance_m = static_cast<long>(extractLong(line));
             }
         } else if (line.find("\"segment_start_cntr1\"") != std::string::npos) {
-            state.segment_start_cntr1 = static_cast<uint32_t>(extractLong(line));
+            state.segment_start_cntr1 = extractCounter(line);
         } else if (line.find("\"segment_start_cntr2\"") != std::string::npos) {
-            state.segment_start_cntr2 = static_cast<uint32_t>(extractLong(line));
+            state.segment_start_cntr2 = extractCounter(line);
         } else if (line.find("\"segment_start_time_ms\"") != std::string::npos) {
             state.segment_start_time_ms = extractLong(line);
         } else if (line.find("\"segment_current_number\"") != std::string::npos) {
@@ -390,11 +405,11 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"units\": " << (state.units ? "true" : "false") << ",\n";
     file << "  \"calibration\": " << state.calibration << ",\n";
     file << "  \"counters\": " << (state.counters ? "true" : "false") << ",\n";
-    file << "  \"total_start_cntr1\": " << state.total_start_cntr1 << ",\n";
-    file << "  \"total_start_cntr2\": " << state.total_start_cntr2 << ",\n";
+    file << "  \"total_start_cntr1\": " << static_cast<int64_t>(state.total_start_cntr1) << ",\n";
+    file << "  \"total_start_cntr2\": " << static_cast<int64_t>(state.total_start_cntr2) << ",\n";
     file << "  \"total_start_time_ms\": " << state.total_start_time_ms << ",\n";
-    file << "  \"trip_start_cntr1\": " << state.trip_start_cntr1 << ",\n";
-    file << "  \"trip_start_cntr2\": " << state.trip_start_cntr2 << ",\n";
+    file << "  \"trip_start_cntr1\": " << static_cast<int64_t>(state.trip_start_cntr1) << ",\n";
+    file << "  \"trip_start_cntr2\": " << static_cast<int64_t>(state.trip_start_cntr2) << ",\n";
     file << "  \"trip_start_time_ms\": " << state.trip_start_time_ms << ",\n";
     file << "  \"reverse_shift1\": " << state.reverse_shift1 << ",\n";
     file << "  \"reverse_shift2\": " << state.reverse_shift2 << ",\n";
@@ -410,8 +425,8 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     }
     // Digits, commas and minus signs only, so no escaping is needed.
     file << "  \"trip_history_m\": \"" << state.trip_history_m << "\",\n";
-    file << "  \"segment_start_cntr1\": " << state.segment_start_cntr1 << ",\n";
-    file << "  \"segment_start_cntr2\": " << state.segment_start_cntr2 << ",\n";
+    file << "  \"segment_start_cntr1\": " << static_cast<int64_t>(state.segment_start_cntr1) << ",\n";
+    file << "  \"segment_start_cntr2\": " << static_cast<int64_t>(state.segment_start_cntr2) << ",\n";
     file << "  \"segment_start_time_ms\": " << state.segment_start_time_ms << ",\n";
     file << "  \"segment_current_number\": " << state.segment_current_number << ",\n";
     file << "  \"rallyTimeOffset_ms\": " << state.rallyTimeOffset_ms << ",\n";
