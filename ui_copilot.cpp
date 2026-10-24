@@ -90,7 +90,10 @@ static void applyCopilotCSS() {
         ".seg-startentry { font-size: 26px; border-color: transparent; }"
         ".seg-addentry { font-size: 24px; }"
         ".dt-label { color: #00FFFF; font-size: 24px; }"
-        ".dt-entry { font-size: 44px; }"
+        // The same bold monospace, at the same 56 px, as the rally and computer
+        // times above it (drawn with cairo on this page).
+        ".dt-entry { font-family: monospace; font-weight: bold; font-size: 56px;"
+        " padding-top: 0; padding-bottom: 0; min-height: 0; }"
         ".cal-row { color: #00FFFF; font-size: 30px; }"
         ".cal-fig { color: #FFFFFF; }"
         ".cal-entry { font-size: 30px; color: #FFFFFF; }"
