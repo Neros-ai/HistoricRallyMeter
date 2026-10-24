@@ -100,6 +100,8 @@ static void parseSegmentArray(std::istringstream& stream, std::vector<Segment>& 
                 has_m = true;
             } else if (line.find("\"distance_counts\"") != std::string::npos) {
                 seg.distance_counts = extractDouble(line);
+            } else if (line.find("\"changes_speed\"") != std::string::npos) {
+                seg.changesSpeed = extractBool(line);
             } else if (line.find("\"autoNext\"") != std::string::npos) {
                 seg.autoNext = extractBool(line);
             }
@@ -177,13 +179,18 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
         } else if (line.find("\"trip_history_m\"") != std::string::npos) {
             state.trip_history_m = extractString(line);
         } else if (line.find("\"memory_") != std::string::npos
-                   && line.find("_start_") != std::string::npos) {
+                   && (line.find("_start_") != std::string::npos
+                       || line.find("_first_") != std::string::npos)) {
             // "memory_N_start_time_s" / "memory_N_start_distance_m"
             size_t k = line.find("\"memory_") + 8;
             int n = (k < line.size()) ? line[k] - '0' : 0;
             if (n >= 1 && n <= RallyState::MAX_MEMORY_SLOTS) {
                 auto& slot = state.memory_slots[n - 1];
-                if (line.find("_start_time_s") != std::string::npos)
+                if (line.find("_first_number") != std::string::npos)
+                    slot.first_number = static_cast<long>(extractLong(line));
+                else if (line.find("_first_from_m") != std::string::npos)
+                    slot.first_from_m = extractDouble(line);
+                else if (line.find("_start_time_s") != std::string::npos)
                     slot.start_time_s = static_cast<long>(extractLong(line));
                 else if (line.find("_start_distance_m") != std::string::npos)
                     slot.start_distance_m = static_cast<long>(extractLong(line));
@@ -348,6 +355,7 @@ static void writeSegmentArray(std::ofstream& file, const std::string& name,
         file << "      \"target_speed_counts_per_hour\": " << segs[i].target_speed_counts_per_hour << ",\n";
         file << "      \"distance_m\": " << segs[i].distance_m << ",\n";
         file << "      \"distance_counts\": " << segs[i].distance_counts << ",\n";
+        file << "      \"changes_speed\": " << (segs[i].changesSpeed ? "true" : "false") << ",\n";
         file << "      \"autoNext\": " << (segs[i].autoNext ? "true" : "false") << "\n";
         file << "    }";
         if (i < segs.size() - 1) file << ",";
@@ -384,6 +392,10 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
              << state.memory_slots[i].start_time_s << ",\n";
         file << "  \"memory_" << (i + 1) << "_start_distance_m\": "
              << state.memory_slots[i].start_distance_m << ",\n";
+        file << "  \"memory_" << (i + 1) << "_first_number\": "
+             << state.memory_slots[i].first_number << ",\n";
+        file << "  \"memory_" << (i + 1) << "_first_from_m\": "
+             << state.memory_slots[i].first_from_m << ",\n";
     }
     // Digits, commas and minus signs only, so no escaping is needed.
     file << "  \"trip_history_m\": \"" << state.trip_history_m << "\",\n";

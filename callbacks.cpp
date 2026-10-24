@@ -8,6 +8,7 @@
 #include "ui_copilot.h"
 #include "ui_control.h"
 #include "nero_frame.h"
+#include "ui_segments.h"
 #include "counter_poller.h"
 #include "tone_generator.h"
 #include <cmath>
@@ -614,6 +615,35 @@ static void setAutoStartToMinute(AppData* data, int64_t target_ms) {
     applyAutoStartArming(data, autoStartArming(target_ms, getAutoStartEpochMs(), true));
 }
 
+void notifyWebStateNow(AppData* data) { notifyWebState(data); }
+
+void flashNotice(GtkWidget* widget, const std::string& text) { flashMessage(widget, text); }
+
+bool confirmYesNo(GtkWidget* widget, const std::string& title, const std::string& text) {
+    GtkWidget* dialog = gtk_dialog_new_with_buttons(
+        title.c_str(), GTK_WINDOW(gtk_widget_get_toplevel(widget)), GTK_DIALOG_MODAL,
+        "Yes", GTK_RESPONSE_YES, "No", GTK_RESPONSE_NO, nullptr);
+    GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_set_border_width(GTK_CONTAINER(content), 20);
+    GtkWidget* label = gtk_label_new(text.c_str());
+    gtk_box_pack_start(GTK_BOX(content), label, TRUE, TRUE, 10);
+    gtk_widget_show(label);
+    applyDialogStyle(dialog);
+    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+    return response == GTK_RESPONSE_YES;
+}
+
+int64_t autoStartTargetForTimeOfDay(AppData* data, long tod_s) {
+    // Today's occurrence of a rally-clock time of day, in rally milliseconds.
+    const int64_t now_ms = getRallyTime_ms(*data->state);
+    time_t t = now_ms / 1000;
+    struct tm* lt = localtime(&t);
+    if (!lt) return 0;
+    const long now_tod = lt->tm_hour * 3600L + lt->tm_min * 60L + lt->tm_sec;
+    return now_ms - (now_tod * 1000LL) + tod_s * 1000LL - (now_ms % 1000);
+}
+
 void startStageAtNextMinute(AppData* data) {
     setAutoStartToMinute(data, nextRoundMinute_ms(getRallyTime_ms(*data->state)));
 }
@@ -1104,6 +1134,8 @@ gboolean on_textview_focus(GtkWidget* widget, G_GNUC_UNUSED GdkEvent* event, gpo
 // stale target let a keypress on one screen edit a widget on another -- and
 // the keypad's "C" silently wipe it.
 void releaseKeypadTarget(AppData* data) {
+    // A value typed on the Segments page is saved when the page is left.
+    segmentsCommitActive(data);
     if (data->beepWaypointCommitTimer) {
         g_source_remove(data->beepWaypointCommitTimer);
         data->beepWaypointCommitTimer = 0;
@@ -1111,131 +1143,6 @@ void releaseKeypadTarget(AppData* data) {
     }
     data->activeEntry = nullptr;
     data->activeBuffer = nullptr;
-}
-
-// Callback for when segment entry value changes
-void on_segment_entry_changed(GtkWidget* widget, gpointer user_data) {
-    int index = GPOINTER_TO_INT(user_data);
-    AppData* data = static_cast<AppData*>(g_object_get_data(G_OBJECT(widget), "app_data"));
-    if (!data || index < 0 || index >= static_cast<int>(data->state->segments.size())) return;
-    
-    const char* entry_type = static_cast<const char*>(g_object_get_data(G_OBJECT(widget), "entry_type"));
-    const char* text = gtk_entry_get_text(GTK_ENTRY(widget));
-    
-    if (text && strlen(text) > 0) {
-        if (strcmp(entry_type, "speed") == 0) {
-            double kph = std::stod(text);
-            data->state->segments[index].target_speed_kph = kph;
-            data->state->segments[index].target_speed_counts_per_hour = kphToCountsPerHour(kph, data->state->calibration);
-        } else if (strcmp(entry_type, "distance") == 0) {
-            double meters = std::stod(text);
-            data->state->segments[index].distance_m = meters;
-            data->state->segments[index].distance_counts = (meters * 1e6) / data->state->calibration;
-        }
-        // After the whole if/else, not inside the distance branch: a speed
-        // edit is just as much an edit, and nesting this left the gauge and
-        // the tone on the old speed until a distance happened to be typed.
-        data->state->last_memory_slot = 0;
-        adoptRoadbookIfIdle(data);
-        ConfigFile::save(*data->state);
-        notifyWebState(data);
-    }
-}
-
-// Callback for when segment auto checkbox toggled
-void on_segment_auto_toggled(GtkWidget* widget, gpointer user_data) {
-    int index = GPOINTER_TO_INT(user_data);
-    AppData* data = static_cast<AppData*>(g_object_get_data(G_OBJECT(widget), "app_data"));
-    if (!data || index < 0 || index >= static_cast<int>(data->state->segments.size())) return;
-    
-    data->state->segments[index].autoNext = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
-    data->state->last_memory_slot = 0;
-    adoptRoadbookIfIdle(data);
-    ConfigFile::save(*data->state);
-    notifyWebState(data);
-}
-
-// Helper function to refresh segment list with editable entries
-void refreshSegmentList(AppData* data) {
-    // Clear existing rows
-    GList* children = gtk_container_get_children(GTK_CONTAINER(data->segmentListBox));
-    for (GList* l = children; l != NULL; l = l->next) {
-        gtk_widget_destroy(GTK_WIDGET(l->data));
-    }
-    g_list_free(children);
-    
-    // Add segments with editable entries
-    for (size_t i = 0; i < data->state->segments.size(); i++) {
-        const Segment& seg = data->state->segments[i];
-        double target_kph = seg.target_speed_kph;
-        long distance_m = static_cast<long>(seg.distance_m);
-        
-        GtkWidget* row = gtk_list_box_row_new();
-        GtkWidget* grid = gtk_grid_new();
-        gtk_grid_set_column_spacing(GTK_GRID(grid), SEGMENT_COL_SPACING);
-        gtk_style_context_add_class(gtk_widget_get_style_context(grid), "segment-row");
-        gtk_container_add(GTK_CONTAINER(row), grid);
-
-        // Speed entry (editable)
-        std::stringstream ss;
-        ss << std::fixed << std::setprecision(2) << target_kph;
-        GtkWidget* speedEntry = gtk_entry_new();
-        gtk_entry_set_text(GTK_ENTRY(speedEntry), ss.str().c_str());
-        g_object_set_data(G_OBJECT(speedEntry), "app_data", data);
-        g_object_set_data(G_OBJECT(speedEntry), "entry_type", (gpointer)"speed");
-        g_signal_connect(speedEntry, "changed", G_CALLBACK(on_segment_entry_changed), GINT_TO_POINTER(i));
-        g_signal_connect(speedEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
-        
-        // Distance entry (editable)
-        ss.str("");
-        ss << distance_m;
-        GtkWidget* distEntry = gtk_entry_new();
-        gtk_entry_set_text(GTK_ENTRY(distEntry), ss.str().c_str());
-        g_object_set_data(G_OBJECT(distEntry), "app_data", data);
-        g_object_set_data(G_OBJECT(distEntry), "entry_type", (gpointer)"distance");
-        g_signal_connect(distEntry, "changed", G_CALLBACK(on_segment_entry_changed), GINT_TO_POINTER(i));
-        g_signal_connect(distEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
-        
-        // Auto checkbox (editable)
-        GtkWidget* autoCheck = gtk_check_button_new();
-        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(autoCheck), seg.autoNext);
-        g_object_set_data(G_OBJECT(autoCheck), "app_data", data);
-        g_signal_connect(autoCheck, "toggled", G_CALLBACK(on_segment_auto_toggled), GINT_TO_POINTER(i));
-        
-        // Time label (display only: mm:ss to cover distance at speed)
-        int time_secs = (seg.distance_m > 0 && seg.target_speed_kph > 0)
-            ? static_cast<int>(seg.distance_m / (seg.target_speed_kph * 1000.0 / 3600.0))
-            : 0;
-        ss.str("");
-        ss << std::setw(2) << std::setfill('0') << (time_secs / 60)
-           << ":" << std::setw(2) << std::setfill('0') << (time_secs % 60);
-        GtkWidget* timeLabel = gtk_label_new(ss.str().c_str());
-        gtk_style_context_add_class(gtk_widget_get_style_context(timeLabel), "segment-label");
-        
-        // Delete button
-        GtkWidget* deleteBtn = gtk_button_new_with_label("del");
-        g_object_set_data(G_OBJECT(deleteBtn), "app_data", data);
-        g_signal_connect(deleteBtn, "clicked", G_CALLBACK(on_delete_segment), GINT_TO_POINTER(i));
-
-        gtk_widget_set_size_request(speedEntry, SEGMENT_COL_SPEED, 36);
-        gtk_grid_attach(GTK_GRID(grid), speedEntry, 0, 0, 1, 1);
-
-        gtk_widget_set_size_request(distEntry, SEGMENT_COL_DISTANCE, 36);
-        gtk_grid_attach(GTK_GRID(grid), distEntry, 1, 0, 1, 1);
-
-        gtk_widget_set_size_request(autoCheck, SEGMENT_COL_AUTO, -1);
-        gtk_grid_attach(GTK_GRID(grid), autoCheck, 2, 0, 1, 1);
-
-        gtk_label_set_xalign(GTK_LABEL(timeLabel), 0.0);
-        gtk_widget_set_size_request(timeLabel, SEGMENT_COL_TIME, -1);
-        gtk_grid_attach(GTK_GRID(grid), timeLabel, 3, 0, 1, 1);
-
-        gtk_widget_set_size_request(deleteBtn, SEGMENT_COL_DELETE, 36);
-        gtk_grid_attach(GTK_GRID(grid), deleteBtn, 4, 0, 1, 1);
-
-        gtk_list_box_insert(data->segmentListBox, row, -1);
-        gtk_widget_show_all(row);
-    }
 }
 
 // Callback for calibration start button
@@ -1360,126 +1267,6 @@ void updateDateTimeDisplay(AppData* data) {
     }
 }
 
-void on_add_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
-    
-    const char* speed_str = gtk_entry_get_text(data->targetSpeedEntry);
-    const char* dist_str = gtk_entry_get_text(data->distanceEntry);
-    bool autoNext = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(data->autoNextCheck));
-    
-    if (speed_str && dist_str && strlen(speed_str) > 0 && strlen(dist_str) > 0) {
-        // RB-SEG-03: both fields are ';'-separated lists now, not just
-        // distance. A single speed still broadcasts to every distance (the
-        // original use case); multiple speeds must match the distance
-        // count and pair positionally -- see buildSegmentSpeedDistancePairs()
-        // in calculations.cpp for the exact rule and why mismatched counts
-        // are rejected outright rather than guessed at.
-        std::vector<double> speeds = parseSemicolonList(speed_str);
-        std::vector<double> distances = parseSemicolonList(dist_str);
-        std::vector<std::pair<double, double>> pairs;
-        bool paired = buildSegmentSpeedDistancePairs(speeds, distances, pairs);
-
-        bool added = false;
-
-        if (paired) {
-            for (const auto& [target_kph, distance_m] : pairs) {
-                if (distance_m <= 0) continue;
-
-                double target_counts_per_hour = kphToCountsPerHour(target_kph, data->state->calibration);
-                double distance_counts = (distance_m * 1e6) / data->state->calibration;
-
-                Segment seg;
-                seg.target_speed_kph = target_kph;
-                seg.target_speed_counts_per_hour = target_counts_per_hour;
-                seg.distance_m = distance_m;
-                seg.distance_counts = distance_counts;
-                seg.autoNext = autoNext;
-
-                data->state->segments.push_back(seg);
-                data->state->last_memory_slot = 0;
-                adoptRoadbookIfIdle(data);
-                added = true;
-            }
-        }
-
-        if (added) {
-            ConfigFile::save(*data->state);
-            
-            gtk_entry_set_text(data->targetSpeedEntry, "");
-            gtk_entry_set_text(data->distanceEntry, "");
-            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(data->autoNextCheck), TRUE);
-            
-            refreshSegmentList(data);
-            notifyWebState(data);
-        }
-    }
-}
-
-void on_delete_segment(GtkWidget* widget, gpointer user_data) {
-    // user_data contains the segment index
-    int index = GPOINTER_TO_INT(user_data);
-    
-    // We need to get AppData from the widget's parent hierarchy
-    // For now, use a simpler approach - store AppData pointer in widget data
-    AppData* data = static_cast<AppData*>(g_object_get_data(G_OBJECT(widget), "app_data"));
-    if (data && index >= 0 && index < static_cast<int>(data->state->segments.size())) {
-        data->state->segments.erase(data->state->segments.begin() + index);
-        data->state->last_memory_slot = 0;
-        adoptRoadbookIfIdle(data);
-        ConfigFile::save(*data->state);
-        refreshSegmentList(data);
-        notifyWebState(data);
-    }
-}
-
-static void updateMemoryRecallStyles(AppData* data) {
-    for (int i = 0; i < 5; i++) {
-        if (!data->memoryRecallBtns[i]) continue;
-        GtkStyleContext* ctx = gtk_widget_get_style_context(data->memoryRecallBtns[i]);
-        if (!data->state->memory_slots[i].empty()) {
-            gtk_style_context_add_class(ctx, "memory-populated");
-        } else {
-            gtk_style_context_remove_class(ctx, "memory-populated");
-        }
-    }
-}
-
-void on_memory_set(GtkWidget* widget, gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
-    int slot = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "slot")) - 1;
-    if (slot < 0 || slot >= RallyState::MAX_MEMORY_SLOTS) return;
-    
-    if (!data->state->memory_slots[slot].empty()) {
-        char msg[128];
-        snprintf(msg, sizeof(msg), "Overwrite memory slot %d?", slot + 1);
-        GtkWidget* dialog = gtk_dialog_new_with_buttons(
-            "Confirm Overwrite",
-            GTK_WINDOW(gtk_widget_get_toplevel(widget)),
-            GTK_DIALOG_MODAL,
-            "Yes", GTK_RESPONSE_YES,
-            "No", GTK_RESPONSE_NO,
-            nullptr);
-        GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-        gtk_container_set_border_width(GTK_CONTAINER(content), 20);
-        GtkWidget* label = gtk_label_new(msg);
-        gtk_box_pack_start(GTK_BOX(content), label, TRUE, TRUE, 10);
-        gtk_widget_show(label);
-        applyDialogStyle(dialog);
-        
-        gint response = gtk_dialog_run(GTK_DIALOG(dialog));
-        gtk_widget_destroy(dialog);
-        if (response != GTK_RESPONSE_YES) return;
-    }
-    
-    data->state->memory_slots[slot].segments = data->state->segments;
-    // A slot is the whole stage setup, waypoints included.
-    data->state->memory_slots[slot].beep_waypoints_m = data->state->beep_waypoints_m;
-    data->state->memory_slots[slot].waypoints_recorded = true;
-    ConfigFile::save(*data->state);
-    updateMemoryRecallStyles(data);
-    notifyWebState(data);
-}
-
 void recallMemorySlot(AppData* data, int slot_1_based) {
     int slot = slot_1_based - 1;
     if (slot >= 0 && slot < RallyState::MAX_MEMORY_SLOTS && !data->state->memory_slots[slot].empty()) {
@@ -1502,39 +1289,6 @@ void recallMemorySlot(AppData* data, int slot_1_based) {
         refreshBeepWaypointView(data);
         notifyWebState(data);
     }
-}
-
-void on_memory_recall(GtkWidget* widget, gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
-    recallMemorySlot(data, GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "slot")));
-}
-
-void on_memory_clear(GtkWidget* widget, gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
-    
-    GtkWidget* dialog = gtk_dialog_new_with_buttons(
-        "Confirm Clear",
-        GTK_WINDOW(gtk_widget_get_toplevel(widget)),
-        GTK_DIALOG_MODAL,
-        "Yes", GTK_RESPONSE_YES,
-        "No", GTK_RESPONSE_NO,
-        nullptr);
-    GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    gtk_container_set_border_width(GTK_CONTAINER(content), 20);
-    GtkWidget* label = gtk_label_new("Clear all memory slots?");
-    gtk_box_pack_start(GTK_BOX(content), label, TRUE, TRUE, 10);
-    gtk_widget_show(label);
-    applyDialogStyle(dialog);
-    
-    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
-    gtk_widget_destroy(dialog);
-    if (response != GTK_RESPONSE_YES) return;
-    
-    for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
-        data->state->memory_slots[i].clear();
-    }
-    ConfigFile::save(*data->state);
-    updateMemoryRecallStyles(data);
 }
 
 void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
