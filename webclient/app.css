@@ -318,3 +318,61 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
   padding: 0.9rem; font-size: 1rem; font-weight: bold;
   background: #222; color: #fff; border: 2px solid #fff;
 }
+
+/* ---- Nero2.0 phone: Navi / Seg / Time / Cal / Set / Drv ---- */
+.tabs { gap: 0.3rem; padding: 0.5rem 0.5rem; }
+.tab { padding: 0.9rem 0.2rem; font-size: 0.95rem; }
+.cyan { color: #0ff; }
+.orange { color: #ffa500; }
+.dim { color: #aaa; }
+.key {
+  background: #222; color: #fff; border: 1px solid #666;
+  font-weight: bold; font-size: 1.05rem; padding: 0.7rem 0.5rem; min-height: 3rem;
+}
+.key:disabled { color: #666; }
+.key.lit, button.lit { background: #fff; color: #000; }
+.navi-grid { display: grid; grid-template-columns: 1fr; gap: 0.5rem; margin: 0.5rem 0; }
+.navi-cell { display: grid; grid-template-columns: 6.5rem 1fr; gap: 0.6rem; align-items: center; }
+.navi-fig { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.navi-fig strong { font-size: 2.6rem; font-family: monospace; }
+.navi-fig .el { color: #ccc; font-size: 1.1rem; font-family: monospace; }
+.navi-fig.keys2 { justify-content: flex-start; }
+.navi-fig.keys2 .key { flex: 1; }
+.speeds { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; color: #ccc; font-size: 0.95rem; margin: 0.4rem 0; }
+.speeds strong { color: #fff; }
+.stage-sel { display: flex; align-items: center; gap: 0.5rem; margin: 0.4rem 0; }
+.stage-sel select { font-size: 1.4rem; padding: 0.4rem; background: #111; color: #fff; border: 1px solid #666; }
+.stage-auto { margin-left: auto; font-family: monospace; font-size: 1.1rem; }
+#stage-table { width: 100%; font-family: monospace; font-size: 1.1rem; border-collapse: collapse; }
+#stage-table th { color: #0ff; text-align: right; }
+#stage-table td { text-align: right; padding: 0.15rem 0.4rem; }
+#stage-table tr.now td { color: #0ff; }
+.arrival { margin: 0.5rem 0; color: #0ff; display: flex; gap: 1rem; align-items: baseline; }
+.arrival b { color: #fff; font-size: 1.6rem; }
+.hist { font-family: monospace; font-size: 1.05rem; margin-bottom: 0.5rem; }
+.flags { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; }
+.adjust-row { display: flex; gap: 0.4rem; margin: 0.4rem 0; }
+.adjust-row input { flex: 1; min-width: 0; }
+.start-block { display: grid; gap: 0.4rem; margin: 0.6rem 0; }
+.start-block label { display: flex; align-items: center; gap: 0.5rem; justify-content: space-between; }
+.start-block input[type=text], .start-block input[type=number] { width: 9rem; font-size: 1.1rem; background: #111; color: #fff; border: 1px solid #666; padding: 0.3rem; text-align: right; }
+.add-row { display: flex; gap: 0.5rem; margin: 0.5rem 0; }
+.add-row input { flex: 1; min-width: 0; font-size: 1.1rem; background: #111; color: #fff; border: 1px solid #666; padding: 0.4rem; }
+#seg-table { width: 100%; font-size: 0.85rem; border-collapse: collapse; }
+#seg-table th { color: #0ff; font-weight: normal; }
+#seg-table td { text-align: right; padding: 0.15rem 0.2rem; }
+#seg-table input.spd { width: 3.4rem; background: #111; color: #fff; border: 1px solid #666; text-align: right; }
+.trow { display: grid; grid-template-columns: 1fr; gap: 0.3rem; margin-bottom: 0.8rem; border-bottom: 1px solid #222; padding-bottom: 0.6rem; }
+.trow .tl { color: #0ff; }
+.trow .big { font-size: 2.2rem; font-family: monospace; }
+.big-input { font-size: 2rem; font-family: monospace; background: #111; color: #fff; border: 1px solid #666; padding: 0.2rem 0.4rem; }
+.pair { display: flex; gap: 0.5rem; }
+.pair .key { flex: 1; }
+.crow { margin: 0.7rem 0; font-size: 1.05rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; color: #0ff; }
+.crow b, .crow strong { color: #fff; font-family: monospace; }
+.crow input { background: #111; color: #fff; border: 1px solid #666; font-size: 1.1rem; padding: 0.3rem; width: 7rem; text-align: right; }
+.crow input.short { width: 5rem; } .crow input.tiny { width: 3.2rem; }
+.ins { color: #ccc; font-size: 0.85rem; }
+.ver { color: #fff; font-size: 0.9rem; font-weight: normal; margin-left: 1rem; }
+.logs-panel { margin-top: 1rem; }
+.logs-panel h3 { color: #0ff; font-size: 1rem; margin: 0.8rem 0 0.2rem; }

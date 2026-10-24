@@ -5,7 +5,8 @@
 
   const GAUGE_ZONE_DEAD_BAND_S = 0.5;
   const REF_RADIUS = 256.0;
-  const NEEDLE_HALF_WIDTH = 3.0;
+  const NEEDLE_HALF_WIDTH = 3.0;   // ticks
+  const NEEDLE_BAR_HALF_WIDTH = 5.0;   // Nero2.0: the needle is 10 px thick
 
   function gaugeEffectiveMaxSeconds(seconds) {
     const abs = Math.abs(seconds);
@@ -52,7 +53,7 @@
     return {
       angle: Math.PI + Math.PI / 2 + (clamped / maxSeconds) * (Math.PI / 2),
       length: (radius - 10) * 0.95,
-      halfWidth: NEEDLE_HALF_WIDTH
+      halfWidth: NEEDLE_BAR_HALF_WIDTH
     };
   }
 
@@ -62,8 +63,10 @@
     L.centerX = width / 2;
     L.centerY = height - 75;
     L.fscale = Math.min(1.0, L.radius / REF_RADIUS);
-    L.valSize = 44 * L.fscale;
-    L.curTopSize = 50 * L.fscale;
+    // Nero2.0 sizes (the box's driver display, RB-DRV-12)
+    L.valSize = 50 * L.fscale;      // ahead/behind digits
+    L.curTopSize = 62 * L.fscale;
+    L.legendDrop = 20 * L.fscale;
     L.labelSize = Math.max(12, 16 * L.fscale);
     L.rowGap = 48 * L.fscale;
     L.rightAnchor = L.centerX + L.radius * 0.72;
@@ -71,8 +74,8 @@
     L.bandOuterX = L.centerX + (L.radius + 6.0);
     L.bandTargetX = L.centerX - (L.radius + 6.0);
     L.bandTopY = L.centerY - (L.radius + 6.0);
-    L.boxHeight = 50.0;
-    L.boxY = L.centerY - 10;
+    L.boxHeight = 64.0 * L.fscale;
+    L.boxY = L.centerY - 8 * L.fscale;
     const lineGap = L.rowGap + 10 * L.fscale;
     L.tripBaseline = L.boxY - (0.22 * L.curTopSize + 6 * L.fscale);
     L.totalBaseline = L.tripBaseline - lineGap;
@@ -238,9 +241,8 @@
     ctx.lineTo(centerX + needle.halfWidth * perpX, centerY + needle.halfWidth * perpY);
     ctx.closePath();
     ctx.fill();
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, 8, 0, 2 * Math.PI);
-    ctx.fill();
+    // (no hub disc: the box below covers it, and the needle appears to start
+    // at the box's top edge)
 
     // Digital ahead/behind box
     const digital = formatGaugeDigital(seconds, zone);
@@ -249,7 +251,7 @@
     ctx.textBaseline = 'middle';
     const textW = ctx.measureText(digital).width;
     const boxW = Math.max(180, textW + 24) * 1.1;
-    const boxH = L.valSize + 20;
+    const boxH = L.boxHeight;
     const boxCenterY = L.boxY + L.boxHeight / 2;
     const boxY = boxCenterY - boxH / 2;
     const boxX = centerX - boxW / 2;
@@ -271,14 +273,14 @@
     ctx.textAlign = 'right';
     ctx.fillText(cur, L.bandOuterX, L.bandTopY + L.curTopSize * 0.8);
     ctx.font = L.labelSize + 'px sans-serif';
-    ctx.fillText('Current', L.bandOuterX, L.bandTopY + L.curTopSize * 0.8 + L.labelSize + 4);
+    ctx.fillText(msg.units === 'mph' ? 'Mph' : 'Kph', L.bandOuterX, L.bandTopY + L.curTopSize * 0.8 + L.labelSize + 4 + L.legendDrop);
 
     ctx.fillStyle = '#FFDD00';
     ctx.textAlign = 'left';
     ctx.font = 'bold ' + L.curTopSize + 'px sans-serif';
     ctx.fillText(tgt, L.bandTargetX, L.bandTopY + L.curTopSize * 0.8);
     ctx.font = L.labelSize + 'px sans-serif';
-    ctx.fillText('Target', L.bandTargetX, L.bandTopY + L.curTopSize * 0.8 + L.labelSize + 4);
+    ctx.fillText('Target', L.bandTargetX, L.bandTopY + L.curTopSize * 0.8 + L.labelSize + 4 + L.legendDrop);
 
     // Total / Trip live in the HTML footer under the canvas (RB-WEB-11).
 

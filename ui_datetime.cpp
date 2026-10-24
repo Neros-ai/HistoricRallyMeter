@@ -146,35 +146,50 @@ void onRallyToEntered(GtkWidget* w, gpointer p) {
         flashNotice(w, "Enter the rally time as hh:mm or hh:mm:ss.");
         return;
     }
-    // autoStartTargetForTimeOfDay gives that time of day in the rally clock's
-    // own frame, on its current date; the offset is that less the computer's now.
-    d->state->rallyTimeOffset_ms = autoStartTargetForTimeOfDay(d, tod) - systemNowMs();
-    ConfigFile::save(*d->state);
-    notifyWebStateNow(d);
+    setRallyToEntered(d, tod);
     gtk_entry_set_text(d->timeEntry, "");
 }
+
+void onComputerToPhone(GtkWidget* w, gpointer p) {
+    std::string err;
+    if (!setComputerClockToPhone(static_cast<AppData*>(p), &err) && !err.empty())
+        flashNotice(w, err);
+}
+
+}  // namespace
 
 // Sets the computer clock to the phone's. The rally clock is the computer
 // clock plus an offset, so the offset is moved by the same step and the rally
 // clock itself does not jump.
-void onComputerToPhone(GtkWidget* w, gpointer p) {
-    AppData* d = static_cast<AppData*>(p);
-    if (!phoneKnown(d)) return;
+bool setComputerClockToPhone(AppData* d, std::string* error) {
+    if (!phoneKnown(d)) {
+        if (error) *error = "";
+        return false;
+    }
     const int64_t phone_now = d->phoneClockMs + (systemNowMs() - d->phoneClockSeenMs);
     char cmd[96];
     snprintf(cmd, sizeof(cmd), "sudo -n date -s @%lld >/dev/null 2>&1",
              static_cast<long long>(phone_now / 1000));
     const int64_t before = systemNowMs();
     if (system(cmd) != 0) {
-        flashNotice(w, "The computer clock could not be set.");
-        return;
+        if (error) *error = "The computer clock could not be set.";
+        return false;
     }
     d->state->rallyTimeOffset_ms += before - systemNowMs();
     ConfigFile::save(*d->state);
     notifyWebStateNow(d);
+    return true;
 }
 
-}  // namespace
+bool phoneClockKnown(AppData* d) { return phoneKnown(d); }
+
+void setRallyToEntered(AppData* d, long tod_s) {
+    // autoStartTargetForTimeOfDay gives that time of day in the rally clock's
+    // own frame, on its current date; the offset is that less the computer's now.
+    d->state->rallyTimeOffset_ms = autoStartTargetForTimeOfDay(d, tod_s) - systemNowMs();
+    ConfigFile::save(*d->state);
+    notifyWebStateNow(d);
+}
 
 GtkWidget* createDateTimeScreen(AppData* d) {
     GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);

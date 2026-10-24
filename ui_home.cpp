@@ -236,7 +236,7 @@ void onFreeze(GtkWidget*, gpointer user_data) {
 gboolean whoopTick(gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     if (!data->poller || !data->poller->reverse()) {
-        data->home->whoopTimer = 0;
+        if (data->home) data->home->whoopTimer = 0;
         return G_SOURCE_REMOVE;
     }
     if (data->toneGen) data->toneGen->playBeep(392.0, ToneWaveform::Triangle, 250, 0.40);
@@ -245,22 +245,7 @@ gboolean whoopTick(gpointer user_data) {
 
 void onReverse(GtkWidget*, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
-    HomeUi* h = data->home;
-    const bool on = !data->poller->reverse();
-    data->poller->setReverse(on);
-    setLit(h->reverseBtn, on);
-    // Keep the raw-minus-distance shift with the baselines in the config, so
-    // a restart after reversing still lines up.
-    data->state->reverse_shift1 = data->poller->virtualShift1();
-    data->state->reverse_shift2 = data->poller->virtualShift2();
-    ConfigFile::save(*data->state);
-    if (on && h->whoopTimer == 0) {
-        whoopTick(data);
-        h->whoopTimer = g_timeout_add(700, whoopTick, data);
-    } else if (!on && h->whoopTimer != 0) {
-        g_source_remove(h->whoopTimer);
-        h->whoopTimer = 0;
-    }
+    setReverse(data, !data->poller->reverse());
 }
 
 void onNextMinute(GtkWidget*, gpointer user_data) {
@@ -315,6 +300,27 @@ void onHomeUnmap(GtkWidget*, gpointer user_data) {
 }
 
 } // namespace
+
+void setReverse(AppData* data, bool on) {
+    if (!data->poller || data->poller->reverse() == on) return;
+    data->poller->setReverse(on);
+    HomeUi* h = data->home;
+    if (h) setLit(h->reverseBtn, on);
+    // Keep the raw-minus-distance shift with the baselines in the config, so
+    // a restart after reversing still lines up.
+    data->state->reverse_shift1 = data->poller->virtualShift1();
+    data->state->reverse_shift2 = data->poller->virtualShift2();
+    ConfigFile::save(*data->state);
+    if (h) {
+        if (on && h->whoopTimer == 0) {
+            whoopTick(data);
+            h->whoopTimer = g_timeout_add(700, whoopTick, data);
+        } else if (!on && h->whoopTimer != 0) {
+            g_source_remove(h->whoopTimer);
+            h->whoopTimer = 0;
+        }
+    }
+}
 
 GtkWidget* createHomeScreen(AppData* data) {
     HomeUi* h = new HomeUi();

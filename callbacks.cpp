@@ -865,13 +865,21 @@ void on_adj_driver_zero(GtkWidget* widget, gpointer user_data) {
     gtk_widget_destroy(dialog);
     
     if (response == GTK_RESPONSE_YES) {
-        long offset_ms = static_cast<long>(current_ahead_behind * -1000.0);
-        data->state->ahead_behind_zero_offset_ms += offset_ms;
-        ConfigFile::save(*data->state);
+        applyDriverZero(data, false);
     } else if (response == RESPONSE_RESET_ZERO) {
-        data->state->ahead_behind_zero_offset_ms = 0;
-        ConfigFile::save(*data->state);
+        applyDriverZero(data, true);
     }
+}
+
+void applyDriverZero(AppData* data, bool reset) {
+    if (reset) {
+        data->state->ahead_behind_zero_offset_ms = 0;
+    } else {
+        // Zero the needle at this instant: the offset absorbs the current error.
+        data->state->ahead_behind_zero_offset_ms +=
+            static_cast<long>(data->aheadBehindSeconds * -1000.0);
+    }
+    ConfigFile::save(*data->state);
 }
 
 // "next", at any point in the segment (the old 500 m window is gone): the
@@ -1546,7 +1554,7 @@ static const guint TRIM_REPEAT_INTERVAL_MS = 150;
 // Saves on every step rather than once on release: a released signal can be
 // missed if the pointer grab breaks, and the config write is a few hundred
 // bytes -- losing a trim silently would be the worse failure.
-static void applyRallyTrim(AppData* data, int steps) {
+void applyRallyTrim(AppData* data, int steps) {
     data->state->rallyTimeOffset_ms = static_cast<long>(
         trimRallyOffsetMs(data->state->rallyTimeOffset_ms, steps));
     ConfigFile::save(*data->state);
