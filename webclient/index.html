@@ -23,6 +23,7 @@
     <button id="tab-live" class="tab active" type="button">Live</button>
     <button id="tab-setup" class="tab" type="button">Setup</button>
     <button id="tab-driver" class="tab" type="button">Driver</button>
+    <button id="tab-logs" class="tab" type="button">Logs</button>
   </nav>
 
   <main id="view-live" class="view">
@@ -188,6 +189,17 @@
         <button id="drv-dist-plus" type="button">+10</button>
       </section>
     </div>
+  </main>
+
+  <!-- Debug log files on the meter (Setup > Debug logs). Plain HTTP, not the
+       WebSocket: GET /api/logs for the list, GET /logs/<name> to download. -->
+  <main id="view-logs" class="view hidden">
+    <section class="logs-head">
+      <span class="logs-note">Debug logs on the meter, newest first. Press one to download it.</span>
+      <button id="btn-logs-refresh" type="button">Refresh</button>
+    </section>
+    <ul id="logs-list" class="logs-list"></ul>
+    <p id="logs-empty" class="logs-empty hidden">No log files. Turn on Debug logs on the meter's Setup screen.</p>
   </main>
 
   <!-- Reset Total with a stage running (a missed start): the box's question. -->

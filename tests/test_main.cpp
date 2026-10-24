@@ -31,6 +31,7 @@
 #include "test_home_logic.h"
 #include "test_stage_rows.h"
 #include "test_settings.h"
+#include "test_debug_log.h"
 
 int main() {
     TestRunner runner;
@@ -65,6 +66,7 @@ int main() {
     TestHomeLogic homeLogicTests;
     TestStageRows stageRowsTests;
     TestSettings settingsTests;
+    TestDebugLog debugLogTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -96,6 +98,7 @@ int main() {
     runner.addSuite(homeLogicTests.createSuite());
     runner.addSuite(stageRowsTests.createSuite());
     runner.addSuite(settingsTests.createSuite());
+    runner.addSuite(debugLogTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();

@@ -37,3 +37,7 @@ sim_check.png
 # One (_preview-datetime.html) was swept in by a `git add` during RB-DTM-02
 # and reached PR #44 before it was spotted.
 docs/_preview-*.html
+
+# Sensor / stage logs written to logs/ beside the executable
+logs/
+test_debug_logs/
