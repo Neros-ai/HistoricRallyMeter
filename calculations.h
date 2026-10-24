@@ -206,6 +206,16 @@ AutoStartArming autoStartArming(int64_t target_ms, int64_t epoch_ms,
 // stage a minute after the crew started it by hand.
 AutoStartArming autoStartDisarmed();
 
+// How long before a preprogrammed autostart (the Autostart tick on Segments)
+// the driver display's T- countdown appears. Hours-long countdowns used to sit
+// over the gauge all day.
+constexpr int64_t AUTO_START_POPUP_WINDOW_MS = 5LL * 60 * 1000;
+
+// Whether the driver display shows the T- countdown. Anything armed from the
+// next-minute flag (an early departure) is never more than a minute away and
+// always shows; a preprogrammed start shows only inside the window above.
+bool autoStartCountdownVisible(bool early_departure, int64_t diff_ms);
+
 bool autoStartHoldsTimeError(uint64_t auto_start_rally_time_s,
                              bool auto_start_early_departure,
                              bool auto_start_triggered,
