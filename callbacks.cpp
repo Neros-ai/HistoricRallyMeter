@@ -7,6 +7,7 @@
 #include "ui_driver.h"
 #include "ui_copilot.h"
 #include "ui_control.h"
+#include "nero_frame.h"
 #include "counter_poller.h"
 #include "tone_generator.h"
 #include <cmath>
@@ -1010,73 +1011,9 @@ void on_show_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     gtk_entry_set_text(data->timeEntry, buf);
 }
 
-// Keypad keys take the co-pilot's menu-bar font (.nav-button, 20 px) rather
-// than GTK's small default -- the keypad sits beside the menu bar on every
-// screen that has one.
-static void useMenuFont(GtkWidget* keypad) {
-    GList* keys = gtk_container_get_children(GTK_CONTAINER(keypad));
-    for (GList* k = keys; k; k = k->next)
-        gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(k->data)), "nav-button");
-    g_list_free(keys);
-}
-
-// Create numeric keypad widget
-GtkWidget* createNumericKeypad(AppData* data) {
-    GtkWidget* keypad = gtk_grid_new();
-    gtk_grid_set_row_spacing(GTK_GRID(keypad), 5);
-    gtk_grid_set_column_spacing(GTK_GRID(keypad), 5);
-    
-    const char* digits[] = {"7", "8", "9", "4", "5", "6", "1", "2", "3", ";", "0", "."};
-    
-    for (int i = 0; i < 12; i++) {
-        GtkWidget* btn = gtk_button_new_with_label(digits[i]);
-        gtk_widget_set_size_request(btn, 60, 42);
-        g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_digit), data);
-        gtk_grid_attach(GTK_GRID(keypad), btn, i % 3, i / 3, 1, 1);
-    }
-
-    // Row 5: Clear and Backspace
-    GtkWidget* clearBtn = gtk_button_new_with_label("C");
-    gtk_widget_set_size_request(clearBtn, 60, 42);
-    g_signal_connect(clearBtn, "clicked", G_CALLBACK(on_keypad_clear), data);
-    gtk_grid_attach(GTK_GRID(keypad), clearBtn, 0, 4, 1, 1);
-
-    GtkWidget* bkspBtn = gtk_button_new_with_label("<-");
-    gtk_widget_set_size_request(bkspBtn, 130, 42);
-    g_signal_connect(bkspBtn, "clicked", G_CALLBACK(on_keypad_backspace), data);
-    gtk_grid_attach(GTK_GRID(keypad), bkspBtn, 1, 4, 2, 1);
-
-    useMenuFont(keypad);
-    return keypad;
-}
-
-GtkWidget* createDateTimeKeypad(AppData* data) {
-    GtkWidget* keypad = gtk_grid_new();
-    gtk_grid_set_row_spacing(GTK_GRID(keypad), 5);
-    gtk_grid_set_column_spacing(GTK_GRID(keypad), 5);
-    
-    const char* digits[] = {"7", "8", "9", "4", "5", "6", "1", "2", "3", "/", "0", ":"};
-    
-    for (int i = 0; i < 12; i++) {
-        GtkWidget* btn = gtk_button_new_with_label(digits[i]);
-        gtk_widget_set_size_request(btn, 60, 42);
-        g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_digit), data);
-        gtk_grid_attach(GTK_GRID(keypad), btn, i % 3, i / 3, 1, 1);
-    }
-    
-    GtkWidget* clearBtn = gtk_button_new_with_label("C");
-    gtk_widget_set_size_request(clearBtn, 60, 42);
-    g_signal_connect(clearBtn, "clicked", G_CALLBACK(on_keypad_clear), data);
-    gtk_grid_attach(GTK_GRID(keypad), clearBtn, 0, 4, 1, 1);
-
-    GtkWidget* bkspBtn = gtk_button_new_with_label("<-");
-    gtk_widget_set_size_request(bkspBtn, 130, 42);
-    g_signal_connect(bkspBtn, "clicked", G_CALLBACK(on_keypad_backspace), data);
-    gtk_grid_attach(GTK_GRID(keypad), bkspBtn, 1, 4, 2, 1);
-
-    useMenuFont(keypad);
-    return keypad;
-}
+// Both keypad entry points build the one shared Nero2.0 keypad.
+GtkWidget* createNumericKeypad(AppData* data) { return createNeroKeypad(data); }
+GtkWidget* createDateTimeKeypad(AppData* data) { return createNeroKeypad(data); }
 
 // Keypad callbacks
 void on_keypad_digit(GtkWidget* widget, gpointer user_data) {
@@ -1717,6 +1654,30 @@ void on_alarm_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     system("pkill -f 'aplay alarm.wav' 2>/dev/null");
     gtk_label_set_text(data->alarmCountdownLabel, "");
     ConfigFile::save(*data->state);
+}
+
+void on_show_menu(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    releaseKeypadTarget(data);  // flush any typed value before the page changes
+    gtk_stack_set_visible_child_name(data->copilotStack, "menu");
+}
+
+// A menu key: runs the same handler the page's old nav button did, so each
+// page's own setup code still runs. A page that is not built yet is ignored.
+void on_menu_choice(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    const nero::MenuItem* item = static_cast<const nero::MenuItem*>(
+        g_object_get_data(G_OBJECT(widget), "menu-item"));
+    if (!item) return;
+    if (!item->page) { on_exit_app(widget, data); return; }
+    if (!gtk_stack_get_child_by_name(data->copilotStack, item->page)) return;
+
+    const std::string page = item->page;
+    if (page == "twinmaster")       on_show_twinmaster(widget, data);
+    else if (page == "stagesetup")  on_show_segments(widget, data);
+    else if (page == "datetime")    on_show_datetime(widget, data);
+    else if (page == "calibration") on_show_calibration(widget, data);
+    else gtk_stack_set_visible_child_name(data->copilotStack, item->page);
 }
 
 void on_exit_app(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
