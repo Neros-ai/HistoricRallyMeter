@@ -38,6 +38,8 @@ struct HomeUi {
     GtkWidget* freezeBtn = nullptr;
     GtkWidget* reverseBtn = nullptr;
     GtkWidget* minuteCaption = nullptr;   // text carrier: hh:mm under the next-minute flag
+    GtkWidget* goArea = nullptr;          // the stage go / stage abort key's drawing
+    bool goWasAbort = false;
     GtkWidget* flagArea = nullptr;        // the flag key's drawing, redrawn when the minute turns
     guint whoopTimer = 0;
 };
