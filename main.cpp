@@ -407,6 +407,9 @@ int main(int argc, char* argv[]) {
         if (app_data.simCounter2) app_data.simCounter2->setPaused(true);
         app_data.state = &state;
         app_data.poller = new CounterPoller();
+        // Resume the reverse shift saved with the baselines (zero unless the
+        // car was reversed), so distances line up after a restart.
+        app_data.poller->setVirtualShift(state.reverse_shift1, state.reverse_shift2);
         // Sim feed can jump after a VM clock step; the hardware glitch guard
         // must not run or one leap freezes the sandbox speed controls.
         if (usingSimCounters()) {

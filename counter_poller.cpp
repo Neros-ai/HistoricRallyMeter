@@ -8,6 +8,7 @@ CounterPoller::CounterPoller() {
         polls[i].time_ms = 0;
     }
     most_recent_poll = {0, 0, 0};
+    most_recent_virtual = {0, 0, 0};
 }
 
 bool CounterPoller::poll(ICounter* cntr1, ICounter* cntr2, uint8_t reg) {
@@ -58,6 +59,24 @@ bool CounterPoller::poll(ICounter* cntr1, ICounter* cntr2, uint8_t reg) {
             }
         }
         
+        // Virtual (distance) count: follows the raw advance, added going
+        // forward and subtracted while reverse is engaged.
+        if (!virt_init) {
+            virt1 = static_cast<int64_t>(val1) - pending_shift1;
+            virt2 = static_cast<int64_t>(val2) - pending_shift2;
+            virt_init = true;
+        } else {
+            int64_t d1 = static_cast<int64_t>(val1) - static_cast<int64_t>(prev_raw1);
+            int64_t d2 = static_cast<int64_t>(val2) - static_cast<int64_t>(prev_raw2);
+            virt1 += reverse_on ? -d1 : d1;
+            virt2 += reverse_on ? -d2 : d2;
+        }
+        prev_raw1 = val1;
+        prev_raw2 = val2;
+        most_recent_virtual.cntr1 = static_cast<uint64_t>(virt1);
+        most_recent_virtual.cntr2 = static_cast<uint64_t>(virt2);
+        most_recent_virtual.time_ms = ms;
+
         // Update last known good values
         last_good_cntr1 = val1;
         last_good_cntr2 = val2;
@@ -119,6 +138,10 @@ CounterPoll CounterPoller::get10th() const {
 }
 
 CounterPoll CounterPoller::getMostRecent() const {
+    return most_recent_virtual;
+}
+
+CounterPoll CounterPoller::getMostRecentRaw() const {
     // The actual most recent I2C read. Never use polls[0] for speed; position 0 is for shifting.
     return most_recent_poll;
 }

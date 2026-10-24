@@ -614,6 +614,14 @@ static void setAutoStartToMinute(AppData* data, int64_t target_ms) {
     applyAutoStartArming(data, autoStartArming(target_ms, getAutoStartEpochMs(), true));
 }
 
+void startStageAtNextMinute(AppData* data) {
+    setAutoStartToMinute(data, nextRoundMinute_ms(getRallyTime_ms(*data->state)));
+}
+
+std::string nextMinuteCaption(AppData* data) {
+    return formatHm(nextRoundMinute_ms(getRallyTime_ms(*data->state)));
+}
+
 static gboolean closeFlashMessage(gpointer dialog) {
     // Spent: clear the id first so the destroy handler below does not try to
     // remove the source that is running now.
@@ -1284,8 +1292,9 @@ void updateCalibrationDisplay(AppData* data) {
     // there is enough history, which reads as no figure rather than a
     // nonsense one.
     CounterPoll tenth = data->poller->get10th();
-    int64_t elapsed_ms = tenth.time_ms ? current_poll.time_ms - tenth.time_ms : 0;
-    std::string rpm = propRpmReading(propRpmFromCounts(current_poll.cntr1, tenth.cntr1,
+    CounterPoll raw_now = data->poller->getMostRecentRaw();  // RPM is raw, not the reversing distance count
+    int64_t elapsed_ms = tenth.time_ms ? raw_now.time_ms - tenth.time_ms : 0;
+    std::string rpm = propRpmReading(propRpmFromCounts(raw_now.cntr1, tenth.cntr1,
                                                        elapsed_ms, data->state->prop_pulses_per_rev));
     if (data->propRpmLabel && rpm != data->propRpmShown) {
         data->propRpmShown = rpm;
@@ -1471,9 +1480,8 @@ void on_memory_set(GtkWidget* widget, gpointer user_data) {
     notifyWebState(data);
 }
 
-void on_memory_recall(GtkWidget* widget, gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
-    int slot = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "slot")) - 1;
+void recallMemorySlot(AppData* data, int slot_1_based) {
+    int slot = slot_1_based - 1;
     if (slot >= 0 && slot < RallyState::MAX_MEMORY_SLOTS && !data->state->memory_slots[slot].empty()) {
         // A running stage keeps the segments it started on; with no stage
         // under way the recalled slot is adopted immediately, so the crew
@@ -1494,6 +1502,11 @@ void on_memory_recall(GtkWidget* widget, gpointer user_data) {
         refreshBeepWaypointView(data);
         notifyWebState(data);
     }
+}
+
+void on_memory_recall(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    recallMemorySlot(data, GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "slot")));
 }
 
 void on_memory_clear(GtkWidget* widget, gpointer user_data) {
