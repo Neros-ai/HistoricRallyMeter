@@ -126,15 +126,22 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
     case STAGE: {
         // auto / manual line
         const double ay = 12 + 28;
-        if (h->autoArmed) {
-            cyan(cr);
-            drawText(cr, "auto", 4, ay, 20, LEFT);
-        } else {
-            // On two lines ("man" over "ual"): on one line the word runs into
-            // the time beside it.
-            setColour(cr, 1.0, 0.65, 0.0);
-            drawText(cr, "man", 4, 12 + 17, 18, LEFT);
-            drawText(cr, "ual", 4, 12 + 35, 18, LEFT);
+        // Always the word "auto"; when no autostart is armed (and none has started
+        // the running stage) it is crossed out in red.
+        cyan(cr);
+        drawText(cr, "auto", 2, ay, 18, LEFT);
+        if (!h->autoArmed) {
+            cairo_text_extents_t e;
+            cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+            cairo_set_font_size(cr, 18);
+            cairo_text_extents(cr, "auto", &e);
+            setColour(cr, 1.0, 0.1, 0.1);
+            cairo_set_line_width(cr, 3.0);
+            cairo_move_to(cr, 0, ay - 14);
+            cairo_line_to(cr, 4 + e.x_advance, ay + 2);
+            cairo_move_to(cr, 0, ay + 2);
+            cairo_line_to(cr, 4 + e.x_advance, ay - 14);
+            cairo_stroke(cr);
         }
         white(cr);
         drawText(cr, h->autoTime, width - 4, ay, 30, RIGHT);
