@@ -130,6 +130,10 @@ struct AppData {
     // (the flag-and-stopwatch key) records the moment of the press. 0 = none;
     // the stage ending drops it. Runtime only.
     uint64_t autoFiredTime_s = 0;
+    // Which memory (1-5) the armed or just-fired autostart belongs to: Home shows
+    // that time only beside that stage, and every other stage shows its own start
+    // time from the Segments page.
+    int autoSlot = 0;
     
     // TwinMaster screen
     GtkWidget* twinMasterScreen;

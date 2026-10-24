@@ -410,6 +410,8 @@ int main(int argc, char* argv[]) {
         if (app_data.simCounter1) app_data.simCounter1->setPaused(true);
         if (app_data.simCounter2) app_data.simCounter2->setPaused(true);
         app_data.state = &state;
+        // An autostart armed before a restart belongs to the stage that was loaded.
+        app_data.autoSlot = state.auto_start_rally_time_s != 0 ? state.last_memory_slot : 0;
         app_data.poller = new CounterPoller();
         // Resume the reverse shift saved with the baselines (zero unless the
         // car was reversed), so distances line up after a restart.
