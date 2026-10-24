@@ -9,6 +9,7 @@
 #include "ui_control.h"
 #include "nero_frame.h"
 #include "ui_segments.h"
+#include "ui_datetime.h"
 #include "counter_poller.h"
 #include "tone_generator.h"
 #include <cmath>
@@ -1188,9 +1189,22 @@ void updateCalibrationDisplay(AppData* data) {
     gtk_label_set_text(data->totalDistCalLabel,
         calibrationReadoutLine(total_m, cntr_a, cntr1_diff, cntr2_diff).c_str());
 
-    char current[96];
+    char buf[160];
+    snprintf(buf, sizeof(buf), "%.1f", countsToMeters(cntr_a, data->state->calibration));
+    gtk_label_set_text(data->totalDistCalLabel, buf);
+
+    char counts[200];
+    snprintf(counts, sizeof(counts),
+             "Sensor Count: 1: <span foreground=\"#FFFFFF\">%lld</span>"
+             " 2: <span foreground=\"#FFFFFF\">%lld</span>"
+             " Avg: <span foreground=\"#FFFFFF\">%lld</span>",
+             static_cast<long long>(cntr1_diff), static_cast<long long>(cntr2_diff),
+             static_cast<long long>(cntr_a));
+    gtk_label_set_markup(data->totalCountCalLabel, counts);
+
+    char current[120];
     snprintf(current, sizeof(current),
-             "Using <span foreground=\"#FFDD00\">Calibration %ld pulses/KM</span>. Reset to",
+             "Pulses/KM: <span foreground=\"#FFFFFF\">%ld</span>. Reset to",
              static_cast<long>(pulsesPerKm(data->state->calibration) + 0.5));
     gtk_label_set_markup(data->calibrationCurrentLabel, current);
 
@@ -1205,7 +1219,7 @@ void updateCalibrationDisplay(AppData* data) {
                                                        elapsed_ms, data->state->prop_pulses_per_rev));
     if (data->propRpmLabel && rpm != data->propRpmShown) {
         data->propRpmShown = rpm;
-        std::string markup = "<span foreground=\"#FFDD00\">" + rpm + "</span>";
+        std::string markup = "<span foreground=\"#FFFFFF\">" + rpm + "</span>";
         gtk_label_set_markup(data->propRpmLabel, markup.c_str());
     }
 }
@@ -1221,35 +1235,8 @@ void on_prop_pulses_changed(GtkWidget* widget, gpointer user_data) {
     ConfigFile::save(*data->state);
 }
 
-// Helper function to update date/time display
-void updateDateTimeDisplay(AppData* data) {
-    // System clock
-    auto now = std::chrono::system_clock::now();
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-    time_t seconds = ms / 1000;
-    struct tm* tm = localtime(&seconds);
-    
-    char buf[100];
-    snprintf(buf, sizeof(buf), "%04d/%02d/%02d",
-             tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday);
-    gtk_label_set_text(data->systemClockLabel, buf);
-    // System clock stays whole seconds; only the rally clock shows tenths,
-    // since the rally clock is the one the +0.1/-0.1 trim moves.
-    snprintf(buf, sizeof(buf), "%02d:%02d:%02d",
-             tm->tm_hour, tm->tm_min, tm->tm_sec);
-    if (data->systemTimeLabel) gtk_label_set_text(data->systemTimeLabel, buf);
-    
-    // Rally clock
-    int64_t rally_ms = getRallyTime_ms(*data->state);
-    time_t rally_seconds = rally_ms / 1000;
-    struct tm* rally_tm = localtime(&rally_seconds);
-    
-    snprintf(buf, sizeof(buf), "%04d/%02d/%02d",
-             rally_tm->tm_year + 1900, rally_tm->tm_mon + 1, rally_tm->tm_mday);
-    gtk_label_set_text(data->rallyClockLabel, buf);
-    snprintf(buf, sizeof(buf), "%s", formatTimeTenths(rally_ms).c_str());
-    if (data->rallyTimeLabel) gtk_label_set_text(data->rallyTimeLabel, buf);
-
+// The phone-access address, for the Settings page's Wi-Fi line.
+void updateWebLinkDisplay(AppData* data) {
     if (data->webUrlLabel && data->webServer && data->state->web_enabled) {
         std::string url = data->webServer->getWebUrl();
         // Drop the scheme ("http://") to keep the on-screen address compact.
@@ -1362,16 +1349,20 @@ void on_reset_calibration_pulses(G_GNUC_UNUSED GtkWidget* widget, gpointer user_
 }
 
 void updateSensorModeLabel(AppData* data) {
-    // The sensor selection silently changes what every other number on this
-    // screen means, so the phrase itself is highlighted in the same yellow
-    // the driver panel uses for the live speed.
-    const char* phrase = data->state->counters
-        ? "Sensors 1+2 (avg)"
-        : "Sensor 1";
-    // "Using" stays white like the other captions; only the selection is yellow.
-    std::string markup = std::string("Using <span foreground=\"#FFDD00\">")
-                       + phrase + "</span>";
-    gtk_label_set_markup(data->sensorModeLabel, markup.c_str());
+    // The sensor in use is the white key and says "using"; the other offers
+    // the choice. The selection silently changes what every reading on the
+    // page means, so it is always one or the other.
+    const bool both = data->state->counters;
+    auto lit = [](GtkWidget* k, bool on, const char* text) {
+        if (!k) return;
+        gtk_button_set_label(GTK_BUTTON(k), text);
+        gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(k))), GTK_JUSTIFY_CENTER);
+        GtkStyleContext* c = gtk_widget_get_style_context(k);
+        if (on) gtk_style_context_add_class(c, "key-lit");
+        else gtk_style_context_remove_class(c, "key-lit");
+    };
+    lit(data->sensor1Btn, !both, both ? "select\nsensor 1" : "using\nsensor 1");
+    lit(data->sensorBothBtn, both, both ? "using\nsensor 1&2" : "select\nsensor 1&2");
 }
 
 void on_set_sensor_1(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
@@ -1551,66 +1542,6 @@ void on_trim_rally_released(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data)
         data->trimRepeatTimer = 0;
     }
     data->trimRepeatSteps = 0;
-}
-
-void on_save_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
-    
-    const char* date_str = gtk_entry_get_text(data->dateEntry);
-    const char* time_str = gtk_entry_get_text(data->timeEntry);
-    
-    if (date_str && time_str && strlen(date_str) > 0 && strlen(time_str) > 0) {
-        // Parse date (yyyy/mm/dd)
-        int year, month, day, hour, min, sec;
-        if (sscanf(date_str, "%d/%d/%d", &year, &month, &day) == 3 &&
-            sscanf(time_str, "%d:%d:%d", &hour, &min, &sec) == 3) {
-            
-            struct tm tm = {};
-            tm.tm_year = year - 1900;
-            tm.tm_mon = month - 1;
-            tm.tm_mday = day;
-            tm.tm_hour = hour;
-            tm.tm_min = min;
-            tm.tm_sec = sec;
-            tm.tm_isdst = -1;
-            
-            time_t rally_time = mktime(&tm);
-            auto now = std::chrono::system_clock::now();
-            auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                now.time_since_epoch()).count();
-            
-            int64_t old_rally_ms = getRallyTime_ms(*data->state);
-            time_t old_rally_s = old_rally_ms / 1000;
-            struct tm* old_tm = localtime(&old_rally_s);
-            fprintf(stderr, "[DEBUG datetime] Input: date='%s' time='%s'\n", date_str, time_str);
-            fprintf(stderr, "[DEBUG datetime] Parsed: %04d/%02d/%02d %02d:%02d:%02d\n",
-                    year, month, day, hour, min, sec);
-            fprintf(stderr, "[DEBUG datetime] Old rally time: %04d/%02d/%02d %02d:%02d:%02d\n",
-                    old_tm->tm_year+1900, old_tm->tm_mon+1, old_tm->tm_mday,
-                    old_tm->tm_hour, old_tm->tm_min, old_tm->tm_sec);
-            fprintf(stderr, "[DEBUG datetime] mktime result: %ld, rally_ms: %ld, now_ms: %ld\n",
-                    (long)rally_time, (long)(rally_time * 1000), (long)now_ms);
-            fprintf(stderr, "[DEBUG datetime] New offset: %ld ms\n",
-                    (long)(rally_time * 1000 - now_ms));
-            
-            // Calculate offset
-            int64_t rally_ms = rally_time * 1000;
-            data->state->rallyTimeOffset_ms = rally_ms - now_ms;
-            ConfigFile::save(*data->state);
-            
-            int64_t verify_ms = getRallyTime_ms(*data->state);
-            time_t verify_s = verify_ms / 1000;
-            struct tm* verify_tm = localtime(&verify_s);
-            fprintf(stderr, "[DEBUG datetime] Verify rally time: %04d/%02d/%02d %02d:%02d:%02d\n",
-                    verify_tm->tm_year+1900, verify_tm->tm_mon+1, verify_tm->tm_mday,
-                    verify_tm->tm_hour, verify_tm->tm_min, verify_tm->tm_sec);
-            
-            // Clear entries
-            gtk_entry_set_text(data->dateEntry, "");
-            gtk_entry_set_text(data->timeEntry, "");
-            updateDateTimeDisplay(data);
-        }
-    }
 }
 
 // Epoch for auto_start: 2020-01-01 00:00:00 local time

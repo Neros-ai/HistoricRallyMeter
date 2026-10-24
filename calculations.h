@@ -58,6 +58,11 @@ std::string formatDuration(int64_t duration_ms);
 // and a whole-second readout hides nine out of ten trim presses.
 std::string formatTimeTenths(int64_t time_ms);
 
+// The rally clock's offset from the computer clock for Date/Time: seconds with
+// one decimal and an explicit sign, "+2.3" / "-0.4" / "+0.0". Rounds to the
+// nearest tenth.
+std::string formatOffsetSeconds(long offset_ms);
+
 // One press of the rally-clock trim. Returns the new rally/system offset
 // after nudging it by `steps` tenths of a second (+1 makes the rally clock
 // read later, -1 earlier). Deliberately does not round the offset to whole
