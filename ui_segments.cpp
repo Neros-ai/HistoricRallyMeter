@@ -22,7 +22,7 @@ namespace {
 constexpr int COLS[11] = {62, 80, 80, 76, 40, 60, 40, 44, 56, 56, 44};
 constexpr int COL_GAP = 8;
 // The stage column is 200 px (was 240); the 40 px it gave up widen the table.
-constexpr int LEFT_W = 1012, LIST_W = 796, STAGE_W = 200, TOP_H = 322, NEWPT_H = 56;
+constexpr int LEFT_W = 1012, TOP_H = 322, NEWPT_H = 56;
 
 struct RowW {
     GtkWidget* num = nullptr;     // entry on row 1, label below
@@ -402,6 +402,20 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_widget_set_size_request(top, LEFT_W, TOP_H);
     gtk_box_pack_start(GTK_BOX(left), top, FALSE, FALSE, 0);
 
+    // The stage column is exactly as wide as the rally clock's text at the top of
+    // it ("00:00:00" at 40 px); the table takes the rest of the 1012 px.
+    int STAGE_W = 192;
+    {
+        GtkWidget* probe = gtk_label_new("00:00:00");
+        addClass(probe, "seg-clock");
+        gint nat = 0;
+        gtk_widget_get_preferred_width(probe, nullptr, &nat);
+        if (nat > 100) STAGE_W = nat;
+        g_object_ref_sink(probe);
+        g_object_unref(probe);
+    }
+    const int LIST_W = LEFT_W - 16 - STAGE_W;
+
     // table header and framed rows
     GtkWidget* listCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
     gtk_widget_set_size_request(listCol, LIST_W, TOP_H);
@@ -485,7 +499,7 @@ GtkWidget* createStageSetupScreen(AppData* data) {
         // otherwise overrides the 144 px and widens the whole column.
         gtk_entry_set_width_chars(GTK_ENTRY(e), 1);
         gtk_entry_set_max_width_chars(GTK_ENTRY(e), 1);
-        gtk_widget_set_size_request(e, 144, 38);
+        gtk_widget_set_size_request(e, STAGE_W, 38);
         gtk_widget_set_halign(e, GTK_ALIGN_END);
         addClass(e, "seg-startentry");
         g_object_set_data(G_OBJECT(e), "seg_kind", const_cast<char*>(kind));
@@ -510,8 +524,8 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_widget_set_valign(clr, GTK_ALIGN_END);
     // Two short lines at 22 px: one 28 px line ("clear stage") is wider than
     // the 117 px half-column and would widen the whole stage column.
-    GtkWidget* clrStage = key("clear\nstage", 94, 48, G_CALLBACK(onClearStage));
-    GtkWidget* clrAll = key("clear\nall", 94, 48, G_CALLBACK(onClearAll));
+    GtkWidget* clrStage = key("clear\nstage", (STAGE_W - 6) / 2, 48, G_CALLBACK(onClearStage));
+    GtkWidget* clrAll = key("clear\nall", (STAGE_W - 6) / 2, 48, G_CALLBACK(onClearAll));
     for (GtkWidget* k : {clrStage, clrAll}) {
         addClass(k, "key-small");
         gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(k))), GTK_JUSTIFY_CENTER);
