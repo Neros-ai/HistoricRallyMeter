@@ -503,6 +503,7 @@ void zeroTimeBaselines(AppData* data) {
 }
 
 void applyAutoStartArming(AppData* data, const AutoStartArming& arming) {
+    if (arming.rally_time_s != 0) data->autoSlot = data->state->last_memory_slot;
     // Assignment, not a set of conditional updates: whatever kind of
     // autostart was armed before -- ordinary, on-the-minute, even one already
     // armed for this very same target time -- is completely replaced here.
@@ -558,6 +559,7 @@ void performStageGo(AppData* data) {
     // autostart's. (performAutoStart overwrites this with the armed moment.)
     data->autoFiredTime_s = autoStartSecondsFromTargetMs(getRallyTime_ms(*data->state),
                                                          getAutoStartEpochMs());
+    data->autoSlot = data->state->last_memory_slot;
     // Distance and clock together: this is the ordinary "start now" case.
     zeroDistanceBaselines(data);
     zeroTimeBaselines(data);
