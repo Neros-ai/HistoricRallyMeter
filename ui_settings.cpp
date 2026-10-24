@@ -127,11 +127,10 @@ void advanceEntry(AppData* d, GtkWidget* r, int mode, double stored) {
     gtk_entry_set_max_width_chars(e, 1);
     gtk_widget_set_size_request(GTK_WIDGET(e), 96, 40);
     addClass(GTK_WIDGET(e), "set-entry");
-    if (stored > 0.0) {
-        char b[32];
-        snprintf(b, sizeof(b), "%.0f", stored);
-        gtk_entry_set_text(e, b);
-    }
+    // Always a figure: "0" when no advance is set, never an empty box.
+    char b[32];
+    snprintf(b, sizeof(b), "%.0f", stored > 0.0 ? stored : 0.0);
+    gtk_entry_set_text(e, b);
     g_object_set_data(G_OBJECT(e), "mode", GINT_TO_POINTER(mode));
     g_signal_connect(e, "focus-in-event", G_CALLBACK(on_entry_focus), d);
     g_signal_connect(e, "changed", G_CALLBACK(on_beep_advance_changed), d);
