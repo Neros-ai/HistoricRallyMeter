@@ -3,6 +3,7 @@
 #include "web_telemetry.h"
 #include "rally_types.h"
 #include "debug_log.h"
+#include "stage_log.h"
 
 #include <gio/gio.h>
 
@@ -229,7 +230,7 @@ static std::string buildLogsListJson() {
     for (const auto& e : DebugLog::listFiles(logsDir())) {
         if (!first) json += ",";
         first = false;
-        json += "{\"name\":\"" + e.name + "\",\"size\":" + std::to_string(e.size) +
+        json += "{\"name\":\"" + e.name + "\",\"kind\":\"" + logKind(e.name) + "\",\"size\":" + std::to_string(e.size) +
                 ",\"modified_ms\":" + std::to_string(e.modified_ms) + "}";
     }
     json += "]";

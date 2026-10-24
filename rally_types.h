@@ -21,6 +21,7 @@ class CounterPoller;
 class ToneGenerator;
 class RallyWebServer;
 class DebugLog;
+class StageLog;
 struct HomeUi;  // Nero2.0 Home page widgets and texts (ui_home.h)
 
 // Segment structure (high precision)
@@ -115,6 +116,9 @@ struct AppData {
     int64_t phoneClockSeenMs = 0;
     // CSV log of every counter poll while Sensor logging is on (debug_log.h).
     DebugLog* debugLog = nullptr;
+    // CSV of the running stage, once a second while Stage data logging is on.
+    StageLog* stageLog = nullptr;
+    int64_t stageLogLastSampleMs = 0;
     HomeUi* home = nullptr;           // Nero2.0 Home page; null in single-display mode
     // Freeze (Home): the co-pilot readouts hold their figures. The driver
     // display and the phone never see it.

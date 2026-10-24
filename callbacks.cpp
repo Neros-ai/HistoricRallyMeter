@@ -10,6 +10,7 @@
 #include "nero_frame.h"
 #include "ui_segments.h"
 #include "debug_log.h"
+#include "stage_log.h"
 #include "ui_datetime.h"
 #include "counter_poller.h"
 #include "tone_generator.h"
@@ -976,6 +977,42 @@ gboolean update_display(gpointer user_data) {
             // The phone decides from the state message whether its Reset
             // Total asks about a running stage, so it must hear this end too.
             notifyWebState(data);
+        }
+    }
+
+    // Stage log (RB-DEV-15): from the moment a stage starts until it ends or is
+    // aborted, one row a second -- Total distance as displayed, the driver
+    // display's speed, and the ahead/behind figure. Switching it on while a
+    // stage is running starts a file at once.
+    if (data->stageLog) {
+        const int64_t sys_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        const bool want = data->state->stage_logging && !data->state->stage_complete;
+        if (want) {
+            if (!data->stageLog->isRunning()) {
+                if (!data->stageLog->start(appDirectory() + "/logs", sys_ms,
+                                           data->state->last_memory_slot)) {
+                    // Unwritable or full: switch the log off rather than retry
+                    // every 10 ms; the app carries on.
+                    data->state->stage_logging = false;
+                    fprintf(stderr, "Stage logging switched off: cannot write the log\n");
+                }
+                data->stageLogLastSampleMs = 0;
+            }
+            if (data->stageLog->isRunning() && sys_ms - data->stageLogLastSampleMs >= 1000) {
+                data->stageLogLastSampleMs = sys_ms;
+                auto p = data->poller->getMostRecent();
+                int64_t total_counts = calculateDistanceCounts(*data->state, p.cntr1, p.cntr2,
+                    data->state->total_start_cntr1, data->state->total_start_cntr2);
+                long total_m = adjustedDistanceMeters(
+                    countsToCentimeters(total_counts, data->state->calibration),
+                    data->state->total_distance_adjust_cm);
+                data->stageLog->record(sys_ms, total_m,
+                    data->smoothedSpeed < 0 ? 0.0 : data->smoothedSpeed,
+                    data->aheadBehindSeconds);
+            }
+        } else if (data->stageLog->isRunning()) {
+            data->stageLog->stop();   // stage ended, aborted or the switch went off
         }
     }
 
