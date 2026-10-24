@@ -144,19 +144,6 @@ void advanceEntry(AppData* d, GtkWidget* r, int mode, double stored) {
     if (mode == 1) d->beepAdvanceSecondsEntry = e; else d->beepAdvanceMetresEntry = e;
 }
 
-// Stage go (and its dialog, which held ABORT STAGE) is retired, so the one way
-// to end a stage that is not driven out lives here. One tap must not end a
-// stage, hence the question.
-void onAbortStage(GtkWidget* w, gpointer p) {
-    AppData* d = static_cast<AppData*>(p);
-    if (!stageAbortable(*d->state)) {
-        flashNotice(w, "There is no stage to abort.");
-        return;
-    }
-    if (confirmYesNo(w, "Abort stage", "ABORT the running stage?"))
-        performAbortStage(d);
-}
-
 }  // namespace
 
 GtkWidget* createSettingsScreen(AppData* d) {
@@ -204,16 +191,6 @@ GtkWidget* createSettingsScreen(AppData* d) {
     gtk_box_pack_end(GTK_BOX(row(right, "Stage data logging")), seg(d, STAGE_LOG, "off", "on", s.stage_logging ? 1 : 0), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(right, "Sensor logging")), seg(d, SENSOR_LOG, "off", "on", s.debug_logs_enabled ? 1 : 0), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(right, "Force single display")), seg(d, FORCE_SINGLE, "off", "on", s.force_single_display ? 1 : 0), FALSE, FALSE, 0);
-
-    {
-        GtkWidget* r = row(right, "Stage");
-        GtkWidget* k = gtk_button_new_with_label("abort stage");
-        gtk_widget_set_size_request(k, 160, KEY_H);
-        addClass(k, "dist-heading");
-        addClass(k, "key-small");
-        g_signal_connect(k, "clicked", G_CALLBACK(onAbortStage), d);
-        gtk_box_pack_end(GTK_BOX(r), k, FALSE, FALSE, 0);
-    }
 
     d->settingsInfoLabel = GTK_LABEL(gtk_label_new(""));
     addClass(GTK_WIDGET(d->settingsInfoLabel), "set-name");
