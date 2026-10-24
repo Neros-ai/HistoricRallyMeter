@@ -235,6 +235,12 @@ bool webHandleCommand(AppData* data, const char* json) {
         setReverse(data, on);
         return true;
     }
+    if (strcmp(type, "abort_stage") == 0) {
+        // The phone asks the crew first; the box only acts if a stage can end.
+        if (!stageAbortable(*data->state)) return false;
+        performAbortStage(data);
+        return true;
+    }
     if (strcmp(type, "flag_next_minute") == 0) { startStageAtNextMinute(data); return true; }
     if (strcmp(type, "flag_late_arrival") == 0) { performStageGo(data); return true; }
     if (strcmp(type, "driver_zero") == 0) {
