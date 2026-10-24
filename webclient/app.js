@@ -473,6 +473,7 @@
   $('set-stage-log').addEventListener('change', (e) => send({ type: 'setting', name: 'stage_logging', on: e.target.checked }));
   $('set-sensor-log').addEventListener('change', (e) => send({ type: 'setting', name: 'sensor_logging', on: e.target.checked }));
   $('set-force-single').addEventListener('change', (e) => send({ type: 'setting', name: 'force_single', on: e.target.checked }));
+  $('btn-abort-stage').addEventListener('click', () => { if (confirm('ABORT the running stage?')) send({ type: 'abort_stage' }); });
   $('btn-download-logs').addEventListener('click', () => {
     $('logs-block').classList.toggle('hidden');
     if (!$('logs-block').classList.contains('hidden')) refreshLogs();
