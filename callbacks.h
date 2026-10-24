@@ -56,7 +56,6 @@ void on_save_calibration(GtkWidget* widget, gpointer user_data);
 // Reset calibration to an operator-entered pulses/km value, replacing the
 // stock "reset to 1m per pulse" with one that works for any device.
 void on_reset_calibration_pulses(GtkWidget* widget, gpointer user_data);
-void on_save_datetime(GtkWidget* widget, gpointer user_data);
 // Rally-clock trim buttons. Direction (+1 / -1 tenths) is read from the
 // button's "trim-steps" data, so both buttons share one handler pair.
 // These act and save on their own -- they are deliberately outside
@@ -106,6 +105,7 @@ void on_adj_driver_zero(GtkWidget* widget, gpointer user_data);
 void on_set_sensor_1(GtkWidget* widget, gpointer user_data);
 void on_set_sensor_both(GtkWidget* widget, gpointer user_data);
 void on_exit_app(GtkWidget* widget, gpointer user_data);
+void updateWebLinkDisplay(AppData* data);
 void on_show_menu(GtkWidget* widget, gpointer user_data);
 void on_menu_choice(GtkWidget* widget, gpointer user_data);
 void on_show_autostart(GtkWidget* widget, gpointer user_data);
