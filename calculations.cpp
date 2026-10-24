@@ -526,6 +526,14 @@ std::string segmentRowHeading(double current_speed, bool has_current_segment) {
     return std::string(buf);
 }
 
+std::string formatOffsetSeconds(long offset_ms) {
+    long tenths = (offset_ms >= 0) ? (offset_ms + 50) / 100 : -((-offset_ms + 50) / 100);
+    char buf[24];
+    snprintf(buf, sizeof(buf), "%c%ld.%ld", tenths < 0 ? '-' : '+',
+             std::labs(tenths) / 10, std::labs(tenths) % 10);
+    return buf;
+}
+
 std::string segmentSpeedTransition(double next_speed, bool has_next, bool is_mph) {
     char buf[32];
     if (has_next)

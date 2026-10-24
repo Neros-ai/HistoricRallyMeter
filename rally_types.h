@@ -101,6 +101,15 @@ struct AppData {
     GtkStack* copilotStack;  // Stack for multiple screens
     GtkLabel* copilotRallyClockLabel;
     GtkWidget* menuScreen = nullptr;  // Nero2.0 full-screen menu page
+    // Nero2.0 Date/Time and Calibration pages
+    GtkWidget* sensor1Btn = nullptr;
+    GtkWidget* sensorBothBtn = nullptr;
+    GtkWidget* dtAreas[4] = {};        // rally, computer, phone, offset drawings
+    GtkWidget* dtSetFromPhoneBtn = nullptr;
+    // The phone's clock, as last reported over Wi-Fi: its time at the report
+    // and the computer's time then. 0 = no phone has reported.
+    int64_t phoneClockMs = 0;
+    int64_t phoneClockSeenMs = 0;
     HomeUi* home = nullptr;           // Nero2.0 Home page; null in single-display mode
     // Freeze (Home): the co-pilot readouts hold their figures. The driver
     // display and the phone never see it.
