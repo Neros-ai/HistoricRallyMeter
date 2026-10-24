@@ -222,8 +222,10 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // Hub: a plain filled disc in the needle's own colour. The old ring and
     // inner dot were decoration on the one part of the dial that carries no
     // reading -- and in compact mode the readout box covers it anyway.
-    cairo_arc(cr, centerX, centerY, 8, 0, 2 * M_PI);
-    cairo_fill(cr);
+    if (!data->driverCompactMode) {   // compact: the readout box covers the hub
+        cairo_arc(cr, centerX, centerY, 8, 0, 2 * M_PI);
+        cairo_fill(cr);
+    }
 
     // Digital ahead/behind readout. Drawn after the needle and hub so that in
     // compact mode it paints the hub out: the hub carries no information, and
@@ -231,7 +233,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // centre of the dial. The wide layout keeps the original smaller box
     // below the hub, where there is nothing to cover.
     {
-        double digital_size = data->driverCompactMode ? L.valSize : 22.0;
+        double digital_size = data->driverCompactMode ? L.boxFontSize : 22.0;
         cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
         cairo_set_font_size(cr, digital_size);
 
@@ -245,7 +247,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             // to the final computed width so it scales whichever branch
             // (the 180px floor or the digit-fitted width) is in effect.
             box_width  = std::max(180.0, dext.x_advance + 24) * 1.1;
-            box_height = digital_size + 20.0;  // RB-DRV-08: fit-to-font, symmetric about the old box centre
+            box_height = L.boxHeight;   // Nero2.0: 64 px at 50 px digits
             double box_center_y = L.boxY + L.boxHeight / 2.0;
             box_y = box_center_y - box_height / 2.0;
             border = 3.0;
@@ -335,7 +337,9 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
 
         cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
         cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
-        for (int i = 0; i < num_chevrons; i++) {
+        // Nero2.0 compact gauge: no arrow head on the needle (the zone is
+        // already carried by the coloured band).
+        for (int i = 0; i < (data->driverCompactMode ? 0 : num_chevrons); i++) {
             double f = f_top - i * spacing_f;
             if (f < 0.03) break;  // keep clear of the hub
             double ax = centerX + f * needle_length * dir_x;      // apex (points to tip)
@@ -376,7 +380,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         // (RB-DRV-08): a fixed right anchor keeps the decimal point in
         // place as the digits change.
         auto drawValue = [&](const char* text, double baseline) {
-            cairo_set_font_size(cr, L.curTopSize);
+            cairo_set_font_size(cr, L.valSize);
             cairo_text_extents(cr, text, &te);
             cairo_move_to(cr, L.rightAnchor - te.x_advance, baseline);
             cairo_show_text(cr, text);
@@ -384,7 +388,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         // Row caption, written just to the right of the value column so the
         // values themselves stay in one unbroken vertical line.
         auto drawCaption = [&](const char* text, double baseline) {
-            cairo_set_font_size(cr, L.labelSize);
+            cairo_set_font_size(cr, L.rowCaptionSize);
             cairo_move_to(cr, L.rightAnchor + L.labelGap, baseline);
             cairo_show_text(cr, text);
         };
@@ -394,7 +398,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         // value's last digit and the caption's closing ")" share one
         // vertical edge.
         auto drawDistance = [&](const char* text, double baseline) {
-            cairo_set_font_size(cr, L.curTopSize);
+            cairo_set_font_size(cr, L.valSize);
             cairo_text_extents(cr, text, &te);
             cairo_move_to(cr, L.distanceAnchor - te.x_advance, baseline);
             cairo_show_text(cr, text);
@@ -420,7 +424,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             cairo_text_extents_t lte;
             cairo_text_extents(cr, text, &lte);
             double x = right_align ? (anchor_x - lte.x_advance) : anchor_x;
-            cairo_move_to(cr, x, value_baseline + L.labelSize + L.labelGap);
+            cairo_move_to(cr, x, value_baseline + L.labelSize + L.labelGap + L.legendDrop);
             cairo_show_text(cr, text);
         };
 
@@ -430,7 +434,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
         {
             double baseline = drawTopCorner(gtk_label_get_text(data->currentSpeedLabel), L.bandOuterX, true);
-            drawTopCornerLabel("Current", L.bandOuterX, true, baseline);
+            drawTopCornerLabel(data->state->units ? "Mph" : "Kph", L.bandOuterX, true, baseline);
         }
 
         // Target: top-left corner, mirrored -- left-aligned to the band's
@@ -440,25 +444,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         {
             double baseline = drawTopCorner(gtk_label_get_text(data->targetSpeedLabel), L.bandTargetX, false);
             drawTopCornerLabel("Target", L.bandTargetX, false, baseline);
-            // On a stage with more than one speed, the NEXT segment's target
-            // goes under the caption in smaller type, so the co-pilot can call
-            // the change before it arrives. Nothing is drawn on the last
-            // segment or a single-speed stage -- an empty slot reads as "no
-            // change coming", which is the truth.
-            double next_kph = 0.0;
-            if (nextSegmentTargetKph(*data->state, &next_kph)) {
-                std::stringstream ns;
-                ns << "> " << std::fixed << std::setprecision(1)
-                   << (data->state->units ? next_kph / 1.60934 : next_kph);
-                // 1.5x the caption size: this is a value to read at a glance,
-                // not a caption. The row below it is spaced off the larger
-                // size so the taller glyphs do not collide with the caption.
-                const double nextSize = L.labelSize * 1.5;
-                cairo_set_font_size(cr, nextSize);
-                cairo_move_to(cr, L.bandTargetX,
-                              baseline + (L.labelSize + L.labelGap) + (nextSize + L.labelGap));
-                cairo_show_text(cr, ns.str().c_str());
-            }
+            // (The "> 30" next-speed marker that used to sit here is gone.)
         }
 
         // {tot}: white, mirrored by the Total distance on the left. Both at
@@ -493,13 +479,13 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             // caption's closing ")" sits directly under the values' last
             // digit rather than centred under a right-aligned column.
             cairo_text_extents(cr, dist_caption.c_str(), &te);
-            cairo_move_to(cr, L.distanceAnchor - te.x_advance, L.captionBaseline);
+            cairo_move_to(cr, L.distCaptionRight - te.x_advance, L.captionBaseline);
             cairo_show_text(cr, dist_caption.c_str());
 
             // Centred (nudged 15px right at the user's request) -- there is
             // no value column edge on this side to match.
             cairo_text_extents(cr, speed_caption.c_str(), &te);
-            cairo_move_to(cr, (L.centerX + width) / 2 - te.x_advance / 2 + 15.0, L.captionBaseline);
+            cairo_move_to(cr, L.speedCaptionLeft, L.captionBaseline);
             cairo_show_text(cr, speed_caption.c_str());
         }
 
