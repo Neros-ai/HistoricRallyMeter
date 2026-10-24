@@ -172,13 +172,21 @@ public:
     bool force_single_display = false;
 
     // Ahead/behind tone. tone_enabled is a master on/off (default true,
-    // matching today's always-on tone). simple_tone_mode picks which
-    // algorithm plays when enabled: false = Type 1, the existing
-    // speed/arrow-based tone (default); true = Type 2, the alternative
-    // time-error-only tone (constant, +/-0.2s quiet band, 0.2s update
-    // hysteresis, ignores speed/recovery distance).
+    // matching today's always-on tone). The per-side types below pick which
+    // algorithm plays when enabled: type 1 is the existing speed/arrow-based
+    // tone (default); type 2 is the alternative time-error-only tone
+    // (constant, +/-0.2s quiet band, 0.2s update hysteresis, ignores
+    // speed/recovery distance).
     bool tone_enabled = true;
-    bool simple_tone_mode = false;
+    // Nero2.0: the type is chosen separately for each side of schedule.
+    // 1 = the speed/arrow-based tone, 2 = the time-error-only tone.
+    int tone_type_behind = 1;
+    int tone_type_ahead = 1;
+
+    // Settings > System (Nero2.0). Written by the logging plan; stored here so
+    // the switches persist.
+    bool stage_logging = true;
+    bool sensor_logging = false;
 
     // Embedded web server for phone browsers
     bool web_enabled = true;

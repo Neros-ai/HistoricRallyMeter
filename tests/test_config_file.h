@@ -361,16 +361,16 @@ public:
             return !in.tone_enabled;
         });
 
-        suite->addTest("simple_tone_mode survives a save/load round trip", []() {
+        suite->addTest("tone types per side survive a save/load round trip", []() {
             const std::string path = "/tmp/rallybox_test_simple_tone_mode.json";
             RallyState out;
-            out.simple_tone_mode = true;
+            out.tone_type_behind = 2; out.tone_type_ahead = 1;
             ConfigFile::save(out, path);
 
             RallyState in;
             ConfigFile::load(in, path);
             std::remove(path.c_str());
-            return in.simple_tone_mode;
+            return in.tone_type_behind == 2 && in.tone_type_ahead == 1;
         });
 
         suite->addTest("loading a config without waypoints clears any already in state", []() {

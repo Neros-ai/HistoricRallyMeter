@@ -43,6 +43,11 @@ struct BeepEvent {
     int gap_ms = 0;          // start-to-start, meaningful only when twice
 };
 
+// Which tone type sounds for the current error: type 2 (the time-error-only
+// tone) when the type chosen for that side of schedule is 2. Behind schedule is
+// a negative error; exactly on time counts as ahead.
+bool simpleToneForError(double seconds_ahead_behind, int behind_type, int ahead_type);
+
 // The box's tone decision, lifted out of ui_driver.cpp unchanged: silent when
 // the tone is switched off, otherwise the simple (time-error-only) tone or the
 // arrow-based one, whichever simple_tone_mode selects. The simple tone's state
