@@ -180,9 +180,8 @@ double calculateAverageSpeed(const RallyState& state, int64_t start_time_ms,
         return 0.0;
     }
     
-    // Same correction, and the same floor at zero, that adjustedDistanceMeters
-    // applies to the readout -- so the average and the distance it is derived
-    // from always describe the same journey.
+    // Same correction as adjustedDistanceMeters applies to the readout, floored
+    // at zero here because an average speed is never negative.
     long cm_diff = countsToCentimeters(count_diff, state.calibration) + adjust_cm;
     if (cm_diff < 0) cm_diff = 0;
     double speed_cm_per_s = (cm_diff * 1000.0) / time_diff_ms;
@@ -522,9 +521,12 @@ bool undoSegmentChange(RallyState& state, uint64_t c1, uint64_t c2, int64_t stag
 }
 
 long adjustedDistanceMeters(long raw_cm, long adjust_cm) {
-    long corrected_cm = raw_cm + adjust_cm;
-    if (corrected_cm < 0) corrected_cm = 0;
-    return corrected_cm / 100;
+    // Not floored at zero: reversing past the start counts into negative
+    // metres (-12), and counts back up again when the car goes forward -- what
+    // is shown is what is counted. (A manual -10 still cannot take the reading
+    // below zero: clampDistanceAdjust limits the correction itself.) C++
+    // division truncates toward zero, so -150 cm reads -1 m.
+    return (raw_cm + adjust_cm) / 100;
 }
 
 std::string segmentRowHeading(double current_speed, bool has_current_segment) {
