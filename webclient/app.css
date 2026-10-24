@@ -414,3 +414,5 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .add-row { flex-direction: column; align-items: stretch; }
 .add-row input { width: 100%; flex: none; height: 3rem; }
 .add-row .key { width: 100%; }
+
+#seg-table input.to { width: 4.2rem; background: #111; color: #fff; border: 1px solid #666; text-align: right; }

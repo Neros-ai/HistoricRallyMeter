@@ -27,6 +27,8 @@ void stageEditSetSpeed(AppData* data, size_t row, double kph);
 void stageEditSetChange(AppData* data, size_t row, bool chg);
 void stageEditSetAuto(AppData* data, size_t row, bool on);
 void stageEditDeleteRow(AppData* data, size_t row);
+// New end distance for a row (see setRowTo). False if it was refused.
+bool stageEditSetRowTo(AppData* data, size_t row, double new_to_m);
 void stageEditSetFirst(AppData* data, long number, double from_m);
 // time_s < 0 clears the time.
 void stageEditSetStart(AppData* data, long time_s, long distance_m);

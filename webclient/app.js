@@ -267,7 +267,7 @@
       const tr = document.createElement('tr');
       tr.innerHTML =
         '<td>' + r.n + '</td>' +
-        '<td>' + Number(r.to).toLocaleString() + '</td>' +
+        '<td><input type="number" step="1" class="to" value="' + r.to + '"></td>' +
         '<td>' + Number(r.dist).toLocaleString() + '</td>' +
         '<td><input type="checkbox" class="chg"' + (r.chg ? ' checked' : '') + (i === 0 ? ' disabled' : '') + '></td>' +
         (r.chg ? '<td><input type="number" step="0.1" class="spd" value="' + (r.kph || '') + '"></td>'
@@ -278,6 +278,8 @@
         '<td><button type="button" class="del">&times;</button></td>';
       const chg = tr.querySelector('.chg');
       if (chg) chg.addEventListener('change', () => send({ type: 'row_chg', row: i, on: chg.checked }));
+      const toEl = tr.querySelector('.to');
+      toEl.addEventListener('change', () => send({ type: 'row_to', row: i, to_m: Number(toEl.value) || 0 }));
       const spd = tr.querySelector('.spd');
       if (spd) spd.addEventListener('change', () => send({ type: 'row_speed', row: i, kph: Number(spd.value) || 0 }));
       const au = tr.querySelector('.auto');
