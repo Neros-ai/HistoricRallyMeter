@@ -99,6 +99,25 @@ public:
             return !threw && s.total_start_cntr1 == static_cast<uint64_t>(static_cast<int64_t>(-4227));
         });
 
+        // RB-CAL-09
+        suite->addTest("typed pulses/km is shown back while it rounds to the stored calibration", []() {
+            const long cal = calibrationFromPulsesPerKm(99999.0);        // stores as the neighbour, 100,000
+            return displayPulsesPerKm(99999.0, cal) == 99999
+                && displayPulsesPerKm(0.0, cal) == 100000
+                && displayPulsesPerKm(99999.0, cal + 500) != 99999       // calibration changed since: the figure is derived
+                && displayPulsesPerKm(5555.0, calibrationFromPulsesPerKm(5555.0)) == 5555;
+        });
+
+        suite->addTest("typed pulses/km survives a save and load", []() {
+            const char* path = "test_typed_ppk.json";
+            RallyState a; a.typed_pulses_per_km = 99999.0;
+            ConfigFile::save(a, path);
+            RallyState b;
+            ConfigFile::load(b, path);
+            std::remove(path);
+            return b.typed_pulses_per_km == 99999.0;
+        });
+
         return suite;
     }
 };

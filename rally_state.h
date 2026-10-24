@@ -195,6 +195,13 @@ public:
     // Pulses per turn of the prop-shaft sensor on counter 1, for the Prop
     // RPM readout on the calibration screen (RB-CAL-06). Display only.
     int prop_pulses_per_rev = 8;
+
+    // The pulses/km the owner last TYPED into Calibration's reset box (0 = none).
+    // Calibration is stored as an integer (mm per 1000 counts), so near 100,000
+    // pulses/km a typed 99,999 can only be stored as the neighbouring 100,000;
+    // the figure shown goes back to what was typed while it still rounds to the
+    // stored calibration (see displayPulsesPerKm). A measured calibration clears it.
+    double typed_pulses_per_km = 0.0;
     
     // Driver window position/size (remembered across sessions)
     int driver_window_x = -1;      // -1 = not set

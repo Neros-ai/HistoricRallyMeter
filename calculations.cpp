@@ -712,6 +712,12 @@ long dueBeepWaypoint(const std::vector<double>& waypoints_m, size_t from_index,
     return -1;
 }
 
+long displayPulsesPerKm(double typed_pulses_per_km, long calibration) {
+    if (typed_pulses_per_km > 0.0 && calibrationFromPulsesPerKm(typed_pulses_per_km) == calibration)
+        return static_cast<long>(typed_pulses_per_km + 0.5);
+    return static_cast<long>(pulsesPerKm(calibration) + 0.5);
+}
+
 double pulsesPerKm(long calibration) {
     if (calibration <= 0) return 0.0;
     // kph = counts_per_hour * calibration / 1e9, so one km takes

@@ -191,6 +191,8 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.reverse_shift1 = extractLong(line);
         } else if (line.find("\"reverse_shift2\"") != std::string::npos) {
             state.reverse_shift2 = extractLong(line);
+        } else if (line.find("\"typed_pulses_per_km\"") != std::string::npos) {
+            state.typed_pulses_per_km = extractDouble(line);
         } else if (line.find("\"trip_history_m\"") != std::string::npos) {
             state.trip_history_m = extractString(line);
         } else if (line.find("\"memory_") != std::string::npos
@@ -411,6 +413,7 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"trip_start_cntr1\": " << static_cast<int64_t>(state.trip_start_cntr1) << ",\n";
     file << "  \"trip_start_cntr2\": " << static_cast<int64_t>(state.trip_start_cntr2) << ",\n";
     file << "  \"trip_start_time_ms\": " << state.trip_start_time_ms << ",\n";
+    file << "  \"typed_pulses_per_km\": " << state.typed_pulses_per_km << ",\n";
     file << "  \"reverse_shift1\": " << state.reverse_shift1 << ",\n";
     file << "  \"reverse_shift2\": " << state.reverse_shift2 << ",\n";
     for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {

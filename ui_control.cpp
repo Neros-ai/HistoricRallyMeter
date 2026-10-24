@@ -250,7 +250,7 @@ void updateControlDisplay(AppData* data) {
         // "the speed I asked for" and "the calibration actually driving the
         // counters" is exactly the kind of thing worth seeing at a glance
         // here rather than only on the Calibration screen.
-        long pulses_per_km = static_cast<long>(pulsesPerKm(data->state->calibration) + 0.5);
+        long pulses_per_km = displayPulsesPerKm(data->state->typed_pulses_per_km, data->state->calibration);
         status << static_cast<int>(data->controlSpeedKph) << " km/h at "
                << pulses_per_km << " pulses per KM";
     } else {
