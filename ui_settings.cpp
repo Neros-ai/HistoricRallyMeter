@@ -223,7 +223,7 @@ GtkWidget* createSettingsScreen(AppData* d) {
 
     // Wi-Fi link: just the address and its QR code (no hotspot switch).
     GtkWidget* wifi = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_widget_set_size_request(wifi, COL_W, 80);
+    gtk_widget_set_size_request(wifi, COL_W, 52);   // text only: the QR code moved
     GtkWidget* wtext = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
     GtkWidget* wname = gtk_label_new("Wi-Fi phone link");
     addClass(wname, "set-name");
@@ -234,10 +234,6 @@ GtkWidget* createSettingsScreen(AppData* d) {
     gtk_box_pack_start(GTK_BOX(wtext), wname, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(wtext), GTK_WIDGET(d->webUrlLabel), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(wifi), wtext, TRUE, TRUE, 0);
-    d->webQrArea = gtk_drawing_area_new();
-    gtk_widget_set_size_request(d->webQrArea, 70, 70);
-    g_signal_connect(d->webQrArea, "draw", G_CALLBACK(on_qr_draw), d);
-    gtk_box_pack_end(GTK_BOX(wifi), d->webQrArea, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(right), wifi, FALSE, FALSE, 0);
 
     // ── keypad and menu key, far right ──
@@ -246,9 +242,20 @@ GtkWidget* createSettingsScreen(AppData* d) {
     gtk_box_pack_end(GTK_BOX(screen), kp, FALSE, FALSE, 0);
     d->numericKeypad = createNeroKeypad(d);
     gtk_box_pack_start(GTK_BOX(kp), d->numericKeypad, FALSE, FALSE, 0);
+    // The Wi-Fi QR code sits left of the menu key, in the keypad's column: 80 px
+    // square plus the 130 px key fits the 240 px column, and 80 fits the 104 px
+    // under the keypad.
+    GtkWidget* base = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_set_valign(base, GTK_ALIGN_END);
+    d->webQrArea = gtk_drawing_area_new();
+    gtk_widget_set_size_request(d->webQrArea, 80, 80);
+    gtk_widget_set_valign(d->webQrArea, GTK_ALIGN_END);
+    g_signal_connect(d->webQrArea, "draw", G_CALLBACK(on_qr_draw), d);
+    gtk_box_pack_start(GTK_BOX(base), d->webQrArea, FALSE, FALSE, 0);
     GtkWidget* menu = createMenuKey(d);
-    gtk_widget_set_halign(menu, GTK_ALIGN_END);
-    gtk_box_pack_end(GTK_BOX(kp), menu, FALSE, FALSE, 0);
+    gtk_widget_set_valign(menu, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(base), menu, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(kp), base, FALSE, FALSE, 0);
 
     d->settingsScreen = screen;
     return screen;
