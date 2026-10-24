@@ -3,6 +3,7 @@
 
 #include "test_framework.h"
 #include "../tone_cadence.h"
+#include "../calculations.h"
 #include "../config_file.h"
 #include "../rally_state.h"
 #include <cstdio>
@@ -50,6 +51,24 @@ public:
             RallyState s;
             return s.stage_logging && !s.debug_logs_enabled
                 && s.tone_type_behind == 1 && s.tone_type_ahead == 1;
+        });
+
+        // RB-DRV-13
+        suite->addTest("a preprogrammed autostart's countdown shows only inside 5 minutes", []() {
+            const int64_t min = 60 * 1000;
+            return !autoStartCountdownVisible(false, 60 * min)
+                && !autoStartCountdownVisible(false, 5 * min + 1)
+                &&  autoStartCountdownVisible(false, 5 * min)
+                &&  autoStartCountdownVisible(false, 1000)
+                && !autoStartCountdownVisible(false, 0)
+                && !autoStartCountdownVisible(false, -1000);
+        });
+
+        suite->addTest("the next-minute flag's countdown always shows", []() {
+            const int64_t min = 60 * 1000;
+            return autoStartCountdownVisible(true, 59 * 1000)
+                && autoStartCountdownVisible(true, 90 * min)
+                && !autoStartCountdownVisible(true, 25 * 60 * min);
         });
 
         return suite;
