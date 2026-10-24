@@ -7,6 +7,7 @@
 #include "webserver/qr_display.h"
 #include <cstdio>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -62,6 +63,24 @@ void apply(AppData* d, Setting id, int idx) {
     ConfigFile::save(s);
 }
 
+// Every two-key selector built, so the page can follow changes made from the phone.
+std::vector<SegCtl*>& allCtls() { static std::vector<SegCtl*> v; return v; }
+
+int stateIndex(const RallyState& s, Setting id) {
+    switch (id) {
+    case BEEP_NAV:     return s.beep_navigation_mode ? 1 : 0;
+    case BEEP_TIMING:  return s.beep_timing_mode ? 1 : 0;
+    case TONE_ON:      return s.tone_enabled ? 1 : 0;
+    case TONE_BEHIND:  return s.tone_type_behind == 2 ? 1 : 0;
+    case TONE_AHEAD:   return s.tone_type_ahead == 2 ? 1 : 0;
+    case UNITS:        return s.units ? 1 : 0;
+    case STAGE_LOG:    return s.stage_logging ? 1 : 0;
+    case SENSOR_LOG:   return s.debug_logs_enabled ? 1 : 0;
+    case FORCE_SINGLE: return s.force_single_display ? 1 : 0;
+    }
+    return 0;
+}
+
 void onSeg(GtkWidget* w, gpointer) {
     SegCtl* c = static_cast<SegCtl*>(g_object_get_data(G_OBJECT(w), "ctl"));
     const int idx = (w == c->btn[1]) ? 1 : 0;
@@ -73,6 +92,7 @@ void onSeg(GtkWidget* w, gpointer) {
 // A two-key selector; `active` is 0 or 1.
 GtkWidget* seg(AppData* d, Setting id, const char* a, const char* b, int active) {
     SegCtl* c = new SegCtl{d, id, {nullptr, nullptr}};
+    allCtls().push_back(c);
     GtkWidget* box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     const char* labels[2] = {a, b};
     for (int i = 0; i < 2; i++) {
@@ -212,6 +232,11 @@ GtkWidget* createSettingsScreen(AppData* d) {
 
 void updateSettingsDisplay(AppData* d) {
     if (!d->settingsInfoLabel) return;
+    for (SegCtl* c : allCtls()) {
+        const int idx = stateIndex(*d->state, c->id);
+        setLit(c->btn[0], idx == 0);
+        setLit(c->btn[1], idx == 1);
+    }
     std::string info = std::string("Screen ") + gtk_label_get_text(d->updatesPerSecLabel)
                      + "   " + gtk_label_get_text(d->cpuTempLabel);
     gtk_label_set_text(d->settingsInfoLabel, info.c_str());
