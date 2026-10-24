@@ -145,6 +145,8 @@
     $('btn-next').disabled = !msg.next_enabled;
     $('btn-prev').disabled = !msg.prev_enabled;
     $('btn-reverse').classList.toggle('lit', !!msg.reverse);
+    $('btn-flag-late').innerHTML = (lastState && (lastState.total_reset_asks || (lastState.autostart && lastState.autostart !== 'none')))
+      ? 'stage<br>abort' : '<svg class="flag" viewBox="0 0 40 34"><use href="#flag"/></svg> now';
     $('btn-freeze').classList.toggle('lit', frozen);
 
     // Stage arrival
@@ -357,7 +359,15 @@
     if (running && !confirm('Abort the current stage?')) return;
     send({ type: 'flag_next_minute', abort: running });
   });
-  $('btn-flag-late').addEventListener('click', () => send({ type: 'flag_late_arrival' }));
+  // Stage go now -- or, with a stage armed or running, stage abort (as on the box).
+  const stageActive = () => !!(lastState && (lastState.total_reset_asks || (lastState.autostart && lastState.autostart !== 'none')));
+  $('btn-flag-late').addEventListener('click', () => {
+    if (stageActive()) {
+      if (confirm('ABORT the stage?')) send({ type: 'abort_stage' });
+      return;
+    }
+    send({ type: 'flag_late_arrival' });
+  });
   $('btn-zero').addEventListener('click', () => {
     if (confirm('Zero the needle here?\nOK = zero now, Cancel = leave it')) send({ type: 'driver_zero', reset: false });
   });
@@ -468,7 +478,6 @@
   $('set-stage-log').addEventListener('change', (e) => send({ type: 'setting', name: 'stage_logging', on: e.target.checked }));
   $('set-sensor-log').addEventListener('change', (e) => send({ type: 'setting', name: 'sensor_logging', on: e.target.checked }));
   $('set-force-single').addEventListener('change', (e) => send({ type: 'setting', name: 'force_single', on: e.target.checked }));
-  $('btn-abort-stage').addEventListener('click', () => { if (confirm('ABORT the running stage?')) send({ type: 'abort_stage' }); });
   $('btn-download-logs').addEventListener('click', () => {
     $('logs-block').classList.toggle('hidden');
     if (!$('logs-block').classList.contains('hidden')) refreshLogs();
