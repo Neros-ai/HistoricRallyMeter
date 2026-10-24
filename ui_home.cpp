@@ -270,8 +270,15 @@ void onReverse(GtkWidget*, gpointer user_data) {
     setReverse(data, !data->poller->reverse());
 }
 
-void onNextMinute(GtkWidget*, gpointer user_data) {
-    startStageAtNextMinute(static_cast<AppData*>(user_data));
+// Start at the next minute. With a stage already running this asks first:
+// yes aborts it and carries on with the new start, no leaves everything alone.
+void onNextMinute(GtkWidget* w, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (classifyTotalReset(*data->state) == TotalResetCase::StageRunning) {
+        if (!confirmYesNo(w, "Stage running", "Abort the current stage?")) return;
+        performAbortStage(data);
+    }
+    startStageAtNextMinute(data);
 }
 
 // Stage go now -- or, once a stage is armed or running, stage abort. Ending a
