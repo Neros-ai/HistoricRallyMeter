@@ -521,6 +521,10 @@ void updateHomeDisplay(AppData* data) {
         std::string armed = formatAutoStartStatus(data->state->auto_start_rally_time_s,
                                                   data->state->auto_start_early_departure,
                                                   getAutoStartEpochMs());
+        // Armed and pending, or the autostart that started the stage now running:
+        // both read "auto hh:mm:ss". Only with neither does it read "manual".
+        if (armed == "none" && data->autoFiredTime_s != 0 && !data->state->stage_complete)
+            armed = formatAutoStartStatus(data->autoFiredTime_s, false, getAutoStartEpochMs());
         const bool is_armed = (armed != "none");
         std::string auto_time = armed;
         if (!is_armed) {

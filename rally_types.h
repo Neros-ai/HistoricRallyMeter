@@ -123,6 +123,12 @@ struct AppData {
     // Freeze (Home): the co-pilot readouts hold their figures. The driver
     // display and the phone never see it.
     bool homeFrozen = false;
+    // The autostart moment (seconds since 2020) that has just started the stage
+    // that is running, kept so Home goes on showing "auto hh:mm:ss" -- the time
+    // the stage actually began -- instead of reverting to "manual" and the
+    // memory's own start time the moment the target is spent. 0 = none; a
+    // manual start or the stage ending drops it. Runtime only.
+    uint64_t autoFiredTime_s = 0;
     
     // TwinMaster screen
     GtkWidget* twinMasterScreen;

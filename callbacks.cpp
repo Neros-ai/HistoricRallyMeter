@@ -529,6 +529,7 @@ void applyAutoStartArming(AppData* data, const AutoStartArming& arming) {
 }
 
 void performAutoStart(AppData* data) {
+    const uint64_t armed_time_s = data->state->auto_start_rally_time_s;
     if (data->state->auto_start_early_departure) {
         // Distance was zeroed when the operator armed this, so only the clock
         // starts now and everything rolled on the way to the line counts
@@ -538,15 +539,18 @@ void performAutoStart(AppData* data) {
         // which forgets autoStartTriggered -- see it as pending again.
         data->state->auto_start_rally_time_s = 0;
         data->state->auto_start_early_departure = false;
+        data->autoFiredTime_s = armed_time_s;
         ConfigFile::save(*data->state);
         notifyWebState(data);
         return;
     }
     // Ordinary autostart: distance and clock both zero at the appointed time.
     performStageGo(data);
+    data->autoFiredTime_s = armed_time_s;   // after performStageGo, which drops it
 }
 
 void performStageGo(AppData* data) {
+    data->autoFiredTime_s = 0;   // a manual start: not an autostart's time
     // Distance and clock together: this is the ordinary "start now" case.
     zeroDistanceBaselines(data);
     zeroTimeBaselines(data);
