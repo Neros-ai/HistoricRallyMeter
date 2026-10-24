@@ -241,7 +241,18 @@ bool webHandleCommand(AppData* data, const char* json) {
         performAbortStage(data);
         return true;
     }
-    if (strcmp(type, "flag_next_minute") == 0) { startStageAtNextMinute(data); return true; }
+    if (strcmp(type, "flag_next_minute") == 0) {
+        // With a stage running the phone has already asked "abort the current
+        // stage?" and sends abort=true on yes; without it the press is refused.
+        bool abort_first = false;
+        jsonFindBool(json, "abort", &abort_first);
+        if (classifyTotalReset(*data->state) == TotalResetCase::StageRunning) {
+            if (!abort_first) return false;
+            performAbortStage(data);
+        }
+        startStageAtNextMinute(data);
+        return true;
+    }
     if (strcmp(type, "flag_late_arrival") == 0) { performStageGo(data); return true; }
     if (strcmp(type, "driver_zero") == 0) {
         bool reset = false;

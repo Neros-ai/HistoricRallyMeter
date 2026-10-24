@@ -349,7 +349,12 @@
   $('btn-prev').addEventListener('click', () => send({ type: 'prev' }));
   $('btn-freeze').addEventListener('click', () => { frozen = !frozen; $('btn-freeze').classList.toggle('lit', frozen); });
   $('btn-reverse').addEventListener('click', () => send({ type: 'reverse_set', on: !(lastTelemetry && lastTelemetry.reverse) }));
-  $('btn-flag-minute').addEventListener('click', () => send({ type: 'flag_next_minute' }));
+  $('btn-flag-minute').addEventListener('click', () => {
+    // A stage already running: ask first, as the box does.
+    const running = !!(lastTelemetry && lastTelemetry.segment_number > 0 && lastState && lastState.total_reset_asks);
+    if (running && !confirm('Abort the current stage?')) return;
+    send({ type: 'flag_next_minute', abort: running });
+  });
   $('btn-flag-late').addEventListener('click', () => send({ type: 'flag_late_arrival' }));
   $('btn-zero').addEventListener('click', () => {
     if (confirm('Zero the needle here?\nOK = zero now, Cancel = leave it')) send({ type: 'driver_zero', reset: false });
