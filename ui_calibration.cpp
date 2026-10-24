@@ -88,7 +88,7 @@ GtkWidget* createCalibrationScreen(AppData* d) {
     GtkWidget* r4 = hrow(content);
     d->calibrationCurrentLabel = GTK_LABEL(text(r4, ""));
     gtk_label_set_use_markup(d->calibrationCurrentLabel, TRUE);
-    d->resetPulsesEntry = GTK_ENTRY(entry(d, r4, 110, 1));
+    d->resetPulsesEntry = GTK_ENTRY(entry(d, r4, 150, 1));   // wide enough for 99999 at 30 px
 
     // 5. prop / wheel rpm: no key, so it sits below the four keys
     GtkWidget* r5 = hrow(content);
