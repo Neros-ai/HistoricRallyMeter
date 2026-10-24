@@ -71,6 +71,34 @@ public:
                 && !autoStartCountdownVisible(true, 25 * 60 * min);
         });
 
+        // RB-DEV-16: a baseline below zero (reversed past where it was taken) was
+        // written as a huge unsigned number that std::stoll threw on, so the
+        // app crashed at startup.
+        suite->addTest("a negative counter baseline survives a save and load", []() {
+            const char* path = "test_neg_baseline.json";
+            RallyState a;
+            a.total_start_cntr1 = static_cast<uint64_t>(static_cast<int64_t>(-4227));
+            a.total_start_cntr2 = static_cast<uint64_t>(static_cast<int64_t>(-4228));
+            a.trip_start_cntr1 = 123456;
+            ConfigFile::save(a, path);
+            RallyState b;
+            ConfigFile::load(b, path);
+            std::remove(path);
+            return b.total_start_cntr1 == a.total_start_cntr1
+                && b.total_start_cntr2 == a.total_start_cntr2
+                && b.trip_start_cntr1 == 123456;
+        });
+
+        suite->addTest("an older file's unsigned-wrapped baseline loads without throwing", []() {
+            const char* path = "test_wrapped_baseline.json";
+            { std::ofstream f(path); f << "{\n  \"total_start_cntr1\": 18446744073709547389,\n  \"calibration\": 180018\n}\n"; }
+            RallyState s;
+            bool threw = false;
+            try { ConfigFile::load(s, path); } catch (...) { threw = true; }
+            std::remove(path);
+            return !threw && s.total_start_cntr1 == static_cast<uint64_t>(static_cast<int64_t>(-4227));
+        });
+
         return suite;
     }
 };
