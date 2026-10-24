@@ -263,7 +263,7 @@ std::string buildStateJson(AppData* data) {
     ss << "],\"stage_logging\":" << (data->state->stage_logging ? "true" : "false")
        << ",\"sensor_logging\":" << (data->state->debug_logs_enabled ? "true" : "false")
        << ",\"force_single\":" << (data->state->force_single_display ? "true" : "false")
-       << ",\"calibration_pulses\":" << static_cast<long>(pulsesPerKm(data->state->calibration) + 0.5)
+       << ",\"calibration_pulses\":" << displayPulsesPerKm(data->state->typed_pulses_per_km, data->state->calibration)
        << ",\"sensors_both\":" << (data->state->counters ? "true" : "false")
        << ",\"prop_pulses\":" << data->state->prop_pulses_per_rev
        << ",\"web_url\":\"" << (data->webServer ? data->webServer->getWebUrl() : std::string()) << "\",";

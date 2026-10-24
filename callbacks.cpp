@@ -1277,7 +1277,7 @@ void updateCalibrationDisplay(AppData* data) {
     char current[120];
     snprintf(current, sizeof(current),
              "Pulses/KM: <span foreground=\"#FFFFFF\">%ld</span>. Reset to",
-             static_cast<long>(pulsesPerKm(data->state->calibration) + 0.5));
+             displayPulsesPerKm(data->state->typed_pulses_per_km, data->state->calibration));
     gtk_label_set_markup(data->calibrationCurrentLabel, current);
 
     // RB-CAL-06: Prop RPM, counter 1 alone over the poller's ~2 s span --
@@ -1371,6 +1371,7 @@ void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
             if (total_count_diff > 0) {
                 // new_cal = (input_meters * 1000 * 1000) / total_count_diff
                 data->state->calibration = (rally_distance_m * 1000000) / total_count_diff;
+                data->state->typed_pulses_per_km = 0.0;   // a measured figure now
                 
                 // The sim counters were given a counts-per-second derived from
                 // the OLD calibration; re-derive so the sim keeps driving at
@@ -1408,6 +1409,7 @@ void on_reset_calibration_pulses(G_GNUC_UNUSED GtkWidget* widget, gpointer user_
     if (new_calibration <= 0) return;  // zero/negative entry -- no-op, not a crash
 
     data->state->calibration = new_calibration;
+    data->state->typed_pulses_per_km = pulses_per_km;   // shown back as typed
 
     // Same re-derivation as the measured-calibration path above.
     resyncSimCounterRate(data);
