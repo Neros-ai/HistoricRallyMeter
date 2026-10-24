@@ -51,16 +51,16 @@ public:
                 && s.trip_start_cntr1 == 1100 && s.trip_start_time_ms == 5000;
         });
 
-        // The Trip readout never shows below zero (adjustedDistanceMeters
-        // clamps), and the history records what the readout showed.
-        suite->addTest("trip history records what the readout showed, never below zero", []() {
+        // The history records what the readout showed, a negative one included
+        // (reversing past the start reads below zero).
+        suite->addTest("trip history records what the readout showed, a negative one with its sign", []() {
             RallyState s;
             s.counters = false;
             s.calibration = 1000000;
             s.trip_start_cntr1 = 100;
             s.trip_distance_adjust_cm = -2000;   // -20 m correction
-            resetTrip(s, 110, 0, 1);             // 10 m driven, 20 m back: reads 0
-            return s.trip_history_m == "0";
+            resetTrip(s, 110, 0, 1);             // 10 m driven, 20 m back: reads -10
+            return s.trip_history_m == "-10";
         });
 
         suite->addTest("config round-trips trip history, reverse shift and slot starts", []() {
@@ -80,6 +80,31 @@ public:
                 && t.memory_slots[2].start_time_s == 38700
                 && t.memory_slots[2].start_distance_m == 6200
                 && t.memory_slots[0].start_time_s == -1;
+        });
+
+        suite->addTest("reversing past the start displays negative metres and counts back up", [this]() {
+            RallyState s;
+            s.counters = false;
+            s.calibration = 1000000;   // 1 m per count
+            CounterPoller p;
+            MockI2CCounter a(1, 0x70), b(1, 0x71);
+            feed(p, a, b, 1000);
+            s.total_start_cntr1 = p.getMostRecent().cntr1;
+            feed(p, a, b, 1005);               // 5 m forward
+            p.setReverse(true);
+            feed(p, a, b, 1017);               // 12 m back: -7 m
+            auto now = p.getMostRecent();
+            long m = adjustedDistanceMeters(countsToCentimeters(
+                calculateDistanceCounts(s, now.cntr1, now.cntr2, s.total_start_cntr1, s.total_start_cntr2),
+                s.calibration), 0);
+            bool neg = (m == -7);
+            p.setReverse(false);
+            feed(p, a, b, 1024);               // 7 m forward: back to 0
+            now = p.getMostRecent();
+            long m2 = adjustedDistanceMeters(countsToCentimeters(
+                calculateDistanceCounts(s, now.cntr1, now.cntr2, s.total_start_cntr1, s.total_start_cntr2),
+                s.calibration), 0);
+            return neg && m2 == 0;
         });
 
         suite->addTest("poller: forward, virtual count equals the raw count", [this]() {
