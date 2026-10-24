@@ -10,6 +10,7 @@
 #include "webserver/qr_display.h"
 #include "calculations.h"
 #include "tone_generator.h"
+#include "nero_frame.h"
 #include <sstream>
 #include <iostream>
 #include <cstdlib>
@@ -70,7 +71,10 @@ static void applyCopilotCSS() {
         ".early-departure-label-embedded { font-size: 18px; color: white; font-weight: bold; }"
         ".instruction-label { font-size: 16px; color: #CCCCCC; }"
         ".compact-entry { min-height: 0; padding-top: 0; padding-bottom: 0; }"
-        ".tone-mode-row label, .tone-mode-row checkbutton { font-size: 20px; }",
+        ".tone-mode-row label, .tone-mode-row checkbutton { font-size: 20px; }"
+        // Nero2.0 menu page: 40 px key name over a 20 px grey caption.
+        ".menu-item { font-size: 40px; }"
+        ".menu-caption { font-size: 20px; color: #CCCCCC; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),
@@ -791,7 +795,13 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     g_signal_connect(data->adjZeroBtn, "clicked", G_CALLBACK(on_adj_driver_zero), data);
     g_signal_connect(calBtn, "clicked", G_CALLBACK(on_show_calibration), data);
     g_signal_connect(datetimeBtn, "clicked", G_CALLBACK(on_show_datetime), data);
-    
+
+    // Nero2.0 menu key. Home keeps its old nav bar until its own re-layout, so
+    // the key takes the bar's 43 px height rather than the full 70 px.
+    GtkWidget* menuKey = createMenuKey(data);
+    gtk_widget_set_size_request(menuKey, nero::MENU_KEY_W, 43);
+    gtk_box_pack_end(GTK_BOX(buttonBox), menuKey, FALSE, FALSE, 0);
+
     return screen;
 }
 
@@ -1693,6 +1703,10 @@ GtkWidget* createCopilotWindow(AppData* data) {
     gtk_stack_add_named(data->copilotStack, data->dateTimeScreen, "datetime");
     gtk_stack_add_named(data->copilotStack, data->autoStartScreen, "autostart");
     
+    // The menu page last: it greys any key whose page is not in the stack.
+    data->menuScreen = createMenuScreen(data);
+    gtk_stack_add_named(data->copilotStack, data->menuScreen, "menu");
+
     // Show TwinMaster by default
     gtk_stack_set_visible_child_name(data->copilotStack, "twinmaster");
     

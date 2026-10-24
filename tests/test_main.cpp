@@ -27,6 +27,7 @@
 #include "test_total_reset.h"
 #include "test_next_prev.h"
 #include "test_tone_cadence.h"
+#include "test_nero_frame.h"
 
 int main() {
     TestRunner runner;
@@ -57,6 +58,7 @@ int main() {
     TestTotalReset totalResetTests;
     TestNextPrev nextPrevTests;
     TestToneCadence toneCadenceTests;
+    TestNeroFrame neroFrameTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -84,6 +86,7 @@ int main() {
     runner.addSuite(totalResetTests.createSuite());
     runner.addSuite(nextPrevTests.createSuite());
     runner.addSuite(toneCadenceTests.createSuite());
+    runner.addSuite(neroFrameTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();

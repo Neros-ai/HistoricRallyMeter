@@ -112,6 +112,8 @@ void on_adj_driver_zero(GtkWidget* widget, gpointer user_data);
 void on_set_sensor_1(GtkWidget* widget, gpointer user_data);
 void on_set_sensor_both(GtkWidget* widget, gpointer user_data);
 void on_exit_app(GtkWidget* widget, gpointer user_data);
+void on_show_menu(GtkWidget* widget, gpointer user_data);
+void on_menu_choice(GtkWidget* widget, gpointer user_data);
 void on_show_autostart(GtkWidget* widget, gpointer user_data);
 void on_autostart_set(GtkWidget* widget, gpointer user_data);
 void on_autostart_clear(GtkWidget* widget, gpointer user_data);

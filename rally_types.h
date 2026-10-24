@@ -96,6 +96,7 @@ struct AppData {
     GtkWidget* copilotWindow;
     GtkStack* copilotStack;  // Stack for multiple screens
     GtkLabel* copilotRallyClockLabel;
+    GtkWidget* menuScreen = nullptr;  // Nero2.0 full-screen menu page
     
     // TwinMaster screen
     GtkWidget* twinMasterScreen;
