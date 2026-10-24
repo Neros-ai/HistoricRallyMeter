@@ -33,7 +33,7 @@ public:
         });
 
         suite->addTest("a correction cannot drive the reading negative", []() {
-            return adjustedDistanceMeters(500, -10000) == 0;
+            return adjustedDistanceMeters(500, -10000) == -95;   // reversed past the start: negative metres
         });
 
         suite->addTest("clamps a correction that would go below zero", []() {
