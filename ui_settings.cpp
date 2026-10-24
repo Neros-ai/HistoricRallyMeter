@@ -11,7 +11,9 @@
 
 namespace {
 
-constexpr int COL_W = 423, ROW_H = 44, HEAD_H = 26;
+// Rows and keys sized so each column fits the 388 px panel with the abort-stage
+// row added: heading 26 + 6 rows x 38 + Wi-Fi 80 + 7 gaps x 5 = 369 on the right.
+constexpr int COL_W = 423, ROW_H = 38, HEAD_H = 26, KEY_H = 34, GAP = 5;
 
 enum Setting {
     BEEP_NAV, BEEP_TIMING, TONE_ON, TONE_BEHIND, TONE_AHEAD,
@@ -97,7 +99,7 @@ GtkWidget* seg(AppData* d, Setting id, const char* a, const char* b, int active)
     const char* labels[2] = {a, b};
     for (int i = 0; i < 2; i++) {
         GtkWidget* k = gtk_button_new_with_label(labels[i]);
-        gtk_widget_set_size_request(k, 70, 40);
+        gtk_widget_set_size_request(k, 70, KEY_H);
         addClass(k, "dist-heading");
         addClass(k, "key-small");
         g_object_set_data(G_OBJECT(k), "ctl", c);
@@ -125,7 +127,7 @@ void advanceEntry(AppData* d, GtkWidget* r, int mode, double stored) {
     gtk_entry_set_alignment(e, 1.0f);
     gtk_entry_set_width_chars(e, 1);
     gtk_entry_set_max_width_chars(e, 1);
-    gtk_widget_set_size_request(GTK_WIDGET(e), 96, 40);
+    gtk_widget_set_size_request(GTK_WIDGET(e), 96, KEY_H);
     addClass(GTK_WIDGET(e), "set-entry");
     // Always a figure: "0" when no advance is set, never an empty box.
     char b[32];
@@ -163,7 +165,7 @@ GtkWidget* createSettingsScreen(AppData* d) {
     gtk_container_set_border_width(GTK_CONTAINER(screen), 5);
 
     // ── left: BEEP ASSIST & TONE ──
-    GtkWidget* left = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    GtkWidget* left = gtk_box_new(GTK_ORIENTATION_VERTICAL, GAP);
     gtk_widget_set_size_request(left, COL_W, -1);
     gtk_box_pack_start(GTK_BOX(screen), left, FALSE, FALSE, 0);
     GtkWidget* h1 = gtk_label_new("BEEP ASSIST & TONE");
@@ -181,7 +183,7 @@ GtkWidget* createSettingsScreen(AppData* d) {
     gtk_box_pack_end(GTK_BOX(row(left, "Tone when ahead")), seg(d, TONE_AHEAD, "1", "2", s.tone_type_ahead == 2 ? 1 : 0), FALSE, FALSE, 0);
 
     // ── right: SYSTEM, with the version above the speed-units key ──
-    GtkWidget* right = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    GtkWidget* right = gtk_box_new(GTK_ORIENTATION_VERTICAL, GAP);
     gtk_widget_set_size_request(right, COL_W, -1);
     gtk_widget_set_margin_start(right, 100);
     gtk_box_pack_start(GTK_BOX(screen), right, FALSE, FALSE, 0);
@@ -206,7 +208,7 @@ GtkWidget* createSettingsScreen(AppData* d) {
     {
         GtkWidget* r = row(right, "Stage");
         GtkWidget* k = gtk_button_new_with_label("abort stage");
-        gtk_widget_set_size_request(k, 160, 40);
+        gtk_widget_set_size_request(k, 160, KEY_H);
         addClass(k, "dist-heading");
         addClass(k, "key-small");
         g_signal_connect(k, "clicked", G_CALLBACK(onAbortStage), d);
@@ -221,7 +223,7 @@ GtkWidget* createSettingsScreen(AppData* d) {
 
     // Wi-Fi link: just the address and its QR code (no hotspot switch).
     GtkWidget* wifi = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_widget_set_size_request(wifi, COL_W, 90);
+    gtk_widget_set_size_request(wifi, COL_W, 80);
     GtkWidget* wtext = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
     GtkWidget* wname = gtk_label_new("Wi-Fi phone link");
     addClass(wname, "set-name");
@@ -233,7 +235,7 @@ GtkWidget* createSettingsScreen(AppData* d) {
     gtk_box_pack_start(GTK_BOX(wtext), GTK_WIDGET(d->webUrlLabel), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(wifi), wtext, TRUE, TRUE, 0);
     d->webQrArea = gtk_drawing_area_new();
-    gtk_widget_set_size_request(d->webQrArea, 80, 80);
+    gtk_widget_set_size_request(d->webQrArea, 70, 70);
     g_signal_connect(d->webQrArea, "draw", G_CALLBACK(on_qr_draw), d);
     gtk_box_pack_end(GTK_BOX(wifi), d->webQrArea, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(right), wifi, FALSE, FALSE, 0);
