@@ -530,6 +530,7 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     GtkWidget* clrAll = key("clear\nall", (STAGE_W - 6) / 2, 48, G_CALLBACK(onClearAll));
     for (GtkWidget* k : {clrStage, clrAll}) {
         addClass(k, "key-small");
+        addClass(k, "key-clr");   // tight padding: the theme's would make the pair wider than the column
         gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(k))), GTK_JUSTIFY_CENTER);
     }
     gtk_box_pack_start(GTK_BOX(clr), clrStage, TRUE, TRUE, 0);
