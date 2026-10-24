@@ -29,6 +29,7 @@
 #include "calculations.h"
 #include "tone_generator.h"
 #include "debug_log.h"
+#include "stage_log.h"
 
 // Structure to hold connector info from DRM
 struct DrmConnector {
@@ -420,6 +421,7 @@ int main(int argc, char* argv[]) {
         }
         std::cerr << "[DEBUG] Step 7: CounterPoller created OK" << std::endl;
         app_data.debugLog = new DebugLog();
+        app_data.stageLog = new StageLog();
         {
             // Logs older than 60 days go at startup (owner, 2026-10-24; upstream used 14)
             int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -689,6 +691,11 @@ int main(int argc, char* argv[]) {
             app_data.webServer->stop();
             delete app_data.webServer;
             app_data.webServer = nullptr;
+        }
+        if (app_data.stageLog) {
+            app_data.stageLog->stop();   // write the buffered tail of the stage
+            delete app_data.stageLog;
+            app_data.stageLog = nullptr;
         }
         if (app_data.debugLog) {
             app_data.debugLog->stop();   // write the buffered tail of the run

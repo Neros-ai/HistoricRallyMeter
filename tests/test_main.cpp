@@ -32,6 +32,7 @@
 #include "test_stage_rows.h"
 #include "test_settings.h"
 #include "test_debug_log.h"
+#include "test_stage_log.h"
 
 int main() {
     TestRunner runner;
@@ -67,6 +68,7 @@ int main() {
     TestStageRows stageRowsTests;
     TestSettings settingsTests;
     TestDebugLog debugLogTests;
+    TestStageLog stageLogTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -99,6 +101,7 @@ int main() {
     runner.addSuite(stageRowsTests.createSuite());
     runner.addSuite(settingsTests.createSuite());
     runner.addSuite(debugLogTests.createSuite());
+    runner.addSuite(stageLogTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();
