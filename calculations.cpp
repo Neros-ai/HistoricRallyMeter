@@ -775,21 +775,31 @@ CompactGaugeLayout computeCompactGaugeLayout(double width, double height, bool e
     // values run off the panel.
     L.fscale  = embedded ? EMBEDDED_FSCALE : std::min(1.0, L.radius / REF_RADIUS);
 
-    L.valSize    = 44 * L.fscale;
-    L.curTopSize = 50 * L.fscale;  // RB-DRV-08: Current/Target/Total/Trip's enlarged size
-    L.labelSize  = std::max(CAPTION_FLOOR, 16 * L.fscale);
-    L.labelGap   = 8 * L.fscale;
-    L.rowGap     = 48 * L.fscale;
+    // Nero2.0 driver display (tools/layout-preview/nero2/driver.html): Total and
+    // Trip speeds and distances at 60 px, Current / Target at 62 px, the
+    // ahead/behind digits at 50 px, captions beside the speeds at 20 px.
+    L.valSize        = 60 * L.fscale;
+    L.curTopSize     = 62 * L.fscale;
+    L.labelSize      = std::max(CAPTION_FLOOR, 16 * L.fscale);
+    L.rowCaptionSize = std::max(CAPTION_FLOOR, 20 * L.fscale);
+    L.boxFontSize    = 50 * L.fscale;
+    L.labelGap       = 8 * L.fscale;
+    L.rowGap         = 66 * L.fscale;
+    // The Target / Kph legends are lowered 20 px; the figures stay put.
+    L.legendDrop     = 20 * L.fscale;
 
-    // rightAnchor: symmetric about the hub, far enough out to clear the arc.
-    // Every Total/Trip speed value right-aligns to it.
-    L.rightAnchor = L.centerX + L.radius * 0.72;
-    // distanceAnchor: where every distance value AND the "Distance (metres)"
-    // caption below it (RB-DRV-02) both right-align to, so a value's last
-    // digit and the caption's closing ")" always share one vertical edge --
-    // no text measurement needed, both anchor to the identical X. RB-DRV-08
-    // shifts this 10px right of the arc-derived offset.
-    L.distanceAnchor = L.radius * 0.72 + 10.0;
+    // rightAnchor: the right edge every Total/Trip speed aligns to, 260 px
+    // right of the hub on the 800 x 480 display, so the 20 px captions to
+    // its right still clear the dial's inner edge.
+    L.rightAnchor = L.centerX + L.radius * 0.6933;
+    // distanceAnchor: the (absolute) right edge every distance value AND the
+    // "Distance (metres)" caption align to, 45 px left of the hub there.
+    L.distanceAnchor = L.centerX - L.radius * 0.12;
+
+    // The column captions sit beside the ahead/behind box, level with its
+    // lower half, rather than under it.
+    L.distCaptionRight = L.centerX - L.radius * 0.28;
+    L.speedCaptionLeft = L.centerX + L.radius * 0.28;
 
     // Coloured band arc is drawn at `radius` with lineWidth 12, so its outer
     // edge sits radius+6 out from the hub. Current's value right-aligns to,
@@ -799,19 +809,16 @@ CompactGaugeLayout computeCompactGaugeLayout(double width, double height, bool e
     L.bandTargetX = L.centerX - (L.radius + 6.0);
     L.bandTopY    = L.centerY - (L.radius + 6.0);
 
-    // The ahead/behind readout is lifted so its top edge sits above the hub.
-    // Drawn after the needle, it paints the hub out -- the hub carries no
-    // information the driver needs, and the readout is what they actually
-    // look at, so it gets the centre of the dial.
-    L.boxHeight = 50.0;
-    L.boxY      = L.centerY - 10;
+    // The ahead/behind readout sits over the hub, its top edge 8 px above it.
+    // Drawn after the needle, it paints the hub out, so the needle appears to
+    // start at the box's top edge.
+    L.boxHeight = 64.0 * L.fscale;
+    L.boxY      = L.centerY - 8 * L.fscale;
 
-    // Total/Trip rows: RB-DRV-08 draws them at curTopSize instead of valSize
-    // and nudges them up, with extra line spacing, so the taller text's
-    // descenders clear the ahead/behind box sitting above them.
-    const double lineGap = L.rowGap + 10 * L.fscale;
-    L.tripBaseline  = L.boxY - (0.22 * L.curTopSize + 6 * L.fscale);
-    L.totalBaseline = L.tripBaseline - lineGap;
+    // Total/Trip rows hang close to the -3 / +3 baseline: Trip 25 px above
+    // the hub line, Total one row above that.
+    L.tripBaseline  = L.centerY - 25 * L.fscale;
+    L.totalBaseline = L.tripBaseline - L.rowGap;
 
     // Footer rides on the bottom edge of the box, so the two never overlap
     // however the box is sized.
@@ -821,7 +828,7 @@ CompactGaugeLayout computeCompactGaugeLayout(double width, double height, bool e
     // Captions were previously hung off the box's top edge. The box has
     // moved up over the hub, so they get their own offset below the value
     // rows, independent of wherever the box now sits.
-    L.captionBaseline = L.centerY + 20 + L.labelSize * 0.78;
+    L.captionBaseline = L.centerY + 38 * L.fscale;
 
     return L;
 }
@@ -849,7 +856,7 @@ NeedleGeometry computeNeedleGeometry(double seconds, double max_seconds, double 
     // 5% short of the tick ring so the bar's flat tip does not foul the ticks
     // it is being read against.
     n.length = (radius - 10) * 0.95;
-    n.halfWidth = 3.0;
+    n.halfWidth = 5.0;   // Nero2.0: 10 px thick
     return n;
 }
 
