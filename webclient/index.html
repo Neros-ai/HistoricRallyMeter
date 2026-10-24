@@ -20,186 +20,188 @@
   </header>
 
   <nav class="tabs">
-    <button id="tab-live" class="tab active" type="button">Live</button>
-    <button id="tab-setup" class="tab" type="button">Setup</button>
-    <button id="tab-driver" class="tab" type="button">Driver</button>
-    <button id="tab-logs" class="tab" type="button">Logs</button>
+    <button id="tab-navi" class="tab active" type="button">Navi</button>
+    <button id="tab-seg" class="tab" type="button">Seg</button>
+    <button id="tab-time" class="tab" type="button">Time</button>
+    <button id="tab-cal" class="tab" type="button">Cal</button>
+    <button id="tab-set" class="tab" type="button">Set</button>
+    <button id="tab-drv" class="tab" type="button">Drv</button>
   </nav>
 
-  <main id="view-live" class="view">
+  <!-- NAVI: the box's Home page -->
+  <main id="view-navi" class="view">
     <section class="clock-row">
       <span>Rally Clock</span>
       <strong id="rally-clock">--:--:--</strong>
     </section>
 
-    <section class="actions live-tall">
-      <button id="btn-prev" type="button" disabled>prev</button>
-      <button id="btn-next" type="button" disabled>next</button>
+    <section id="ahead-behind" class="ahead-behind">
+      <div id="ahead-value" class="value">0.0 s</div>
     </section>
 
-    <!-- Ahead/behind, Total and Trip share one grid. Press Total/Trip to reset
-         (same as Driver); the separate Reset buttons are gone. -->
-    <div class="live-boxes">
-      <section id="ahead-behind" class="ahead-behind">
-        <div id="ahead-value" class="value">0.0 s</div>
-      </section>
-
-      <section class="dist-box press-reset" id="box-total" role="button" tabindex="0"
-               title="Reset Total" aria-label="Total distance, press to reset">
-        <span class="dl">Total</span><strong id="total-m">0 m</strong>
-        <span class="rt">
-          <span class="avg">avg <b id="total-avg">0.0</b></span>
-          <span class="sp"><span class="sl" id="unit-label">kph</span><strong id="cur-kph">0.0</strong></span>
-        </span>
-      </section>
-
-      <section class="dist-box press-reset" id="box-trip" role="button" tabindex="0"
-               title="Reset Trip" aria-label="Trip distance, press to reset">
-        <span class="dl">Trip</span><strong id="trip-m">0 m</strong>
-        <span class="rt">
-          <span class="avg">avg <b id="trip-avg">0.0</b></span>
-          <span class="sp tgt"><span class="sl">tgt</span><strong id="target-kph">0.0</strong></span>
-        </span>
-      </section>
+    <div class="navi-grid">
+      <div class="navi-cell"><button id="btn-total" type="button" class="key">total</button>
+        <div class="navi-fig"><strong id="total-m">0</strong><span class="el" id="total-el">0:00</span></div></div>
+      <div class="navi-cell"><button id="btn-trip" type="button" class="key">trip</button>
+        <div class="navi-fig"><strong id="trip-m">0</strong><span class="el" id="trip-el">0:00</span></div></div>
+      <div class="navi-cell"><button id="btn-next" type="button" class="key" disabled>next</button>
+        <div class="navi-fig"><strong id="next-m">---</strong><span class="el" id="speed-change"></span></div></div>
+      <div class="navi-cell"><button id="btn-prev" type="button" class="key" disabled>prev</button>
+        <div class="navi-fig keys2">
+          <button id="btn-freeze" type="button" class="key">freeze</button>
+          <button id="btn-reverse" type="button" class="key">reverse</button></div></div>
     </div>
 
-    <section class="adjust-row live-tall">
-      <span class="adjust-label">Adjust</span>
-      <button id="btn-dist-minus" type="button">&minus;10</button>
-      <input id="dist-set-m" type="number" min="0" max="999999" step="1"
-             inputmode="numeric" placeholder="Total m">
-      <button id="btn-dist-set" type="button">set</button>
+    <section class="adjust-row">
       <button id="btn-dist-plus" type="button">+10</button>
+      <button id="btn-dist-minus" type="button">&minus;10</button>
+      <input id="dist-set-m" type="number" min="0" max="999999" step="1" inputmode="numeric" placeholder="Total m">
+      <button id="btn-dist-set" type="button">set</button>
     </section>
 
-    <section class="segment-row">
-      Segment <strong id="seg-num">0</strong> of <strong id="seg-count">0</strong>
+    <section class="speeds">
+      <span>now <strong id="cur-kph">0.0</strong> <span id="unit-label">kph</span></span>
+      <span>target <strong id="target-kph">0.0</strong></span>
+      <span>total avg <strong id="total-avg">0.0</strong></span>
+      <span>trip avg <strong id="trip-avg">0.0</strong></span>
     </section>
 
-    <!-- The co-pilot's read-only stage panel, same figures in the same order:
-         the roadbook as set, each segment's own length, and the running total
-         the crew read off against the odometer. -->
     <section class="stage-panel">
-      <div class="stage-autostart">Autostart: <strong id="stage-autostart">none</strong></div>
+      <div class="stage-sel">
+        <button id="stage-minus" type="button" class="key">&minus;</button>
+        <select id="stage-pick"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select>
+        <button id="stage-plus" type="button" class="key">+</button>
+        <span class="stage-auto"><span id="auto-word" class="cyan">auto</span> <strong id="auto-time"></strong></span>
+      </div>
       <table id="stage-table">
-        <thead>
-          <tr><th id="stage-speed-head">KPH</th><th colspan="2">Distance (m)</th></tr>
-        </thead>
+        <thead><tr><th id="stage-speed-head">KPH</th><th>at m</th></tr></thead>
         <tbody></tbody>
       </table>
+      <div class="arrival">Stage arrival
+        <span><b id="arr-kph">--</b> kph</span> <span><b id="arr-min">--</b> min</span></div>
+      <div class="hist"><span class="cyan">Trip history</span> <span id="trip-history">-</span></div>
     </section>
 
+    <section class="actions flags">
+      <button id="btn-flag-minute" type="button" class="key">&#127937; <span id="flag-minute-time">--:--</span></button>
+      <button id="btn-flag-late" type="button" class="key">&#127937; &#9201; now</button>
+      <button id="btn-zero" type="button" class="key">A-B, B-C zero</button>
+    </section>
   </main>
 
-  <main id="view-setup" class="view hidden">
+  <!-- SEG: the box's Segments page -->
+  <main id="view-seg" class="view hidden">
+    <section class="stage-sel">
+      <button id="seg-minus" type="button" class="key">&minus;</button>
+      <select id="seg-pick"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select>
+      <button id="seg-plus" type="button" class="key">+</button>
+    </section>
     <div class="table-wrap">
       <table id="seg-table">
-        <thead>
-          <tr><th>#</th><th>Target kph</th><th>Distance m</th><th>Auto</th><th></th></tr>
-        </thead>
+        <thead><tr><th>#</th><th>to m</th><th>dist</th><th>chg</th><th>KPH</th><th>auto</th><th>time</th><th>total</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
-    <button id="btn-add-seg" type="button">+ Add segment</button>
-    <section class="memory-row">
-      <span class="mem-label">Store</span>
-      <button class="mem-slot" data-action="store" data-slot="1" type="button">1</button>
-      <button class="mem-slot" data-action="store" data-slot="2" type="button">2</button>
-      <button class="mem-slot" data-action="store" data-slot="3" type="button">3</button>
-      <button class="mem-slot" data-action="store" data-slot="4" type="button">4</button>
-      <button class="mem-slot" data-action="store" data-slot="5" type="button">5</button>
+    <section class="start-block">
+      <div class="cyan">Stage start</div>
+      <label>Time <input id="seg-start-time" type="text" inputmode="numeric" placeholder="hh:mm:ss"></label>
+      <label>Distance at start <input id="seg-start-dist" type="number" min="0" step="1" inputmode="numeric" placeholder="m"> m</label>
+      <label>First # <input id="seg-first-n" type="number" min="0" step="1" inputmode="numeric"></label>
+      <label>from m <input id="seg-first-from" type="number" min="0" step="1" inputmode="numeric"></label>
+      <label class="auto-row">Autostart <input id="seg-autostart" type="checkbox"></label>
     </section>
-    <section class="memory-row">
-      <span class="mem-label">Recall</span>
-      <button class="mem-slot" data-action="recall" data-slot="1" type="button">1</button>
-      <button class="mem-slot" data-action="recall" data-slot="2" type="button">2</button>
-      <button class="mem-slot" data-action="recall" data-slot="3" type="button">3</button>
-      <button class="mem-slot" data-action="recall" data-slot="4" type="button">4</button>
-      <button class="mem-slot" data-action="recall" data-slot="5" type="button">5</button>
-    </section>
-
-    <section class="beep-panel">
-      <h2>Beep Assist KM</h2>
-      <textarea id="beep-waypoints" rows="2"
-                placeholder="3.67, 4.98, 17.30"></textarea>
-      <div class="beep-row">
-        <label for="beep-enabled">Off/On</label>
-        <input id="beep-enabled" type="checkbox">
-      </div>
-      <div class="beep-row beep-head">
-        <span>Mode</span><span>Advance by</span>
-      </div>
-      <div class="beep-row">
-        <label for="beep-nav">Navigation</label>
-        <input id="beep-nav" type="checkbox">
-        <input id="beep-advance-m" type="number" min="0" step="1" inputmode="numeric"
-               placeholder="Metres">
-      </div>
-      <div class="beep-row">
-        <label for="beep-timing">Timing</label>
-        <input id="beep-timing" type="checkbox">
-        <input id="beep-advance-s" type="number" min="0" step="1" inputmode="numeric"
-               placeholder="Seconds">
-      </div>
-    </section>
-
-    <section class="beep-panel">
-      <div class="beep-row">
-        <label for="tone-enabled">tone off/on</label>
-        <input id="tone-enabled" type="checkbox">
-      </div>
-      <div class="beep-row">
-        <span>Type</span>
-        <label><input type="radio" name="tone-type" value="1"> 1</label>
-        <label><input type="radio" name="tone-type" value="2"> 2</label>
-      </div>
+    <section class="add-row">
+      <input id="seg-add-text" type="text" placeholder="1,000;1,500;2,300">
+      <button id="btn-add-seg" type="button" class="key">add distance</button>
     </section>
     <section class="actions">
-      <button id="btn-reset-trip2" type="button">Reset Trip</button>
-      <button id="btn-reset-total" type="button">Reset Total</button>
+      <button id="btn-clear-stage" type="button" class="key">clear stage</button>
+      <button id="btn-clear-all" type="button" class="key">clear all</button>
     </section>
   </main>
 
-  <!-- Sample / side-branch: recognisable twin of the compact driver gauge.
-       Display-only; drawn only while this tab is active (RB-WEB-11). -->
-  <main id="view-driver" class="view view-driver hidden">
+  <!-- TIME: the box's Date / Time page -->
+  <main id="view-time" class="view hidden">
+    <section class="trow"><span class="tl">Rally time</span><strong id="t-rally" class="big cyan">--:--:--.-</strong>
+      <span class="pair"><button id="trim-minus" type="button" class="key">&minus;0.1</button>
+      <button id="trim-plus" type="button" class="key">+0.1</button></span></section>
+    <section class="trow"><span class="tl">Computer time</span><strong id="t-computer" class="big">--:--:--.-</strong>
+      <button id="btn-rally-computer" type="button" class="key">set rally to computer time</button></section>
+    <section class="trow"><span class="tl">Phone time</span><strong id="t-phone" class="big">--:--:--.-</strong>
+      <button id="btn-computer-phone" type="button" class="key">set computer to phone time</button></section>
+    <section class="trow"><span class="tl">Enter rally time</span>
+      <input id="t-enter" type="text" inputmode="numeric" placeholder="hh:mm:ss" class="big-input">
+      <button id="btn-rally-entered" type="button" class="key">set rally to entered time</button></section>
+    <section class="trow"><span class="tl">Offset</span><span><span>Computer</span> <strong id="t-offset" class="big cyan">+0.0</strong></span>
+      <span id="t-date" class="dim"></span></section>
+  </main>
+
+  <!-- CAL: the box's Calibration page -->
+  <main id="view-cal" class="view hidden">
+    <section class="crow"><span class="cl">Calculated distance:</span><strong id="cal-dist">0.0</strong> m
+      <button id="cal-zero" type="button" class="key">zero counters</button></section>
+    <section class="crow"><span class="cl">Actual distance:</span>
+      <input id="cal-actual" type="number" min="500" max="100000" step="1" inputmode="numeric"> m
+      <button id="cal-save" type="button" class="key">save calibration</button></section>
+    <section class="crow"><span class="cl">Sensor Count:</span> 1: <b id="cal-c1">0</b> 2: <b id="cal-c2">0</b> Avg: <b id="cal-avg">0</b>
+      <span class="pair"><button id="cal-s1" type="button" class="key">using sensor 1</button>
+      <button id="cal-s12" type="button" class="key">select sensor 1&amp;2</button></span></section>
+    <section class="crow"><span class="cl">Pulses/KM:</span> <b id="cal-pulses">0</b>. Reset to
+      <input id="cal-reset-n" type="number" min="1" step="1" inputmode="numeric" class="short">
+      <button id="cal-reset" type="button" class="key">reset</button></section>
+    <section class="crow">Prop/Wheel RPM at <input id="cal-prop-n" type="number" min="1" max="64" step="1" class="tiny"> pulses/rev <b id="cal-rpm">---</b> rpm</section>
+    <p class="ins">1. Press zero counters, or skip to step 2 to use the existing counts. 2. Enter actual distance covered.
+      3. Choose sensor 1 or 1&amp;2. 4. Save calibration.</p>
+  </main>
+
+  <!-- SET: the box's Settings page, plus the log downloads -->
+  <main id="view-set" class="view hidden">
+    <section class="beep-panel">
+      <h2>Beep assist &amp; tone</h2>
+      <div class="beep-row"><label for="beep-nav">Beep navigation</label><input id="beep-nav" type="checkbox"></div>
+      <div class="beep-row"><label for="beep-advance-m">Navigation advance (m)</label>
+        <input id="beep-advance-m" type="number" min="0" step="1" inputmode="numeric"></div>
+      <div class="beep-row"><label for="beep-timing">Beep timing</label><input id="beep-timing" type="checkbox"></div>
+      <div class="beep-row"><label for="beep-advance-s">Timing advance (s)</label>
+        <input id="beep-advance-s" type="number" min="0" step="1" inputmode="numeric"></div>
+      <div class="beep-row"><label for="tone-enabled">Ahead/Behind Tone</label><input id="tone-enabled" type="checkbox"></div>
+      <div class="beep-row"><span>Tone when behind</span>
+        <label><input type="radio" name="tone-behind" value="1"> 1</label><label><input type="radio" name="tone-behind" value="2"> 2</label></div>
+      <div class="beep-row"><span>Tone when ahead</span>
+        <label><input type="radio" name="tone-ahead" value="1"> 1</label><label><input type="radio" name="tone-ahead" value="2"> 2</label></div>
+    </section>
+    <section class="beep-panel">
+      <h2>System <span class="ver">Nero2.0</span></h2>
+      <div class="beep-row"><span>Speed units</span>
+        <label><input type="radio" name="units" value="kph"> kph</label><label><input type="radio" name="units" value="mph"> mph</label></div>
+      <div class="beep-row"><label for="set-stage-log">Stage data logging</label><input id="set-stage-log" type="checkbox"></div>
+      <div class="beep-row"><label for="set-sensor-log">Sensor logging</label><input id="set-sensor-log" type="checkbox"></div>
+      <div class="beep-row"><label for="set-force-single">Force single display</label><input id="set-force-single" type="checkbox"></div>
+      <div class="beep-row"><span>Screen <b id="set-fps">-</b></span><span><b id="set-cpu">-</b></span></div>
+      <div class="beep-row"><span>Wi-Fi phone link</span><span id="set-url" class="cyan">-</span></div>
+      <div class="beep-row"><span>Phone sound</span><span class="dim">the Sound key at the top</span></div>
+    </section>
+    <section class="logs-panel">
+      <button id="btn-download-logs" type="button" class="key">download logs</button>
+      <div id="logs-block" class="hidden">
+        <div class="logs-head"><span class="logs-note">Stage logs, then sensor logs, newest first. Both are kept 60 days. Press one to download it.</span>
+          <button id="btn-logs-refresh" type="button">Refresh</button></div>
+        <h3>Stage logs</h3><ul id="logs-stage" class="logs-list"></ul>
+        <h3>Sensor logs</h3><ul id="logs-sensor" class="logs-list"></ul>
+        <p id="logs-empty" class="logs-empty hidden">No log files yet.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- DRV: the Nero2.0 driver display -->
+  <main id="view-drv" class="view view-driver hidden">
     <canvas id="driver-gauge" width="390" height="360" aria-label="Driver gauge"></canvas>
-    <!-- From the gauge down: same Total/Trip (press to reset) and Adjust as Live. -->
     <div class="driver-footer">
-      <section class="dist-box press-reset" id="drv-box-total" role="button" tabindex="0"
-               title="Reset Total" aria-label="Total distance, press to reset">
-        <span class="dl">Total</span><strong id="drv-total-m">0 m</strong>
-        <span class="rt">
-          <span class="avg">avg<b id="drv-total-avg">0.0</b></span>
-        </span>
-      </section>
-      <section class="dist-box press-reset" id="drv-box-trip" role="button" tabindex="0"
-               title="Reset Trip" aria-label="Trip distance, press to reset">
-        <span class="dl">Trip</span><strong id="drv-trip-m">0 m</strong>
-        <span class="rt">
-          <span class="avg">avg<b id="drv-trip-avg">0.0</b></span>
-        </span>
-      </section>
-      <section class="adjust-row live-tall">
-        <span class="adjust-label">Adjust</span>
-        <button id="drv-dist-minus" type="button">&minus;10</button>
-        <input id="drv-dist-set-m" type="number" min="0" max="999999" step="1"
-               inputmode="numeric" placeholder="Total m">
-        <button id="drv-dist-set" type="button">set</button>
-        <button id="drv-dist-plus" type="button">+10</button>
-      </section>
+      <section class="dist-box" id="drv-box-total"><span class="dl">Total</span><strong id="drv-total-m">0 m</strong>
+        <span class="rt"><span class="avg">avg <b id="drv-total-avg">0.0</b></span></span></section>
+      <section class="dist-box" id="drv-box-trip"><span class="dl">Trip</span><strong id="drv-trip-m">0 m</strong>
+        <span class="rt"><span class="avg">avg <b id="drv-trip-avg">0.0</b></span></span></section>
     </div>
-  </main>
-
-  <!-- Debug log files on the meter (Setup > Debug logs). Plain HTTP, not the
-       WebSocket: GET /api/logs for the list, GET /logs/<name> to download. -->
-  <main id="view-logs" class="view hidden">
-    <section class="logs-head">
-      <span class="logs-note">Debug logs on the meter, newest first. Press one to download it.</span>
-      <button id="btn-logs-refresh" type="button">Refresh</button>
-    </section>
-    <ul id="logs-list" class="logs-list"></ul>
-    <p id="logs-empty" class="logs-empty hidden">No log files. Turn on Debug logs on the meter's Setup screen.</p>
   </main>
 
   <!-- Reset Total with a stage running (a missed start): the box's question. -->

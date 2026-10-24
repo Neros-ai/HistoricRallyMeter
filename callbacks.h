@@ -101,6 +101,11 @@ void on_adj_driver_zero(GtkWidget* widget, gpointer user_data);
 void on_set_sensor_1(GtkWidget* widget, gpointer user_data);
 void on_set_sensor_both(GtkWidget* widget, gpointer user_data);
 void on_exit_app(GtkWidget* widget, gpointer user_data);
+// A-B, B-C zero without the dialog: `reset` puts the offset back to 0.0, else
+// the needle is zeroed at this instant.
+void applyDriverZero(AppData* data, bool reset);
+// One 0.1 s step of the rally-clock trim (+1 later, -1 earlier).
+void applyRallyTrim(AppData* data, int steps);
 void setDebugLogging(AppData* data, bool on);   // start a new logs/*.csv, or flush and close
 std::string appDirectory();                       // directory holding the executable
 void updateWebLinkDisplay(AppData* data);

@@ -4,6 +4,7 @@
 #include "config_file.h"
 #include "nero_frame.h"
 #include "rally_state.h"
+#include "stage_edit.h"
 #include "stage_rows.h"
 #include <cmath>
 #include <cstdio>
@@ -54,44 +55,12 @@ void addClass(GtkWidget* w, const char* c) {
     gtk_style_context_add_class(gtk_widget_get_style_context(w), c);
 }
 
-// Which memory the page edits: the one on show, creating a home for a stage
-// loaded from an older config (live segments with no memory) in the first
-// empty slot.
-int editSlot(AppData* d) {
-    RallyState& s = *d->state;
-    if (s.last_memory_slot >= 1 && s.last_memory_slot <= RallyState::MAX_MEMORY_SLOTS)
-        return s.last_memory_slot;
-    int pick = RallyState::MAX_MEMORY_SLOTS;
-    for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++)
-        if (s.memory_slots[i].empty()) { pick = i + 1; break; }
-    if (!s.segments.empty() && s.memory_slots[pick - 1].empty()) {
-        s.memory_slots[pick - 1].segments = s.segments;
-        s.memory_slots[pick - 1].beep_waypoints_m = deriveWaypoints(s.segments);
-        s.memory_slots[pick - 1].waypoints_recorded = true;
-    }
-    s.last_memory_slot = pick;
-    return pick;
-}
-
+int editSlot(AppData* d) { return stageEditSlot(d); }
 RallyState::MemorySlot& slotOf(AppData* d) { return d->state->memory_slots[editSlot(d) - 1]; }
 
 std::string metres(double m) { return formatDistanceGrouped(static_cast<long>(std::lround(m))); }
 
-// An edit is final: counts, beep distances, the memory itself, the running
-// stage if idle, the config and the phone.
-void commitStage(AppData* d) {
-    RallyState& s = *d->state;
-    RallyState::MemorySlot& slot = slotOf(d);
-    recomputeSegmentCounts(s.segments, s.calibration);
-    s.beep_waypoints_m = deriveWaypoints(s.segments);
-    slot.segments = s.segments;
-    slot.beep_waypoints_m = s.beep_waypoints_m;
-    slot.waypoints_recorded = true;
-    d->beepCursorsStale = true;
-    adoptRoadbookIfIdle(d);
-    ConfigFile::save(s);
-    notifyWebStateNow(d);
-}
+void commitStage(AppData* d) { stageEditCommit(d); }
 
 // Text and numbers of every row, in place (no widget is created or destroyed,
 // so an entry that is being typed into is never pulled from under the finger).
@@ -152,24 +121,21 @@ void onChgToggled(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
     segmentsCommitImpl(d);
     size_t row = static_cast<size_t>(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w), "row")));
-    setRowChange(d->state->segments, row, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w)));
-    commitStage(d);
+    stageEditSetChange(d, row, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w)));
     scheduleRebuild(d);
 }
 
 void onAutoToggled(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
     size_t row = static_cast<size_t>(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w), "row")));
-    setRowAuto(d->state->segments, row, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w)));
-    commitStage(d);
+    stageEditSetAuto(d, row, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w)));
 }
 
 void onDelete(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
     segmentsCommitImpl(d);
     size_t row = static_cast<size_t>(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w), "row")));
-    deleteRow(d->state->segments, slotOf(d).first_from_m, row);
-    commitStage(d);
+    stageEditDeleteRow(d, row);
     scheduleRebuild(d);
 }
 
@@ -279,15 +245,7 @@ void loadFields(AppData* d) {
 void selectSlot(AppData* d, int slot_1) {
     if (slot_1 < 1 || slot_1 > RallyState::MAX_MEMORY_SLOTS) return;
     segmentsCommitImpl(d);
-    RallyState& s = *d->state;
-    s.last_memory_slot = slot_1;
-    RallyState::MemorySlot& slot = s.memory_slots[slot_1 - 1];
-    s.segments = slot.segments;
-    s.beep_waypoints_m = deriveWaypoints(s.segments);
-    d->beepCursorsStale = true;
-    adoptRoadbookIfIdle(d);
-    ConfigFile::save(s);
-    notifyWebStateNow(d);
+    stageEditSelect(d, slot_1);
     loadFields(d);
     rebuildNow(d);
 }
@@ -308,14 +266,11 @@ void onAddDistance(GtkWidget*, gpointer p) {
     RallyState::MemorySlot& slot = slotOf(d);
     double end = slot.first_from_m;
     for (const Segment& sg : d->state->segments) end += sg.distance_m;
-    DistanceParse pr = parseStageDistances(gtk_entry_get_text(GTK_ENTRY(u->addEntry)), end);
-    if (!pr.accepted.empty()) {
-        appendStageDistances(d->state->segments, slot.first_from_m, pr.accepted);
-        commitStage(d);
-        rebuildNow(d);
-    }
-    gtk_entry_set_text(GTK_ENTRY(u->addEntry), pr.rest.c_str());
-    if (!pr.rest.empty())
+    std::string rest;
+    const int added = stageEditAddDistances(d, gtk_entry_get_text(GTK_ENTRY(u->addEntry)), &rest);
+    if (added > 0) rebuildNow(d);
+    gtk_entry_set_text(GTK_ENTRY(u->addEntry), rest.c_str());
+    if (!rest.empty())
         flashNotice(u->addEntry, "Each distance must be larger than the one before ("
                                  + metres(end) + " m so far).");
 }
@@ -324,9 +279,7 @@ void onClearStage(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
     segmentsCommitImpl(d);
     if (!confirmYesNo(w, "Clear stage", "Clear this stage?")) return;
-    slotOf(d).clear();
-    d->state->segments.clear();
-    commitStage(d);
+    stageEditClearStage(d);
     loadFields(d);
     rebuildNow(d);
 }
@@ -335,10 +288,7 @@ void onClearAll(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
     segmentsCommitImpl(d);
     if (!confirmYesNo(w, "Clear all", "Clear every stage?")) return;
-    for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) d->state->memory_slots[i].clear();
-    d->state->segments.clear();
-    d->state->last_memory_slot = 1;
-    commitStage(d);
+    stageEditClearAll(d);
     loadFields(d);
     rebuildNow(d);
 }
@@ -348,20 +298,12 @@ void onClearAll(GtkWidget* w, gpointer p) {
 void onAutostartToggled(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
     segmentsCommitImpl(d);
-    if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w))) {
-        applyAutoStartArming(d, autoStartDisarmed());
-        return;
-    }
-    const long tod = slotOf(d).start_time_s;
-    const int64_t now_ms = getRallyTime_ms(*d->state);
-    const int64_t target = (tod >= 0) ? autoStartTargetForTimeOfDay(d, tod) : 0;
-    if (tod < 0 || target <= now_ms) {
+    std::string err;
+    const bool on = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w));
+    if (!stageEditSetAutostart(d, on, &err)) {
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(w), FALSE);
-        flashNotice(w, tod < 0 ? "Set the stage start time first."
-                               : "That start time has already passed.");
-        return;
+        flashNotice(w, err);
     }
-    applyAutoStartArming(d, autoStartArming(target, getAutoStartEpochMs(), false));
 }
 
 }  // namespace
@@ -380,23 +322,21 @@ void segmentsCommitImpl(AppData* d) {
 
     if (!strcmp(kind, "num")) {
         long n = parseMetres(text);
-        if (n >= 0) slot.first_number = n;
+        if (n >= 0) stageEditSetFirst(d, n, -1.0);
     } else if (!strcmp(kind, "from")) {
         long m = parseMetres(text);
-        if (m >= 0) slot.first_from_m = static_cast<double>(m);
+        if (m >= 0) stageEditSetFirst(d, -1, static_cast<double>(m));
     } else if (!strcmp(kind, "kph")) {
         char* stop = nullptr;
         double v = std::strtod(text.c_str(), &stop);
-        if (stop && *stop == '\0' && v >= 0.0 && !text.empty()) setRowSpeed(d->state->segments, row, v);
+        if (stop && *stop == '\0' && v >= 0.0 && !text.empty()) stageEditSetSpeed(d, row, v);
     } else if (!strcmp(kind, "start_time")) {
         long t = parseTimeOfDay(text);
-        if (t >= 0) slot.start_time_s = t;
-        else if (text.empty()) slot.start_time_s = -1;
+        if (t >= 0 || text.empty()) stageEditSetStart(d, t >= 0 ? t : -1, -1);
     } else if (!strcmp(kind, "start_dist")) {
         long m = parseMetres(text);
-        if (m >= 0) slot.start_distance_m = m;
+        if (m >= 0) stageEditSetStart(d, slot.start_time_s, m);
     }
-    commitStage(d);
     updateRowText(d);
     // Echo the stored form back into the start fields.
     if (!strcmp(kind, "start_time") || !strcmp(kind, "start_dist")) loadFields(d);

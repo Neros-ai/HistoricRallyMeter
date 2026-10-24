@@ -3,15 +3,18 @@
 
   let ws = null;
   let reconnectTimer = null;
-  let suppressSegEdit = false;
   let units = 'kph';
   // The last state message, kept so a units change arriving on telemetry can
   // re-title the stage panel without waiting for the next state broadcast.
   let lastState = null;
-  let activeTab = 'live';
+  let lastTelemetry = null;
+  let activeTab = 'navi';
   let driverGauge = null;
+  let frozen = false;       // Navi freeze: this phone's figures hold (the box's driver display never does)
+  let tzMin = 0;            // the box's zone, so its clock reads the same here
 
   const $ = (id) => document.getElementById(id);
+  const TABS = ['navi', 'seg', 'time', 'cal', 'set', 'drv'];
 
   function ensureDriverGauge() {
     if (driverGauge) return driverGauge;
@@ -24,24 +27,19 @@
 
   function showTab(name) {
     activeTab = name;
-    $('tab-live').classList.toggle('active', name === 'live');
-    $('tab-setup').classList.toggle('active', name === 'setup');
-    $('tab-driver').classList.toggle('active', name === 'driver');
-    $('tab-logs').classList.toggle('active', name === 'logs');
-    $('view-live').classList.toggle('hidden', name !== 'live');
-    $('view-setup').classList.toggle('hidden', name !== 'setup');
-    $('view-driver').classList.toggle('hidden', name !== 'driver');
-    $('view-logs').classList.toggle('hidden', name !== 'logs');
-    if (name === 'driver') {
+    TABS.forEach((t) => {
+      $('tab-' + t).classList.toggle('active', t === name);
+      $('view-' + t).classList.toggle('hidden', t !== name);
+    });
+    if (name === 'drv') {
       const g = ensureDriverGauge();
       if (g) g.resize();
     }
-    if (name === 'logs') refreshLogs();
   }
 
-  // ---- Logs tab ----
-  // The meter's debug log files (Design.md "Debug logs"). Fetched over plain
-  // HTTP so the list works even when the WebSocket is down.
+  // ---- Log downloads (foot of Set) ----
+  // Plain HTTP, not the WebSocket: GET /api/logs for the list, GET /logs/<name>
+  // to download. Stage logs first, then sensor logs, newest first.
   function formatSize(bytes) {
     bytes = Number(bytes) || 0;
     if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
@@ -49,33 +47,37 @@
     return bytes + ' B';
   }
 
+  function fillLogList(ul, files) {
+    ul.textContent = '';
+    files.forEach((f) => {
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.href = '/logs/' + encodeURIComponent(f.name);
+      a.setAttribute('download', f.name);
+      const name = document.createElement('span');
+      name.className = 'log-name';
+      name.textContent = f.name;
+      const size = document.createElement('span');
+      size.className = 'log-size';
+      size.textContent = formatSize(f.size);
+      a.appendChild(name);
+      a.appendChild(size);
+      li.appendChild(a);
+      ul.appendChild(li);
+    });
+  }
+
   function refreshLogs() {
-    const list = $('logs-list');
     const empty = $('logs-empty');
     fetch('/api/logs', { cache: 'no-store' })
       .then((r) => r.json())
       .then((files) => {
-        list.textContent = '';
+        fillLogList($('logs-stage'), files.filter((f) => f.kind === 'stage'));
+        fillLogList($('logs-sensor'), files.filter((f) => f.kind !== 'stage'));
+        empty.textContent = 'No log files yet.';
         empty.classList.toggle('hidden', files.length > 0);
-        files.forEach((f) => {
-          const li = document.createElement('li');
-          const a = document.createElement('a');
-          a.href = '/logs/' + encodeURIComponent(f.name);
-          a.setAttribute('download', f.name);
-          const name = document.createElement('span');
-          name.className = 'log-name';
-          name.textContent = f.name;
-          const size = document.createElement('span');
-          size.className = 'log-size';
-          size.textContent = formatSize(f.size);
-          a.appendChild(name);
-          a.appendChild(size);
-          li.appendChild(a);
-          list.appendChild(li);
-        });
       })
       .catch(() => {
-        list.textContent = '';
         empty.textContent = 'Could not reach the meter.';
         empty.classList.remove('hidden');
       });
@@ -94,44 +96,101 @@
 
   function formatDist(m) {
     m = Number(m) || 0;
-    if (Math.abs(m) > 999999) return Math.round(m / 1000).toLocaleString() + ' km';
-    return Math.round(m).toLocaleString() + ' m';
+    // From 100,000 m the box shows km with two decimals and no unit.
+    if (Math.abs(m) >= 100000) return (m / 1000).toFixed(2);
+    return Math.round(m).toLocaleString();
+  }
+
+  function mmss(s) {
+    s = Math.max(0, Math.round(Number(s) || 0));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  // "hh:mm:ss.t" of an epoch time in the box's zone.
+  function clockText(ms) {
+    const d = new Date(ms + tzMin * 60000);
+    const p = (n, w) => String(n).padStart(w || 2, '0');
+    return p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()) + ':' + p(d.getUTCSeconds()) + '.' +
+           Math.floor(d.getUTCMilliseconds() / 100);
+  }
+
+  function offsetText(ms) {
+    const tenths = Math.round(Math.abs(ms) / 100);
+    return (ms < 0 ? '-' : '+') + Math.floor(tenths / 10) + '.' + (tenths % 10);
   }
 
   function applyTelemetry(msg) {
+    lastTelemetry = msg;
+    lastTelemetryAt = Date.now();
+    tzMin = Number(msg.tz_min) || 0;
     $('rally-clock').textContent = msg.rally_clock || '--:--:--';
-    const ab = Number(msg.ahead_behind_s) || 0;
-    $('ahead-value').textContent = (ab >= 0 ? '+' : '') + ab.toFixed(1) + ' s';
-    const abEl = $('ahead-behind');
-    abEl.classList.toggle('ahead', ab > 0.05);
-    abEl.classList.toggle('behind', ab < -0.05);
-
     const previousUnits = units;
     units = msg.units || 'kph';
     if (units !== previousUnits && lastState) renderStagePanel(lastState);
-    $('unit-label').textContent = units;
-    $('cur-kph').textContent = Number(msg.cur_kph || 0).toFixed(1);
-    $('target-kph').textContent = Number(msg.target_kph || 0).toFixed(1);
-    $('trip-m').textContent = formatDist(msg.trip_m);
-    $('total-m').textContent = formatDist(msg.total_m);
-    $('trip-avg').textContent = Number(msg.trip_avg_kph || 0).toFixed(1);
-    $('total-avg').textContent = Number(msg.total_avg_kph || 0).toFixed(1);
+
+    if (!frozen) {
+      const ab = Number(msg.ahead_behind_s) || 0;
+      $('ahead-value').textContent = (ab >= 0 ? '+' : '') + ab.toFixed(1) + ' s';
+      const abEl = $('ahead-behind');
+      abEl.classList.toggle('ahead', ab > 0.05);
+      abEl.classList.toggle('behind', ab < -0.05);
+      $('unit-label').textContent = units;
+      $('cur-kph').textContent = Number(msg.cur_kph || 0).toFixed(1);
+      $('target-kph').textContent = Number(msg.target_kph || 0).toFixed(1);
+      $('trip-m').textContent = formatDist(msg.trip_m);
+      $('total-m').textContent = formatDist(msg.total_m);
+      $('total-el').textContent = mmss(msg.total_s);
+      $('trip-el').textContent = mmss(msg.trip_s);
+      $('trip-avg').textContent = Number(msg.trip_avg_kph || 0).toFixed(1);
+      $('total-avg').textContent = Number(msg.total_avg_kph || 0).toFixed(1);
+      $('next-m').textContent = (msg.next_m === null || msg.next_m === undefined) ? '---' : formatDist(msg.next_m);
+      $('speed-change').textContent = msg.speed_change || '';
+    }
     // Driver tab footer (HTML under the gauge — keeps dial clear).
-    $('drv-trip-m').textContent = formatDist(msg.trip_m);
-    $('drv-total-m').textContent = formatDist(msg.total_m);
+    $('drv-trip-m').textContent = formatDist(msg.trip_m) + ' m';
+    $('drv-total-m').textContent = formatDist(msg.total_m) + ' m';
     $('drv-trip-avg').textContent = Number(msg.trip_avg_kph || 0).toFixed(1);
     $('drv-total-avg').textContent = Number(msg.total_avg_kph || 0).toFixed(1);
-    $('seg-num').textContent = msg.segment_number || 0;
-    $('seg-count').textContent = msg.segment_count || 0;
 
     $('btn-next').disabled = !msg.next_enabled;
     $('btn-prev').disabled = !msg.prev_enabled;
+    $('btn-reverse').classList.toggle('lit', !!msg.reverse);
+    $('btn-freeze').classList.toggle('lit', frozen);
+
+    // Stage arrival
+    $('arr-kph').textContent = msg.arrival ? msg.arrival.kph : '--';
+    $('arr-min').textContent = msg.arrival ? msg.arrival.min : '--';
+    const sp = $('stage-pick');
+    if (document.activeElement !== sp && msg.stage_no >= 1) sp.value = String(msg.stage_no);
+
+    // Time tab
+    const rallyMs = Number(msg.computer_ms) + Number(msg.rally_offset_ms || 0);
+    $('t-rally').textContent = clockText(rallyMs);
+    $('t-computer').textContent = clockText(Number(msg.computer_ms));
+    $('t-offset').textContent = offsetText(Number(msg.rally_offset_ms) || 0);
+    $('t-date').textContent = new Date(rallyMs + tzMin * 60000).toUTCString().slice(0, 16);
+    const phoneEl = $('t-phone');
+    phoneEl.textContent = clockText(Date.now() - 0);   // this phone's clock, in the box's zone
+    $('btn-computer-phone').disabled = !msg.phone_known;
+
+    // Cal tab
+    if (msg.cal) {
+      $('cal-dist').textContent = Number(msg.cal.dist_m).toFixed(1);
+      $('cal-c1').textContent = msg.cal.c1;
+      $('cal-c2').textContent = msg.cal.c2;
+      $('cal-avg').textContent = msg.cal.avg;
+      $('cal-rpm').textContent = msg.cal.rpm >= 0 ? msg.cal.rpm : '---';
+    }
+
+    // Set tab
+    $('set-fps').textContent = (msg.fps || '').replace(/^fps:\s*/, '') + ' fps';
+    $('set-cpu').textContent = msg.cpu || '';
 
     toneHeard(msg.tone);
     beepHeard(msg.beep);
 
-    // Driver canvas: only paint while that tab is open (keeps Live/Setup cheap).
-    if (activeTab === 'driver') {
+    // Driver canvas: only paint while that tab is open (keeps the others cheap).
+    if (activeTab === 'drv') {
       const g = ensureDriverGauge();
       if (g) g.update(msg);
     } else if (driverGauge) {
@@ -142,93 +201,107 @@
   // Reflects the box's own settings back into the controls. Skips whichever
   // field has focus so an incoming update cannot yank a value out from under
   // someone mid-edit on the phone.
-  function applySetupState(state) {
+  function applySetState(state) {
     const active = document.activeElement;
     const setIf = (el, apply) => { if (el && el !== active) apply(el); };
-
-    setIf($('beep-enabled'), (el) => { el.checked = !!state.beep_assist_enabled; });
     setIf($('beep-nav'), (el) => { el.checked = !!state.beep_navigation_mode; });
     setIf($('beep-timing'), (el) => { el.checked = !!state.beep_timing_mode; });
     setIf($('beep-advance-m'), (el) => { el.value = Number(state.beep_advance_m) || 0; });
     setIf($('beep-advance-s'), (el) => { el.value = Number(state.beep_advance_s) || 0; });
-    setIf($('beep-waypoints'), (el) => { el.value = state.beep_waypoints_km || ''; });
     setIf($('tone-enabled'), (el) => { el.checked = !!state.tone_enabled; });
-
-    const type = Number(state.tone_type) || 1;
-    document.querySelectorAll('input[name="tone-type"]').forEach((radio) => {
-      if (radio !== active) radio.checked = Number(radio.value) === type;
+    const radios = (name, val) => document.querySelectorAll('input[name="' + name + '"]').forEach((r) => {
+      if (r !== active) r.checked = String(r.value) === String(val);
     });
-
-    const populated = state.memory_populated || [];
-    document.querySelectorAll('.mem-slot').forEach((btn) => {
-      btn.classList.toggle('populated', !!populated[Number(btn.dataset.slot) - 1]);
-    });
+    radios('tone-behind', Number(state.tone_type_behind) || 1);
+    radios('tone-ahead', Number(state.tone_type_ahead) || 1);
+    radios('units', units);
+    setIf($('set-stage-log'), (el) => { el.checked = !!state.stage_logging; });
+    setIf($('set-sensor-log'), (el) => { el.checked = !!state.sensor_logging; });
+    setIf($('set-force-single'), (el) => { el.checked = !!state.force_single; });
+    $('set-url').textContent = state.web_url || '-';
+    // Calibration
+    $('cal-pulses').textContent = state.calibration_pulses;
+    $('cal-s1').classList.toggle('lit', !state.sensors_both);
+    $('cal-s12').classList.toggle('lit', !!state.sensors_both);
+    $('cal-s1').textContent = state.sensors_both ? 'select sensor 1' : 'using sensor 1';
+    $('cal-s12').textContent = state.sensors_both ? 'using sensor 1&2' : 'select sensor 1&2';
+    setIf($('cal-prop-n'), (el) => { el.value = state.prop_pulses; });
+    // Navi
+    const hist = (state.trip_history || []);
+    $('trip-history').textContent = hist.length ? hist.map((m) => Number(m).toLocaleString()).join('  ') : '-';
+    const sa = state.autostart || 'none';
+    const armed = sa !== 'none';
+    $('auto-word').textContent = armed ? 'auto' : 'manual';
+    $('auto-word').classList.toggle('orange', !armed);
+    $('auto-word').classList.toggle('cyan', armed);
+    $('auto-time').textContent = armed ? sa : (state.start_time || '');
+    $('flag-minute-time').textContent = nextMinuteText();
   }
 
-  // The co-pilot's stage panel, built from the same `segments` list the box
-  // builds it from -- the roadbook as set, not the running stage's frozen
-  // snapshot. The cumulative column is computed here for the same reason the
-  // box computes it: the roadbook gives each segment's length, but the
-  // odometer counts from the stage start.
-  function renderStagePanel(state) {
-    $('stage-autostart').textContent = state.autostart || 'none';
-    $('stage-speed-head').textContent = units === 'mph' ? 'MPH' : 'KPH';
+  function nextMinuteText() {
+    const ms = lastTelemetry ? Number(lastTelemetry.computer_ms) + Number(lastTelemetry.rally_offset_ms || 0) : Date.now();
+    const d = new Date((Math.floor(ms / 60000) + 1) * 60000 + tzMin * 60000);
+    return String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0');
+  }
 
+  // The loaded stage's first rows (the running one's current segment lit), as on Home.
+  function renderStagePanel(state) {
+    $('stage-speed-head').textContent = units === 'mph' ? 'MPH' : 'KPH';
     const tbody = $('stage-table').querySelector('tbody');
     tbody.innerHTML = '';
-    let cumulative = 0;
-    (state.segments || []).forEach((seg) => {
-      const dist = Number(seg.distance_m) || 0;
-      cumulative += dist;
+    const rows = state.rows || [];
+    const cur = Math.max(0, (Number(state.segment_current_number) || 0));
+    const first = cur > 0 ? Math.min(cur - 1, Math.max(0, rows.length - 3)) : 0;
+    rows.slice(first, first + 3).forEach((r, i) => {
       const tr = document.createElement('tr');
-      // Converted, not just relabelled: the state message always carries KPH,
-      // and the box's own panel converts before printing. Leaving the number
-      // raw under an MPH heading showed 30.00 where the box showed 18.64 --
-      // the same segment, wrong by a margin the crew would drive to.
-      const speed = Number(seg.target_speed_kph || 0) * (units === 'mph' ? 0.621371 : 1);
-      tr.innerHTML =
-        '<td>' + speed.toFixed(2) + '</td>' +
-        '<td>' + Math.round(dist).toLocaleString() + '</td>' +
-        '<td>' + Math.round(cumulative).toLocaleString() + '</td>';
+      if (first + i === state.segment_current_number) tr.className = 'now';
+      const speed = Number(r.kph || 0) * (units === 'mph' ? 0.621371 : 1);
+      tr.innerHTML = '<td>' + speed.toFixed(1) + '</td><td>' + Number(r.from).toLocaleString() + '</td>';
       tbody.appendChild(tr);
     });
-    if (!(state.segments || []).length) {
+    if (!rows.length) {
       const tr = document.createElement('tr');
-      tr.innerHTML = '<td colspan="3" class="stage-empty">(no segments set)</td>';
+      tr.innerHTML = '<td colspan="2" class="stage-empty">(no segments set)</td>';
       tbody.appendChild(tr);
     }
   }
 
+  // ---- Seg tab ----
   function renderSegments(state) {
+    const active = document.activeElement;
+    // Do not rebuild under a field being typed in.
+    if (active && active.closest && active.closest('#seg-table')) return;
     const tbody = $('seg-table').querySelector('tbody');
     tbody.innerHTML = '';
-    suppressSegEdit = true;
-    (state.segments || []).forEach((seg, i) => {
+    (state.rows || []).forEach((r, i) => {
       const tr = document.createElement('tr');
       tr.innerHTML =
-        '<td>' + (i + 1) + '</td>' +
-        '<td><input type="number" step="0.1" class="spd" value="' + seg.target_speed_kph + '"></td>' +
-        '<td><input type="number" step="1" class="dist" value="' + seg.distance_m + '"></td>' +
-        '<td><input type="checkbox" class="auto"' + (seg.autoNext ? ' checked' : '') + '></td>' +
-        '<td><button type="button" class="del">del</button></td>';
-      tr.querySelector('.spd').addEventListener('change', () => pushSegSet(i, tr));
-      tr.querySelector('.dist').addEventListener('change', () => pushSegSet(i, tr));
-      tr.querySelector('.auto').addEventListener('change', () => pushSegSet(i, tr));
-      tr.querySelector('.del').addEventListener('click', () => send({ type: 'segment_delete', index: i }));
+        '<td>' + r.n + '</td>' +
+        '<td>' + Number(r.to).toLocaleString() + '</td>' +
+        '<td>' + Number(r.dist).toLocaleString() + '</td>' +
+        '<td><input type="checkbox" class="chg"' + (r.chg ? ' checked' : '') + (i === 0 ? ' disabled' : '') + '></td>' +
+        (r.chg ? '<td><input type="number" step="0.1" class="spd" value="' + (r.kph || '') + '"></td>'
+               : '<td class="dim">&quot;</td>') +
+        '<td>' + (i >= 1 ? '<input type="checkbox" class="auto"' + (r.auto_on ? ' checked' : '') +
+                  (r.auto_av ? '' : ' disabled') + '>' : '') + '</td>' +
+        '<td class="dim">' + mmss(r.time_s) + '</td><td class="dim">' + mmss(r.total_s) + '</td>' +
+        '<td><button type="button" class="del">&times;</button></td>';
+      const chg = tr.querySelector('.chg');
+      if (chg) chg.addEventListener('change', () => send({ type: 'row_chg', row: i, on: chg.checked }));
+      const spd = tr.querySelector('.spd');
+      if (spd) spd.addEventListener('change', () => send({ type: 'row_speed', row: i, kph: Number(spd.value) || 0 }));
+      const au = tr.querySelector('.auto');
+      if (au) au.addEventListener('change', () => send({ type: 'row_auto', row: i, on: au.checked }));
+      tr.querySelector('.del').addEventListener('click', () => send({ type: 'row_delete', row: i }));
       tbody.appendChild(tr);
     });
-    suppressSegEdit = false;
-  }
-
-  function pushSegSet(index, tr) {
-    if (suppressSegEdit) return;
-    send({
-      type: 'segment_set',
-      index: index,
-      target_speed_kph: Number(tr.querySelector('.spd').value),
-      distance_m: Number(tr.querySelector('.dist').value),
-      autoNext: tr.querySelector('.auto').checked
-    });
+    const setIf = (el, v) => { if (el !== active) el.value = v; };
+    setIf($('seg-pick'), String(state.edit_slot || 1));
+    setIf($('seg-start-time'), state.start_time || '');
+    setIf($('seg-start-dist'), state.start_distance_m || '');
+    setIf($('seg-first-n'), state.first_number);
+    setIf($('seg-first-from'), state.first_from_m);
+    if ($('seg-autostart') !== active) $('seg-autostart').checked = !!state.autostart_on;
   }
 
   function onMessage(ev) {
@@ -238,7 +311,7 @@
     if (msg.type === 'state') {
       lastState = msg;
       renderSegments(msg);
-      applySetupState(msg);
+      applySetState(msg);
       renderStagePanel(msg);
     }
   }
@@ -262,39 +335,47 @@
     ws.onmessage = onMessage;
   }
 
-  $('tab-live').addEventListener('click', () => showTab('live'));
-  $('tab-setup').addEventListener('click', () => showTab('setup'));
-  $('tab-driver').addEventListener('click', () => showTab('driver'));
-  $('tab-logs').addEventListener('click', () => showTab('logs'));
-  $('btn-logs-refresh').addEventListener('click', refreshLogs);
+  TABS.forEach((t) => $('tab-' + t).addEventListener('click', () => showTab(t)));
   window.addEventListener('resize', () => {
-    if (activeTab === 'driver' && driverGauge) driverGauge.resize();
+    if (activeTab === 'drv' && driverGauge) driverGauge.resize();
   });
 
-  // ---- Distance correction ----
-  // The co-pilot's Total row, verbatim: -10 and +10 nudge both Total and Trip
-  // (one wheel measurement, so a slip correction belongs to both), and "set"
-  // pins Total alone to a roadbook figure. Live and Driver each have a row.
-  function wireAdjust(minusId, plusId, setId, fieldId) {
-    $(minusId).addEventListener('click', () => send({ type: 'distance_adjust', delta_m: -10 }));
-    $(plusId).addEventListener('click', () => send({ type: 'distance_adjust', delta_m: 10 }));
-    $(setId).addEventListener('click', () => {
-      const field = $(fieldId);
-      // An empty box is someone who has not typed a figure yet, not a request
-      // to pin Total to zero -- press Total to reset.
-      if (field.value.trim() === '') return;
-      const meters = Number(field.value);
-      if (!Number.isFinite(meters) || meters < 0) return;
-      send({ type: 'distance_set', meters: meters });
-      field.value = '';
-      field.blur();
-    });
-  }
-  wireAdjust('btn-dist-minus', 'btn-dist-plus', 'btn-dist-set', 'dist-set-m');
-  wireAdjust('drv-dist-minus', 'drv-dist-plus', 'drv-dist-set', 'drv-dist-set-m');
+  // Heartbeat: this phone's clock, for the Time tab and "set computer to phone time".
+  setInterval(() => send({ type: 'phone_time', ms: Date.now() }), 2000);
 
+  // ---- Navi ----
+  $('btn-dist-minus').addEventListener('click', () => send({ type: 'distance_adjust', delta_m: -10 }));
+  $('btn-dist-plus').addEventListener('click', () => send({ type: 'distance_adjust', delta_m: 10 }));
+  $('btn-dist-set').addEventListener('click', () => {
+    const field = $('dist-set-m');
+    // An empty box is someone who has not typed a figure yet, not a request
+    // to pin Total to zero -- press total to reset.
+    if (field.value.trim() === '') return;
+    const meters = Number(field.value);
+    if (!Number.isFinite(meters) || meters < 0) return;
+    send({ type: 'distance_set', meters: meters });
+    field.value = '';
+    field.blur();
+  });
   $('btn-next').addEventListener('click', () => send({ type: 'next' }));
   $('btn-prev').addEventListener('click', () => send({ type: 'prev' }));
+  $('btn-freeze').addEventListener('click', () => { frozen = !frozen; $('btn-freeze').classList.toggle('lit', frozen); });
+  $('btn-reverse').addEventListener('click', () => send({ type: 'reverse_set', on: !(lastTelemetry && lastTelemetry.reverse) }));
+  $('btn-flag-minute').addEventListener('click', () => send({ type: 'flag_next_minute' }));
+  $('btn-flag-late').addEventListener('click', () => send({ type: 'flag_late_arrival' }));
+  $('btn-zero').addEventListener('click', () => {
+    if (confirm('Zero the needle here?\nOK = zero now, Cancel = leave it')) send({ type: 'driver_zero', reset: false });
+  });
+  function stageStep(dir) {
+    const cur = Number($('stage-pick').value) || 1;
+    const pop = (lastState && lastState.memory_populated) || [];
+    for (let s = cur + dir; s >= 1 && s <= 5; s += dir) {
+      if (pop[s - 1]) { send({ type: 'memory_recall', slot: s }); return; }
+    }
+  }
+  $('stage-minus').addEventListener('click', () => stageStep(-1));
+  $('stage-plus').addEventListener('click', () => stageStep(1));
+  $('stage-pick').addEventListener('change', (e) => send({ type: 'memory_recall', slot: Number(e.target.value) }));
 
   // With a stage running, the box's own question (a missed start): the
   // distance zero is the press, so the box is told at once and the reset
@@ -307,29 +388,10 @@
     }
     if (confirm('Reset total distance?')) send({ type: 'reset_total' });
   }
-  // The box's Reset Trip never asks, so neither does the phone: a confirm()
-  // costs a second the crew do not have, mid-stage or not.
-  function resetTrip() {
-    send({ type: 'reset_trip' });
-  }
-
-  // Press Total / Trip boxes on Live and Driver (and Setup's remaining buttons).
-  function wirePressReset(el, action) {
-    if (!el) return;
-    el.addEventListener('click', action);
-    el.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Enter' || ev.key === ' ') {
-        ev.preventDefault();
-        action();
-      }
-    });
-  }
-  wirePressReset($('box-total'), resetTotal);
-  wirePressReset($('box-trip'), resetTrip);
-  wirePressReset($('drv-box-total'), resetTotal);
-  wirePressReset($('drv-box-trip'), resetTrip);
-  $('btn-reset-trip2').addEventListener('click', resetTrip);
-  $('btn-reset-total').addEventListener('click', resetTotal);
+  // The box's trip key never asks, so neither does the phone.
+  function resetTrip() { send({ type: 'reset_trip' }); }
+  $('btn-total').addEventListener('click', resetTotal);
+  $('btn-trip').addEventListener('click', resetTrip);
 
   const closeStageMenu = () => $('stage-menu').classList.add('hidden');
   $('menu-abort').addEventListener('click', () => {
@@ -337,66 +399,85 @@
     send({ type: 'reset_total', choice: 'confirm' });
   });
   // Back: the box is holding the position of the press, so it has to be told
-  // the press is abandoned. Its own message, not a "reset_total" carrying a
-  // cancel: with no stage running that message means "just do it" above, so a
-  // Back arriving after the stage ended would zero Total.
+  // the press is abandoned (its own message: see the box's cancelTotalResetPress).
   $('menu-cancel').addEventListener('click', () => {
     closeStageMenu();
     send({ type: 'reset_total_cancel' });
   });
 
+  // ---- Seg ----
+  const segStep = (dir) => {
+    const cur = Number($('seg-pick').value) || 1;
+    const n = cur + dir;
+    if (n >= 1 && n <= 5) send({ type: 'edit_select', slot: n });
+  };
+  $('seg-minus').addEventListener('click', () => segStep(-1));
+  $('seg-plus').addEventListener('click', () => segStep(1));
+  $('seg-pick').addEventListener('change', (e) => send({ type: 'edit_select', slot: Number(e.target.value) }));
   $('btn-add-seg').addEventListener('click', () => {
-    const kph = prompt('Target speed (kph):', '75');
-    const dist = prompt('Distance (m):', '1000');
-    if (!kph || !dist) return;
-    send({
-      type: 'segment_add',
-      target_speed_kph: Number(kph),
-      distance_m: Number(dist),
-      autoNext: true
-    });
+    const text = $('seg-add-text').value.trim();
+    if (!text) return;
+    send({ type: 'rows_add', text: text });
+    $('seg-add-text').value = '';
+  });
+  const sendStart = () => send({ type: 'stage_start', time: $('seg-start-time').value.trim(),
+                                 distance_m: Number($('seg-start-dist').value) || 0 });
+  $('seg-start-time').addEventListener('change', sendStart);
+  $('seg-start-dist').addEventListener('change', sendStart);
+  const sendFirst = () => send({ type: 'stage_first', number: Number($('seg-first-n').value) || 0,
+                                 from_m: Number($('seg-first-from').value) || 0 });
+  $('seg-first-n').addEventListener('change', sendFirst);
+  $('seg-first-from').addEventListener('change', sendFirst);
+  $('seg-autostart').addEventListener('change', (e) => send({ type: 'autostart_set', on: e.target.checked }));
+  $('btn-clear-stage').addEventListener('click', () => { if (confirm('Clear this stage?')) send({ type: 'clear_stage' }); });
+  $('btn-clear-all').addEventListener('click', () => { if (confirm('Clear every stage?')) send({ type: 'clear_all' }); });
+
+  // ---- Time ----
+  $('trim-minus').addEventListener('click', () => send({ type: 'rally_trim', steps: -1 }));
+  $('trim-plus').addEventListener('click', () => send({ type: 'rally_trim', steps: 1 }));
+  $('btn-rally-computer').addEventListener('click', () => send({ type: 'rally_to_computer' }));
+  $('btn-computer-phone').addEventListener('click', () => send({ type: 'computer_to_phone' }));
+  $('btn-rally-entered').addEventListener('click', () => {
+    const t = $('t-enter').value.trim();
+    if (t) send({ type: 'rally_to_entered', time: t });
   });
 
-  // A slot button now acts on its own row's verb, so there is no separate
-  // select-then-press step and no selection state to get out of sync.
-  document.querySelectorAll('.mem-slot').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const slot = Number(btn.dataset.slot);
-      const store = btn.dataset.action === 'store';
-      const populated = btn.classList.contains('populated');
-      // Confirm only when something would be lost: overwriting a saved stage,
-      // or replacing the segments on screen with a recalled one.
-      const question = store
-        ? (populated ? 'Overwrite memory ' + slot + '?' : null)
-        : 'Recall memory ' + slot + '?';
-      if (!store && !populated) return;  // nothing saved there, so nothing to ask
-      if (question && !confirm(question)) return;
-      send({ type: store ? 'memory_store' : 'memory_recall', slot: slot });
-    });
+  // ---- Cal ----
+  $('cal-zero').addEventListener('click', () => send({ type: 'cal_zero' }));
+  $('cal-save').addEventListener('click', () => {
+    const m = Number($('cal-actual').value);
+    if (Number.isFinite(m) && m >= 500 && m <= 100000) { send({ type: 'cal_save', meters: m }); $('cal-actual').value = ''; }
   });
+  $('cal-s1').addEventListener('click', () => send({ type: 'cal_sensor', both: false }));
+  $('cal-s12').addEventListener('click', () => send({ type: 'cal_sensor', both: true }));
+  $('cal-reset').addEventListener('click', () => {
+    const n = Number($('cal-reset-n').value);
+    if (Number.isFinite(n) && n > 0) send({ type: 'cal_reset', pulses: n });
+  });
+  $('cal-prop-n').addEventListener('change', (e) => send({ type: 'prop_pulses', n: Number(e.target.value) || 0 }));
 
-  // ---- Beep Assist ----
-  // Each control sends only its own field; the box merges it into state.
+  // ---- Set ----
   function sendBeep(patch) { send(Object.assign({ type: 'beep_set' }, patch)); }
-
-  $('beep-enabled').addEventListener('change', (e) => sendBeep({ enabled: e.target.checked }));
   $('beep-nav').addEventListener('change', (e) => sendBeep({ navigation: e.target.checked }));
   $('beep-timing').addEventListener('change', (e) => sendBeep({ timing: e.target.checked }));
-
-  // Committed on blur, not per keystroke: mid-typing a number is a real value
-  // ("3" on the way to "30"), and sending it would arm a waypoint the operator
-  // never meant.
+  // Committed on blur, not per keystroke: mid-typing a number is a real value.
   $('beep-advance-m').addEventListener('change', (e) => sendBeep({ advance_m: Number(e.target.value) || 0 }));
   $('beep-advance-s').addEventListener('change', (e) => sendBeep({ advance_s: Number(e.target.value) || 0 }));
-  $('beep-waypoints').addEventListener('change', (e) => sendBeep({ waypoints_km: e.target.value }));
-
-  // ---- Tone ----
   $('tone-enabled').addEventListener('change', (e) => send({ type: 'tone_set', enabled: e.target.checked }));
-  document.querySelectorAll('input[name="tone-type"]').forEach((radio) => {
-    radio.addEventListener('change', () => {
-      if (radio.checked) send({ type: 'tone_set', tone_type: Number(radio.value) });
-    });
+  document.querySelectorAll('input[name="tone-behind"]').forEach((r) =>
+    r.addEventListener('change', () => { if (r.checked) send({ type: 'tone_set', tone_type_behind: Number(r.value) }); }));
+  document.querySelectorAll('input[name="tone-ahead"]').forEach((r) =>
+    r.addEventListener('change', () => { if (r.checked) send({ type: 'tone_set', tone_type_ahead: Number(r.value) }); }));
+  document.querySelectorAll('input[name="units"]').forEach((r) =>
+    r.addEventListener('change', () => { if (r.checked) send({ type: 'setting', name: 'units_mph', on: r.value === 'mph' }); }));
+  $('set-stage-log').addEventListener('change', (e) => send({ type: 'setting', name: 'stage_logging', on: e.target.checked }));
+  $('set-sensor-log').addEventListener('change', (e) => send({ type: 'setting', name: 'sensor_logging', on: e.target.checked }));
+  $('set-force-single').addEventListener('change', (e) => send({ type: 'setting', name: 'force_single', on: e.target.checked }));
+  $('btn-download-logs').addEventListener('click', () => {
+    $('logs-block').classList.toggle('hidden');
+    if (!$('logs-block').classList.contains('hidden')) refreshLogs();
   });
+  $('btn-logs-refresh').addEventListener('click', refreshLogs);
 
   // ---- Sound (RB-WEB-02) ----
   // The box's ahead/behind tone, played exactly as the box is playing it --

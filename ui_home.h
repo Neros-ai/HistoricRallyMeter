@@ -44,6 +44,10 @@ struct HomeUi {
 
 GtkWidget* createHomeScreen(AppData* data);
 
+// Reverse on or off, from the box's key or the phone: the poller counts
+// backwards, the key lights and the whoop repeats while it is on.
+void setReverse(AppData* data, bool on);
+
 // Refresh the drawn figures from the AppData readouts. Does nothing while
 // frozen. Call after the TwinMaster labels have been updated.
 void updateHomeDisplay(AppData* data);
