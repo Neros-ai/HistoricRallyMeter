@@ -167,14 +167,14 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
     case FLAG_WATCH: {
         const int ww = width;
         if (kind == FLAG) {
-            drawFlag(cr, ww / 2.0 - 20, 6, 40, 30);
+            drawFlag(cr, ww / 2.0 - 20, 1, 40, 30);
             white(cr);
             drawText(cr, data->home && data->home->minuteCaption
                          ? gtk_label_get_text(GTK_LABEL(data->home->minuteCaption)) : "",
-                     ww / 2.0, 62, 24, CENTRE);
+                     ww / 2.0, 50, 24, CENTRE);
         } else {
-            drawFlag(cr, ww / 2.0 - 52, 18, 40, 30);
-            drawWatch(cr, ww / 2.0 + 12, 16, 34, true);
+            drawFlag(cr, ww / 2.0 - 50, 12, 40, 30);
+            drawWatch(cr, ww / 2.0 + 10, 9, 34, true);
         }
         break;
     }
@@ -208,7 +208,11 @@ GtkWidget* makeIconKey(AppData* data, AreaKind kind, GCallback cb, HomeUi* h) {
     GtkWidget* b = gtk_button_new();
     gtk_widget_set_size_request(b, KEY_W, KEY_H);
     addClass(b, "dist-heading");
-    GtkWidget* area = makeArea(data, kind, 0, KEY_W - 8, KEY_H - 8);
+    // 16 px smaller than the key each way: the button adds about 12 px of
+    // padding and border round its child, and a child as big as the key made
+    // these two keys 74 px tall, throwing the column's pitch out against the
+    // 70 px keys on the left.
+    GtkWidget* area = makeArea(data, kind, 0, KEY_W - 16, KEY_H - 16);
     gtk_container_add(GTK_CONTAINER(b), area);
     g_signal_connect(b, "clicked", cb, data);
     (void)h;
