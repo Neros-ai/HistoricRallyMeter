@@ -80,6 +80,7 @@ static void applyCopilotCSS() {
         // Nero2.0 menu page: 40 px key name over a 20 px grey caption.
         // Keys that must stay inside a narrow column ("A-B, B-C", +10).
         "button.key-small { font-size: 22px; }"
+        "button.key-clr { padding-left: 2px; padding-right: 2px; }"
         "button.key-24 { font-size: 24px; }"
         ".seg-head { color: #00FFFF; font-size: 18px; }"
         ".seg-clock { font-size: 40px; font-family: monospace; }"
