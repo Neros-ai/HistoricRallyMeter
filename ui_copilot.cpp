@@ -12,6 +12,7 @@
 #include "tone_generator.h"
 #include "nero_frame.h"
 #include "ui_home.h"
+#include "ui_segments.h"
 #include <sstream>
 #include <iostream>
 #include <cstdlib>
@@ -76,6 +77,14 @@ static void applyCopilotCSS() {
         // Nero2.0 menu page: 40 px key name over a 20 px grey caption.
         // Keys that must stay inside a narrow column ("A-B, B-C", +10).
         "button.key-small { font-size: 22px; }"
+        ".seg-head { color: #00FFFF; font-size: 18px; }"
+        ".seg-clock { font-size: 40px; font-family: monospace; }"
+        ".seg-small { font-size: 18px; }"
+        ".seg-row label, .seg-row entry { font-size: 21px; }"
+        ".seg-dim { color: #AAAAAA; }"
+        ".seg-del { font-size: 17px; }"
+        ".seg-startentry { font-size: 26px; border-color: transparent; }"
+        ".seg-addentry { font-size: 26px; }"
         ".home-clock { font-size: 42px; font-family: monospace; }"
         ".home-picker-title { font-size: 22px; color: #00FFFF; }"
         // An engaged key (freeze, reverse, the loaded stage in the picker).
@@ -319,6 +328,12 @@ void updateCopilotDisplay(AppData* data) {
         return;
     }
     
+    // Nero2.0 Segments: clock and the Autostart tick
+    if (visible_child == data->stageSetupScreen) {
+        updateSegmentsDisplay(data);
+        return;
+    }
+
     // Update auto-start screen if visible
     if (visible_child == data->autoStartScreen) {
         updateAutoStartDisplay(data);
@@ -813,363 +828,6 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_widget_set_size_request(menuKey, nero::MENU_KEY_W, 43);
     gtk_box_pack_end(GTK_BOX(buttonBox), menuKey, FALSE, FALSE, 0);
 
-    return screen;
-}
-
-// Create Stage Setup screen - horizontal layout for 1280x400
-GtkWidget* createStageSetupScreen(AppData* data) {
-    GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_container_set_border_width(GTK_CONTAINER(screen), 5);
-    
-    // Title
-    GtkWidget* titleLabel = gtk_label_new("STAGE SETUP");
-    gtk_style_context_add_class(gtk_widget_get_style_context(titleLabel), "title-label");
-    gtk_box_pack_start(GTK_BOX(screen), titleLabel, FALSE, FALSE, 0);
-    
-    // Main horizontal container: left side for segments, right side for keypad
-    data->stageSetupMainBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_pack_start(GTK_BOX(screen), data->stageSetupMainBox, TRUE, TRUE, 0);
-    
-    // Left side: the segment table. Cropped to its content width rather than
-    // expanding to fill the panel -- the New: row below is the widest thing
-    // in it, so this column ends right after "add". The space that frees up
-    // goes to Beep Assist (RB-SEG-02), not to this list.
-    GtkWidget* leftBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_box_pack_start(GTK_BOX(data->stageSetupMainBox), leftBox, FALSE, FALSE, 0);
-
-    // Header row, on the same fixed column widths as the data rows below.
-    GtkWidget* headerGrid = gtk_grid_new();
-    gtk_grid_set_column_spacing(GTK_GRID(headerGrid), SEGMENT_COL_SPACING);
-    gtk_box_pack_start(GTK_BOX(leftBox), headerGrid, FALSE, FALSE, 0);
-
-    struct { const char* text; int width; } headers[] = {
-        { "Speed (KPH)",  SEGMENT_COL_SPEED },
-        { "Distance (m)", SEGMENT_COL_DISTANCE },
-        { "Auto",         SEGMENT_COL_AUTO },
-        { "Time",         SEGMENT_COL_TIME },
-        { "",             SEGMENT_COL_DELETE },
-    };
-    for (int i = 0; i < 5; i++) {
-        GtkWidget* lbl = gtk_label_new(headers[i].text);
-        gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "segment-label");
-        gtk_label_set_xalign(GTK_LABEL(lbl), 0.0);
-        gtk_widget_set_size_request(lbl, headers[i].width, -1);
-        gtk_grid_attach(GTK_GRID(headerGrid), lbl, i, 0, 1, 1);
-    }
-
-    // Scrollable list, framed so its extent is visible against the black
-    // background -- an unframed list reads as loose text on the panel.
-    GtkWidget* listFrame = gtk_frame_new(NULL);
-    gtk_style_context_add_class(gtk_widget_get_style_context(listFrame), "segment-list-frame");
-    gtk_box_pack_start(GTK_BOX(leftBox), listFrame, TRUE, TRUE, 0);
-
-    GtkWidget* scrolled = gtk_scrolled_window_new(NULL, NULL);
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
-                                   GTK_POLICY_NEVER, GTK_POLICY_ALWAYS);
-    gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(scrolled), 150);
-    gtk_container_add(GTK_CONTAINER(listFrame), scrolled);
-
-    data->segmentListBox = GTK_LIST_BOX(gtk_list_box_new());
-    gtk_list_box_set_selection_mode(data->segmentListBox, GTK_SELECTION_NONE);
-    gtk_container_add(GTK_CONTAINER(scrolled), GTK_WIDGET(data->segmentListBox));
-
-    // Memory columns (Set and Recall) - vertical layout between segments and keypad
-    GtkWidget* memBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_box_pack_start(GTK_BOX(data->stageSetupMainBox), memBox, FALSE, FALSE, 10);
-    
-    // Header row for memory columns
-    GtkWidget* memHeaderRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_pack_start(GTK_BOX(memBox), memHeaderRow, FALSE, FALSE, 0);
-    GtkWidget* setHeader = gtk_label_new("Set");
-    GtkWidget* recallHeader = gtk_label_new("Recall");
-    gtk_widget_set_size_request(setHeader, 66, -1);
-    gtk_widget_set_size_request(recallHeader, 66, -1);
-    // The segment table's own heading size ("Recall" at the 20 px menu font
-    // would be wider than its 66 px column).
-    gtk_style_context_add_class(gtk_widget_get_style_context(setHeader), "segment-label");
-    gtk_style_context_add_class(gtk_widget_get_style_context(recallHeader), "segment-label");
-    gtk_box_pack_start(GTK_BOX(memHeaderRow), setHeader, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(memHeaderRow), recallHeader, FALSE, FALSE, 0);
-    
-    // Buttons [1]-[5] in two vertical columns
-    for (int i = 1; i <= 5; i++) {
-        GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-        gtk_box_pack_start(GTK_BOX(memBox), row, FALSE, FALSE, 0);
-        
-        GtkWidget* setBtn = gtk_button_new_with_label(std::to_string(i).c_str());
-        gtk_widget_set_size_request(setBtn, 66, 43);
-        gtk_style_context_add_class(gtk_widget_get_style_context(setBtn), "nav-button");
-        g_signal_connect(setBtn, "clicked", G_CALLBACK(on_memory_set), data);
-        g_object_set_data(G_OBJECT(setBtn), "slot", GINT_TO_POINTER(i));
-        gtk_box_pack_start(GTK_BOX(row), setBtn, FALSE, FALSE, 0);
-        
-        GtkWidget* recallBtn = gtk_button_new_with_label(std::to_string(i).c_str());
-        gtk_widget_set_size_request(recallBtn, 66, 43);
-        gtk_style_context_add_class(gtk_widget_get_style_context(recallBtn), "nav-button");
-        g_signal_connect(recallBtn, "clicked", G_CALLBACK(on_memory_recall), data);
-        g_object_set_data(G_OBJECT(recallBtn), "slot", GINT_TO_POINTER(i));
-        gtk_box_pack_start(GTK_BOX(row), recallBtn, FALSE, FALSE, 0);
-        data->memoryRecallBtns[i - 1] = recallBtn;
-    }
-    
-    // Style populated recall buttons
-    for (int i = 0; i < 5; i++) {
-        if (!data->state->memory_slots[i].empty()) {
-            gtk_style_context_add_class(
-                gtk_widget_get_style_context(data->memoryRecallBtns[i]), "memory-populated");
-        }
-    }
-    
-    // Two lines: at the menu font one line (~174 px) is wider than the two
-    // memory columns it sits under (142 px), and this screen has no width to
-    // give -- widening Beep Assist by 40 px has pushed the keypad off before.
-    GtkWidget* clearMemBtn = gtk_button_new_with_label("clear\nmemory");
-    gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(clearMemBtn))), GTK_JUSTIFY_CENTER);
-    gtk_style_context_add_class(gtk_widget_get_style_context(clearMemBtn), "nav-button");
-    g_signal_connect(clearMemBtn, "clicked", G_CALLBACK(on_memory_clear), data);
-    gtk_box_pack_start(GTK_BOX(memBox), clearMemBtn, FALSE, FALSE, 5);
-
-    // Beep Assist: waypoints the operator wants a warning at, so their eyes
-    // can stay on the roadbook rather than the odometer. Its own column,
-    // between the memory buttons and the keypad.
-    // Width is not an explicit size_request -- it's set by beepTitle's own
-    // natural size ("Beep Assist KM"), and every row below it is
-    // built to fit within that same budget rather than forcing the column
-    // wider. A size_request minimum was tried here through several rounds
-    // (260/200/150px) and had zero effect: the leadIns rows below always
-    // needed ~370px regardless of what floor was set on the column itself.
-    GtkWidget* beepCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    gtk_box_pack_start(GTK_BOX(data->stageSetupMainBox), beepCol, FALSE, FALSE, 0);
-
-    // Wraps rather than setting the column's width -- "Off/On ... Advance
-    // by" is the narrower, authoritative row; the title would otherwise be
-    // the widest thing in the column and push it out past "by".
-    GtkWidget* beepTitle = gtk_label_new("Beep Assist KM");
-    gtk_style_context_add_class(gtk_widget_get_style_context(beepTitle), "segment-label");
-    gtk_label_set_xalign(GTK_LABEL(beepTitle), 0.0);
-    gtk_label_set_line_wrap(GTK_LABEL(beepTitle), TRUE);
-    gtk_label_set_max_width_chars(GTK_LABEL(beepTitle), 14);
-    gtk_box_pack_start(GTK_BOX(beepCol), beepTitle, FALSE, FALSE, 0);
-
-    GtkWidget* beepFrame = gtk_frame_new(NULL);
-    gtk_style_context_add_class(gtk_widget_get_style_context(beepFrame), "segment-list-frame");
-    gtk_box_pack_start(GTK_BOX(beepCol), beepFrame, TRUE, TRUE, 0);
-
-    GtkWidget* beepView = gtk_text_view_new();
-    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(beepView), GTK_WRAP_WORD_CHAR);
-    gtk_style_context_add_class(gtk_widget_get_style_context(beepView), "segment-label");
-    g_signal_connect(beepView, "focus-in-event", G_CALLBACK(on_textview_focus), data);
-    gtk_container_add(GTK_CONTAINER(beepFrame), beepView);
-
-    data->beepWaypointBuffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(beepView));
-    gtk_text_buffer_set_text(data->beepWaypointBuffer,
-        formatBeepWaypointsKm(data->state->beep_waypoints_m).c_str(), -1);
-
-    // The cursors must skip waypoints already behind the car, or restarting
-    // mid-stage replays every one of them. They are NOT derived here: this
-    // runs during window construction, before the first poller->poll(), so
-    // the counter still reads zero while total_start_cntr1/2 are loaded
-    // non-zero from config -- a large negative travelled distance, a cursor
-    // of 0, and exactly the replay this is meant to prevent. Flagging them
-    // stale defers the derivation to the first display tick, which has real
-    // counter data.
-    data->beepCursorsStale = true;
-
-    g_signal_connect(data->beepWaypointBuffer, "changed",
-                     G_CALLBACK(on_beep_waypoints_changed), data);
-
-    // Forces every row below to the same width as the widest one (whichever
-    // that turns out to be) so the entry fields genuinely align to the same
-    // right edge as "Advance by" -- hexpand does not work for this: it
-    // propagates a widget's expand request up through its parent boxes,
-    // but beepCol itself is packed with expand=FALSE into stageSetupMainBox,
-    // which blocks that propagation, so a bare hexpand on a row never
-    // actually stretched it past its own natural content width.
-    GtkSizeGroup* beepRowWidth = gtk_size_group_new(GTK_SIZE_GROUP_HORIZONTAL);
-
-    // Off/On
-    GtkWidget* activeRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
-    gtk_size_group_add_widget(beepRowWidth, activeRow);
-    gtk_box_pack_start(GTK_BOX(beepCol), activeRow, FALSE, FALSE, 0);
-
-    GtkWidget* beepOnLabel = gtk_label_new("Off/On");
-    gtk_style_context_add_class(gtk_widget_get_style_context(beepOnLabel), "segment-label");
-    gtk_box_pack_start(GTK_BOX(activeRow), beepOnLabel, FALSE, FALSE, 0);
-
-    GtkWidget* beepSwitch = gtk_switch_new();
-    gtk_switch_set_active(GTK_SWITCH(beepSwitch), data->state->beep_assist_enabled);
-    gtk_widget_set_valign(beepSwitch, GTK_ALIGN_CENTER);
-    g_signal_connect(beepSwitch, "state-set", G_CALLBACK(on_beep_enable_toggled), data);
-    gtk_box_pack_start(GTK_BOX(activeRow), beepSwitch, FALSE, FALSE, 0);
-
-    // "Mode" heads the checkbox column shared by the two rows below, the
-    // same way "Advance by" heads their entry column -- so each row itself
-    // only needs the bare mode name. Both headings share their own row,
-    // separate from "Off/On" above them: Mode left-aligned, Advance by
-    // right-aligned.
-    GtkWidget* headingRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_size_group_add_widget(beepRowWidth, headingRow);
-    gtk_box_pack_start(GTK_BOX(beepCol), headingRow, FALSE, FALSE, 0);
-
-    GtkWidget* modeHeading = gtk_label_new("Mode");
-    gtk_style_context_add_class(gtk_widget_get_style_context(modeHeading), "segment-label");
-    gtk_label_set_xalign(GTK_LABEL(modeHeading), 0.0);
-    gtk_box_pack_start(GTK_BOX(headingRow), modeHeading, FALSE, FALSE, 0);
-
-    GtkWidget* advanceHeading = gtk_label_new("Advance by");
-    gtk_style_context_add_class(gtk_widget_get_style_context(advanceHeading), "segment-label");
-    gtk_box_pack_end(GTK_BOX(headingRow), advanceHeading, FALSE, FALSE, 0);
-
-    // Two independent lead-in rows: navigation mode is a fixed distance,
-    // timing mode is a fixed number of seconds off the scheduled (roadbook)
-    // arrival time. Both may be on; either firing is enough.
-    //
-    // Root cause of the column's width overflow, confirmed by measuring
-    // gtk_widget_get_preferred_width() on each row's individual children
-    // (querying the GtkSizeGroup-member rows themselves is invalid -- a
-    // SizeGroup member always reports the group's synced width, which is
-    // what sent the first two rounds of measurement down the wrong path):
-    // the Metres/Seconds GtkEntry's natural width was 168px. The 90px in
-    // gtk_widget_set_size_request(entry, 90, 30) is only a *minimum* --
-    // with no gtk_entry_set_width_chars()/max_width_chars() call, GTK fell
-    // back to its own default natural-width heuristic for a bare entry,
-    // nearly double the intended 90px.
-    struct { const char* mode_label; const char* placeholder; int mode; } leadIns[] = {
-        { "Navigation", "Metres",  0 },
-        { "Timing",     "Seconds", 1 },
-    };
-    for (const auto& li : leadIns) {
-        GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-        gtk_size_group_add_widget(beepRowWidth, row);
-        gtk_box_pack_start(GTK_BOX(beepCol), row, FALSE, FALSE, 0);
-
-        GtkWidget* modeLabel = gtk_label_new(li.mode_label);
-        gtk_style_context_add_class(gtk_widget_get_style_context(modeLabel), "segment-label");
-        gtk_label_set_xalign(GTK_LABEL(modeLabel), 0.0);
-        gtk_box_pack_start(GTK_BOX(row), modeLabel, FALSE, FALSE, 0);
-
-        GtkWidget* check = gtk_check_button_new();
-        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(check),
-            li.mode == 1 ? data->state->beep_timing_mode : data->state->beep_navigation_mode);
-        g_object_set_data(G_OBJECT(check), "mode", GINT_TO_POINTER(li.mode));
-        g_signal_connect(check, "toggled", G_CALLBACK(on_beep_mode_toggled), data);
-        gtk_box_pack_start(GTK_BOX(row), check, FALSE, FALSE, 0);
-
-        // Single-line height (30px), matching the checkbox/label row rather
-        // than the taller 40px used elsewhere for touch targets. Width
-        // explicitly capped at 6 chars ("999999") -- both the floor and
-        // the ceiling GTK needs to stop defaulting to ~168px.
-        GtkEntry* entry = GTK_ENTRY(gtk_entry_new());
-        gtk_entry_set_placeholder_text(entry, li.placeholder);
-        // 5 chars, not 6: the larger font below needs the width back, and this
-        // column's budget is tight. "99999" still covers any lead-in anyone
-        // would enter, in metres or seconds.
-        gtk_entry_set_width_chars(entry, 5);
-        gtk_entry_set_max_width_chars(entry, 5);
-        gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(entry)),
-                                    "beep-advance-entry");
-        gtk_widget_set_size_request(GTK_WIDGET(entry), -1, 38);
-        double stored = (li.mode == 1) ? data->state->beep_advance_s : data->state->beep_advance_m;
-        if (stored > 0.0) {
-            char buf[32];
-            snprintf(buf, sizeof(buf), "%.0f", stored);
-            gtk_entry_set_text(entry, buf);
-        }
-        g_object_set_data(G_OBJECT(entry), "mode", GINT_TO_POINTER(li.mode));
-        g_signal_connect(entry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
-        g_signal_connect(entry, "changed", G_CALLBACK(on_beep_advance_changed), data);
-        gtk_box_pack_end(GTK_BOX(row), GTK_WIDGET(entry), FALSE, FALSE, 0);
-
-        if (li.mode == 1) data->beepAdvanceSecondsEntry = entry;
-        else              data->beepAdvanceMetresEntry = entry;
-    }
-
-    // gtk_size_group_new returns a full reference; its members hold their own,
-    // so drop ours rather than leaking the group.
-    g_object_unref(beepRowWidth);
-
-    // Add new segment row (30% larger fonts and buttons)
-    GtkWidget* addBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_style_context_add_class(gtk_widget_get_style_context(addBox), "new-segment-row");
-    gtk_box_pack_start(GTK_BOX(leftBox), addBox, FALSE, FALSE, 5);
-    
-    GtkWidget* newLabel = gtk_label_new("New:");
-    data->targetSpeedEntry = GTK_ENTRY(gtk_entry_new());
-    gtk_entry_set_placeholder_text(data->targetSpeedEntry, "KPH");
-    gtk_widget_set_size_request(GTK_WIDGET(data->targetSpeedEntry), 70, 40);
-    g_signal_connect(data->targetSpeedEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
-
-    data->distanceEntry = GTK_ENTRY(gtk_entry_new());
-    gtk_entry_set_placeholder_text(data->distanceEntry, "metres (;  separated)");
-    gtk_widget_set_size_request(GTK_WIDGET(data->distanceEntry), 180, 40);
-    g_signal_connect(data->distanceEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
-    
-    data->autoNextCheck = GTK_CHECK_BUTTON(gtk_check_button_new_with_label("Auto"));
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(data->autoNextCheck), TRUE);
-    
-    GtkWidget* addBtn = gtk_button_new_with_label("add");
-    gtk_widget_set_size_request(addBtn, 60, 40);
-    g_signal_connect(addBtn, "clicked", G_CALLBACK(on_add_segment), data);
-    
-    gtk_box_pack_start(GTK_BOX(addBox), newLabel, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(addBox), GTK_WIDGET(data->targetSpeedEntry), FALSE, FALSE, 3);
-    gtk_box_pack_start(GTK_BOX(addBox), GTK_WIDGET(data->distanceEntry), FALSE, FALSE, 3);
-    gtk_box_pack_start(GTK_BOX(addBox), GTK_WIDGET(data->autoNextCheck), FALSE, FALSE, 3);
-    gtk_box_pack_start(GTK_BOX(addBox), addBtn, FALSE, FALSE, 3);
-
-    // Right side: keypad, with "back" on its own row beneath it, in the same
-    // column. It used to sit in the New: row next to "add", where a mis-tap
-    // during data entry dropped the operator out of the screen mid-edit. (A
-    // fully separate column for "back" was tried and dropped -- it only
-    // squeezed Beep Assist for no real benefit.)
-    GtkWidget* rightCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-    gtk_box_pack_end(GTK_BOX(data->stageSetupMainBox), rightCol, FALSE, FALSE, 10);
-
-    data->numericKeypad = createNumericKeypad(data);
-    gtk_box_pack_start(GTK_BOX(rightCol), data->numericKeypad, FALSE, FALSE, 0);
-
-    // Tone mode: master on/off, plus which algorithm (Type 1 = existing
-    // speed/arrow-based tone, the default; Type 2 = alternative
-    // time-error-only tone). Placed under the keypad -- an option chosen
-    // once before driving, not something adjusted mid-stage.
-    GtkWidget* toneModeRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_style_context_add_class(gtk_widget_get_style_context(toneModeRow), "tone-mode-row");
-    GtkWidget* toneModeLabel = gtk_label_new("tone off/on");
-    GtkWidget* toneModeSwitch = gtk_switch_new();
-    gtk_switch_set_active(GTK_SWITCH(toneModeSwitch), data->state->tone_enabled);
-    gtk_widget_set_valign(toneModeSwitch, GTK_ALIGN_CENTER);
-    g_signal_connect(toneModeSwitch, "state-set", G_CALLBACK(on_tone_enabled_toggle), data);
-    gtk_box_pack_start(GTK_BOX(toneModeRow), toneModeLabel, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(toneModeRow), toneModeSwitch, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(rightCol), toneModeRow, FALSE, FALSE, 0);
-
-    GtkWidget* toneTypeRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_style_context_add_class(gtk_widget_get_style_context(toneTypeRow), "tone-mode-row");
-    GtkWidget* toneTypeLabel = gtk_label_new("Type");
-    GtkWidget* toneType1Check = gtk_check_button_new_with_label("1");
-    GtkWidget* toneType2Check = gtk_check_button_new_with_label("2");
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toneType1Check), !data->state->simple_tone_mode);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toneType2Check), data->state->simple_tone_mode);
-    g_object_set_data(G_OBJECT(toneType1Check), "tone_type", GINT_TO_POINTER(1));
-    g_object_set_data(G_OBJECT(toneType2Check), "tone_type", GINT_TO_POINTER(2));
-    g_object_set_data(G_OBJECT(toneType1Check), "other_type_check", toneType2Check);
-    g_object_set_data(G_OBJECT(toneType2Check), "other_type_check", toneType1Check);
-    g_signal_connect(toneType1Check, "toggled", G_CALLBACK(on_tone_type_toggled), data);
-    g_signal_connect(toneType2Check, "toggled", G_CALLBACK(on_tone_type_toggled), data);
-    gtk_box_pack_start(GTK_BOX(toneTypeRow), toneTypeLabel, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(toneTypeRow), toneType1Check, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(toneTypeRow), toneType2Check, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(rightCol), toneTypeRow, FALSE, FALSE, 0);
-
-    GtkWidget* backBtn = gtk_button_new_with_label("back");
-    gtk_widget_set_size_request(backBtn, -1, 40);
-    gtk_style_context_add_class(gtk_widget_get_style_context(backBtn), "nav-button");
-    gtk_widget_set_valign(backBtn, GTK_ALIGN_END);
-    g_signal_connect(backBtn, "clicked", G_CALLBACK(on_show_twinmaster), data);
-    gtk_box_pack_end(GTK_BOX(rightCol), backBtn, FALSE, FALSE, 0);
-
-    data->activeEntry = NULL;
-    
     return screen;
 }
 

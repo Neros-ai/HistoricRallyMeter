@@ -51,8 +51,6 @@ void on_show_segments(GtkWidget* widget, gpointer user_data);
 void on_show_calibration(GtkWidget* widget, gpointer user_data);
 void on_show_twinmaster(GtkWidget* widget, gpointer user_data);
 void on_show_datetime(GtkWidget* widget, gpointer user_data);
-void on_add_segment(GtkWidget* widget, gpointer user_data);
-void on_delete_segment(GtkWidget* widget, gpointer user_data);
 void on_calibration_start(GtkWidget* widget, gpointer user_data);
 void on_save_calibration(GtkWidget* widget, gpointer user_data);
 // Reset calibration to an operator-entered pulses/km value, replacing the
@@ -80,13 +78,8 @@ void on_keypad_backspace(GtkWidget* widget, gpointer user_data);
 gboolean on_entry_focus(GtkWidget* widget, GdkEvent* event, gpointer user_data);
 // Focus handler for the Beep Assist waypoint view, mirroring on_entry_focus.
 gboolean on_textview_focus(GtkWidget* widget, GdkEvent* event, gpointer user_data);
-void on_segment_entry_changed(GtkWidget* widget, gpointer user_data);
 // RB-CAL-06: the calibration screen's Prop RPM pulses-per-turn box.
 void on_prop_pulses_changed(GtkWidget* widget, gpointer user_data);
-void on_segment_auto_toggled(GtkWidget* widget, gpointer user_data);
-void on_memory_set(GtkWidget* widget, gpointer user_data);
-void on_memory_recall(GtkWidget* widget, gpointer user_data);
-void on_memory_clear(GtkWidget* widget, gpointer user_data);
 
 // How long the waypoint list must sit unedited before it is parsed and
 // saved. Long enough that a multi-digit number is never committed
@@ -127,6 +120,12 @@ void performStageGo(AppData* data);
 void startStageAtNextMinute(AppData* data);
 // "hh:mm" of the minute the next-minute key would arm, for its caption.
 std::string nextMinuteCaption(AppData* data);
+// Helpers the Segments page shares with the dialogs in this file.
+void notifyWebStateNow(AppData* data);
+void flashNotice(GtkWidget* widget, const std::string& text);   // self-closing message
+bool confirmYesNo(GtkWidget* widget, const std::string& title, const std::string& text);
+// Rally milliseconds of today's `tod_s` seconds-after-midnight (may be in the past).
+int64_t autoStartTargetForTimeOfDay(AppData* data, long tod_s);
 // Load memory slot 1-5 as the stage (what a Recall key does). No-op for an
 // empty or out-of-range slot.
 void recallMemorySlot(AppData* data, int slot_1_based);
