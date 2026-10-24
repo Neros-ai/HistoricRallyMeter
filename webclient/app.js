@@ -129,20 +129,10 @@
     if (units !== previousUnits && lastState) renderStagePanel(lastState);
 
     if (!frozen) {
-      const ab = Number(msg.ahead_behind_s) || 0;
-      $('ahead-value').textContent = (ab >= 0 ? '+' : '') + ab.toFixed(1) + ' s';
-      const abEl = $('ahead-behind');
-      abEl.classList.toggle('ahead', ab > 0.05);
-      abEl.classList.toggle('behind', ab < -0.05);
-      $('unit-label').textContent = units;
-      $('cur-kph').textContent = Number(msg.cur_kph || 0).toFixed(1);
-      $('target-kph').textContent = Number(msg.target_kph || 0).toFixed(1);
       $('trip-m').textContent = formatDist(msg.trip_m);
       $('total-m').textContent = formatDist(msg.total_m);
       $('total-el').textContent = mmss(msg.total_s);
       $('trip-el').textContent = mmss(msg.trip_s);
-      $('trip-avg').textContent = Number(msg.trip_avg_kph || 0).toFixed(1);
-      $('total-avg').textContent = Number(msg.total_avg_kph || 0).toFixed(1);
       $('next-m').textContent = (msg.next_m === null || msg.next_m === undefined) ? '---' : formatDist(msg.next_m);
       $('speed-change').textContent = msg.speed_change || '';
     }
@@ -228,7 +218,7 @@
     setIf($('cal-prop-n'), (el) => { el.value = state.prop_pulses; });
     // Navi
     const hist = (state.trip_history || []);
-    $('trip-history').textContent = hist.length ? hist.map((m) => Number(m).toLocaleString()).join('  ') : '-';
+    $('trip-history').textContent = hist.length ? hist.map((m) => Number(m).toLocaleString()).join(' \u00b7 ') : '-';
     const sa = state.autostart || 'none';
     const armed = sa !== 'none';
     $('auto-word').textContent = armed ? 'auto' : 'manual';
@@ -346,16 +336,14 @@
   // ---- Navi ----
   $('btn-dist-minus').addEventListener('click', () => send({ type: 'distance_adjust', delta_m: -10 }));
   $('btn-dist-plus').addEventListener('click', () => send({ type: 'distance_adjust', delta_m: 10 }));
+  // "set" pins Total to a roadbook figure: it asks for the figure. Cancel or an
+  // empty answer is not a request to pin Total to zero -- press total to reset.
   $('btn-dist-set').addEventListener('click', () => {
-    const field = $('dist-set-m');
-    // An empty box is someone who has not typed a figure yet, not a request
-    // to pin Total to zero -- press total to reset.
-    if (field.value.trim() === '') return;
-    const meters = Number(field.value);
-    if (!Number.isFinite(meters) || meters < 0) return;
+    const answer = prompt('Set Total to (metres):', '');
+    if (answer === null || answer.trim() === '') return;
+    const meters = Number(answer.replace(/,/g, ''));
+    if (!Number.isFinite(meters) || meters < 0 || meters > 999999) return;
     send({ type: 'distance_set', meters: meters });
-    field.value = '';
-    field.blur();
   });
   $('btn-next').addEventListener('click', () => send({ type: 'next' }));
   $('btn-prev').addEventListener('click', () => send({ type: 'prev' }));
