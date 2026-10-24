@@ -174,8 +174,15 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
             // coming minute.
             drawText(cr, nextMinuteCaption(data), ww / 2.0, 50, 24, CENTRE);
         } else {
-            drawFlag(cr, ww / 2.0 - 50, 12, 40, 30);
-            drawWatch(cr, ww / 2.0 + 10, 9, 34, true);
+            if (stageAbortable(*data->state)) {
+                // A stage is armed or running: this key ends it.
+                white(cr);
+                drawText(cr, "stage", ww / 2.0, 22, 22, CENTRE);
+                drawText(cr, "abort", ww / 2.0, 46, 22, CENTRE);
+            } else {
+                drawFlag(cr, ww / 2.0 - 50, 12, 40, 30);
+                drawWatch(cr, ww / 2.0 + 10, 9, 34, true);
+            }
         }
         break;
     }
@@ -257,8 +264,15 @@ void onNextMinute(GtkWidget*, gpointer user_data) {
     startStageAtNextMinute(static_cast<AppData*>(user_data));
 }
 
-void onLateArrival(GtkWidget*, gpointer user_data) {
-    performStageGo(static_cast<AppData*>(user_data));
+// Stage go now -- or, once a stage is armed or running, stage abort. Ending a
+// stage takes a confirm: one stray tap must not do it.
+void onLateArrival(GtkWidget* w, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (stageAbortable(*data->state)) {
+        if (confirmYesNo(w, "Abort stage", "ABORT the stage?")) performAbortStage(data);
+        return;
+    }
+    performStageGo(data);
 }
 
 // Step to the next populated memory in a direction; no wrap, empties skipped.
@@ -476,7 +490,9 @@ GtkWidget* createHomeScreen(AppData* data) {
     GtkWidget* flagKey = makeIconKey(data, FLAG, G_CALLBACK(onNextMinute), h);
     h->flagArea = gtk_bin_get_child(GTK_BIN(flagKey));
     gtk_box_pack_start(GTK_BOX(c5), flagKey, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(c5), makeIconKey(data, FLAG_WATCH, G_CALLBACK(onLateArrival), h), FALSE, FALSE, 0);
+    GtkWidget* goKey = makeIconKey(data, FLAG_WATCH, G_CALLBACK(onLateArrival), h);
+    h->goArea = gtk_bin_get_child(GTK_BIN(goKey));
+    gtk_box_pack_start(GTK_BOX(c5), goKey, FALSE, FALSE, 0);
     data->adjZeroBtn = makeKey("A-B, B-C\nzero", RC_W, KEY_H, G_CALLBACK(on_adj_driver_zero), data);
     addClass(data->adjZeroBtn, "key-small");
     gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(data->adjZeroBtn))), GTK_JUSTIFY_CENTER);
@@ -501,6 +517,15 @@ void updateHomeDisplay(AppData* data) {
     if (cap != gtk_label_get_text(GTK_LABEL(h->minuteCaption))) {
         gtk_label_set_text(GTK_LABEL(h->minuteCaption), cap.c_str());
         markDirty(h->flagArea);
+    }
+
+    // The stage-go key turns into stage abort while a stage is armed or running.
+    {
+        const bool abortable = stageAbortable(*data->state);
+        if (abortable != h->goWasAbort) {
+            h->goWasAbort = abortable;
+            markDirty(h->goArea);
+        }
     }
 
     // Stage panel: loaded memory, auto / manual, table, arrival. Not part of
