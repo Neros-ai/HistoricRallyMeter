@@ -365,9 +365,17 @@ GtkWidget* createHomeScreen(AppData* data) {
     g_signal_connect(screen, "unmap", G_CALLBACK(onHomeUnmap), data);
 
     // ── column 1: Total / Trip / next / prev with their figures ──
+    // Columns 1 and 2 sit in an overlay so freeze and reverse can be placed by
+    // position along the bottom row: reverse ends level with the right edge of
+    // the figures above it.
+    GtkWidget* leftOverlay = gtk_overlay_new();
+    GtkWidget* leftCols = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, COL_GAP);
+    gtk_container_add(GTK_CONTAINER(leftOverlay), leftCols);
+    gtk_box_pack_start(GTK_BOX(screen), leftOverlay, FALSE, FALSE, 0);
+
     GtkWidget* c1 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_set_size_request(c1, COL1_W, -1);
-    gtk_box_pack_start(GTK_BOX(screen), c1, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(leftCols), c1, FALSE, FALSE, 0);
 
     struct { const char* label; GCallback cb; } rows[3] = {
         { "total", G_CALLBACK(on_total_reset) },
@@ -388,28 +396,24 @@ GtkWidget* createHomeScreen(AppData* data) {
         if (i == 2) data->nextPrevBtn = key;
         gtk_widget_set_sensitive(key, i == 2 ? FALSE : TRUE);
     }
-    // prev + freeze + reverse
+    // prev, then freeze and reverse further right (placed over the columns below)
     {
-        GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
         data->prevBtn = makeKey("prev", KEY_W, KEY_H, G_CALLBACK(on_prev_press), data);
         gtk_widget_set_sensitive(data->prevBtn, FALSE);
-        gtk_box_pack_start(GTK_BOX(row), data->prevBtn, FALSE, FALSE, 0);
-        // 130 + 24 + 130 = 284, centred in the 356 px figure column.
-        GtkWidget* x = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 24);
-        gtk_widget_set_halign(x, GTK_ALIGN_CENTER);
+        gtk_box_pack_start(GTK_BOX(c1), data->prevBtn, FALSE, FALSE, 0);
+        gtk_widget_set_halign(data->prevBtn, GTK_ALIGN_START);   // 130 px, not the column's width
         h->freezeBtn = makeKey("freeze", KEY_W, KEY_H, G_CALLBACK(onFreeze), data);
         h->reverseBtn = makeKey("reverse", KEY_W, KEY_H, G_CALLBACK(onReverse), data);
-        gtk_box_pack_start(GTK_BOX(x), h->freezeBtn, FALSE, FALSE, 0);
-        gtk_box_pack_start(GTK_BOX(x), h->reverseBtn, FALSE, FALSE, 0);
-        gtk_widget_set_halign(x, GTK_ALIGN_CENTER);
-        gtk_box_pack_start(GTK_BOX(row), x, TRUE, FALSE, 0);
-        gtk_box_pack_start(GTK_BOX(c1), row, FALSE, FALSE, 0);
+        // 24 px: "reverse" at the keys' usual 28 px is wider than 130 px once the
+        // button's padding is added, and was clipped at the overlay's edge.
+        addClass(h->freezeBtn, "key-24");
+        addClass(h->reverseBtn, "key-24");
     }
 
     // ── column 2: +10 / set / −10, level with Total / Trip / next ──
     GtkWidget* c2 = gtk_box_new(GTK_ORIENTATION_VERTICAL, ROW_GAP);
     gtk_widget_set_size_request(c2, COL2_W, -1);
-    gtk_box_pack_start(GTK_BOX(screen), c2, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(leftCols), c2, FALSE, FALSE, 0);
     struct { const char* label; int delta_m; } adj[3] = { {"+10", 10}, {"set", 0}, {"-10", -10} };
     for (int i = 0; i < 3; i++) {
         GtkWidget* b = makeKey(adj[i].label, COL2_W, KEY_H, nullptr, data);
@@ -421,6 +425,30 @@ GtkWidget* createHomeScreen(AppData* data) {
             g_signal_connect(b, "clicked", G_CALLBACK(on_distance_adjust), data);
         }
         gtk_box_pack_start(GTK_BOX(c2), b, FALSE, FALSE, 0);
+    }
+
+    {
+        // Reverse is right-aligned with the Total / Trip / next figures (owner's
+        // ruling; it first lined up with -10, which was too far right).
+        // The drawn digits stop a few pixels short of the figure area's edge
+        // (the glyphs' own side bearing), so the key's right edge is set 10 px in
+        // to sit under the last digit, measured on the sandbox screenshot.
+        const int right = COL1_W - 10;                        // 476
+        // The keys' real widths (a button is a little wider than its 130 px
+        // request when the label needs it), so reverse ends exactly on -10's edge.
+        gint rev_w = KEY_W, frz_w = KEY_W, nat = 0;
+        gtk_widget_get_preferred_width(h->reverseBtn, nullptr, &nat); rev_w = std::max<gint>(KEY_W, nat);
+        gtk_widget_get_preferred_width(h->freezeBtn, nullptr, &nat);  frz_w = std::max<gint>(KEY_W, nat);
+        const int rev_x = right - rev_w;
+        const int frz_x = rev_x - 24 - frz_w;
+        const int row_y = 3 * (KEY_H + ROW_GAP);              // 318: the prev row
+        GtkWidget* fixed = gtk_fixed_new();
+        gtk_fixed_put(GTK_FIXED(fixed), h->freezeBtn, frz_x, row_y);
+        gtk_fixed_put(GTK_FIXED(fixed), h->reverseBtn, rev_x, row_y);
+        gtk_widget_set_halign(fixed, GTK_ALIGN_START);
+        gtk_widget_set_valign(fixed, GTK_ALIGN_START);
+        gtk_overlay_add_overlay(GTK_OVERLAY(leftOverlay), fixed);
+        gtk_overlay_set_overlay_pass_through(GTK_OVERLAY(leftOverlay), fixed, TRUE);
     }
 
     // ── columns 3 and 4 live in a stack so the picker can cover both ──
