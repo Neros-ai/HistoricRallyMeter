@@ -204,8 +204,10 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
                 drawText(cr, "stage", ww / 2.0, 22, 22, CENTRE);
                 drawText(cr, "abort", ww / 2.0, 46, 22, CENTRE);
             } else {
-                drawFlag(cr, ww / 2.0 - 50, 12, 40, 30);
-                drawWatch(cr, ww / 2.0 + 10, 9, 34, true);
+                // The flag with "now" under it, laid out like the next-minute key above.
+                drawFlag(cr, ww / 2.0 - 20, 1, 40, 30);
+                white(cr);
+                drawText(cr, "now", ww / 2.0, 50, 24, CENTRE);
             }
         }
         break;
