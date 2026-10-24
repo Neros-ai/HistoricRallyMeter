@@ -17,7 +17,9 @@ namespace {
 
 // Column widths from segments.html: 50 86 86 86 40 60 40 44 60 60 44 with 8 px
 // gaps = 656 + 80 = 736, inside the 756 px list.
-constexpr int COLS[11] = {50, 86, 86, 86, 40, 60, 40, 44, 60, 60, 44};
+// Narrowed a little from the mockup's 50 86 86 86 40 60 40 44 60 60 44 so the
+// number entry (3 digits) and the scroll bar both fit inside the 756 px list.
+constexpr int COLS[11] = {62, 80, 80, 76, 40, 60, 40, 44, 56, 56, 44};
 constexpr int COL_GAP = 8;
 constexpr int LEFT_W = 1012, LIST_W = 756, STAGE_W = 240, TOP_H = 322, NEWPT_H = 56;
 
@@ -168,7 +170,11 @@ void rebuildNow(AppData* d) {
         };
         auto makeEntry = [&](int col, const char* kind) {
             GtkWidget* e = gtk_entry_new();
-            gtk_entry_set_width_chars(GTK_ENTRY(e), 3);
+            // 1 char, not 3: an entry's natural width otherwise beats the column's
+            // fixed width and widens that column in the rows that have one, so the
+            // columns after it no longer line up with the rows that do not.
+            gtk_entry_set_width_chars(GTK_ENTRY(e), 1);
+            gtk_entry_set_max_width_chars(GTK_ENTRY(e), 1);
             gtk_entry_set_alignment(GTK_ENTRY(e), 1.0f);
             addClass(e, "seg-entry");
             g_object_set_data(G_OBJECT(e), "seg_kind", const_cast<char*>(kind));
@@ -221,6 +227,7 @@ void rebuildNow(AppData* d) {
         w.total = makeLabel(9, true, true);
 
         GtkWidget* del = gtk_button_new_with_label("del");
+        gtk_widget_set_halign(del, GTK_ALIGN_START);   // keep its own width, never stretched
         g_object_set_data(G_OBJECT(del), "row", GINT_TO_POINTER(static_cast<int>(i)));
         g_signal_connect(del, "clicked", G_CALLBACK(onDelete), d);
         addClass(del, "seg-del");
