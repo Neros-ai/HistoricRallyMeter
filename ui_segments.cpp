@@ -21,7 +21,8 @@ namespace {
 // number entry (3 digits) and the scroll bar both fit inside the 756 px list.
 constexpr int COLS[11] = {62, 80, 80, 76, 40, 60, 40, 44, 56, 56, 44};
 constexpr int COL_GAP = 8;
-constexpr int LEFT_W = 1012, LIST_W = 756, STAGE_W = 240, TOP_H = 322, NEWPT_H = 56;
+// The stage column is 200 px (was 240); the 40 px it gave up widen the table.
+constexpr int LEFT_W = 1012, LIST_W = 796, STAGE_W = 200, TOP_H = 322, NEWPT_H = 56;
 
 struct RowW {
     GtkWidget* num = nullptr;     // entry on row 1, label below
@@ -434,12 +435,12 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_box_pack_end(GTK_BOX(top), col, FALSE, FALSE, 0);
     u->clock = GTK_LABEL(gtk_label_new("00:00:00"));
     addClass(GTK_WIDGET(u->clock), "seg-clock");
-    gtk_widget_set_size_request(GTK_WIDGET(u->clock), STAGE_W, 46);
+    gtk_widget_set_size_request(GTK_WIDGET(u->clock), STAGE_W, 42);
     gtk_box_pack_start(GTK_BOX(col), GTK_WIDGET(u->clock), FALSE, FALSE, 0);
 
     GtkWidget* sel = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_widget_set_halign(sel, GTK_ALIGN_CENTER);
-    gtk_widget_set_size_request(sel, STAGE_W, 54);
+    gtk_widget_set_halign(sel, GTK_ALIGN_END);   // right-aligned with the time boxes below
+    gtk_widget_set_size_request(sel, -1, 54);
     auto key = [&](const char* t, int w, int h, GCallback cb) {
         GtkWidget* b = gtk_button_new_with_label(t);
         gtk_widget_set_size_request(b, w, h);
@@ -464,35 +465,37 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_container_add(GTK_CONTAINER(u->popover), pbox);
     gtk_widget_show_all(pbox);
 
-    GtkWidget* lbl = gtk_label_new("Stage start");
+    GtkWidget* lbl = gtk_label_new("Stage Start time");
     addClass(lbl, "seg-head");
     gtk_label_set_xalign(GTK_LABEL(lbl), 0.0f);
     gtk_box_pack_start(GTK_BOX(col), lbl, FALSE, FALSE, 0);
 
-    auto startRow = [&](const char* text, const char* kind, GtkWidget** entryOut) {
-        GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-        GtkWidget* l = gtk_label_new(text);
-        addClass(l, "seg-small");
-        gtk_label_set_xalign(GTK_LABEL(l), 0.0f);
-        gtk_widget_set_size_request(l, 88, -1);
+    // An entry right-aligned in the column; `label` (cyan, like the heading) goes on
+    // the row above it, or nothing for the time, which the heading already names.
+    auto startRow = [&](const char* label, const char* kind, GtkWidget** entryOut) {
+        if (label) {
+            GtkWidget* l = gtk_label_new(label);
+            addClass(l, "seg-head");
+            gtk_label_set_xalign(GTK_LABEL(l), 0.0f);
+            gtk_box_pack_start(GTK_BOX(col), l, FALSE, FALSE, 0);
+        }
         GtkWidget* e = gtk_entry_new();
         gtk_entry_set_alignment(GTK_ENTRY(e), 1.0f);
         // width_chars as well as the size request: an entry's natural width
         // otherwise overrides the 144 px and widens the whole column.
         gtk_entry_set_width_chars(GTK_ENTRY(e), 1);
         gtk_entry_set_max_width_chars(GTK_ENTRY(e), 1);
-        gtk_widget_set_size_request(e, 144, 44);
+        gtk_widget_set_size_request(e, 144, 38);
+        gtk_widget_set_halign(e, GTK_ALIGN_END);
         addClass(e, "seg-startentry");
         g_object_set_data(G_OBJECT(e), "seg_kind", const_cast<char*>(kind));
         g_signal_connect(e, "focus-in-event", G_CALLBACK(onEntryFocusIn), data);
         g_signal_connect(e, "activate", G_CALLBACK(onEntryActivate), data);
-        gtk_box_pack_start(GTK_BOX(row), l, FALSE, FALSE, 0);
-        gtk_box_pack_start(GTK_BOX(row), e, FALSE, FALSE, 0);
-        gtk_box_pack_start(GTK_BOX(col), row, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(col), e, FALSE, FALSE, 0);
         *entryOut = e;
     };
-    startRow("Time", "start_time", &u->timeEntry);
-    startRow("Distance\nat start", "start_dist", &u->distEntry);
+    startRow(nullptr, "start_time", &u->timeEntry);
+    startRow("Distance at start", "start_dist", &u->distEntry);
 
     GtkWidget* autoRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     GtkWidget* al = gtk_label_new("Autostart");
@@ -507,8 +510,8 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_widget_set_valign(clr, GTK_ALIGN_END);
     // Two short lines at 22 px: one 28 px line ("clear stage") is wider than
     // the 117 px half-column and would widen the whole stage column.
-    GtkWidget* clrStage = key("clear\nstage", 117, 54, G_CALLBACK(onClearStage));
-    GtkWidget* clrAll = key("clear\nall", 117, 54, G_CALLBACK(onClearAll));
+    GtkWidget* clrStage = key("clear\nstage", 94, 48, G_CALLBACK(onClearStage));
+    GtkWidget* clrAll = key("clear\nall", 94, 48, G_CALLBACK(onClearAll));
     for (GtkWidget* k : {clrStage, clrAll}) {
         addClass(k, "key-small");
         gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(k))), GTK_JUSTIFY_CENTER);
