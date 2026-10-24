@@ -563,7 +563,10 @@ StageArrival stageArrival(double start_distance_m, double minutes_to_start) {
     StageArrival a;
     if (start_distance_m <= 0.0 || minutes_to_start <= 1.0) return a;
     a.valid = true;
-    a.minutes = static_cast<int>(std::lround(minutes_to_start));
+    // Whole minutes still to go, rounded DOWN: 14 min 45 s reads 14, so the figure
+    // drops the moment the next minute is crossed instead of lagging half a
+    // minute behind. The speed below uses the exact figure.
+    a.minutes = static_cast<int>(std::floor(minutes_to_start));
     a.speed_kph = static_cast<int>(std::lround((start_distance_m / 1000.0) /
                                                ((minutes_to_start - 1.0) / 60.0)));
     return a;
