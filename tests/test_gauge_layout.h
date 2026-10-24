@@ -36,22 +36,19 @@ public:
             // right-aligning to, an absolute offset from the arc's own
             // radius, not a centre-relative gap.
             CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
-            // radius = 375, so the arc-derived offset is 375 * 0.72 = 270;
-            // RB-DRV-08 adds a flat +10 shift, giving 280.
-            return std::abs(L.distanceAnchor - 280.0) < 0.001
+            // Nero2.0: 45 px left of the hub on the 800x480 display
+            // (centerX - 0.12 * radius = 400 - 45).
+            return std::abs(L.distanceAnchor - 355.0) < 0.001
                 && L.distanceAnchor < L.centerX;
         });
 
-        suite->addTest("distance anchor is shifted 10px right of the arc offset (RB-DRV-08)", []() {
+        suite->addTest("Nero2.0 sizes at full scale: top 62, values 60, box digits 50, captions 20", []() {
             CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
-            // radius = 375, so the un-shifted offset would be 270; RB-DRV-08
-            // adds a flat +10.
-            return std::abs(L.distanceAnchor - 280.0) < 0.001;
-        });
-
-        suite->addTest("curTopSize is 50 at full scale", []() {
-            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
-            return std::abs(L.curTopSize - 50.0) < 0.001;
+            return std::abs(L.curTopSize - 62.0) < 0.001
+                && std::abs(L.valSize - 60.0) < 0.001
+                && std::abs(L.boxFontSize - 50.0) < 0.001
+                && std::abs(L.rowCaptionSize - 20.0) < 0.001
+                && std::abs(L.legendDrop - 20.0) < 0.001;
         });
 
         suite->addTest("band edges straddle the centre and sit above centerY", []() {
@@ -68,22 +65,17 @@ public:
                 && L.bandTopY < L.centerY;
         });
 
-        suite->addTest("Total sits above Trip, separated by more than rowGap", []() {
-            // RB-DRV-08: Target moved off this stack entirely (to the
-            // top-left corner); Total/Trip are drawn at the larger
-            // curTopSize with extra line spacing so the taller glyphs'
-            // descenders clear the ahead/behind box above them -- so the
-            // gap is now rowGap plus a scaled margin, not exactly rowGap.
+        suite->addTest("Total sits one row gap above Trip", []() {
             CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
-            double gap = L.tripBaseline - L.totalBaseline;
             return L.totalBaseline < L.tripBaseline
-                && gap > L.rowGap
-                && gap < L.rowGap + 20.0 * L.fscale + 0.001;
+                && std::abs((L.tripBaseline - L.totalBaseline) - L.rowGap) < 0.001
+                && std::abs(L.rowGap - 66.0) < 0.001;
         });
 
-        suite->addTest("row gap is 48 at full scale", []() {
+        suite->addTest("Trip and Total sit at the Nero2.0 mockup's baselines (380 and 314)", []() {
             CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
-            return std::abs(L.rowGap - 48.0) < 0.001;
+            return std::abs(L.tripBaseline - 380.0) < 0.001
+                && std::abs(L.totalBaseline - 314.0) < 0.001;
         });
 
         suite->addTest("curTopSize is the largest text size in the layout", []() {
@@ -133,9 +125,10 @@ public:
                 && (L.boxY + L.boxHeight) > L.centerY;
         });
 
-        suite->addTest("error box is 50px tall", []() {
+        suite->addTest("error box is 64px tall and starts 8px above the hub", []() {
             CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
-            return std::abs(L.boxHeight - 50.0) < 0.001;
+            return std::abs(L.boxHeight - 64.0) < 0.001
+                && std::abs(L.boxY - (L.centerY - 8.0)) < 0.001;
         });
 
         suite->addTest("footer sits on the bottom edge of the error box", []() {
@@ -235,7 +228,8 @@ public:
         suite->addTest("needle is a constant-width bar matching the ticks", []() {
             NeedleGeometry a = computeNeedleGeometry(0.0, 10.0, 375.0);
             NeedleGeometry b = computeNeedleGeometry(7.5, 10.0, 375.0);
-            return std::abs(a.halfWidth - 3.0) < 1e-9
+            // Nero2.0: 10 px thick.
+            return std::abs(a.halfWidth - 5.0) < 1e-9
                 && std::abs(a.halfWidth - b.halfWidth) < 1e-9;
         });
 

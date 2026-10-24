@@ -593,6 +593,14 @@ struct CompactGaugeLayout {
     double boxHeight;       // ahead/behind readout box height
     double footBaseline;    // fps/cpu footer baseline
     double footSize;        // fps/cpu footer font size
+    // Nero2.0 (RB-DRV-12)
+    double rowCaptionSize;  // "Total" / "Trip" captions beside the speeds
+    double boxFontSize;     // ahead/behind readout digits
+    double legendDrop;      // how far the Target / Kph legends sit lower than
+                            // directly under their figures
+    double distCaptionRight; // right edge of "Distance (metres)": 105 px left of
+                             // the hub on the 800 x 480 display, beside the box
+    double speedCaptionLeft; // left edge of "Average Speed": 105 px right of the hub
 };
 
 // `embedded` selects the single-display variant, where the gauge is drawn in
