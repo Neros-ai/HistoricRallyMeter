@@ -143,6 +143,13 @@ public:
             return a.valid && a.minutes == 14 && a.speed_kph == 29;
         });
 
+        suite->addTest("stage arrival minutes count down in whole minutes, rounded down", []() {
+            return stageArrival(6200, 14.75).minutes == 14      // 14 min 45 s
+                && stageArrival(6200, 14.0).minutes == 14
+                && stageArrival(6200, 13.99).minutes == 13
+                && stageArrival(6200, 14.75).speed_kph == 27;   // 6.2 km in 13.75 min
+        });
+
         suite->addTest("stage arrival is blank with a minute or less, or no distance", []() {
             return !stageArrival(6200, 1).valid && !stageArrival(6200, 0.5).valid
                 && !stageArrival(0, 14).valid;
