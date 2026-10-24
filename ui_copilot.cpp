@@ -58,7 +58,7 @@ static void applyCopilotCSS() {
         // The Navigation/Timing lead-in values are read at a glance while
         // moving, so they get their own larger size rather than inheriting
         // the 18px used for captions.
-        ".beep-advance-entry { font-size: 26px; }"
+        ".beep-advance-entry { font-size: 24px; }"
         ".segment-row entry, .segment-row button, .segment-row checkbutton { font-size: 18px; }"
         ".new-segment-row label, .new-segment-row entry, .new-segment-row button, .new-segment-row checkbutton { font-size: 18px; }"
         ".segment-list-frame { border: 1px solid #444444; background-color: #111111; }"
@@ -80,6 +80,7 @@ static void applyCopilotCSS() {
         // Nero2.0 menu page: 40 px key name over a 20 px grey caption.
         // Keys that must stay inside a narrow column ("A-B, B-C", +10).
         "button.key-small { font-size: 22px; }"
+        "button.key-24 { font-size: 24px; }"
         ".seg-head { color: #00FFFF; font-size: 18px; }"
         ".seg-clock { font-size: 40px; font-family: monospace; }"
         ".seg-small { font-size: 18px; }"
@@ -87,7 +88,7 @@ static void applyCopilotCSS() {
         ".seg-dim { color: #AAAAAA; }"
         ".seg-del { font-size: 17px; }"
         ".seg-startentry { font-size: 26px; border-color: transparent; }"
-        ".seg-addentry { font-size: 26px; }"
+        ".seg-addentry { font-size: 24px; }"
         ".dt-label { color: #00FFFF; font-size: 24px; }"
         ".dt-entry { font-size: 44px; }"
         ".cal-row { color: #00FFFF; font-size: 30px; }"
