@@ -713,8 +713,8 @@ void updateDriverDisplay(AppData* data) {
         
         // Speed adjustment arrows (always driven by the arrow-based
         // calculation, regardless of tone mode -- the visual indicator is
-        // unaffected by simple_tone_mode) and the ahead/behind tone
-        // (driven by whichever algorithm simple_tone_mode selects).
+        // unaffected by the tone types) and the ahead/behind tone
+        // (driven by whichever algorithm the type for the current side selects).
         double stage_dist_m = countsToMeters(total_count_diff_ab, data->state->calibration);
         double total_stage_counts = 0.0;
         for (const auto& s : data->state->stage_segments)
@@ -740,7 +740,9 @@ void updateDriverDisplay(AppData* data) {
 
         // One decision for the box's speaker and the phone (RB-WEB-02).
         data->currentTone = decideToneCadence(
-            data->state->tone_enabled, data->state->simple_tone_mode, arrow,
+            data->state->tone_enabled,
+            simpleToneForError(seconds, data->state->tone_type_behind, data->state->tone_type_ahead),
+            arrow,
             data->simpleToneState, seconds, stage_dist_m, past_stage_end);
         if (data->toneGen) {
             const ToneCadence& t = data->currentTone;

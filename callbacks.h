@@ -63,8 +63,6 @@ void on_reset_calibration_pulses(GtkWidget* widget, gpointer user_data);
 void on_trim_rally_pressed(GtkWidget* widget, gpointer user_data);
 void on_trim_rally_released(GtkWidget* widget, gpointer user_data);
 gboolean on_force_single_display_toggle(GtkSwitch* sw, gboolean state, gpointer user_data);
-gboolean on_tone_enabled_toggle(GtkSwitch* sw, gboolean state, gpointer user_data);
-void on_tone_type_toggled(GtkWidget* widget, gpointer user_data);
 void refreshSegmentList(AppData* data);
 void updateCalibrationDisplay(AppData* data);
 // Refresh the calibration screen's sensor-selection label.
@@ -96,8 +94,6 @@ void refreshBeepWaypointView(AppData* data);
 // Clear the keypad's target and flush any pending waypoint edit. Called on
 // every screen switch -- the keypad target is shared process-wide.
 void releaseKeypadTarget(AppData* data);
-gboolean on_beep_enable_toggled(GtkWidget* widget, gboolean state, gpointer user_data);
-void on_beep_mode_toggled(GtkWidget* widget, gpointer user_data);
 void on_beep_advance_changed(GtkWidget* widget, gpointer user_data);
 void on_alarm_set(GtkWidget* widget, gpointer user_data);
 void on_alarm_clear(GtkWidget* widget, gpointer user_data);

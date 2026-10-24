@@ -162,7 +162,9 @@ std::string buildStateJson(AppData* data) {
        << ",\"beep_advance_s\":" << data->state->beep_advance_s
        << ",\"beep_waypoints_km\":\"" << formatBeepWaypointsKm(data->state->beep_waypoints_m) << "\""
        << ",\"tone_enabled\":" << (data->state->tone_enabled ? "true" : "false")
-       << ",\"tone_type\":" << (data->state->simple_tone_mode ? 2 : 1);
+       << ",\"tone_type\":" << data->state->tone_type_behind
+       << ",\"tone_type_behind\":" << data->state->tone_type_behind
+       << ",\"tone_type_ahead\":" << data->state->tone_type_ahead;
 
     // Which memory slots hold a stage, so the phone can mark them the way the
     // box does instead of offering five identical buttons.

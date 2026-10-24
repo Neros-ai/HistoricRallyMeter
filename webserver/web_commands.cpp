@@ -235,6 +235,9 @@ bool webHandleCommand(AppData* data, const char* json) {
         if (jsonFindBool(json, "enabled", &flag)) data->state->beep_assist_enabled = flag;
         if (jsonFindBool(json, "navigation", &flag)) data->state->beep_navigation_mode = flag;
         if (jsonFindBool(json, "timing", &flag)) data->state->beep_timing_mode = flag;
+        // Nero2.0 has no separate master: Beep Assist is on when either mode is.
+        data->state->beep_assist_enabled =
+            data->state->beep_navigation_mode || data->state->beep_timing_mode;
         if (jsonFindDouble(json, "advance_m", &value) && value >= 0.0) {
             data->state->beep_advance_m = value;
         }
@@ -259,7 +262,15 @@ bool webHandleCommand(AppData* data, const char* json) {
         if (jsonFindBool(json, "enabled", &flag)) data->state->tone_enabled = flag;
         if (jsonFindInt(json, "tone_type", &tone_type)) {
             if (tone_type != 1 && tone_type != 2) return false;
-            data->state->simple_tone_mode = (tone_type == 2);
+            data->state->tone_type_behind = data->state->tone_type_ahead = tone_type;
+        }
+        if (jsonFindInt(json, "tone_type_behind", &tone_type)) {
+            if (tone_type != 1 && tone_type != 2) return false;
+            data->state->tone_type_behind = tone_type;
+        }
+        if (jsonFindInt(json, "tone_type_ahead", &tone_type)) {
+            if (tone_type != 1 && tone_type != 2) return false;
+            data->state->tone_type_ahead = tone_type;
         }
         ConfigFile::save(*data->state);
         return true;
