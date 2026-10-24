@@ -28,65 +28,66 @@
     <button id="tab-drv" class="tab" type="button">Drv</button>
   </nav>
 
-  <!-- NAVI: the box's Home page -->
-  <main id="view-navi" class="view">
-    <section class="clock-row">
-      <span>Rally Clock</span>
-      <strong id="rally-clock">--:--:--</strong>
-    </section>
+  <!-- NAVI: the box's Home page, in the mockup's order (phone.html, "Navi") -->
+  <main id="view-navi" class="view navi">
+    <div class="nclk"><span id="rally-clock">--:--:--</span></div>
 
-    <section id="ahead-behind" class="ahead-behind">
-      <div id="ahead-value" class="value">0.0 s</div>
-    </section>
-
-    <div class="navi-grid">
-      <div class="navi-cell"><button id="btn-total" type="button" class="key">total</button>
-        <div class="navi-fig"><strong id="total-m">0</strong><span class="el" id="total-el">0:00</span></div></div>
-      <div class="navi-cell"><button id="btn-trip" type="button" class="key">trip</button>
-        <div class="navi-fig"><strong id="trip-m">0</strong><span class="el" id="trip-el">0:00</span></div></div>
-      <div class="navi-cell"><button id="btn-next" type="button" class="key" disabled>next</button>
-        <div class="navi-fig"><strong id="next-m">---</strong><span class="el" id="speed-change"></span></div></div>
-      <div class="navi-cell"><button id="btn-prev" type="button" class="key" disabled>prev</button>
-        <div class="navi-fig keys2">
-          <button id="btn-freeze" type="button" class="key">freeze</button>
-          <button id="btn-reverse" type="button" class="key">reverse</button></div></div>
+    <div class="nr">
+      <button id="btn-dist-minus" type="button" class="key">&minus;10</button>
+      <button id="btn-dist-set" type="button" class="key">set</button>
+      <button id="btn-dist-plus" type="button" class="key">+10</button>
     </div>
 
-    <section class="adjust-row">
-      <button id="btn-dist-plus" type="button">+10</button>
-      <button id="btn-dist-minus" type="button">&minus;10</button>
-      <input id="dist-set-m" type="number" min="0" max="999999" step="1" inputmode="numeric" placeholder="Total m">
-      <button id="btn-dist-set" type="button">set</button>
-    </section>
+    <div class="nr fig-row">
+      <button id="btn-total" type="button" class="key k">total</button>
+      <span class="el"><svg class="watch" viewBox="0 0 32 36"><use href="#watch"/></svg><span id="total-el">0:00</span></span>
+      <strong id="total-m" class="big">0</strong>
+    </div>
+    <div class="nr fig-row">
+      <button id="btn-trip" type="button" class="key k">trip</button>
+      <span class="el"><svg class="watch" viewBox="0 0 32 36"><use href="#watch"/></svg><span id="trip-el">0:00</span></span>
+      <strong id="trip-m" class="big">0</strong>
+    </div>
+    <div class="nr fig-row">
+      <button id="btn-next" type="button" class="key k" disabled>next</button>
+      <span class="el" id="speed-change"></span>
+      <strong id="next-m" class="big sm">---</strong>
+    </div>
 
-    <section class="speeds">
-      <span>now <strong id="cur-kph">0.0</strong> <span id="unit-label">kph</span></span>
-      <span>target <strong id="target-kph">0.0</strong></span>
-      <span>total avg <strong id="total-avg">0.0</strong></span>
-      <span>trip avg <strong id="trip-avg">0.0</strong></span>
-    </section>
+    <div class="nr">
+      <button id="btn-prev" type="button" class="key" disabled>prev</button>
+      <button id="btn-freeze" type="button" class="key">freeze</button>
+      <button id="btn-reverse" type="button" class="key">reverse</button>
+    </div>
 
-    <section class="stage-panel">
-      <div class="stage-sel">
-        <button id="stage-minus" type="button" class="key">&minus;</button>
-        <select id="stage-pick"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select>
-        <button id="stage-plus" type="button" class="key">+</button>
-        <span class="stage-auto"><span id="auto-word" class="cyan">auto</span> <strong id="auto-time"></strong></span>
+    <div class="nr">
+      <button id="stage-minus" type="button" class="key sq">&minus;</button>
+      <select id="stage-pick" class="stno"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select>
+      <button id="stage-plus" type="button" class="key sq">+</button>
+      <span class="auto"><span id="auto-word" class="cyan">auto</span> <span id="auto-time"></span></span>
+    </div>
+
+    <div class="nr flags">
+      <button id="btn-flag-minute" type="button" class="key col"><svg class="flag" viewBox="0 0 40 34"><use href="#flag"/></svg><span id="flag-minute-time">--:--</span></button>
+      <button id="btn-flag-late" type="button" class="key"><svg class="flag" viewBox="0 0 40 34"><use href="#flag"/></svg><svg class="watch w" viewBox="0 0 32 36"><use href="#watch"/></svg></button>
+      <button id="btn-zero" type="button" class="key sm">A-B, B-C<br>zero</button>
+    </div>
+
+    <div class="nr cards">
+      <div class="card">
+        <table id="stage-table"><thead><tr><th id="stage-speed-head">KPH</th><th>at m</th></tr></thead><tbody></tbody></table>
       </div>
-      <table id="stage-table">
-        <thead><tr><th id="stage-speed-head">KPH</th><th>at m</th></tr></thead>
-        <tbody></tbody>
-      </table>
-      <div class="arrival">Stage arrival
-        <span><b id="arr-kph">--</b> kph</span> <span><b id="arr-min">--</b> min</span></div>
-      <div class="hist"><span class="cyan">Trip history</span> <span id="trip-history">-</span></div>
-    </section>
+      <div class="card arr"><span class="cyan">Stage arrival</span>
+        <span class="fig"><span><small>kph</small><b class="cyan" id="arr-kph">--</b></span><span><small>min</small><b id="arr-min">--</b></span></span></div>
+    </div>
+    <div class="card hist">Trip history&nbsp; <span id="trip-history">-</span></div>
 
-    <section class="actions flags">
-      <button id="btn-flag-minute" type="button" class="key">&#127937; <span id="flag-minute-time">--:--</span></button>
-      <button id="btn-flag-late" type="button" class="key">&#127937; &#9201; now</button>
-      <button id="btn-zero" type="button" class="key">A-B, B-C zero</button>
-    </section>
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <defs>
+        <g id="watch"><rect x="12" y="0" width="8" height="4" fill="currentColor"/><circle cx="16" cy="21" r="12" fill="none" stroke="currentColor" stroke-width="4"/><line x1="16" y1="21" x2="16" y2="12" stroke="currentColor" stroke-width="4"/></g>
+        <g id="flag"><rect x="2" y="2" width="3" height="31" fill="#fff"/><g transform="translate(5,3)"><rect width="32" height="18" fill="#fff"/><g fill="#000"><rect x="0" y="0" width="8" height="6"/><rect x="16" y="0" width="8" height="6"/><rect x="8" y="6" width="8" height="6"/><rect x="24" y="6" width="8" height="6"/><rect x="0" y="12" width="8" height="6"/><rect x="16" y="12" width="8" height="6"/></g><rect width="32" height="18" fill="none" stroke="#fff" stroke-width="1.5"/></g></g>
+      </defs>
+    </svg>
   </main>
 
   <!-- SEG: the box's Segments page -->
