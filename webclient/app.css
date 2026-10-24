@@ -376,3 +376,36 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .ver { color: #fff; font-size: 0.9rem; font-weight: normal; margin-left: 1rem; }
 .logs-panel { margin-top: 1rem; }
 .logs-panel h3 { color: #0ff; font-size: 1rem; margin: 0.8rem 0 0.2rem; }
+
+/* ---- Navi, in the mockup's order ---- */
+.navi { padding: 0.5rem 0.5rem 1rem; }
+.nclk { text-align: center; font-size: 1.9rem; font-family: monospace; margin: 0.2rem 0 0.5rem; }
+.nr { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.5rem; }
+.nr .key { flex: 1 1 0; min-width: 0; height: 3rem; min-height: 0; padding: 0 0.3rem; font-size: 1.05rem; }
+.nr .key.k { flex: 0 0 4.5rem; }
+.nr .key.sq { flex: 0 0 3rem; font-size: 1.6rem; }
+.nr .key.sm { font-size: 0.9rem; line-height: 1.15; }
+.nr .key.col { flex-direction: column; font-size: 0.9rem; line-height: 1; padding-top: 0.2rem; }
+.fig-row { margin-bottom: 0.3rem; }
+.fig-row .el { flex: 0 0 5.7rem; display: flex; align-items: center; gap: 0.2rem; font-size: 0.85rem; color: #ccc; white-space: nowrap; font-family: monospace; }
+.fig-row .big { flex: 1; text-align: right; font-size: 2.9rem; font-family: monospace; font-weight: bold; }
+.fig-row .big.sm { font-size: 2.2rem; }
+.watch { width: 1rem; height: 1.1rem; color: #ccc; }
+.watch.w { width: 1.5rem; height: 1.6rem; color: #fff; }
+.flag { width: 2rem; height: 1.7rem; }
+.flags .key { display: flex; align-items: center; justify-content: center; gap: 0.3rem; height: 3.2rem; }
+.stno { flex: 0 0 3rem; height: 3rem; font-size: 1.6rem; text-align: center; background: #111; color: #fff; border: 1px solid #666; appearance: none; -webkit-appearance: none; border-radius: 0; padding: 0; text-align-last: center; }
+.auto { flex: 1; text-align: right; font-size: 1.3rem; font-family: monospace; }
+.auto .cyan, .auto .orange { font-size: 0.9rem; }
+.cards { align-items: stretch; }
+.cards .card { flex: 1; }
+.card { border: 1px solid #444; background: #0b0b0b; padding: 0.4rem 0.5rem; font-size: 0.9rem; }
+.card table { width: 100%; border-collapse: collapse; font-family: monospace; font-size: 1rem; }
+.card th { color: #0ff; text-align: right; font-weight: normal; }
+.card td { text-align: right; padding: 0.1rem 0.2rem; }
+.card tr.now td { color: #0ff; }
+.card.arr { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem; }
+.card.arr .fig { display: grid; grid-template-columns: 1fr 1fr; width: 100%; text-align: center; }
+.card.arr small { display: block; color: #ccc; font-size: 0.75rem; }
+.card.arr b { font-size: 1.8rem; }
+.card.hist { font-family: monospace; }
