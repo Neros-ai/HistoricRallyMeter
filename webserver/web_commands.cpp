@@ -177,6 +177,15 @@ bool webHandleCommand(AppData* data, const char* json) {
         refreshSegmentList(data);
         return true;
     }
+    if (strcmp(type, "row_to") == 0) {
+        int row = 0; double to_m = 0;
+        if (!jsonFindInt(json, "row", &row) || !jsonFindDouble(json, "to_m", &to_m)) return false;
+        if (row < 0 || row >= static_cast<int>(data->state->segments.size())) return false;
+        bool ok = stageEditSetRowTo(data, static_cast<size_t>(row), to_m);
+        refreshSegmentList(data);
+        notifyWebStateNow(data);   // put the old figure back on a refusal
+        return ok;
+    }
     if (strcmp(type, "row_delete") == 0) {
         int row = 0;
         if (!jsonFindInt(json, "row", &row)) return false;

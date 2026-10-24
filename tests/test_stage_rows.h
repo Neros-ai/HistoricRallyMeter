@@ -152,6 +152,31 @@ public:
                 && t.memory_slots[0].first_number == 1;
         });
 
+        suite->addTest("editing a row's to m moves the next row's start; later ends hold", []() {
+            auto v = sample();      // ends 1000, 1500, 2300
+            bool ok = setRowTo(v, 0, 0, 900);
+            auto w = deriveWaypoints(v);
+            auto r = buildStageRows(v, 1, 0);
+            return ok && w[0] == 900 && w[1] == 1500 && w[2] == 2300
+                && r[1].from_m == 900 && r[1].dist_m == 600;
+        });
+
+        suite->addTest("to m is refused at or before the row's start, or at or past the next row's end", []() {
+            auto v = sample();
+            const bool a = setRowTo(v, 0, 1, 1000);    // not past its own start
+            const bool b = setRowTo(v, 0, 1, 2300);    // reaches the next end
+            const bool c = setRowTo(v, 0, 0, 1500);    // reaches the next end
+            auto w = deriveWaypoints(v);
+            return !a && !b && !c && w[0] == 1000 && w[1] == 1500 && w[2] == 2300;
+        });
+
+        suite->addTest("the last row's to m just moves the end of the stage", []() {
+            auto v = sample();
+            bool ok = setRowTo(v, 0, 2, 3000);
+            auto w = deriveWaypoints(v);
+            return ok && w[2] == 3000 && w[1] == 1500;
+        });
+
         return suite;
     }
 };

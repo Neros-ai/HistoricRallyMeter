@@ -81,6 +81,12 @@ void stageEditSetAuto(AppData* d, size_t row, bool on) {
     stageEditCommit(d);
 }
 
+bool stageEditSetRowTo(AppData* d, size_t row, double new_to_m) {
+    if (!setRowTo(d->state->segments, slotOf(d).first_from_m, row, new_to_m)) return false;
+    stageEditCommit(d);
+    return true;
+}
+
 void stageEditDeleteRow(AppData* d, size_t row) {
     deleteRow(d->state->segments, slotOf(d).first_from_m, row);
     stageEditCommit(d);

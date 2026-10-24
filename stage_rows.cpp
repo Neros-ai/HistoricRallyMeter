@@ -102,6 +102,21 @@ void setRowAuto(std::vector<Segment>& segs, size_t row, bool on) {
     segs[row - 1].autoNext = on;
 }
 
+bool setRowTo(std::vector<Segment>& segs, double first_from_m, size_t row, double new_to_m) {
+    if (row >= segs.size()) return false;
+    double from = first_from_m;
+    for (size_t i = 0; i < row; i++) from += segs[i].distance_m;
+    const double old_to = from + segs[row].distance_m;
+    if (new_to_m <= from) return false;
+    if (row + 1 < segs.size()) {
+        const double next_to = old_to + segs[row + 1].distance_m;
+        if (new_to_m >= next_to) return false;
+        segs[row + 1].distance_m = next_to - new_to_m;
+    }
+    segs[row].distance_m = new_to_m - from;
+    return true;
+}
+
 void deleteRow(std::vector<Segment>& segs, double& first_from_m, size_t row) {
     if (row >= segs.size()) return;
     const double len = segs[row].distance_m;

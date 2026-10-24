@@ -181,7 +181,7 @@ void rebuildNow(AppData* d) {
 
         w.num = (i == 0) ? makeEntry(0, "num") : makeLabel(0, true, false);
         w.from = (i == 0) ? makeEntry(1, "from") : makeLabel(1, true, false);
-        w.to = makeLabel(2, true, false);
+        w.to = makeEntry(2, "to");
         w.dist = makeLabel(3, true, false);
 
         GtkWidget* chg = gtk_check_button_new();
@@ -200,6 +200,14 @@ void rebuildNow(AppData* d) {
         }
         w.ms = makeLabel(6, true, true);
 
+        if (i == 0) {
+            // Row 1 has no auto (the stage starts there): a greyed box keeps the
+            // columns after it in line with the rows below.
+            GtkWidget* au0 = gtk_check_button_new();
+            gtk_widget_set_sensitive(au0, FALSE);
+            gtk_widget_set_halign(au0, GTK_ALIGN_CENTER);
+            put(au0, 7);
+        }
         if (i >= 1) {
             GtkWidget* au = gtk_check_button_new();
             gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(au), rows[i].auto_on);
@@ -326,6 +334,10 @@ void segmentsCommitImpl(AppData* d) {
     } else if (!strcmp(kind, "from")) {
         long m = parseMetres(text);
         if (m >= 0) stageEditSetFirst(d, -1, static_cast<double>(m));
+    } else if (!strcmp(kind, "to")) {
+        long m = parseMetres(text);
+        if (m >= 0 && !stageEditSetRowTo(d, row, static_cast<double>(m)))
+            flashNotice(GTK_WIDGET(e), "That end distance must be past this row's start and short of the next row's end.");
     } else if (!strcmp(kind, "kph")) {
         char* stop = nullptr;
         double v = std::strtod(text.c_str(), &stop);

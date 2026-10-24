@@ -52,6 +52,12 @@ void setRowChange(std::vector<Segment>& segs, size_t row, bool chg);
 // The auto box of `row` (only meaningful where chg and row >= 1): the speed
 // change happens by itself when this row begins.
 void setRowAuto(std::vector<Segment>& segs, size_t row, bool on);
+// Move the end of `row` to `new_to_m` (whole metres from the stage's frame). The
+// next row then starts at the new figure and is shortened or lengthened to
+// match, so every later row's end stays where it was; on the last row the stage
+// simply ends elsewhere. False, and nothing changed, if the new end is not past
+// this row's start or not short of the next row's end.
+bool setRowTo(std::vector<Segment>& segs, double first_from_m, size_t row, double new_to_m);
 // Removes a row. Its length goes to the row above so later positions do not
 // move; deleting row 0 moves first_from_m instead.
 void deleteRow(std::vector<Segment>& segs, double& first_from_m, size_t row);
