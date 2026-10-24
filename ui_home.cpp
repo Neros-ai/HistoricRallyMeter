@@ -145,6 +145,20 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         }
         white(cr);
         drawText(cr, h->autoTime, width - 4, ay, 30, RIGHT);
+        if (h->autoTimePast && !h->autoTime.empty()) {
+            cairo_text_extents_t te;
+            cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+            cairo_set_font_size(cr, 30);
+            cairo_text_extents(cr, h->autoTime.c_str(), &te);
+            const double x1 = width - 4 - te.x_advance, x2 = width - 4;
+            setColour(cr, 1.0, 0.1, 0.1);
+            cairo_set_line_width(cr, 3.0);
+            cairo_move_to(cr, x1, ay - 24);
+            cairo_line_to(cr, x2, ay + 3);
+            cairo_move_to(cr, x1, ay + 3);
+            cairo_line_to(cr, x2, ay - 24);
+            cairo_stroke(cr);
+        }
 
         // segment table: KPH / at m
         const double top = 12 + 36 + 6;
@@ -629,6 +643,15 @@ void updateHomeDisplay(AppData* data) {
             cum_m += segs[i].distance_m;
         }
 
+        // A start time that has already gone by, with nothing armed or running, is
+        // out of date: it is crossed out like the word "auto".
+        bool time_past = false;
+        if (!is_armed && start_s >= 0) {
+            time_t tt = now_ms / 1000;
+            struct tm* lt0 = localtime(&tt);
+            if (lt0) time_past = start_s < lt0->tm_hour * 3600L + lt0->tm_min * 60L + lt0->tm_sec;
+        }
+
         // Stage arrival: minutes until the loaded memory's start time.
         StageArrival arr;
         if (start_s >= 0) {
@@ -641,6 +664,7 @@ void updateHomeDisplay(AppData* data) {
         }
 
         bool changed = (is_armed != h->autoArmed) || (auto_time != h->autoTime)
+                    || (time_past != h->autoTimePast)
                     || (arr.valid != h->arrivalValid) || (arr.speed_kph != h->arrivalKph)
                     || (arr.minutes != h->arrivalMin);
         for (int r = 0; r < 3; r++) {
@@ -649,6 +673,7 @@ void updateHomeDisplay(AppData* data) {
             h->rows[r] = rows[r];
         }
         h->autoArmed = is_armed;
+        h->autoTimePast = time_past;
         h->autoTime = auto_time;
         h->arrivalValid = arr.valid;
         h->arrivalKph = arr.speed_kph;
