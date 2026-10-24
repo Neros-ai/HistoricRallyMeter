@@ -130,8 +130,11 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
             cyan(cr);
             drawText(cr, "auto", 4, ay, 20, LEFT);
         } else {
+            // On two lines ("man" over "ual"): on one line the word runs into
+            // the time beside it.
             setColour(cr, 1.0, 0.65, 0.0);
-            drawText(cr, "manual", 4, ay, 20, LEFT);
+            drawText(cr, "man", 4, 12 + 17, 18, LEFT);
+            drawText(cr, "ual", 4, 12 + 35, 18, LEFT);
         }
         white(cr);
         drawText(cr, h->autoTime, width - 4, ay, 30, RIGHT);
