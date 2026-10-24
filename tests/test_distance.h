@@ -170,27 +170,30 @@ public:
             return true;
         });
 
-        suite->addTest("stays in metres at and below the switch threshold", []() {
+        suite->addTest("stays in whole metres up to 99,999", []() {
             const char* unit = nullptr;
-            std::string s = formatDistanceAutoUnit(999999, &unit);
+            std::string s = formatDistanceAutoUnit(99999, &unit);
             ASSERT_STR_EQ(std::string(unit), "m");
-            ASSERT_EQ(s, "999,999");
+            ASSERT_EQ(s, "99,999");
             return true;
         });
 
-        suite->addTest("switches to kilometres above the threshold", []() {
+        suite->addTest("switches to kilometres with two decimals from 100,000 m", []() {
             const char* unit = nullptr;
-            std::string s = formatDistanceAutoUnit(1000000, &unit);
+            ASSERT_EQ(formatDistanceAutoUnit(100000, &unit), "100.00");
             ASSERT_STR_EQ(std::string(unit), "km");
-            ASSERT_EQ(s, "1,000");
+            ASSERT_EQ(formatDistanceAutoUnit(127480, &unit), "127.48");
+            ASSERT_EQ(formatDistanceAutoUnit(127489, &unit), "127.48");   // truncated
+            ASSERT_EQ(formatDistanceAutoUnit(1000000, &unit), "1000.00");
             return true;
         });
 
-        suite->addTest("switches to kilometres below the negative threshold too", []() {
+        suite->addTest("negative distances switch at -100,000 m and keep the sign", []() {
             const char* unit = nullptr;
-            std::string s = formatDistanceAutoUnit(-1000000, &unit);
+            ASSERT_EQ(formatDistanceAutoUnit(-99999, &unit), "-99,999");
+            ASSERT_STR_EQ(std::string(unit), "m");
+            ASSERT_EQ(formatDistanceAutoUnit(-100000, &unit), "-100.00");
             ASSERT_STR_EQ(std::string(unit), "km");
-            ASSERT_EQ(s, "-1,000");
             return true;
         });
 

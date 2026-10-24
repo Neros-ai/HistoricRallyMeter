@@ -97,7 +97,7 @@
   function formatDist(m) {
     m = Number(m) || 0;
     // From 100,000 m the box shows km with two decimals and no unit.
-    if (Math.abs(m) >= 100000) return (m / 1000).toFixed(2);
+    if (Math.abs(m) >= 100000) return (Math.trunc(m / 10) / 100).toFixed(2);   // truncated, as on the box
     return Math.round(m).toLocaleString();
   }
 
