@@ -309,9 +309,17 @@ std::string formatDistanceGrouped(long meters) {
 }
 
 std::string formatDistanceAutoUnit(long meters, const char** unit_out) {
-    if (meters > 999999 || meters < -999999) {
+    // Nero2.0: up to 99,999 m a distance reads in whole metres; from 100,000 m
+    // it reads in kilometres to two decimals (127.48), the decimal point alone
+    // telling km from metres on the 88 px figures. Truncated, not rounded, like
+    // the metres figure itself, so the display never reads ahead of the car.
+    if (meters >= 100000 || meters <= -100000) {
         *unit_out = "km";
-        return formatDistanceGrouped(meters / 1000);
+        const long abs_m = meters < 0 ? -meters : meters;
+        const long hundredths = abs_m / 10;
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%s%ld.%02ld", meters < 0 ? "-" : "", hundredths / 100, hundredths % 100);
+        return buf;
     }
     *unit_out = "m";
     return formatDistanceGrouped(meters);

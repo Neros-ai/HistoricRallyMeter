@@ -102,7 +102,7 @@ public:
 
         suite->addTest("distance caption follows the metre/kilometre switch", []() {
             // The caption carries the unit, so it must track the automatic
-            // switch formatDistanceAutoUnit() makes above 999,999 m -- a
+            // switch formatDistanceAutoUnit() makes from 100,000 m -- a
             // hard-coded "metres" would misread a km value by 1000x.
             return distanceColumnCaption("m") == "Distance (metres)"
                 && distanceColumnCaption("km") == "Distance (kilometres)";
