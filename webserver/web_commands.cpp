@@ -217,6 +217,11 @@ bool webHandleCommand(AppData* data, const char* json) {
     if (strcmp(type, "autostart_set") == 0) {
         bool on = false;
         if (!jsonFindBool(json, "on", &on)) return false;
+        // As the box's auto key: no arming while a stage is running.
+        if (on && classifyTotalReset(*data->state) == TotalResetCase::StageRunning) {
+            notifyWebStateNow(data);
+            return false;
+        }
         std::string err;
         bool ok = stageEditSetAutostart(data, on, &err);
         notifyWebStateNow(data);
@@ -233,6 +238,7 @@ bool webHandleCommand(AppData* data, const char* json) {
         if (!jsonFindInt(json, "slot", &slot)) return false;
         if (slot < 1 || slot > RallyState::MAX_MEMORY_SLOTS) return false;
         if (data->state->memory_slots[slot - 1].empty()) return false;
+        if (stageChangeLocked(*data->state)) { notifyWebStateNow(data); return false; }   // as the box: not mid-stage
         recallMemorySlot(data, slot);
         return true;
     }
@@ -244,6 +250,7 @@ bool webHandleCommand(AppData* data, const char* json) {
         setReverse(data, on);
         return true;
     }
+    if (strcmp(type, "freeze_toggle") == 0) { toggleHomeFreeze(data); return true; }
     if (strcmp(type, "abort_stage") == 0) {
         // The phone asks the crew first; the box only acts if a stage can end.
         if (!stageAbortable(*data->state)) return false;
