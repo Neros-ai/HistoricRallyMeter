@@ -21,6 +21,10 @@ int stageEditSlot(AppData* d) {
     return pick;
 }
 
+bool stageEditLocked(const RallyState& st) { return stageLive(st); }
+
+#define STAGE_EDIT_GUARD(d, ret) if (stageEditLocked(*(d)->state)) return ret
+
 static RallyState::MemorySlot& slotOf(AppData* d) {
     return d->state->memory_slots[stageEditSlot(d) - 1];
 }
@@ -40,6 +44,7 @@ void stageEditCommit(AppData* d) {
 }
 
 void stageEditSelect(AppData* d, int slot_1) {
+    STAGE_EDIT_GUARD(d, );
     if (slot_1 < 1 || slot_1 > RallyState::MAX_MEMORY_SLOTS) return;
     RallyState& s = *d->state;
     s.last_memory_slot = slot_1;
@@ -53,7 +58,12 @@ void stageEditSelect(AppData* d, int slot_1) {
 }
 
 int stageEditAddDistances(AppData* d, const std::string& text, std::string* rest) {
+    STAGE_EDIT_GUARD(d, 0);
     RallyState::MemorySlot& slot = slotOf(d);
+    // An empty table has no frame to keep (rows deleted one by one can leave
+    // it at their old end): distances are measured from 0 again. The stage's
+    // start time and distance at start are separate and stay.
+    if (d->state->segments.empty()) slot.first_from_m = 0.0;
     double end = slot.first_from_m;
     for (const Segment& sg : d->state->segments) end += sg.distance_m;
     DistanceParse pr = parseStageDistances(text, end);
@@ -66,33 +76,39 @@ int stageEditAddDistances(AppData* d, const std::string& text, std::string* rest
 }
 
 void stageEditSetSpeed(AppData* d, size_t row, double kph) {
+    STAGE_EDIT_GUARD(d, );
     if (kph < 0.0) return;
     setRowSpeed(d->state->segments, row, kph);
     stageEditCommit(d);
 }
 
 void stageEditSetChange(AppData* d, size_t row, bool chg) {
+    STAGE_EDIT_GUARD(d, );
     setRowChange(d->state->segments, row, chg);
     stageEditCommit(d);
 }
 
 void stageEditSetAuto(AppData* d, size_t row, bool on) {
+    STAGE_EDIT_GUARD(d, );
     setRowAuto(d->state->segments, row, on);
     stageEditCommit(d);
 }
 
 bool stageEditSetRowTo(AppData* d, size_t row, double new_to_m) {
+    STAGE_EDIT_GUARD(d, false);
     if (!setRowTo(d->state->segments, slotOf(d).first_from_m, row, new_to_m)) return false;
     stageEditCommit(d);
     return true;
 }
 
 void stageEditDeleteRow(AppData* d, size_t row) {
+    STAGE_EDIT_GUARD(d, );
     deleteRow(d->state->segments, slotOf(d).first_from_m, row);
     stageEditCommit(d);
 }
 
 void stageEditSetFirst(AppData* d, long number, double from_m) {
+    STAGE_EDIT_GUARD(d, );
     RallyState::MemorySlot& slot = slotOf(d);
     if (number >= 0) slot.first_number = number;
     if (from_m >= 0.0) slot.first_from_m = from_m;
@@ -100,6 +116,7 @@ void stageEditSetFirst(AppData* d, long number, double from_m) {
 }
 
 void stageEditSetStart(AppData* d, long time_s, long distance_m) {
+    STAGE_EDIT_GUARD(d, );
     RallyState::MemorySlot& slot = slotOf(d);
     slot.start_time_s = time_s < 0 ? -1 : time_s;
     if (distance_m >= 0) slot.start_distance_m = distance_m;
@@ -107,12 +124,14 @@ void stageEditSetStart(AppData* d, long time_s, long distance_m) {
 }
 
 void stageEditClearStage(AppData* d) {
+    STAGE_EDIT_GUARD(d, );
     slotOf(d).clear();
     d->state->segments.clear();
     stageEditCommit(d);
 }
 
 void stageEditClearAll(AppData* d) {
+    STAGE_EDIT_GUARD(d, );
     for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) d->state->memory_slots[i].clear();
     d->state->segments.clear();
     d->state->last_memory_slot = 1;

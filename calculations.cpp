@@ -538,9 +538,17 @@ std::string segmentRowHeading(double current_speed, bool has_current_segment) {
 
 std::string formatOffsetSeconds(long offset_ms) {
     long tenths = (offset_ms >= 0) ? (offset_ms + 50) / 100 : -((-offset_ms + 50) / 100);
-    char buf[24];
-    snprintf(buf, sizeof(buf), "%c%ld.%ld", tenths < 0 ? '-' : '+',
-             std::labs(tenths) / 10, std::labs(tenths) % 10);
+    const long total_s = std::labs(tenths) / 10, t = std::labs(tenths) % 10;
+    char buf[40];
+    const char sign = tenths < 0 ? '-' : '+';
+    // As the clocks above it: seconds alone under a minute, then m:ss, then h:mm:ss.
+    if (total_s < 60)
+        snprintf(buf, sizeof(buf), "%c%ld.%ld", sign, total_s, t);
+    else if (total_s < 3600)
+        snprintf(buf, sizeof(buf), "%c%ld:%02ld.%ld", sign, total_s / 60, total_s % 60, t);
+    else
+        snprintf(buf, sizeof(buf), "%c%ld:%02ld:%02ld.%ld", sign, total_s / 3600,
+                 (total_s / 60) % 60, total_s % 60, t);
     return buf;
 }
 
@@ -1041,6 +1049,12 @@ TotalResetCase classifyTotalReset(const RallyState& state) {
 
 bool stageAbortable(const RallyState& state) {
     return state.auto_start_rally_time_s != 0 || state.segment_current_number >= 0;
+}
+
+bool stageLive(const RallyState& state) {
+    const bool running = !state.stage_complete && state.segment_current_number >= 0;
+    const bool counting_down = state.auto_start_rally_time_s != 0 && state.auto_start_early_departure;
+    return running || counting_down;
 }
 
 void rebaseTotalDistance(RallyState& state, uint64_t c1, uint64_t c2) {

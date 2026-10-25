@@ -12,6 +12,10 @@
 #include <string>
 #include "rally_types.h"
 
+// True while a stage is live (see stageLive): no stage may be edited or loaded then. Every setter below
+// does nothing while this holds; the Segments page and the phone say so.
+bool stageEditLocked(const RallyState& state);
+
 // The memory being edited (1-5): the one on show, creating a home for a stage
 // loaded from an older config in the first empty slot.
 int stageEditSlot(AppData* data);

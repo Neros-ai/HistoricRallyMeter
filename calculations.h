@@ -60,7 +60,8 @@ std::string formatTimeTenths(int64_t time_ms);
 
 // The rally clock's offset from the computer clock for Date/Time: seconds with
 // one decimal and an explicit sign, "+2.3" / "-0.4" / "+0.0". Rounds to the
-// nearest tenth.
+// nearest tenth. From a minute up it reads as the clocks do: "-11:49.2", then
+// "+1:02:03.4" from an hour.
 std::string formatOffsetSeconds(long offset_ms);
 
 // One press of the rally-clock trim. Returns the new rally/system offset
@@ -251,6 +252,11 @@ TotalResetCase classifyTotalReset(const RallyState& state);
 // figure on the gauge until the crew change something), or any autostart
 // armed -- ABORT STAGE cancels those too, inside a stage or out of one.
 bool stageAbortable(const RallyState& state);
+
+// A stage is live: running (not yet complete, a segment current), or an early-departure start
+// counting down. Stages can be neither edited nor loaded then. Narrower than stageAbortable:
+// a stage driven out to its end, or a scheduled start still waiting, is not live.
+bool stageLive(const RallyState& state);
 
 // The halves a Total reset is built from, on the state alone so each case is
 // testable. `c1`/`c2` are the counters now, `now_ms` the rally time now.

@@ -42,6 +42,8 @@ struct HomeUi {
     GtkWidget* goArea = nullptr;          // the stage go / stage abort key's drawing
     bool goWasAbort = false;
     GtkWidget* flagArea = nullptr;        // the flag key's drawing, redrawn when the minute turns
+    GtkWidget* schedArea = nullptr;       // the scheduled-start key's drawing
+    std::string schedState;               // caption + armed mark last drawn
     guint whoopTimer = 0;
 };
 
@@ -50,6 +52,12 @@ GtkWidget* createHomeScreen(AppData* data);
 // Reverse on or off, from the box's key or the phone: the poller counts
 // backwards, the key lights and the whoop repeats while it is on.
 void setReverse(AppData* data, bool on);
+
+// True while a stage is live: no new stage can be loaded then.
+bool stageChangeLocked(const RallyState& st);
+
+// Freeze on or off, from the box's key or a phone; both follow the one state.
+void toggleHomeFreeze(AppData* data);
 
 // Refresh the drawn figures from the AppData readouts. Does nothing while
 // frozen. Call after the TwinMaster labels have been updated.
