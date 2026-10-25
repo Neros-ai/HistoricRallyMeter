@@ -7,9 +7,9 @@
 
 namespace {
 
-// Content 774 + gap 12 + key column 200 + keypad 240 = 1226 of 1268; the other
-// 42 px sit between the keys and the keypad (calibration.html).
-constexpr int CONTENT_W = 774, KEYS_W = 200, ROW_H = 56, ROW_GAP = 8;
+// Content 774 + gap 12 + key column 240 + keypad 240 = 1266 of 1268 (the key column
+// took the 40 px that used to sit between the keys and the keypad).
+constexpr int CONTENT_W = 774, KEYS_W = 240, ROW_H = 56, ROW_GAP = 8;
 constexpr int LABEL_W = 380, VALUE_W = 170;
 
 void addClass(GtkWidget* w, const char* c) { gtk_style_context_add_class(gtk_widget_get_style_context(w), c); }
@@ -46,7 +46,7 @@ GtkWidget* key(const char* label, int w, int h, GCallback cb, AppData* d, bool t
     GtkWidget* b = gtk_button_new_with_label(label);
     gtk_widget_set_size_request(b, w, h);
     addClass(b, "dist-heading");
-    addClass(b, tiny ? "key-tiny" : "key-small");
+    addClass(b, tiny ? "key-18" : "key-small");
     gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(b))), GTK_JUSTIFY_CENTER);
     g_signal_connect(b, "clicked", cb, d);
     return b;
@@ -101,7 +101,6 @@ GtkWidget* createCalibrationScreen(AppData* d) {
     d->propRpmLabel = GTK_LABEL(text(r5, "---", 110, true));
     gtk_label_set_use_markup(d->propRpmLabel, TRUE);
     d->propRpmShown = "---";
-    text(r5, "rpm");
 
     // instructions, small
     GtkWidget* ins = gtk_label_new(
@@ -119,12 +118,12 @@ GtkWidget* createCalibrationScreen(AppData* d) {
     gtk_box_pack_start(GTK_BOX(keys), key("zero counters", KEYS_W, ROW_H, G_CALLBACK(on_calibration_start), d), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(keys), key("save\ncalibration", KEYS_W, ROW_H, G_CALLBACK(on_save_calibration), d), FALSE, FALSE, 0);
     GtkWidget* pair = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    d->sensor1Btn = key("using\nsensor 1", 95, ROW_H, G_CALLBACK(on_set_sensor_1), d, true);
-    d->sensorBothBtn = key("select\nsensor 1&2", 95, ROW_H, G_CALLBACK(on_set_sensor_both), d, true);
+    d->sensor1Btn = key("sensor 1", (KEYS_W - 10) / 2, ROW_H, G_CALLBACK(on_set_sensor_1), d, true);
+    d->sensorBothBtn = key("sensor 1&2", (KEYS_W - 10) / 2, ROW_H, G_CALLBACK(on_set_sensor_both), d, true);
     gtk_box_pack_start(GTK_BOX(pair), d->sensor1Btn, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(pair), d->sensorBothBtn, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(keys), pair, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(keys), key("reset", KEYS_W, ROW_H, G_CALLBACK(on_reset_calibration_pulses), d), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(keys), key("save pulses", KEYS_W, ROW_H, G_CALLBACK(on_reset_calibration_pulses), d), FALSE, FALSE, 0);
     updateSensorModeLabel(d);
 
     // keypad far right, menu under it

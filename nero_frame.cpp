@@ -16,7 +16,7 @@ GtkWidget* createNeroKeypad(AppData* data) {
         const char* label = nero::KEYPAD_LABELS[i];
         GtkWidget* btn = gtk_button_new_with_label(label);
         gtk_widget_set_size_request(btn, nero::KEYPAD_KEY_W, nero::KEYPAD_KEY_H);
-        addClass(btn, "nav-button");
+        addClass(btn, "dist-heading");   // 28 px bold monospace, as the menu key (nav-button was 20 px)
         GCallback cb = G_CALLBACK(on_keypad_digit);
         if (nero::isBackspaceLabel(label))
             cb = G_CALLBACK(on_keypad_backspace);
@@ -31,7 +31,7 @@ GtkWidget* createNeroKeypad(AppData* data) {
 GtkWidget* createMenuKey(AppData* data) {
     GtkWidget* btn = gtk_button_new_with_label("menu");
     gtk_widget_set_size_request(btn, nero::MENU_KEY_W, nero::MENU_KEY_H);
-    addClass(btn, "nav-button");
+    addClass(btn, "dist-heading");   // 28 px bold, like total / trip (nav-button was 20 px)
     g_signal_connect(btn, "clicked", G_CALLBACK(on_show_menu), data);
     return btn;
 }

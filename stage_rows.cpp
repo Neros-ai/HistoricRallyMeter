@@ -126,6 +126,9 @@ void deleteRow(std::vector<Segment>& segs, double& first_from_m, size_t row) {
         segs[row - 1].distance_m += len;
     }
     segs.erase(segs.begin() + static_cast<long>(row));
+    // An empty stage has no distances to protect: back to 0, or deleting row by
+    // row would leave the frame at the old end and refuse every new distance.
+    if (segs.empty()) first_from_m = 0.0;
     if (!segs.empty()) segs[0].changesSpeed = true;
     carrySpeeds(segs);
 }
