@@ -3,6 +3,7 @@
 
 #include "test_framework.h"
 #include "../stage_rows.h"
+#include "../calculations.h"
 #include "../config_file.h"
 #include "../rally_state.h"
 #include <cmath>
@@ -175,6 +176,21 @@ public:
             bool ok = setRowTo(v, 0, 2, 3000);
             auto w = deriveWaypoints(v);
             return ok && w[2] == 3000 && w[1] == 1500;
+        });
+
+        suite->addTest("deleting every row puts the stage's start back to 0", []() {
+            auto v = sample();
+            double from = 0;
+            while (!v.empty()) deleteRow(v, from, 0);
+            std::vector<Segment> w;
+            appendStageDistances(w, from, {1250, 1500});
+            return from == 0.0 && w.size() == 2;
+        });
+
+        suite->addTest("offset reads as minutes and hours from 60 s up", []() {
+            return formatOffsetSeconds(2300) == "+2.3" && formatOffsetSeconds(-400) == "-0.4"
+                && formatOffsetSeconds(-709200) == "-11:49.2" && formatOffsetSeconds(60000) == "+1:00.0"
+                && formatOffsetSeconds(3723400) == "+1:02:03.4";
         });
 
         return suite;
