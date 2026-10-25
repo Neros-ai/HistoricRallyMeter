@@ -65,7 +65,7 @@
     L.fscale = Math.min(1.0, L.radius / REF_RADIUS);
     // Nero2.0 sizes (the box's driver display, RB-DRV-12)
     L.valSize = 50 * L.fscale;      // ahead/behind digits
-    L.curTopSize = 62 * L.fscale;
+    L.curTopSize = 60;   // fixed, not scaled with the dial
     L.legendDrop = 20 * L.fscale;
     L.labelSize = Math.max(12, 16 * L.fscale);
     L.rowGap = 48 * L.fscale;
@@ -74,6 +74,7 @@
     L.bandOuterX = L.centerX + (L.radius + 6.0);
     L.bandTargetX = L.centerX - (L.radius + 6.0);
     L.bandTopY = L.centerY - (L.radius + 6.0);
+    L.speedBase = L.bandTopY - 14;   // the two speeds' baseline: clear above the arc, not against it
     L.boxHeight = 64.0 * L.fscale;
     L.boxY = L.centerY - 8 * L.fscale;
     const lineGap = L.rowGap + 10 * L.fscale;
@@ -121,11 +122,17 @@
     };
   }
 
+  // Room under the +0.0 box for the stage number (the layout already leaves a gap under that
+  // box), and a little space above the dial so it sits clear of the rally clock.
+  const STAGE_STRIP = 30;
+  const TOP_PAD = 34;
+  const DIAL_DROP = 48;   // room for the large speeds between the clock and the dial
+
   DriverGauge.prototype.resize = function () {
     const parent = this.canvas.parentElement;
     const cssW = Math.max(280, parent.clientWidth || window.innerWidth);
     // Dial only — Total/Trip sit in the HTML footer below, so leave them room.
-    const cssH = Math.max(280, Math.min(window.innerHeight * 0.55, cssW * 0.85));
+    const cssH = Math.max(280, Math.min(window.innerHeight * 0.48, cssW * 0.78)) + STAGE_STRIP + TOP_PAD + DIAL_DROP;
     const dpr = window.devicePixelRatio || 1;
     this.canvas.style.width = cssW + 'px';
     this.canvas.style.height = cssH + 'px';
@@ -154,7 +161,7 @@
     this.zoneShown = gaugeZoneHysteretic(seconds, this.zoneShown);
     const zone = this.zoneShown;
     const arc = gaugeArcColor(zone);
-    const L = computeCompactGaugeLayout(width, height);
+    const L = computeCompactGaugeLayout(width, height - STAGE_STRIP);   // bottom-anchored: the pad above is free space
     const centerX = L.centerX;
     const centerY = L.centerY;
     const radius = L.radius;
@@ -269,27 +276,36 @@
     ctx.font = 'bold ' + L.curTopSize + 'px sans-serif';
     ctx.textBaseline = 'alphabetic';
 
-    ctx.fillStyle = '#7ec8e3';
+    ctx.fillStyle = '#fff';
     ctx.textAlign = 'right';
-    ctx.fillText(cur, L.bandOuterX, L.bandTopY + L.curTopSize * 0.8);
+    ctx.fillText(cur, L.bandOuterX, L.speedBase);
     ctx.font = L.labelSize + 'px sans-serif';
-    ctx.fillText(msg.units === 'mph' ? 'Mph' : 'Kph', L.bandOuterX, L.bandTopY + L.curTopSize * 0.8 + L.labelSize + 4 + L.legendDrop);
+    ctx.fillText(msg.units === 'mph' ? 'Mph' : 'Kph', L.bandOuterX, L.speedBase + L.labelSize + 4 + L.legendDrop * 0.2);
 
     ctx.fillStyle = '#FFDD00';
     ctx.textAlign = 'left';
     ctx.font = 'bold ' + L.curTopSize + 'px sans-serif';
-    ctx.fillText(tgt, L.bandTargetX, L.bandTopY + L.curTopSize * 0.8);
+    ctx.fillText(tgt, L.bandTargetX, L.speedBase);
     ctx.font = L.labelSize + 'px sans-serif';
-    ctx.fillText('Target', L.bandTargetX, L.bandTopY + L.curTopSize * 0.8 + L.labelSize + 4 + L.legendDrop);
+    ctx.fillText('Target', L.bandTargetX, L.speedBase + L.labelSize + 4 + L.legendDrop * 0.2);
+
+    // The stage number, centred just below the ahead/behind box.
+    const stageNo = Number(msg.stage_no) || 0;
+    ctx.fillStyle = '#FFDD00';   // the Target colour, as on the box
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    const stageSize = 46.5 * L.fscale;
+    ctx.font = 'bold ' + stageSize + 'px sans-serif';
+    ctx.fillText('Stage ' + (stageNo >= 1 ? stageNo : '-'), centerX, L.footBaseline + 2 + stageSize * 0.8);
 
     // Total / Trip live in the HTML footer under the canvas (RB-WEB-11).
 
-    // Rally clock top-right (driver overlay) — larger for glanceability.
+    // Rally clock top-centre (driver overlay) — larger for glanceability.
     ctx.fillStyle = '#fff';
     ctx.font = 'bold ' + Math.max(26, 34 * fscale) + 'px monospace';
-    ctx.textAlign = 'right';
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText(msg.rally_clock || '--:--:--', width - 8, 6);
+    ctx.fillText(msg.rally_clock || '--:--:--', width / 2, 6);
   };
 
   global.RallyDriverGauge = DriverGauge;

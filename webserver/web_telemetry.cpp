@@ -213,6 +213,7 @@ std::string buildStateJson(AppData* data) {
        << "\"segment_current_number\":" << data->state->segment_current_number << ","
        // True when Reset Total would be asked about on the box, so the phone
        // asks the same question instead of a plain "Reset total?".
+       << "\"frozen\":" << (data->homeFrozen ? "true" : "false") << ","
        << "\"total_reset_asks\":"
        << (classifyTotalReset(*data->state) == TotalResetCase::StageRunning ? "true" : "false")
        << ","
@@ -241,7 +242,13 @@ std::string buildStateJson(AppData* data) {
                      (slot.start_time_s / 60) % 60, slot.start_time_s % 60);
             ss << b;
         }
-        ss << "\",\"autostart_on\":" << (data->state->auto_start_rally_time_s != 0 ? "true" : "false")
+        // As the box's stage-go key: abort only for a live stage, not a scheduled start still waiting.
+        const RallyState& rs = *data->state;
+        const bool sched_pending = rs.auto_start_rally_time_s != 0 && !rs.auto_start_early_departure &&
+                                   rs.segment_current_number < 0;
+        ss << "\",\"autostart_on\":" << (rs.auto_start_rally_time_s != 0 ? "true" : "false")
+           << ",\"stage_locked\":" << (stageLive(rs) ? "true" : "false")
+           << ",\"stage_abortable\":" << (stageAbortable(rs) && !sched_pending ? "true" : "false")
            << ",\"rows\":[";
         for (size_t i = 0; i < rows.size(); i++) {
             const StageRow& r = rows[i];
