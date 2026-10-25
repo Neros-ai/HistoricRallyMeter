@@ -14,6 +14,7 @@ namespace {
 // Rows and keys sized so each column fits the 388 px panel with the abort-stage
 // row added: heading 26 + 6 rows x 38 + Wi-Fi 80 + 7 gaps x 5 = 369 on the right.
 constexpr int COL_W = 423, ROW_H = 38, HEAD_H = 26, KEY_H = 34, GAP = 5;
+constexpr int QR_SIZE = 3 * ROW_H + 2 * GAP;   // 124: the QR code spans three rows, beside the Wi-Fi link and address
 
 enum Setting {
     BEEP_NAV, BEEP_TIMING, TONE_ON, TONE_BEHIND, TONE_AHEAD,
@@ -196,21 +197,39 @@ GtkWidget* createSettingsScreen(AppData* d) {
     addClass(GTK_WIDGET(d->settingsInfoLabel), "set-name");
     gtk_label_set_xalign(d->settingsInfoLabel, 0.0f);
     gtk_widget_set_size_request(GTK_WIDGET(d->settingsInfoLabel), COL_W, ROW_H);
-    gtk_box_pack_start(GTK_BOX(right), GTK_WIDGET(d->settingsInfoLabel), FALSE, FALSE, 0);
+    // Not a setting: it sits at the foot of the column, below the Wi-Fi link.
+    gtk_box_pack_end(GTK_BOX(right), GTK_WIDGET(d->settingsInfoLabel), FALSE, FALSE, 0);
 
     // Wi-Fi link: just the address and its QR code (no hotspot switch).
     GtkWidget* wifi = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_widget_set_size_request(wifi, COL_W, 52);   // text only: the QR code moved
-    GtkWidget* wtext = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_size_request(wifi, COL_W, QR_SIZE);
+    // The name and the address each take a row of their own, level with the rows of the
+    // left column (Ahead/Behind Tone, Tone when behind).
+    GtkWidget* wtext = gtk_box_new(GTK_ORIENTATION_VERTICAL, GAP);
     GtkWidget* wname = gtk_label_new("Wi-Fi phone link");
     addClass(wname, "set-name");
     gtk_label_set_xalign(GTK_LABEL(wname), 0.0f);
     d->webUrlLabel = GTK_LABEL(gtk_label_new(""));
-    addClass(GTK_WIDGET(d->webUrlLabel), "seg-head");
+    addClass(GTK_WIDGET(d->webUrlLabel), "set-url");   // same size as the names, still cyan
     gtk_label_set_xalign(d->webUrlLabel, 0.0f);
+    gtk_widget_set_size_request(wname, -1, ROW_H);
+    gtk_widget_set_size_request(GTK_WIDGET(d->webUrlLabel), -1, ROW_H);
     gtk_box_pack_start(GTK_BOX(wtext), wname, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(wtext), GTK_WIDGET(d->webUrlLabel), FALSE, FALSE, 0);
+    // Third row, beside the QR code: how to get the phone page without the browser's bars.
+    GtkWidget* wnote = gtk_label_new("load from home screen to avoid landscape tabs");
+    addClass(wnote, "set-note");
+    gtk_label_set_xalign(GTK_LABEL(wnote), 0.0f);
+    gtk_label_set_line_wrap(GTK_LABEL(wnote), TRUE);
+    gtk_widget_set_size_request(wnote, -1, ROW_H);
+    gtk_box_pack_start(GTK_BOX(wtext), wnote, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(wifi), wtext, TRUE, TRUE, 0);
+    // The QR code under the off/on keys, right-aligned with them.
+    d->webQrArea = gtk_drawing_area_new();
+    gtk_widget_set_size_request(d->webQrArea, QR_SIZE, QR_SIZE);
+    gtk_widget_set_valign(d->webQrArea, GTK_ALIGN_START);
+    g_signal_connect(d->webQrArea, "draw", G_CALLBACK(on_qr_draw), d);
+    gtk_box_pack_end(GTK_BOX(wifi), d->webQrArea, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(right), wifi, FALSE, FALSE, 0);
 
     // ── keypad and menu key, far right ──
@@ -219,16 +238,9 @@ GtkWidget* createSettingsScreen(AppData* d) {
     gtk_box_pack_end(GTK_BOX(screen), kp, FALSE, FALSE, 0);
     d->numericKeypad = createNeroKeypad(d);
     gtk_box_pack_start(GTK_BOX(kp), d->numericKeypad, FALSE, FALSE, 0);
-    // The Wi-Fi QR code sits left of the menu key, in the keypad's column: 80 px
-    // square plus the 130 px key fits the 240 px column, and 80 fits the 104 px
-    // under the keypad.
+    // Menu key at the foot of the keypad column (the Wi-Fi QR code is in the SYSTEM column).
     GtkWidget* base = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_widget_set_valign(base, GTK_ALIGN_END);
-    d->webQrArea = gtk_drawing_area_new();
-    gtk_widget_set_size_request(d->webQrArea, 80, 80);
-    gtk_widget_set_valign(d->webQrArea, GTK_ALIGN_END);
-    g_signal_connect(d->webQrArea, "draw", G_CALLBACK(on_qr_draw), d);
-    gtk_box_pack_start(GTK_BOX(base), d->webQrArea, FALSE, FALSE, 0);
     GtkWidget* menu = createMenuKey(d);
     gtk_widget_set_valign(menu, GTK_ALIGN_END);
     gtk_box_pack_end(GTK_BOX(base), menu, FALSE, FALSE, 0);

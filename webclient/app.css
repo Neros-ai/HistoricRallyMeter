@@ -123,7 +123,7 @@ header { justify-content: flex-end; }
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  border: 2px solid #666;
+  border: none;   /* no box round Total / Trip, as the box's driver display */
   padding: 0.75rem;
 }
 /* Press Total/Trip to reset — same on Live and Driver. */
@@ -379,8 +379,8 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 
 /* ---- Navi, in the mockup's order ---- */
 .navi { padding: 0.5rem 0.5rem 1rem; }
-.nclk { text-align: center; font-size: 1.9rem; font-family: monospace; margin: 0.2rem 0 0.5rem; }
-.nr { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.5rem; }
+.nclk { font-weight: bold; text-align: center; font-size: 1.9rem; font-family: monospace; margin: 0.2rem 0 0.5rem; }
+.nr { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.6rem; }
 .nr .key { flex: 1 1 0; min-width: 0; height: 3rem; min-height: 0; padding: 0 0.3rem; font-size: 1.05rem; }
 .nr .key.k { flex: 0 0 4.5rem; }
 .nr .key.sq { flex: 0 0 3rem; font-size: 1.6rem; }
@@ -416,3 +416,94 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .add-row .key { width: 100%; }
 
 #seg-table input.to { width: 4.2rem; background: #111; color: #fff; border: 1px solid #666; text-align: right; }
+
+/* Seg table: one row height and the large KPH figure size throughout; the
+   stage picker is an oblong, not an oval. */
+#seg-table td { font-size: 1.4rem; height: 3.4rem; font-variant-numeric: tabular-nums; }
+#seg-table input.to, #seg-table input.spd, #seg-table input.first, #seg-table input.first-from {
+  height: 3.4rem; font-size: 1.4rem; padding: 0.2rem 0.3rem; box-sizing: border-box;
+}
+#seg-table input.to { width: 5.2rem; }
+#seg-table input.first { width: 3.2rem; background: #111; color: #fff; border: 1px solid #666; text-align: right; }
+#seg-table input[type=checkbox] { width: 1.6rem; height: 1.6rem; }
+#seg-table button.del { font-size: 1.4rem; }
+.stage-sel select, #seg-pick { -webkit-appearance: none; appearance: none; border-radius: 4px; min-width: 4rem; text-align: center; text-align-last: center; }
+.stage-sel .key { border-radius: 4px; }
+#seg-table th { font-size: 1.4rem; }
+/* Seg: the stage start block, add distance and clear stage match the table's figure size. */
+#view-seg .start-block, #view-seg .start-block label, #view-seg .cyan { font-size: 1.4rem; }
+#view-seg .start-block input[type=text], #view-seg .start-block input[type=number],
+#view-seg .add-row input, #view-seg .add-row .key, #view-seg .actions .key { font-size: 1.4rem; }
+#view-seg .start-block input[type=text], #view-seg .start-block input[type=number] { width: 7.5rem; }
+#view-seg .start-block label { white-space: nowrap; }
+#view-seg .start-block input[type=checkbox] { width: 1.6rem; height: 1.6rem; }
+#seg-table input.first-from { width: 5.2rem; background: #111; color: #fff; border: 1px solid #666; text-align: right; }
+#view-seg .start-block label { color: #0ff; }
+/* Navi: every row is one key tall with the same gap below it, so the spacing is even
+   top to bottom (the big figures no longer make their rows taller than the keys). */
+.navi .nr { height: 3rem; margin-bottom: 0.6rem; }
+.navi .nr.cards { height: auto; }
+.fig-row { margin-bottom: 0.6rem; }
+.fig-row .big { line-height: 1; }
+.flags .key { height: 3rem; }
+/* Cal: larger writing throughout, the distance figures largest. */
+#view-cal .crow { font-size: 1.4rem; margin: 1rem 0; }
+#view-cal .crow input { font-size: 1.4rem; padding: 0.4rem; width: 8.5rem; }
+#view-cal .crow input.short { width: 6.5rem; }
+#view-cal .crow input.tiny { width: 4.2rem; }
+#view-cal .crow .key { font-size: 1.3rem; min-height: 3.2rem; }
+#view-cal #cal-dist, #view-cal #cal-actual { font-size: 2.2rem; }
+#view-cal #cal-actual { width: 10rem; }
+#view-cal .ins { font-size: 1.1rem; line-height: 1.4; }
+.crow .brk { flex-basis: 100%; height: 0; }
+.tl .w, .trow .tl .w { color: #fff; } .beep-row .unit { display: flex; align-items: center; gap: 0.3rem; margin-left: auto; }
+/* Navi: the elapsed times sit under their keys, as on the box, which leaves the
+   total / trip / next figures the full width to be large. */
+.navi .fig-row { height: 4.7rem; }
+.kcol { flex: 0 0 4.5rem; display: flex; flex-direction: column; align-items: center; gap: 0.15rem; }
+.kcol .key.k { flex: none; width: 100%; }
+.kcol .el { flex: none; font-size: 0.85rem; justify-content: center; min-height: 1.1rem; }
+.fig-row .big { font-size: 4.4rem; }
+.fig-row .big.sm { font-size: 3.6rem; }
+/* Time page: the title (over two lines) at the left of its row, the time right-justified;
+   keys and the date go on a line of their own beneath. */
+.trow { grid-template-columns: 6.5rem 1fr; align-items: center; }
+.trow > .tl { grid-column: 1; grid-row: 1; font-size: 1.2rem; line-height: 1.2; }
+.trow > :nth-child(2) { grid-column: 2; grid-row: 1; justify-self: end; text-align: right; }
+.trow > :nth-child(n+3) { grid-column: 1 / -1; }
+.trow > input.big-input { width: 11rem; text-align: right; }
+#view-cal #cal-zero, #view-cal #cal-save { margin-left: auto; }
+#view-cal #cal-actual { width: 8rem; }
+.beep-note { color: #aaa; font-size: 0.95rem; margin: -0.2rem 0 0.6rem; }
+/* Drv: Total / Trip above their figure, so the figures can be larger. */
+.driver-footer .dist-box { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "dl rt" "num rt"; align-items: start; gap: 0 0.75rem; padding: 0.4rem 0.75rem; }
+.driver-footer .dist-box .dl { grid-area: dl; flex: none; font-size: 1.2rem; }
+.driver-footer .dist-box > strong { grid-area: num; font-size: 3.4rem; line-height: 1.05; }
+.driver-footer .dist-box .rt { grid-area: rt; align-self: end; }
+@media (max-width: 380px) { .driver-footer .dist-box > strong { font-size: 2.9rem; } }
+.driver-footer .dist-box > strong { justify-self: end; text-align: right; }
+.driver-footer .dist-box > strong { font-family: monospace; font-weight: bold; }
+/* Drv: the averages at the far left, Total / Trip and their figures at the far right. */
+.driver-footer .dist-box { grid-template-columns: auto 1fr; grid-template-areas: "rt dl" "rt num"; }
+.driver-footer .dist-box .dl { justify-self: end; text-align: right; }
+.driver-footer .rt { margin-left: 0; align-items: flex-start; }
+.driver-footer .avg { align-items: flex-start; }
+/* Drv: Total / Trip words at the left, their figures at the right and larger; each average
+   level with the baseline of its figure. */
+.driver-footer .dist-box { grid-template-areas: "dl dl" "rt num"; align-items: end; }
+.driver-footer .dist-box .dl { justify-self: start; text-align: left; }
+.driver-footer .dist-box > strong { font-size: 4.2rem; line-height: 1; align-self: end; align-self: last baseline; }
+.driver-footer .dist-box .rt { align-self: end; align-self: last baseline; }
+@media (max-width: 380px) { .driver-footer .dist-box > strong { font-size: 3.5rem; } }
+/* Drv: the Total / Trip word sits just above its average (column 1), the figure beside both;
+   the footer is packed up so it stays on the page. */
+.driver-footer { gap: 0.3rem; }
+.driver-footer .dist-box { grid-template-areas: "dl num" "rt num"; grid-template-rows: auto auto; align-content: end; padding: 0.2rem 0.75rem; }
+.driver-footer .dist-box .dl { align-self: end; justify-self: start; }
+.driver-footer .dist-box .rt { align-self: start; }
+.driver-footer .dist-box > strong { align-self: end; }
+/* The big figures use the proportional bold face of the box's driver display (not monospace);
+   tabular digits keep them from shifting as they change. */
+.fig-row .big, .driver-footer .dist-box > strong { font-family: sans-serif; font-weight: bold; font-variant-numeric: tabular-nums; }
+/* Drv: the Trip block in cyan, as on the box. */
+#drv-box-trip .dl, #drv-box-trip > strong, .driver-footer #drv-box-trip .avg b { color: #0ff; }

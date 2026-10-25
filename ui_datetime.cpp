@@ -61,10 +61,10 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer p) {
     std::string hms, tenth;
     if (kind == RALLY) {
         splitTime(getRallyTime_ms(*d->state), hms, tenth);
-        big(hms, tenth, true);
+        big(hms, tenth, false);
     } else if (kind == COMPUTER) {
         splitTime(systemNowMs(), hms, tenth);
-        big(hms, tenth, false);
+        big(hms, tenth, true);
     } else if (kind == PHONE) {
         if (phoneKnown(d)) {
             splitTime(d->phoneClockMs + (systemNowMs() - d->phoneClockSeenMs), hms, tenth);
@@ -75,25 +75,30 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer p) {
             cairo_move_to(cr, 0, 48);
             cairo_show_text(cr, "no phone");
         }
-    } else {  // OFFSET: "Computer" at the left, the signed offset right-aligned over the tenths
+    } else {  // OFFSET: the signed offset ending over the tenths column, then the date
+        // The same two sizes as the clocks above: whole seconds at 56 px ending where
+        // their hh:mm:ss ends, the tenth at 42 px starting exactly under their tenths.
+        const std::string off = formatOffsetSeconds(d->state->rallyTimeOffset_ms);
+        const size_t dot = off.find('.');
+        const std::string whole = off.substr(0, dot), tenth = off.substr(dot);
         cairo_set_source_rgb(cr, 1, 1, 1);
-        cairo_set_font_size(cr, 26);
-        cairo_move_to(cr, 0, 46);
-        cairo_show_text(cr, "Computer");
-        std::string off = formatOffsetSeconds(d->state->rallyTimeOffset_ms);
-        cairo_set_source_rgb(cr, 0, 1, 1);
         cairo_set_font_size(cr, 56);
-        cairo_text_extents_t e;
-        cairo_text_extents(cr, off.c_str(), &e);
-        cairo_move_to(cr, VALUE_W - e.x_advance, 52);
-        cairo_show_text(cr, off.c_str());
-        // date, right of the offset
+        cairo_text_extents_t e, ref;
+        cairo_text_extents(cr, "00:00:00", &ref);   // where the clocks' tenths begin
+        cairo_text_extents(cr, whole.c_str(), &e);
+        cairo_move_to(cr, ref.x_advance - e.x_advance, 52);
+        cairo_show_text(cr, whole.c_str());
+        cairo_set_font_size(cr, 42);
+        cairo_move_to(cr, ref.x_advance, 52);
+        cairo_show_text(cr, tenth.c_str());
+        // The date, right of the offset (which can run to h:mm:ss).
+        const double date_x = VALUE_W + 9;   // under the left edge of the "set rally to entered time" key above
+        cairo_set_font_size(cr, 24);
         time_t s = getRallyTime_ms(*d->state) / 1000;
         char b[40] = "";
         if (struct tm* t = localtime(&s)) strftime(b, sizeof(b), "%a %d %b %Y", t);
         cairo_set_source_rgb(cr, 0.67, 0.67, 0.67);
-        cairo_set_font_size(cr, 26);
-        cairo_move_to(cr, VALUE_W + 24, 46);
+        cairo_move_to(cr, date_x, 46);
         cairo_show_text(cr, b);
     }
     (void)width;
@@ -217,14 +222,19 @@ GtkWidget* createDateTimeScreen(AppData* d) {
     GtkWidget* r1 = row();
     gtk_box_pack_start(GTK_BOX(r1), labelCell("Rally time"), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(r1), makeArea(d, RALLY, VALUE_W, ROW_H), FALSE, FALSE, 0);
+    // -0.1 at the left of the key column, +0.1 at its right edge.
+    GtkWidget* trimBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_size_request(trimBox, KEY_W, -1);
     for (int steps : {-1, 1}) {
         GtkWidget* b = makeKey(steps < 0 ? "-0.1" : "+0.1", 100, 60, nullptr, d);
         g_object_set_data(G_OBJECT(b), "trim-steps", GINT_TO_POINTER(steps));
         // "pressed"/"released" so holding the key repeats.
         g_signal_connect(b, "pressed", G_CALLBACK(on_trim_rally_pressed), d);
         g_signal_connect(b, "released", G_CALLBACK(on_trim_rally_released), d);
-        gtk_box_pack_start(GTK_BOX(r1), b, FALSE, FALSE, 0);
+        if (steps < 0) gtk_box_pack_start(GTK_BOX(trimBox), b, FALSE, FALSE, 0);
+        else gtk_box_pack_end(GTK_BOX(trimBox), b, FALSE, FALSE, 0);
     }
+    gtk_box_pack_start(GTK_BOX(r1), trimBox, FALSE, FALSE, 0);
 
     GtkWidget* r2 = row();
     gtk_box_pack_start(GTK_BOX(r2), labelCell("Computer time"), FALSE, FALSE, 0);
@@ -249,7 +259,10 @@ GtkWidget* createDateTimeScreen(AppData* d) {
     gtk_box_pack_start(GTK_BOX(r4), makeKey("set rally to\nentered time", KEY_W, 60, G_CALLBACK(onRallyToEntered), d), FALSE, FALSE, 0);
 
     GtkWidget* r5 = row();
-    gtk_box_pack_start(GTK_BOX(r5), labelCell("Offset"), FALSE, FALSE, 0);
+    // Two lines inside the row's own height: "Offset to" in the label colour, "computer" in white.
+    GtkWidget* offLabel = labelCell("Offset to");
+    gtk_label_set_markup(GTK_LABEL(offLabel), "Offset to\n<span foreground=\"#FFFFFF\">computer</span>");
+    gtk_box_pack_start(GTK_BOX(r5), offLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(r5), makeArea(d, OFFSET, 700, ROW_H), FALSE, FALSE, 0);
 
     // keypad column

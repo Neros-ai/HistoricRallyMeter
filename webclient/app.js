@@ -10,7 +10,7 @@
   let lastTelemetry = null;
   let activeTab = 'navi';
   let driverGauge = null;
-  let frozen = false;       // Navi freeze: this phone's figures hold (the box's driver display never does)
+  let frozen = false;       // Navi freeze: the box and every phone hold together (set from the state message)
   let tzMin = 0;            // the box's zone, so its clock reads the same here
 
   const $ = (id) => document.getElementById(id);
@@ -114,9 +114,15 @@
            Math.floor(d.getUTCMilliseconds() / 100);
   }
 
+  // As the box: seconds alone under a minute, then m:ss, then h:mm:ss, with tenths.
   function offsetText(ms) {
     const tenths = Math.round(Math.abs(ms) / 100);
-    return (ms < 0 ? '-' : '+') + Math.floor(tenths / 10) + '.' + (tenths % 10);
+    const total = Math.floor(tenths / 10), t = tenths % 10;
+    const p = (n) => String(n).padStart(2, '0');
+    const sign = ms < 0 ? '-' : '+';
+    if (total < 60) return sign + total + '.' + t;
+    if (total < 3600) return sign + Math.floor(total / 60) + ':' + p(total % 60) + '.' + t;
+    return sign + Math.floor(total / 3600) + ':' + p(Math.floor(total / 60) % 60) + ':' + p(total % 60) + '.' + t;
   }
 
   function applyTelemetry(msg) {
@@ -137,17 +143,19 @@
       $('speed-change').textContent = msg.speed_change || '';
     }
     // Driver tab footer (HTML under the gauge — keeps dial clear).
-    $('drv-trip-m').textContent = formatDist(msg.trip_m) + ' m';
-    $('drv-total-m').textContent = formatDist(msg.total_m) + ' m';
+    $('drv-trip-m').textContent = formatDist(msg.trip_m);
+    $('drv-total-m').textContent = formatDist(msg.total_m);
     $('drv-trip-avg').textContent = Number(msg.trip_avg_kph || 0).toFixed(1);
     $('drv-total-avg').textContent = Number(msg.total_avg_kph || 0).toFixed(1);
 
     $('btn-next').disabled = !msg.next_enabled;
     $('btn-prev').disabled = !msg.prev_enabled;
     $('btn-reverse').classList.toggle('lit', !!msg.reverse);
-    $('btn-flag-late').innerHTML = (lastState && (lastState.total_reset_asks || (lastState.autostart && lastState.autostart !== 'none')))
+    setWhoop(!!msg.reverse || frozen);
+    $('btn-flag-late').innerHTML = (lastState && (lastState.total_reset_asks || lastState.stage_abortable))
       ? 'stage<br>abort' : '<svg class="flag" viewBox="0 0 40 34"><use href="#flag"/></svg> now';
     $('btn-freeze').classList.toggle('lit', frozen);
+    setWhoop(!!(lastTelemetry && lastTelemetry.reverse) || frozen);
 
     // Stage arrival
     $('arr-kph').textContent = msg.arrival ? msg.arrival.kph : '--';
@@ -215,10 +223,13 @@
     $('cal-pulses').textContent = state.calibration_pulses;
     $('cal-s1').classList.toggle('lit', !state.sensors_both);
     $('cal-s12').classList.toggle('lit', !!state.sensors_both);
-    $('cal-s1').textContent = state.sensors_both ? 'select sensor 1' : 'using sensor 1';
-    $('cal-s12').textContent = state.sensors_both ? 'using sensor 1&2' : 'select sensor 1&2';
+    $('cal-s1').textContent = 'sensor 1';
+    $('cal-s12').textContent = 'sensor 1&2';
     setIf($('cal-prop-n'), (el) => { el.value = state.prop_pulses; });
     // Navi
+    frozen = !!state.frozen;
+    $('btn-freeze').classList.toggle('lit', frozen);
+    setWhoop(!!(lastTelemetry && lastTelemetry.reverse) || frozen);
     const hist = (state.trip_history || []);
     $('trip-history').textContent = hist.length ? hist.map((m) => Number(m).toLocaleString()).join(' \u00b7 ') : '-';
     const sa = state.autostart || 'none';
@@ -228,6 +239,7 @@
     $('auto-word').classList.toggle('cyan', armed);
     $('auto-time').textContent = armed ? sa : (state.start_time || '');
     $('flag-minute-time').textContent = nextMinuteText();
+    $('btn-flag-auto').classList.toggle('lit', !!state.autostart_on);
   }
 
   function nextMinuteText() {
@@ -261,29 +273,72 @@
   // ---- Seg tab ----
   function renderSegments(state) {
     const active = document.activeElement;
-    // Do not rebuild under a field being typed in.
-    if (active && active.closest && active.closest('#seg-table')) return;
     const tbody = $('seg-table').querySelector('tbody');
+    // A field is being typed in: do not rebuild under it, but bring every other figure up to
+    // date in place (a changed "to m" moves the next row's "from m", the distances and times).
+    if (active && active.closest && active.closest('#seg-table')) {
+      const rows = state.rows || [];
+      const trs = tbody.children;
+      if (trs.length !== rows.length) return;
+      const group = (v) => Number(v).toLocaleString();
+      const setText = (td, text) => { if (td && !td.querySelector('input') && td.textContent !== text) td.textContent = text; };
+      const setVal = (el, v) => { if (el && el !== active) el.value = v; };
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i], tds = trs[i].children;
+        if (!!trs[i].querySelector('.spd') !== !!r.chg) return;   // structure changed: wait for the field to be left
+        if (i === 0) setVal(trs[i].querySelector('.first'), r.n); else setText(tds[0], String(r.n));
+        if (i === 0) setVal(trs[i].querySelector('.first-from'), r.from); else setText(tds[1], group(r.from));
+        setVal(trs[i].querySelector('.to'), r.to);
+        setText(tds[3], group(r.dist));
+        setVal(trs[i].querySelector('.spd'), r.kph || '');
+        setText(tds[6], r.chg && r.kph > 0 ? String(Math.round(r.kph / 3.6)) : '');
+        setText(tds[8], mmss(r.time_s));
+        setText(tds[9], mmss(r.total_s));
+      }
+      return;
+    }
     tbody.innerHTML = '';
+    // A committed edit lets go of its field, so the next state redraws the table.
+    const done = (el) => { setTimeout(() => el.blur(), 0); };
     (state.rows || []).forEach((r, i) => {
       const tr = document.createElement('tr');
       tr.innerHTML =
-        '<td>' + r.n + '</td>' +
-        '<td><input type="number" step="1" class="to" value="' + r.to + '"></td>' +
-        '<td>' + Number(r.dist).toLocaleString() + '</td>' +
+        (i === 0 ? '<td><input type="number" step="1" min="0" inputmode="numeric" pattern="[0-9]*" class="first" value="' + r.n + '"></td>'
+                 : '<td class="dim">' + r.n + '</td>') +
+        (i === 0 ? '<td><input type="number" step="1" min="0" inputmode="numeric" pattern="[0-9]*" class="first-from" value="' + r.from + '"></td>'
+                 : '<td class="dim">' + Number(r.from).toLocaleString() + '</td>') +
+        '<td><input type="number" step="1" inputmode="numeric" pattern="[0-9]*" class="to" value="' + r.to + '"></td>' +
+        '<td class="dim">' + Number(r.dist).toLocaleString() + '</td>' +
         '<td><input type="checkbox" class="chg"' + (r.chg ? ' checked' : '') + (i === 0 ? ' disabled' : '') + '></td>' +
-        (r.chg ? '<td><input type="number" step="0.1" class="spd" value="' + (r.kph || '') + '"></td>'
+        (r.chg ? '<td><input type="number" step="0.1" inputmode="decimal" class="spd" value="' + (r.kph || '') + '"></td>'
                : '<td class="dim">&quot;</td>') +
+        '<td class="dim">' + (r.chg && r.kph > 0 ? Math.round(r.kph / 3.6) : '') + '</td>' +
         '<td>' + (i >= 1 ? '<input type="checkbox" class="auto"' + (r.auto_on ? ' checked' : '') +
                   (r.auto_av ? '' : ' disabled') + '>' : '') + '</td>' +
         '<td class="dim">' + mmss(r.time_s) + '</td><td class="dim">' + mmss(r.total_s) + '</td>' +
         '<td><button type="button" class="del">&times;</button></td>';
       const chg = tr.querySelector('.chg');
       if (chg) chg.addEventListener('change', () => send({ type: 'row_chg', row: i, on: chg.checked }));
+      const firstEl = tr.querySelector('.first');
+      if (firstEl) firstEl.addEventListener('change', () => {
+        send({ type: 'stage_first', number: Number(firstEl.value) || 0, from_m: Number($('seg-first-from').value) || 0 });
+        done(firstEl);
+      });
+      const fromEl = tr.querySelector('.first-from');
+      if (fromEl) fromEl.addEventListener('change', () => {
+        send({ type: 'stage_first', number: Number($('seg-first-n').value) || 0, from_m: Number(fromEl.value) || 0 });
+        done(fromEl);
+      });
       const toEl = tr.querySelector('.to');
-      toEl.addEventListener('change', () => send({ type: 'row_to', row: i, to_m: Number(toEl.value) || 0 }));
+      toEl.addEventListener('change', () => {
+        send({ type: 'row_to', row: i, to_m: Number(toEl.value) || 0 });
+        done(toEl);
+      });
       const spd = tr.querySelector('.spd');
-      if (spd) spd.addEventListener('change', () => send({ type: 'row_speed', row: i, kph: Number(spd.value) || 0 }));
+      if (spd) spd.addEventListener('change', () => {
+        send({ type: 'row_speed', row: i, kph: Number(spd.value) || 0 });
+        done(spd);
+      });
       const au = tr.querySelector('.auto');
       if (au) au.addEventListener('change', () => send({ type: 'row_auto', row: i, on: au.checked }));
       tr.querySelector('.del').addEventListener('click', () => send({ type: 'row_delete', row: i }));
@@ -351,16 +406,16 @@
   });
   $('btn-next').addEventListener('click', () => send({ type: 'next' }));
   $('btn-prev').addEventListener('click', () => send({ type: 'prev' }));
-  $('btn-freeze').addEventListener('click', () => { frozen = !frozen; $('btn-freeze').classList.toggle('lit', frozen); });
+  $('btn-freeze').addEventListener('click', () => send({ type: 'freeze_toggle' }));
   $('btn-reverse').addEventListener('click', () => send({ type: 'reverse_set', on: !(lastTelemetry && lastTelemetry.reverse) }));
   $('btn-flag-minute').addEventListener('click', () => {
     // A stage already running: ask first, as the box does.
-    const running = !!(lastTelemetry && lastTelemetry.segment_number > 0 && lastState && lastState.total_reset_asks);
+    const running = !!(lastState && lastState.total_reset_asks);
     if (running && !confirm('Abort the current stage?')) return;
     send({ type: 'flag_next_minute', abort: running });
   });
   // Stage go now -- or, with a stage armed or running, stage abort (as on the box).
-  const stageActive = () => !!(lastState && (lastState.total_reset_asks || (lastState.autostart && lastState.autostart !== 'none')));
+  const stageActive = () => !!(lastState && (lastState.total_reset_asks || lastState.stage_abortable));
   $('btn-flag-late').addEventListener('click', () => {
     if (stageActive()) {
       if (confirm('ABORT the stage?')) send({ type: 'abort_stage' });
@@ -368,10 +423,19 @@
     }
     send({ type: 'flag_late_arrival' });
   });
+  // Scheduled start: arm or cancel the autostart at the loaded stage's start time.
+  $('btn-flag-auto').addEventListener('click', () => send({ type: 'autostart_set', on: !(lastState && lastState.autostart_on) }));
   $('btn-zero').addEventListener('click', () => {
     if (confirm('Zero the needle here?\nOK = zero now, Cancel = leave it')) send({ type: 'driver_zero', reset: false });
   });
+  // No new stage can be loaded while one is live, as on the box.
+  const okToChangeStage = () => {
+    if (!(lastState && lastState.stage_locked)) return true;
+    alert('New stage cannot be loaded while stage is running');
+    return false;
+  };
   function stageStep(dir) {
+    if (!okToChangeStage()) return;
     const cur = Number($('stage-pick').value) || 1;
     const pop = (lastState && lastState.memory_populated) || [];
     for (let s = cur + dir; s >= 1 && s <= 5; s += dir) {
@@ -380,7 +444,14 @@
   }
   $('stage-minus').addEventListener('click', () => stageStep(-1));
   $('stage-plus').addEventListener('click', () => stageStep(1));
-  $('stage-pick').addEventListener('change', (e) => send({ type: 'memory_recall', slot: Number(e.target.value) }));
+  $('stage-pick').addEventListener('change', (e) => {
+    if (!okToChangeStage()) {   // put the picker back on the stage that is loaded
+      const t = lastTelemetry && Number(lastTelemetry.stage_no);
+      if (t >= 1) e.target.value = String(t);
+      return;
+    }
+    send({ type: 'memory_recall', slot: Number(e.target.value) });
+  });
 
   // With a stage running, the box's own question (a missed start): the
   // distance zero is the press, so the box is told at once and the reset
@@ -411,6 +482,21 @@
   });
 
   // ---- Seg ----
+  // No stage can be edited while one is live, as on the box: any touch of an entry, key or
+  // tick on this page is stopped and explained, and the page is drawn again from the box.
+  const segLocked = () => !!(lastState && lastState.stage_locked);
+  const segGuard = (e) => {
+    if (!segLocked()) return;
+    const t = e.target;
+    if (!t.closest || !t.closest('input, select, button')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (t.blur) t.blur();
+    const now = Date.now();
+    if (now - (segGuard.last || 0) > 1000) { segGuard.last = now; alert('Stages cannot be edited while a stage is running'); }
+    if (lastState) renderSegments(lastState);
+  };
+  ['focusin', 'click'].forEach((ev) => $('view-seg').addEventListener(ev, segGuard, true));
   const segStep = (dir) => {
     const cur = Number($('seg-pick').value) || 1;
     const n = cur + dir;
@@ -605,6 +691,25 @@
     osc.connect(gain).connect(ctx.destination);
     osc.start(at);
     osc.stop(at + on + 0.02);
+  }
+
+  // Reverse: the box's repeating whoop (392 Hz triangle, 250 ms, 0.40, every 700 ms),
+  // played here too while the car is reversing or the figures are frozen. Stops if the link goes quiet.
+  let whoopTimer = null;
+  function whoopOnce() {
+    if (!soundOn || Date.now() - lastTelemetryAt > STALE_LINK_MS) return;
+    wakeAudio();
+    const ctx = audio();
+    if (ctx) playBeepAt({ ms: 250, amp: 0.4, wave: 'triangle', freq_hz: 392 }, ctx.currentTime + 0.02);
+  }
+  function setWhoop(on) {
+    if (on && whoopTimer === null) {
+      whoopOnce();
+      whoopTimer = setInterval(whoopOnce, 700);
+    } else if (!on && whoopTimer !== null) {
+      clearInterval(whoopTimer);
+      whoopTimer = null;
+    }
   }
 
   // Beep Assist. The box plays these to its own speaker, which the phone never

@@ -5,6 +5,7 @@
 #include "config_file.h"
 #include "nero_frame.h"
 #include "rally_state.h"
+#include "stage_edit.h"
 #include "tone_generator.h"
 #include <algorithm>
 #include <cmath>
@@ -25,7 +26,7 @@ constexpr int HIST_H = 388 - CLOCK_H - CLOCK_GAP;   // 308
 constexpr int STAGE_ROW_H = 54;
 constexpr int STAGE_AREA_H = 388 - STAGE_ROW_H;     // 334
 
-enum AreaKind { FIGURE, ELAPSED, HISTORY, STAGE, FLAG, FLAG_WATCH };
+enum AreaKind { FIGURE, ELAPSED, HISTORY, STAGE, FLAG, FLAG_WATCH, FLAG_SCHED };
 
 void setColour(cairo_t* cr, double r, double g, double b) { cairo_set_source_rgb(cr, r, g, b); }
 void cyan(cairo_t* cr) { setColour(cr, 0.0, 1.0, 1.0); }
@@ -63,20 +64,40 @@ void drawWatch(cairo_t* cr, double x, double y, double size, bool filled_white) 
     cairo_fill(cr);
 }
 
+// The stage-go key turns into stage abort only once there is a stage to abort.
+// A scheduled (on-the-clock) autostart that has not fired is not one: nothing is
+// live until its time, so the key stays "now" (pressing it starts at once).
+bool homeStageAbortable(const RallyState& st) {
+    const bool scheduled_pending = st.auto_start_rally_time_s != 0 &&
+                                   !st.auto_start_early_departure &&
+                                   st.segment_current_number < 0;
+    return stageAbortable(st) && !scheduled_pending;
+}
+
+// An on-the-clock autostart (not the early-departure kind) is pending for the
+// loaded memory: what the scheduled key toggles.
+bool scheduledAutostartArmed(const AppData& data) {
+    return data.state->auto_start_rally_time_s != 0 &&
+           !data.state->auto_start_early_departure &&
+           data.autoSlot == data.state->last_memory_slot;
+}
+
 // Chequered flag on a pole, w wide.
-void drawFlag(cairo_t* cr, double x, double y, double w, double h) {
-    white(cr);
+// `tint`: draw the flag for a lit key (white face): black, with light grey squares.
+void drawFlag(cairo_t* cr, double x, double y, double w, double h, bool tint = false) {
+    auto bright = [&]() { if (tint) setColour(cr, 0.0, 0.0, 0.0); else white(cr); };
+    bright();
     cairo_rectangle(cr, x, y, 3, h);
     cairo_fill(cr);
     const int cols = 4, rows = 3;
     double cw = (w - 4) / cols, ch = (h * 0.6) / rows;
     for (int r = 0; r < rows; r++)
         for (int c = 0; c < cols; c++) {
-            if ((r + c) % 2 == 0) white(cr); else setColour(cr, 0.25, 0.25, 0.25);
+            if ((r + c) % 2 == 0) bright(); else if (tint) setColour(cr, 0.75, 0.75, 0.75); else setColour(cr, 0.25, 0.25, 0.25);
             cairo_rectangle(cr, x + 4 + c * cw, y + 1 + r * ch, cw, ch);
             cairo_fill(cr);
         }
-    white(cr);
+    bright();
     cairo_set_line_width(cr, 1.0);
     cairo_rectangle(cr, x + 4, y + 1, cw * cols, ch * rows);
     cairo_stroke(cr);
@@ -124,23 +145,30 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         break;
     }
     case STAGE: {
-        // auto / manual line
+        // clock icon (autostart on / off) and the start time
         const double ay = 12 + 28;
-        // Always the word "auto"; when no autostart is armed (and none has started
-        // the running stage) it is crossed out in red.
-        cyan(cr);
-        drawText(cr, "auto", 2, ay, 18, LEFT);
-        if (!h->autoArmed) {
-            cairo_text_extents_t e;
-            cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-            cairo_set_font_size(cr, 18);
-            cairo_text_extents(cr, "auto", &e);
-            setColour(cr, 1.0, 0.1, 0.1);
+        // Armed (or the autostart that started the running stage): a wall clock --
+        // round face, two hands, no crown, so it is not the stopwatch of the
+        // elapsed times -- in front of the time. Otherwise just a red cross.
+        const double cx = 15, cy = ay - 10, rad = 13;
+        if (h->autoArmed) {
+            cyan(cr);
             cairo_set_line_width(cr, 3.0);
-            cairo_move_to(cr, 0, ay - 14);
-            cairo_line_to(cr, 4 + e.x_advance, ay + 2);
-            cairo_move_to(cr, 0, ay + 2);
-            cairo_line_to(cr, 4 + e.x_advance, ay - 14);
+            cairo_arc(cr, cx, cy, rad, 0, 2 * M_PI);
+            cairo_stroke(cr);
+            cairo_set_line_width(cr, 2.5);
+            cairo_move_to(cr, cx, cy);
+            cairo_line_to(cr, cx, cy - 8);          // minute hand, straight up
+            cairo_move_to(cr, cx, cy);
+            cairo_line_to(cr, cx + 6, cy + 3);      // hour hand
+            cairo_stroke(cr);
+        } else {
+            setColour(cr, 1.0, 0.1, 0.1);
+            cairo_set_line_width(cr, 8.0);
+            cairo_move_to(cr, cx - rad, cy - rad);
+            cairo_line_to(cr, cx + rad, cy + rad);
+            cairo_move_to(cr, cx - rad, cy + rad);
+            cairo_line_to(cr, cx + rad, cy - rad);
             cairo_stroke(cr);
         }
         white(cr);
@@ -188,9 +216,17 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         break;
     }
     case FLAG:
-    case FLAG_WATCH: {
+    case FLAG_WATCH:
+    case FLAG_SCHED: {
         const int ww = width;
-        if (kind == FLAG) {
+        if (kind == FLAG_SCHED) {
+            // Reversed (black on a white key, see setLit) while an autostart at the loaded
+            // stage's Segments start time is armed.
+            const bool armed = scheduledAutostartArmed(*data);
+            drawFlag(cr, ww / 2.0 - 20, 1, 40, 30, armed);
+            if (armed) setColour(cr, 0.0, 0.0, 0.0); else white(cr);
+            drawText(cr, "auto", ww / 2.0, 50, 24, CENTRE);
+        } else if (kind == FLAG) {
             drawFlag(cr, ww / 2.0 - 20, 1, 40, 30);
             white(cr);
             // Read from the clock every time the key is drawn, never from a
@@ -198,7 +234,7 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
             // coming minute.
             drawText(cr, nextMinuteCaption(data), ww / 2.0, 50, 24, CENTRE);
         } else {
-            if (stageAbortable(*data->state)) {
+            if (homeStageAbortable(*data->state)) {
                 // A stage is armed or running: this key ends it.
                 white(cr);
                 drawText(cr, "stage", ww / 2.0, 22, 22, CENTRE);
@@ -265,15 +301,13 @@ void markDirty(GtkWidget* w) { if (w) gtk_widget_queue_draw(w); }
 // ── actions ──────────────────────────────────────────────────────────────
 
 void onFreeze(GtkWidget*, gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
-    data->homeFrozen = !data->homeFrozen;
-    setLit(data->home->freezeBtn, data->homeFrozen);
+    toggleHomeFreeze(static_cast<AppData*>(user_data));
 }
 
-// The repeating "whoop" while reversed.
+// The repeating "whoop" while reversed or frozen.
 gboolean whoopTick(gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
-    if (!data->poller || !data->poller->reverse()) {
+    if (!(data->poller && data->poller->reverse()) && !data->homeFrozen) {
         if (data->home) data->home->whoopTimer = 0;
         return G_SOURCE_REMOVE;
     }
@@ -301,11 +335,27 @@ void onNextMinute(GtkWidget* w, gpointer user_data) {
 // stage takes a confirm: one stray tap must not do it.
 void onLateArrival(GtkWidget* w, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
-    if (stageAbortable(*data->state)) {
+    if (homeStageAbortable(*data->state)) {
         if (confirmYesNo(w, "Abort stage", "ABORT the stage?")) performAbortStage(data);
         return;
     }
     performStageGo(data);
+}
+
+// Scheduled start: arm an autostart at the loaded stage's start time from the
+// Segments page, or cancel the one that is armed.
+void onScheduledStart(GtkWidget* w, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (scheduledAutostartArmed(*data)) {
+        stageEditSetAutostart(data, false, nullptr);
+        return;
+    }
+    if (classifyTotalReset(*data->state) == TotalResetCase::StageRunning) {
+        flashNotice(w, "A stage is running");
+        return;
+    }
+    std::string err;
+    if (!stageEditSetAutostart(data, true, &err)) flashNotice(w, err);
 }
 
 // Step to the next populated memory in a direction; no wrap, empties skipped.
@@ -319,12 +369,23 @@ void stepStage(AppData* data, int dir) {
         }
     }
 }
-void onStageMinus(GtkWidget*, gpointer d) { stepStage(static_cast<AppData*>(d), -1); }
-void onStagePlus(GtkWidget*, gpointer d) { stepStage(static_cast<AppData*>(d), +1); }
+// No new stage can be loaded while one is live: say so and leave everything as it is.
+bool confirmStageChange(GtkWidget* w, AppData* data) {
+    if (!stageChangeLocked(*data->state)) return true;
+    flashNotice(w, "New stage cannot be loaded while stage is running");
+    return false;
+}
+void onStageMinus(GtkWidget* w, gpointer d) {
+    if (confirmStageChange(w, static_cast<AppData*>(d))) stepStage(static_cast<AppData*>(d), -1);
+}
+void onStagePlus(GtkWidget* w, gpointer d) {
+    if (confirmStageChange(w, static_cast<AppData*>(d))) stepStage(static_cast<AppData*>(d), +1);
+}
 
-void onStageNumber(GtkWidget*, gpointer user_data) {
+void onStageNumber(GtkWidget* w, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     HomeUi* h = data->home;
+    if (!confirmStageChange(w, data)) return;
     for (int i = 0; i < 5; i++) {
         const bool empty = data->state->memory_slots[i].empty();
         gtk_widget_set_sensitive(h->pickerBtns[i], !empty);
@@ -353,6 +414,20 @@ void onHomeUnmap(GtkWidget*, gpointer user_data) {
 
 } // namespace
 
+// The whoop repeats while the car is reversing or the figures are frozen.
+static void updateWhoop(AppData* data) {
+    HomeUi* h = data->home;
+    if (!h) return;
+    const bool want = (data->poller && data->poller->reverse()) || data->homeFrozen;
+    if (want && h->whoopTimer == 0) {
+        whoopTick(data);
+        h->whoopTimer = g_timeout_add(700, whoopTick, data);
+    } else if (!want && h->whoopTimer != 0) {
+        g_source_remove(h->whoopTimer);
+        h->whoopTimer = 0;
+    }
+}
+
 void setReverse(AppData* data, bool on) {
     if (!data->poller || data->poller->reverse() == on) return;
     data->poller->setReverse(on);
@@ -363,15 +438,7 @@ void setReverse(AppData* data, bool on) {
     data->state->reverse_shift1 = data->poller->virtualShift1();
     data->state->reverse_shift2 = data->poller->virtualShift2();
     ConfigFile::save(*data->state);
-    if (h) {
-        if (on && h->whoopTimer == 0) {
-            whoopTick(data);
-            h->whoopTimer = g_timeout_add(700, whoopTick, data);
-        } else if (!on && h->whoopTimer != 0) {
-            g_source_remove(h->whoopTimer);
-            h->whoopTimer = 0;
-        }
-    }
+    updateWhoop(data);
 }
 
 GtkWidget* createHomeScreen(AppData* data) {
@@ -435,8 +502,8 @@ GtkWidget* createHomeScreen(AppData* data) {
         gtk_widget_set_sensitive(data->prevBtn, FALSE);
         gtk_box_pack_start(GTK_BOX(c1), data->prevBtn, FALSE, FALSE, 0);
         gtk_widget_set_halign(data->prevBtn, GTK_ALIGN_START);   // 130 px, not the column's width
-        h->freezeBtn = makeKey("freeze", KEY_W, KEY_H, G_CALLBACK(onFreeze), data);
-        h->reverseBtn = makeKey("reverse", KEY_W, KEY_H, G_CALLBACK(onReverse), data);
+        h->freezeBtn = makeKey("freeze", -1, KEY_H, G_CALLBACK(onFreeze), data);
+        h->reverseBtn = makeKey("reverse", -1, KEY_H, G_CALLBACK(onReverse), data);
         // 24 px: "reverse" at the keys' usual 28 px is wider than 130 px once the
         // button's padding is added, and was clipped at the overlay's edge.
         addClass(h->freezeBtn, "key-24");
@@ -450,7 +517,6 @@ GtkWidget* createHomeScreen(AppData* data) {
     struct { const char* label; int delta_m; } adj[3] = { {"+10", 10}, {"set", 0}, {"-10", -10} };
     for (int i = 0; i < 3; i++) {
         GtkWidget* b = makeKey(adj[i].label, COL2_W, KEY_H, nullptr, data);
-        addClass(b, "key-small");
         if (adj[i].delta_m == 0) {
             g_signal_connect(b, "clicked", G_CALLBACK(on_distance_set), data);
         } else {
@@ -461,23 +527,27 @@ GtkWidget* createHomeScreen(AppData* data) {
     }
 
     {
-        // Reverse is right-aligned with the Total / Trip / next figures (owner's
-        // ruling; it first lined up with -10, which was too far right).
-        // The drawn digits stop a few pixels short of the figure area's edge
-        // (the glyphs' own side bearing), so the key's right edge is set 10 px in
-        // to sit under the last digit, measured on the sandbox screenshot.
-        const int right = COL1_W - 10;                        // 476
-        // The keys' real widths (a button is a little wider than its 130 px
-        // request when the label needs it), so reverse ends exactly on -10's edge.
-        gint rev_w = KEY_W, frz_w = KEY_W, nat = 0;
-        gtk_widget_get_preferred_width(h->reverseBtn, nullptr, &nat); rev_w = std::max<gint>(KEY_W, nat);
-        gtk_widget_get_preferred_width(h->freezeBtn, nullptr, &nat);  frz_w = std::max<gint>(KEY_W, nat);
-        const int rev_x = right - rev_w;
-        const int frz_x = rev_x - 24 - frz_w;
+        // Freeze, reverse and A-B, B-C zero share the prev row: three keys of one
+        // width (128 px, sized for the widest label at 24 px), spread evenly
+        // between prev's right edge and the right edge of the +10 / set / -10
+        // column, so A-B, B-C zero sits under -10 and to the right of reverse.
+        data->adjZeroBtn = makeKey("A-B, B-C\nzero", -1, KEY_H, G_CALLBACK(on_adj_driver_zero), data);
+        addClass(data->adjZeroBtn, "key-24");
+        gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(data->adjZeroBtn))), GTK_JUSTIFY_CENTER);
+        GtkWidget* row_keys[3] = { h->freezeBtn, h->reverseBtn, data->adjZeroBtn };
+        // 128 px: "A-B, B-C" at 24 px (8 x 14.4 = 115) plus the button's padding.
+        const gint key_w = 128;
+        for (GtkWidget* k : row_keys) gtk_widget_set_size_request(k, key_w, KEY_H);
+        const int span_l = KEY_W, span_r = 594;   // 130 .. the -10 key's right edge, measured on the sandbox screenshot
+        const int gap = (span_r - span_l - 3 * key_w) / 3;
         const int row_y = 3 * (KEY_H + ROW_GAP);              // 318: the prev row
+        const int frz_x = span_l + gap;
+        const int rev_x = frz_x + key_w + gap;
+        const int ab_x = span_r - key_w;
         GtkWidget* fixed = gtk_fixed_new();
         gtk_fixed_put(GTK_FIXED(fixed), h->freezeBtn, frz_x, row_y);
         gtk_fixed_put(GTK_FIXED(fixed), h->reverseBtn, rev_x, row_y);
+        gtk_fixed_put(GTK_FIXED(fixed), data->adjZeroBtn, ab_x, row_y);
         gtk_widget_set_halign(fixed, GTK_ALIGN_START);
         gtk_widget_set_valign(fixed, GTK_ALIGN_START);
         gtk_overlay_add_overlay(GTK_OVERLAY(leftOverlay), fixed);
@@ -507,9 +577,9 @@ GtkWidget* createHomeScreen(AppData* data) {
     GtkWidget* c4 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_set_size_request(c4, STAGE_W, -1);
     gtk_box_pack_start(GTK_BOX(mainPage), c4, FALSE, FALSE, 0);
-    GtkWidget* stageRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    // - 1 + spread edge to edge: three keys, each drawn about 53 px wide (the button adds padding to its 50-52 px request), the rest split into two gaps.
+    GtkWidget* stageRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (STAGE_W - 159) / 2);
     gtk_widget_set_size_request(stageRow, STAGE_W, STAGE_ROW_H);
-    gtk_widget_set_halign(stageRow, GTK_ALIGN_CENTER);
     GtkWidget* minus = makeKey("-", 52, 52, G_CALLBACK(onStageMinus), data);
     h->stageNoBtn = makeKey("-", 50, 50, G_CALLBACK(onStageNumber), data);
     GtkWidget* plus = makeKey("+", 52, 52, G_CALLBACK(onStagePlus), data);
@@ -554,10 +624,9 @@ GtkWidget* createHomeScreen(AppData* data) {
     GtkWidget* goKey = makeIconKey(data, FLAG_WATCH, G_CALLBACK(onLateArrival), h);
     h->goArea = gtk_bin_get_child(GTK_BIN(goKey));
     gtk_box_pack_start(GTK_BOX(c5), goKey, FALSE, FALSE, 0);
-    data->adjZeroBtn = makeKey("A-B, B-C\nzero", RC_W, KEY_H, G_CALLBACK(on_adj_driver_zero), data);
-    addClass(data->adjZeroBtn, "key-small");
-    gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(data->adjZeroBtn))), GTK_JUSTIFY_CENTER);
-    gtk_box_pack_start(GTK_BOX(c5), data->adjZeroBtn, FALSE, FALSE, 0);
+    GtkWidget* schedKey = makeIconKey(data, FLAG_SCHED, G_CALLBACK(onScheduledStart), h);
+    h->schedArea = gtk_bin_get_child(GTK_BIN(schedKey));
+    gtk_box_pack_start(GTK_BOX(c5), schedKey, FALSE, FALSE, 0);
     GtkWidget* menu = createMenuKey(data);
     gtk_widget_set_size_request(menu, RC_W, KEY_H);
     gtk_box_pack_start(GTK_BOX(c5), menu, FALSE, FALSE, 0);
@@ -580,9 +649,19 @@ void updateHomeDisplay(AppData* data) {
         markDirty(h->flagArea);
     }
 
+    // The scheduled key redraws when its armed state changes.
+    {
+        const std::string cap = scheduledAutostartArmed(*data) ? "armed" : "off";
+        if (cap != h->schedState) {
+            h->schedState = cap;
+            setLit(gtk_widget_get_parent(h->schedArea), scheduledAutostartArmed(*data));
+            markDirty(h->schedArea);
+        }
+    }
+
     // The stage-go key turns into stage abort while a stage is armed or running.
     {
-        const bool abortable = stageAbortable(*data->state);
+        const bool abortable = homeStageAbortable(*data->state);
         if (abortable != h->goWasAbort) {
             h->goWasAbort = abortable;
             markDirty(h->goArea);
@@ -631,22 +710,34 @@ void updateHomeDisplay(AppData* data) {
         const std::vector<Segment>& segs =
             (data->state->segment_current_number >= 0 && !data->state->stage_segments.empty())
                 ? data->state->stage_segments : data->state->segments;
-        long cur = data->state->segment_current_number;
-        long first = (cur > 0) ? std::min<long>(cur - 1, std::max<long>(0, static_cast<long>(segs.size()) - 3)) : 0;
+        // Speed changes only: a segment that carries the speed on is not a row.
+        // Each entry is the segment's index, its speed and where it starts.
+        struct Change { long seg; double kph; double at_m; };
+        std::vector<Change> changes;
+        {
+            double cum_m = 0.0;
+            for (long i = 0; i < static_cast<long>(segs.size()); i++) {
+                if (i == 0 || segs[i].changesSpeed)
+                    changes.push_back({i, segs[i].target_speed_kph * (data->state->units ? 0.621371 : 1.0), cum_m});
+                cum_m += segs[i].distance_m;
+            }
+        }
+        const long cur = data->state->segment_current_number;
+        long cur_change = 0;   // the change in force at the current segment
+        for (long c = 0; c < static_cast<long>(changes.size()); c++)
+            if (changes[c].seg <= cur) cur_change = c;
+        const long n_changes = static_cast<long>(changes.size());
+        const long first = (cur_change > 0) ? std::min<long>(cur_change - 1, std::max<long>(0, n_changes - 3)) : 0;
         HomeUi::Row rows[3];
-        double cum_m = 0.0;
-        for (long i = 0; i < first && i < static_cast<long>(segs.size()); i++) cum_m += segs[i].distance_m;
         for (int r = 0; r < 3; r++) {
-            long i = first + r;
-            if (i >= static_cast<long>(segs.size())) break;
-            double kph = segs[i].target_speed_kph * (data->state->units ? 0.621371 : 1.0);
+            long c = first + r;
+            if (c >= n_changes) break;
             char b[16];
-            snprintf(b, sizeof(b), "%.1f", kph);
+            snprintf(b, sizeof(b), "%.1f", changes[c].kph);
             rows[r].kph = b;
-            rows[r].at = formatDistanceGrouped(static_cast<long>(std::lround(cum_m)));
-            // grouped figures keep their commas, as in the mockup ("1,500")
-            rows[r].now = (i == cur);
-            cum_m += segs[i].distance_m;
+            // plain digits: "12,000" with its comma was too wide for the column
+            rows[r].at = std::to_string(static_cast<long>(std::lround(changes[c].at_m)));
+            rows[r].now = (cur >= 0 && c == cur_change);
         }
 
         // A start time that has already gone by, with nothing armed or running, is
@@ -721,3 +812,16 @@ void updateHomeDisplay(AppData* data) {
     }
     if (hchanged) markDirty(h->historyArea);
 }
+
+// Freeze is one state for the box and every phone: either end toggles it and
+// the other follows.
+void toggleHomeFreeze(AppData* data) {
+    data->homeFrozen = !data->homeFrozen;
+    if (data->home) setLit(data->home->freezeBtn, data->homeFrozen);
+    updateWhoop(data);
+    notifyWebStateNow(data);
+}
+
+// True while a stage is live (running, or an early-departure start armed): no new stage
+// can be loaded then. A scheduled start still waiting is not live.
+bool stageChangeLocked(const RallyState& st) { return stageEditLocked(st); }

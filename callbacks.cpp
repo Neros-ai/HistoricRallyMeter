@@ -1278,7 +1278,7 @@ void updateCalibrationDisplay(AppData* data) {
 
     char current[120];
     snprintf(current, sizeof(current),
-             "Pulses/KM: <span foreground=\"#FFFFFF\">%ld</span>. Reset to",
+             "Pulses/KM: <span foreground=\"#FFFFFF\">%ld</span> Reset to",
              displayPulsesPerKm(data->state->typed_pulses_per_km, data->state->calibration));
     gtk_label_set_markup(data->calibrationCurrentLabel, current);
 
@@ -1425,8 +1425,8 @@ void on_reset_calibration_pulses(G_GNUC_UNUSED GtkWidget* widget, gpointer user_
 }
 
 void updateSensorModeLabel(AppData* data) {
-    // The sensor in use is the white key and says "using"; the other offers
-    // the choice. The selection silently changes what every reading on the
+    // The sensor in use is the white key and the other is dark; the keys say only
+    // which sensor they are. The selection silently changes what every reading on the
     // page means, so it is always one or the other.
     const bool both = data->state->counters;
     auto lit = [](GtkWidget* k, bool on, const char* text) {
@@ -1437,8 +1437,8 @@ void updateSensorModeLabel(AppData* data) {
         if (on) gtk_style_context_add_class(c, "key-lit");
         else gtk_style_context_remove_class(c, "key-lit");
     };
-    lit(data->sensor1Btn, !both, both ? "select\nsensor 1" : "using\nsensor 1");
-    lit(data->sensorBothBtn, both, both ? "using\nsensor 1&2" : "select\nsensor 1&2");
+    lit(data->sensor1Btn, !both, "sensor 1");
+    lit(data->sensorBothBtn, both, "sensor 1&2");
 }
 
 void on_set_sensor_1(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
