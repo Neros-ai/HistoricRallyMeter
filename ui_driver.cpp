@@ -234,7 +234,8 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // below the hub, where there is nothing to cover.
     {
         double digital_size = data->driverCompactMode ? L.boxFontSize : 22.0;
-        cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+        // Proportional bold digits (the same face as the speeds and distances below).
+        cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
         cairo_set_font_size(cr, digital_size);
 
         cairo_text_extents_t dext;
@@ -374,16 +375,22 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // Fonts match the wide layout at full size and shrink with the gauge.
     if (data->driverCompactMode) {
         cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+        // The big figures (target, current speed, stage number, Total and Trip distances) are
+        // proportional bold; everything else on this display stays monospace.
+        auto bigFace = [&]() { cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD); };
+        auto smallFace = [&]() { cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD); };
         cairo_text_extents_t te;
 
         // Right-aligned Total/Trip value, at the enlarged curTopSize
         // (RB-DRV-08): a fixed right anchor keeps the decimal point in
         // place as the digits change.
         auto drawValue = [&](const char* text, double baseline) {
+            bigFace();
             cairo_set_font_size(cr, L.valSize);
             cairo_text_extents(cr, text, &te);
             cairo_move_to(cr, L.rightAnchor - te.x_advance, baseline);
             cairo_show_text(cr, text);
+            smallFace();
         };
         // Row caption, written just to the right of the value column so the
         // values themselves stay in one unbroken vertical line.
@@ -398,10 +405,12 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         // value's last digit and the caption's closing ")" share one
         // vertical edge.
         auto drawDistance = [&](const char* text, double baseline) {
+            bigFace();
             cairo_set_font_size(cr, L.valSize);
             cairo_text_extents(cr, text, &te);
             cairo_move_to(cr, L.distanceAnchor - te.x_advance, baseline);
             cairo_show_text(cr, text);
+            smallFace();
         };
         // Top-corner value: right-aligns to `anchor_x` (Current: bandOuterX;
         // Target: mirrored, left-aligned from bandTargetX), top-aligns with
@@ -410,6 +419,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         // CompactGaugeLayout -- RB-DRV-08). Returns the baseline used, so
         // the caller can place the label directly beneath it.
         auto drawTopCorner = [&](const char* text, double anchor_x, bool right_align) -> double {
+            bigFace();
             cairo_set_font_size(cr, L.curTopSize);
             cairo_text_extents(cr, text, &te);
             double ascent = -te.y_bearing;
@@ -417,14 +427,17 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             double x = right_align ? (anchor_x - te.x_advance) : anchor_x;
             cairo_move_to(cr, x, baseline);
             cairo_show_text(cr, text);
+            smallFace();
             return baseline;
         };
+        // Captions sit close under their figures: a fifth of the layout's legend drop.
+        const double capDrop = L.legendDrop * 0.2;
         auto drawTopCornerLabel = [&](const char* text, double anchor_x, bool right_align, double value_baseline) {
             cairo_set_font_size(cr, L.labelSize);
             cairo_text_extents_t lte;
             cairo_text_extents(cr, text, &lte);
             double x = right_align ? (anchor_x - lte.x_advance) : anchor_x;
-            cairo_move_to(cr, x, value_baseline + L.labelSize + L.labelGap + L.legendDrop);
+            cairo_move_to(cr, x, value_baseline + L.labelSize + L.labelGap + capDrop);
             cairo_show_text(cr, text);
         };
 
@@ -445,6 +458,19 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             double baseline = drawTopCorner(gtk_label_get_text(data->targetSpeedLabel), L.bandTargetX, false);
             drawTopCornerLabel("Target", L.bandTargetX, false, baseline);
             // (The "> 30" next-speed marker that used to sit here is gone.)
+
+            // The stage number under Target, in Target's yellow, with "Stage" beneath it.
+            const double targetCaption = baseline + L.labelSize + L.labelGap + capDrop;
+            const long stage_no = data->state->last_memory_slot;
+            const std::string stage_text = stage_no >= 1 ? std::to_string(stage_no) : "-";
+            cairo_set_source_rgb(cr, 1.0, 0.867, 0.0);   // #FFDD00, the Target colour: the number and its "Stage" caption
+            bigFace();
+            cairo_set_font_size(cr, L.curTopSize);   // the same size as the speeds
+            cairo_move_to(cr, L.bandTargetX, targetCaption + L.curTopSize * 0.95 + L.labelGap);
+            cairo_show_text(cr, stage_text.c_str());
+            smallFace();
+            drawTopCornerLabel("Stage", L.bandTargetX, false,
+                               targetCaption + L.curTopSize * 0.95 + L.labelGap - capDrop);
         }
 
         // {tot}: white, mirrored by the Total distance on the left. Both at
