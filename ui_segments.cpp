@@ -24,7 +24,9 @@ namespace {
 constexpr int COLS[11] = {56, 92, 92, 84, 40, 60, 40, 44, 56, 56, 44};
 constexpr int COL_GAP = 8;
 // The stage column is 200 px (was 240); the 40 px it gave up widen the table.
-constexpr int LEFT_W = 1012, TOP_H = 322, NEWPT_H = 56;
+constexpr int LEFT_W = 1012, NEWPT_H = nero::MENU_KEY_H;
+// The left side is as deep as keypad + menu, so the add row sits on the menu line.
+constexpr int TOP_H = nero::KEYPAD_H + nero::KEYPAD_MENU_GAP + nero::MENU_KEY_H - 10 - NEWPT_H;   // 308
 
 struct RowW {
     GtkWidget* num = nullptr;     // entry on row 1, label below
@@ -50,6 +52,7 @@ struct SegUi {
     GtkWidget* addEntry = nullptr;
     std::vector<RowW> rows;
     guint rebuildIdle = 0;
+    guint autoCommitTimer = 0;   // saves the entry being typed in after a pause
 };
 
 namespace {
@@ -97,7 +100,25 @@ void updateRowText(AppData* d) {
     }
 }
 
-void segmentsCommitImpl(AppData* d);
+// quiet: the automatic save after a pause in typing -- no error pop-up (the
+// number may be half typed) and no rewriting of the box being typed in.
+void segmentsCommitImpl(AppData* d, bool quiet = false);
+
+// The box has no Enter key, so an edit is saved a moment after the last keypress.
+constexpr guint AUTO_COMMIT_MS = 1000;
+gboolean autoCommitCb(gpointer p) {
+    AppData* d = static_cast<AppData*>(p);
+    ui(d)->autoCommitTimer = 0;
+    segmentsCommitImpl(d, true);
+    return G_SOURCE_REMOVE;
+}
+void onSegEntryChanged(GtkEditable* w, gpointer p) {
+    AppData* d = static_cast<AppData*>(p);
+    SegUi* u = ui(d);
+    if (!u || d->activeEntry != GTK_ENTRY(w)) return;   // set by code, not typed
+    if (u->autoCommitTimer) g_source_remove(u->autoCommitTimer);
+    u->autoCommitTimer = g_timeout_add(AUTO_COMMIT_MS, autoCommitCb, d);
+}
 
 void rebuildNow(AppData* d);
 gboolean rebuildIdleCb(gpointer p) {
@@ -113,8 +134,16 @@ void scheduleRebuild(AppData* d) {
     if (!u->rebuildIdle) u->rebuildIdle = g_idle_add(rebuildIdleCb, d);
 }
 
+// No stage can be edited while one is live: say so, and let nothing change.
+bool editRefused(GtkWidget* w, AppData* d) {
+    if (!stageEditLocked(*d->state)) return false;
+    flashNotice(w, "Stages cannot be edited while a stage is running");
+    return true;
+}
+
 gboolean onEntryFocusIn(GtkWidget* w, GdkEvent* e, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
+    if (editRefused(w, d)) return TRUE;   // no keypad, nothing to type into
     // Tapping another field saves the one being typed in.
     if (d->activeEntry && d->activeEntry != GTK_ENTRY(w)) segmentsCommitImpl(d);
     return on_entry_focus(w, e, d);
@@ -124,6 +153,7 @@ void onEntryActivate(GtkWidget*, gpointer p) { segmentsCommitImpl(static_cast<Ap
 
 void onChgToggled(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
+    if (editRefused(w, d)) { scheduleRebuild(d); return; }   // the rebuild puts the tick back
     segmentsCommitImpl(d);
     size_t row = static_cast<size_t>(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w), "row")));
     stageEditSetChange(d, row, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w)));
@@ -132,12 +162,14 @@ void onChgToggled(GtkWidget* w, gpointer p) {
 
 void onAutoToggled(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
+    if (editRefused(w, d)) { scheduleRebuild(d); return; }
     size_t row = static_cast<size_t>(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w), "row")));
     stageEditSetAuto(d, row, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w)));
 }
 
 void onDelete(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
+    if (editRefused(w, d)) return;
     segmentsCommitImpl(d);
     size_t row = static_cast<size_t>(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w), "row")));
     stageEditDeleteRow(d, row);
@@ -184,6 +216,7 @@ void rebuildNow(AppData* d) {
             g_object_set_data(G_OBJECT(e), "row", GINT_TO_POINTER(static_cast<int>(i)));
             g_signal_connect(e, "focus-in-event", G_CALLBACK(onEntryFocusIn), d);
             g_signal_connect(e, "activate", G_CALLBACK(onEntryActivate), d);
+            g_signal_connect(e, "changed", G_CALLBACK(onSegEntryChanged), d);
             put(e, col);
             return e;
         };
@@ -219,7 +252,8 @@ void rebuildNow(AppData* d) {
         }
         if (i >= 1) {
             GtkWidget* au = gtk_check_button_new();
-            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(au), rows[i].auto_on);
+            // Ticked only where it applies: with no speed change the box is greyed and empty, like row 1.
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(au), rows[i].auto_available && rows[i].auto_on);
             gtk_widget_set_sensitive(au, rows[i].auto_available);
             g_object_set_data(G_OBJECT(au), "row", GINT_TO_POINTER(static_cast<int>(i)));
             g_signal_connect(au, "toggled", G_CALLBACK(onAutoToggled), d);
@@ -268,20 +302,31 @@ void selectSlot(AppData* d, int slot_1) {
     rebuildNow(d);
 }
 
-void onStageMinus(GtkWidget*, gpointer p) { AppData* d = static_cast<AppData*>(p); selectSlot(d, editSlot(d) - 1); }
-void onStagePlus(GtkWidget*, gpointer p) { AppData* d = static_cast<AppData*>(p); selectSlot(d, editSlot(d) + 1); }
-void onStageNumber(GtkWidget*, gpointer p) { gtk_popover_popup(GTK_POPOVER(ui(static_cast<AppData*>(p))->popover)); }
+void onStageMinus(GtkWidget* w, gpointer p) {
+    AppData* d = static_cast<AppData*>(p);
+    if (!editRefused(w, d)) selectSlot(d, editSlot(d) - 1);
+}
+void onStagePlus(GtkWidget* w, gpointer p) {
+    AppData* d = static_cast<AppData*>(p);
+    if (!editRefused(w, d)) selectSlot(d, editSlot(d) + 1);
+}
+void onStageNumber(GtkWidget* w, gpointer p) {
+    AppData* d = static_cast<AppData*>(p);
+    if (!editRefused(w, d)) gtk_popover_popup(GTK_POPOVER(ui(d)->popover));
+}
 void onPickSlot(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
     gtk_popover_popdown(GTK_POPOVER(ui(d)->popover));
     selectSlot(d, GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w), "slot")));
 }
 
-void onAddDistance(GtkWidget*, gpointer p) {
+void onAddDistance(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
+    if (editRefused(w, d)) return;
     SegUi* u = ui(d);
     segmentsCommitImpl(d);
     RallyState::MemorySlot& slot = slotOf(d);
+    if (d->state->segments.empty()) slot.first_from_m = 0.0;   // as stageEditAddDistances does
     double end = slot.first_from_m;
     for (const Segment& sg : d->state->segments) end += sg.distance_m;
     std::string rest;
@@ -295,6 +340,7 @@ void onAddDistance(GtkWidget*, gpointer p) {
 
 void onClearStage(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
+    if (editRefused(w, d)) return;
     segmentsCommitImpl(d);
     if (!confirmYesNo(w, "Clear stage", "Clear this stage?")) return;
     stageEditClearStage(d);
@@ -304,6 +350,7 @@ void onClearStage(GtkWidget* w, gpointer p) {
 
 void onClearAll(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
+    if (editRefused(w, d)) return;
     segmentsCommitImpl(d);
     if (!confirmYesNo(w, "Clear all", "Clear every stage?")) return;
     stageEditClearAll(d);
@@ -328,7 +375,7 @@ void onAutostartToggled(GtkWidget* w, gpointer p) {
 
 // ── commit of the entry being typed into ─────────────────────────────────────
 namespace {
-void segmentsCommitImpl(AppData* d) {
+void segmentsCommitImpl(AppData* d, bool quiet) {
     SegUi* u = ui(d);
     GtkEntry* e = d->activeEntry;
     if (!u || !e) return;
@@ -346,7 +393,7 @@ void segmentsCommitImpl(AppData* d) {
         if (m >= 0) stageEditSetFirst(d, -1, static_cast<double>(m));
     } else if (!strcmp(kind, "to")) {
         long m = parseMetres(text);
-        if (m >= 0 && !stageEditSetRowTo(d, row, static_cast<double>(m)))
+        if (m >= 0 && !stageEditSetRowTo(d, row, static_cast<double>(m)) && !quiet)
             flashNotice(GTK_WIDGET(e), "That end distance must be past this row's start and short of the next row's end.");
     } else if (!strcmp(kind, "kph")) {
         char* stop = nullptr;
@@ -361,7 +408,7 @@ void segmentsCommitImpl(AppData* d) {
     }
     updateRowText(d);
     // Echo the stored form back into the start fields.
-    if (!strcmp(kind, "start_time") || !strcmp(kind, "start_dist")) loadFields(d);
+    if (!quiet && (!strcmp(kind, "start_time") || !strcmp(kind, "start_dist"))) loadFields(d);
 }
 }  // namespace
 
@@ -397,12 +444,9 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     data->stageSetupScreen = screen;   // ui() reads it, so it is set before anything is built
 
     // ── left area: top row (list + stage column) and the add-distance row ──
-    GtkWidget* left = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    GtkWidget* left = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
     gtk_widget_set_size_request(left, LEFT_W, -1);
     gtk_box_pack_start(GTK_BOX(screen), left, FALSE, FALSE, 0);
-    GtkWidget* top = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
-    gtk_widget_set_size_request(top, LEFT_W, TOP_H);
-    gtk_box_pack_start(GTK_BOX(left), top, FALSE, FALSE, 0);
 
     // The stage column is exactly as wide as the rally clock's text at the top of
     // it ("00:00:00" at 40 px); the table takes the rest of the 1012 px.
@@ -417,6 +461,11 @@ GtkWidget* createStageSetupScreen(AppData* data) {
         g_object_unref(probe);
     }
     const int LIST_W = LEFT_W - 16 - STAGE_W;
+    // The table and the add-distance row stack in the left part; the stage
+    // column beside them runs the full height, with clear stage at its foot.
+    GtkWidget* top = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_widget_set_size_request(top, LIST_W, TOP_H + 10 + NEWPT_H);
+    gtk_box_pack_start(GTK_BOX(left), top, FALSE, FALSE, 0);
 
     // table header and framed rows
     GtkWidget* listCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
@@ -445,18 +494,20 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_container_add(GTK_CONTAINER(scrolled), u->list);
     data->segmentListBox = GTK_LIST_BOX(u->list);
 
-    // stage column (240): clock, selector, start, autostart, clear keys
+    // stage column: clock, selector, start, autostart
     GtkWidget* col = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_widget_set_size_request(col, STAGE_W, TOP_H);
-    gtk_box_pack_end(GTK_BOX(top), col, FALSE, FALSE, 0);
+    gtk_widget_set_size_request(col, STAGE_W, TOP_H + 10 + NEWPT_H);
+    gtk_box_pack_end(GTK_BOX(left), col, FALSE, FALSE, 0);
     u->clock = GTK_LABEL(gtk_label_new("00:00:00"));
     addClass(GTK_WIDGET(u->clock), "seg-clock");
     gtk_widget_set_size_request(GTK_WIDGET(u->clock), STAGE_W, 42);
     gtk_box_pack_start(GTK_BOX(col), GTK_WIDGET(u->clock), FALSE, FALSE, 0);
 
-    GtkWidget* sel = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_widget_set_halign(sel, GTK_ALIGN_END);   // right-aligned with the time boxes below
-    gtk_widget_set_size_request(sel, -1, 54);
+    // - 1 + spread edge to edge: three keys, each drawn about 53 px wide (the button adds padding to its 50-52 px request), the rest split into two gaps.
+    GtkWidget* sel = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (STAGE_W - 159) / 2);
+    gtk_widget_set_halign(sel, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_top(sel, 8);           // clear of the rally clock above
+    gtk_widget_set_size_request(sel, STAGE_W, 54);
     auto key = [&](const char* t, int w, int h, GCallback cb) {
         GtkWidget* b = gtk_button_new_with_label(t);
         gtk_widget_set_size_request(b, w, h);
@@ -484,6 +535,7 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     GtkWidget* lbl = gtk_label_new("Stage Start time");
     addClass(lbl, "seg-head");
     gtk_label_set_xalign(GTK_LABEL(lbl), 0.0f);
+    gtk_widget_set_margin_top(lbl, 10);   // clear of the - 1 + row above
     gtk_box_pack_start(GTK_BOX(col), lbl, FALSE, FALSE, 0);
 
     // An entry right-aligned in the column; `label` (cyan, like the heading) goes on
@@ -507,6 +559,7 @@ GtkWidget* createStageSetupScreen(AppData* data) {
         g_object_set_data(G_OBJECT(e), "seg_kind", const_cast<char*>(kind));
         g_signal_connect(e, "focus-in-event", G_CALLBACK(onEntryFocusIn), data);
         g_signal_connect(e, "activate", G_CALLBACK(onEntryActivate), data);
+        g_signal_connect(e, "changed", G_CALLBACK(onSegEntryChanged), data);
         gtk_box_pack_start(GTK_BOX(col), e, FALSE, FALSE, 0);
         *entryOut = e;
     };
@@ -515,32 +568,22 @@ GtkWidget* createStageSetupScreen(AppData* data) {
 
     GtkWidget* autoRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     GtkWidget* al = gtk_label_new("Autostart");
-    addClass(al, "seg-small");
+    addClass(al, "seg-head");   // same 18 px cyan as "Distance at start"
     u->autoCheck = gtk_check_button_new();
     g_signal_connect(u->autoCheck, "toggled", G_CALLBACK(onAutostartToggled), data);
     gtk_box_pack_start(GTK_BOX(autoRow), al, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(autoRow), u->autoCheck, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(col), autoRow, FALSE, FALSE, 0);
 
-    GtkWidget* clr = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-    gtk_widget_set_valign(clr, GTK_ALIGN_END);
-    // Two short lines at 22 px: one 28 px line ("clear stage") is wider than
-    // the 117 px half-column and would widen the whole stage column.
-    GtkWidget* clrStage = key("clear\nstage", (STAGE_W - 6) / 2, 48, G_CALLBACK(onClearStage));
-    GtkWidget* clrAll = key("clear\nall", (STAGE_W - 6) / 2, 48, G_CALLBACK(onClearAll));
-    for (GtkWidget* k : {clrStage, clrAll}) {
-        addClass(k, "key-small");
-        addClass(k, "key-clr");   // tight padding: the theme's would make the pair wider than the column
-        gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(k))), GTK_JUSTIFY_CENTER);
-    }
-    gtk_box_pack_start(GTK_BOX(clr), clrStage, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(clr), clrAll, TRUE, TRUE, 0);
-    gtk_box_pack_end(GTK_BOX(col), clr, FALSE, FALSE, 0);
+    // clear stage at the foot of the column, as tall as menu; clear all is under the keypad.
+    GtkWidget* clrStage = key("clear stage", STAGE_W, nero::MENU_KEY_H, G_CALLBACK(onClearStage));
+    addClass(clrStage, "key-small");
+    gtk_box_pack_end(GTK_BOX(col), clrStage, FALSE, FALSE, 0);
 
     // new point row: add distance + the ';' list
     GtkWidget* newPt = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 14);
-    gtk_widget_set_size_request(newPt, LEFT_W, NEWPT_H);
-    gtk_box_pack_start(GTK_BOX(left), newPt, FALSE, FALSE, 0);
+    gtk_widget_set_size_request(newPt, LIST_W, NEWPT_H);
+    gtk_box_pack_start(GTK_BOX(top), newPt, FALSE, FALSE, 0);
     GtkWidget* add = key("add distance", 200, NEWPT_H, G_CALLBACK(onAddDistance));
     addClass(add, "key-small");
     gtk_box_pack_start(GTK_BOX(newPt), add, FALSE, FALSE, 0);
@@ -556,10 +599,18 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(screen), kp, FALSE, FALSE, 0);
     data->numericKeypad = createNeroKeypad(data);
     gtk_box_pack_start(GTK_BOX(kp), data->numericKeypad, FALSE, FALSE, 0);
+    // clear all sits to the left of menu, as tall as it.
+    const int CLR_W = nero::KEYPAD_COL_W - nero::MENU_KEY_W - 8;
+    GtkWidget* clrAll = key("clear\nall", CLR_W, nero::MENU_KEY_H, G_CALLBACK(onClearAll));
+    addClass(clrAll, "key-small");
+    gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(clrAll))), GTK_JUSTIFY_CENTER);
     GtkWidget* menu = createMenuKey(data);
-    gtk_widget_set_halign(menu, GTK_ALIGN_END);
-    gtk_widget_set_valign(menu, GTK_ALIGN_END);
-    gtk_box_pack_end(GTK_BOX(kp), menu, FALSE, FALSE, 0);
+    GtkWidget* menuRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_pack_start(GTK_BOX(menuRow), clrAll, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(menuRow), menu, FALSE, FALSE, 0);
+    gtk_widget_set_halign(menuRow, GTK_ALIGN_END);
+    gtk_widget_set_valign(menuRow, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(kp), menuRow, FALSE, FALSE, 0);
 
     data->activeEntry = nullptr;
     return screen;

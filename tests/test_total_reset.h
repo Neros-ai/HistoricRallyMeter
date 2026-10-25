@@ -151,6 +151,23 @@ public:
             return true;
         });
 
+        suite->addTest("a stage is live only while running or counting down (the edit lock)", []() {
+            RallyState s;
+            ASSERT_FALSE(stageLive(s));                 // idle: stages may be edited and loaded
+            s.segment_current_number = 1;
+            s.stage_complete = false;
+            ASSERT_TRUE(stageLive(s));                  // running
+            s.stage_complete = true;
+            ASSERT_FALSE(stageLive(s));                 // driven out: the next stage may be loaded
+            s.segment_current_number = -1;
+            s.auto_start_rally_time_s = 1000;
+            s.auto_start_early_departure = false;
+            ASSERT_FALSE(stageLive(s));                 // a scheduled start still waiting is not live
+            s.auto_start_early_departure = true;
+            ASSERT_TRUE(stageLive(s));                  // an early-departure start counting down is
+            return true;
+        });
+
         suite->addTest("no stage and nothing armed is the plain odometer case", []() {
             RallyState s;
             ASSERT_TRUE(classifyTotalReset(s) == TotalResetCase::Idle);
