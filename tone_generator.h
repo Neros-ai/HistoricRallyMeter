@@ -6,7 +6,7 @@
 #include <thread>
 #include <mutex>
 
-enum class ToneWaveform { Sine, Triangle };
+enum class ToneWaveform { Sine, Triangle, Square };
 
 class ToneGenerator {
 public:

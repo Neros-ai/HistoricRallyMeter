@@ -30,6 +30,7 @@ ToneCadence decideToneCadence(bool tone_enabled, bool simple_tone_mode,
         cadence.tone_ms = arrow.tone_ms;
         cadence.silence_ms = arrow.silence_ms;
         cadence.freq_hz = arrow.freq_hz;
+        cadence.square = true;
     }
     return cadence;
 }
@@ -42,7 +43,7 @@ std::string toneCadenceJson(const ToneCadence& cadence) {
              on ? cadence.tone_ms : 0,
              on ? cadence.silence_ms : 0,
              on ? cadence.freq_hz : 0.0,
-             (on && cadence.triangle) ? "triangle" : "sine");
+             (on && cadence.square) ? "square" : (on && cadence.triangle) ? "triangle" : "sine");
     return buf;
 }
 

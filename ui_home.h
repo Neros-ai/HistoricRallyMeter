@@ -21,6 +21,7 @@ struct HomeUi {
     std::string history[6];     // Trip history, newest first
     std::string stageNo = "-";
     bool autoArmed = false;
+    bool unitsMph = false;      // speed-table header reads MPH
     std::string autoTime;       // hh:mm:ss, or empty
     bool autoTimePast = false;  // the stage start time has already gone by and no stage is armed or running
     struct Row { std::string kph, at; bool now = false; };
@@ -36,6 +37,7 @@ struct HomeUi {
     GtkWidget* stack = nullptr;       // "main" | "picker"
     GtkWidget* stageNoBtn = nullptr;
     GtkWidget* pickerBtns[5] = {};
+    GtkWidget* popover = nullptr;     // single-display: the stage picker, beside the gauge
     GtkWidget* freezeBtn = nullptr;
     GtkWidget* reverseBtn = nullptr;
     GtkWidget* minuteCaption = nullptr;   // text carrier: hh:mm under the next-minute flag

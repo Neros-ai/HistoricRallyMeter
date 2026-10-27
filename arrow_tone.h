@@ -45,6 +45,18 @@ constexpr double ARROW_TONE_SOUND_THRESHOLD_S = 0.2;
 // behave exactly as upstream's do.
 constexpr double ARROW_TONE_ARROW_FLOOR_S = 0.1;
 
+// Type 1 tone: a short square-wave tick whose gap shrinks as the error grows,
+// one step per 0.2 s of error (the same step the latch moves in, and type 2's).
+// The gap is the silence between ticks; the pitch says which way to go.
+constexpr int    ARROW_TONE_TICK_MS = 50;
+constexpr double ARROW_TONE_BEHIND_HZ = 560.0;   // behind schedule: speed up
+constexpr double ARROW_TONE_AHEAD_HZ  = 440.0;   // ahead of schedule: slow down
+constexpr double ARROW_TONE_STEP_S = 0.2;
+constexpr int    ARROW_TONE_STEPS = 15;          // 0.2 s .. 3.0 s; beyond 3 s the last gap holds
+
+// The silence between ticks for an error of this size (either sign), in ms.
+int arrowToneGapMs(double errorSeconds);
+
 struct ArrowToneResult {
     int num_arrows;         // 0-3; 0 = no correction needed or gated off
     bool increase_speed;    // true = speed up (behind), false = slow down (ahead); valid only if num_arrows > 0

@@ -2,6 +2,7 @@
 #include "callbacks.h"
 #include "calculations.h"
 #include "counter_poller.h"
+#include "ui_copilot.h"
 #include "config_file.h"
 #include "nero_frame.h"
 #include "rally_state.h"
@@ -191,7 +192,7 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         // segment table: KPH / at m
         const double top = 12 + 36 + 6;
         cyan(cr);
-        drawText(cr, "KPH", 79, top + 18, 20, RIGHT);
+        drawText(cr, h->unitsMph ? "MPH" : "KPH", 79, top + 18, 20, RIGHT);
         drawText(cr, "at m", 193, top + 18, 20, RIGHT);
         for (int i = 0; i < 3; i++) {
             if (h->rows[i].kph.empty()) continue;
@@ -205,11 +206,11 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         cyan(cr);
         drawText(cr, "Stage arrival", width / 2.0, base + 26, 22, CENTRE);
         grey(cr);
-        drawText(cr, "kph", width * 0.25, base + 62, 18, CENTRE);
+        drawText(cr, h->unitsMph ? "mph" : "kph", width * 0.25, base + 62, 18, CENTRE);
         drawText(cr, "min", width * 0.75, base + 62, 18, CENTRE);
         if (h->arrivalValid) {
             cyan(cr);
-            drawText(cr, std::to_string(h->arrivalKph), width * 0.25, base + 112, 40, CENTRE);
+            drawText(cr, std::to_string(h->unitsMph ? static_cast<int>(std::lround(h->arrivalKph * 0.621371)) : h->arrivalKph), width * 0.25, base + 112, 40, CENTRE);
             white(cr);
             drawText(cr, std::to_string(h->arrivalMin), width * 0.75, base + 112, 40, CENTRE);
         }
@@ -391,12 +392,14 @@ void onStageNumber(GtkWidget* w, gpointer user_data) {
         gtk_widget_set_sensitive(h->pickerBtns[i], !empty);
         setLit(h->pickerBtns[i], data->state->last_memory_slot == i + 1);
     }
+    if (h->popover) { gtk_popover_popup(GTK_POPOVER(h->popover)); return; }
     gtk_stack_set_visible_child_name(GTK_STACK(h->stack), "picker");
 }
 
 void onPick(GtkWidget* w, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     recallMemorySlot(data, GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w), "slot")));
+    if (data->home->popover) { gtk_popover_popdown(GTK_POPOVER(data->home->popover)); return; }
     gtk_stack_set_visible_child_name(GTK_STACK(data->home->stack), "main");
 }
 
@@ -460,7 +463,16 @@ GtkWidget* createHomeScreen(AppData* data) {
     data->alarmCountdownLabel = nullptr;   // the Alarm KM grid is gone
     data->alarmClearBtn = nullptr;
 
-    GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, COL_GAP);
+    // Single-display mode (one 1280 x 400 screen): the same left block, then the
+    // clock and stage selector over the driver gauge, then the right-hand keys.
+    // Widths: left 470 + 10 + 90 = 570, gap 10, gauge 544, gap 10, keys 130 = 1264.
+    // Layout: tools/layout-preview/nero2/single-display.html.
+    const bool single = data->singleDisplayMode;
+    const int col1W = single ? 470 : COL1_W;
+    const int figW = col1W - KEY_W;
+    const int leftGap = single ? 10 : COL_GAP;
+
+    GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, single ? 10 : COL_GAP);
     gtk_container_set_border_width(GTK_CONTAINER(screen), 5);
     g_signal_connect(screen, "unmap", G_CALLBACK(onHomeUnmap), data);
 
@@ -469,12 +481,12 @@ GtkWidget* createHomeScreen(AppData* data) {
     // position along the bottom row: reverse ends level with the right edge of
     // the figures above it.
     GtkWidget* leftOverlay = gtk_overlay_new();
-    GtkWidget* leftCols = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, COL_GAP);
+    GtkWidget* leftCols = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, leftGap);
     gtk_container_add(GTK_CONTAINER(leftOverlay), leftCols);
     gtk_box_pack_start(GTK_BOX(screen), leftOverlay, FALSE, FALSE, 0);
 
     GtkWidget* c1 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_widget_set_size_request(c1, COL1_W, -1);
+    gtk_widget_set_size_request(c1, col1W, -1);
     gtk_box_pack_start(GTK_BOX(leftCols), c1, FALSE, FALSE, 0);
 
     struct { const char* label; GCallback cb; } rows[3] = {
@@ -489,7 +501,7 @@ GtkWidget* createHomeScreen(AppData* data) {
         gtk_box_pack_start(GTK_BOX(left), key, FALSE, FALSE, 0);
         h->elapsedArea[i] = makeArea(data, ELAPSED, i, KEY_W, ROW_GAP);
         gtk_box_pack_start(GTK_BOX(left), h->elapsedArea[i], FALSE, FALSE, 0);
-        h->figureArea[i] = makeArea(data, FIGURE, i, FIGURE_W, CELL_H);
+        h->figureArea[i] = makeArea(data, FIGURE, i, figW, CELL_H);
         gtk_box_pack_start(GTK_BOX(row), left, FALSE, FALSE, 0);
         gtk_box_pack_start(GTK_BOX(row), h->figureArea[i], FALSE, FALSE, 0);
         gtk_box_pack_start(GTK_BOX(c1), row, FALSE, FALSE, 0);
@@ -538,7 +550,7 @@ GtkWidget* createHomeScreen(AppData* data) {
         // 128 px: "A-B, B-C" at 24 px (8 x 14.4 = 115) plus the button's padding.
         const gint key_w = 128;
         for (GtkWidget* k : row_keys) gtk_widget_set_size_request(k, key_w, KEY_H);
-        const int span_l = KEY_W, span_r = 594;   // 130 .. the -10 key's right edge, measured on the sandbox screenshot
+        const int span_l = KEY_W, span_r = single ? col1W + leftGap + COL2_W - 21 : 594;   // 130 .. the -10 key's right edge, measured on the sandbox screenshot
         const int gap = (span_r - span_l - 3 * key_w) / 3;
         const int row_y = 3 * (KEY_H + ROW_GAP);              // 318: the prev row
         const int frz_x = span_l + gap;
@@ -554,6 +566,44 @@ GtkWidget* createHomeScreen(AppData* data) {
         gtk_overlay_set_overlay_pass_through(GTK_OVERLAY(leftOverlay), fixed, TRUE);
     }
 
+    if (single) {
+        // ── middle: rally clock and stage selector over the driver gauge ──
+        GtkWidget* mid = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+        gtk_widget_set_size_request(mid, 544, -1);
+        gtk_box_pack_start(GTK_BOX(screen), mid, FALSE, FALSE, 0);
+
+        GtkWidget* top = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+        gtk_widget_set_size_request(top, 544, STAGE_ROW_H);
+        gtk_label_set_xalign(data->copilotRallyClockLabel, 0.0);
+        gtk_label_set_width_chars(data->copilotRallyClockLabel, 8);
+        addClass(GTK_WIDGET(data->copilotRallyClockLabel), "home-clock");
+        gtk_box_pack_start(GTK_BOX(top), GTK_WIDGET(data->copilotRallyClockLabel), FALSE, FALSE, 0);
+
+        GtkWidget* minus = makeKey("-", 52, 52, G_CALLBACK(onStageMinus), data);
+        h->stageNoBtn = makeKey("-", 50, 50, G_CALLBACK(onStageNumber), data);
+        GtkWidget* plus = makeKey("+", 52, 52, G_CALLBACK(onStagePlus), data);
+        gtk_box_pack_end(GTK_BOX(top), plus, FALSE, FALSE, 0);
+        gtk_box_pack_end(GTK_BOX(top), h->stageNoBtn, FALSE, FALSE, 0);
+        gtk_box_pack_end(GTK_BOX(top), minus, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(mid), top, FALSE, FALSE, 0);
+
+        // The picker: five keys in a popover on the stage number.
+        h->popover = gtk_popover_new(h->stageNoBtn);
+        GtkWidget* pbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+        gtk_container_set_border_width(GTK_CONTAINER(pbox), 8);
+        for (int i = 0; i < 5; i++) {
+            GtkWidget* b = makeKey(std::to_string(i + 1).c_str(), 56, 56, G_CALLBACK(onPick), data);
+            g_object_set_data(G_OBJECT(b), "slot", GINT_TO_POINTER(i + 1));
+            h->pickerBtns[i] = b;
+            gtk_box_pack_start(GTK_BOX(pbox), b, FALSE, FALSE, 0);
+        }
+        gtk_container_add(GTK_CONTAINER(h->popover), pbox);
+        gtk_widget_show_all(pbox);
+
+        GtkWidget* gauge = createEmbeddedGauge(data);
+        gtk_widget_set_size_request(gauge, 544, -1);
+        gtk_box_pack_start(GTK_BOX(mid), gauge, TRUE, TRUE, 0);
+    } else {
     // ── columns 3 and 4 live in a stack so the picker can cover both ──
     h->stack = gtk_stack_new();
     gtk_box_pack_start(GTK_BOX(screen), h->stack, FALSE, FALSE, 0);
@@ -611,6 +661,7 @@ GtkWidget* createHomeScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(picker), cancel, FALSE, FALSE, 0);
     gtk_stack_add_named(GTK_STACK(h->stack), picker, "picker");
     gtk_stack_set_visible_child_name(GTK_STACK(h->stack), "main");
+    }
 
     // ── column 5: flags, zero, menu ──
     GtkWidget* c5 = gtk_box_new(GTK_ORIENTATION_VERTICAL, ROW_GAP);
@@ -760,7 +811,7 @@ void updateHomeDisplay(AppData* data) {
             }
         }
 
-        bool changed = (is_armed != h->autoArmed) || (auto_time != h->autoTime)
+        bool changed = (data->state->units != h->unitsMph) || (is_armed != h->autoArmed) || (auto_time != h->autoTime)
                     || (time_past != h->autoTimePast)
                     || (arr.valid != h->arrivalValid) || (arr.speed_kph != h->arrivalKph)
                     || (arr.minutes != h->arrivalMin);
@@ -769,6 +820,7 @@ void updateHomeDisplay(AppData* data) {
                 changed = true;
             h->rows[r] = rows[r];
         }
+        h->unitsMph = data->state->units;
         h->autoArmed = is_armed;
         h->autoTimePast = time_past;
         h->autoTime = auto_time;

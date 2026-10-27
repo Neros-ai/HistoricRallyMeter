@@ -20,13 +20,14 @@ public:
             return !c.sounding() && simple.lastCommittedSeconds == 0.0;
         });
 
-        suite->addTest("arrow mode plays the arrow tone's cadence, sine", []() {
+        suite->addTest("arrow mode plays the arrow tone's cadence, square", []() {
             ArrowToneResult arrow{};
             arrow.tone_active = true; arrow.tone_ms = 500; arrow.silence_ms = 200; arrow.freq_hz = 1046.50;
             SimpleToneState simple;
             ToneCadence c = decideToneCadence(true, false, arrow, simple, -2.0, 1000.0, false);
             return c.tone_ms == 500 && c.silence_ms == 200 && c.freq_hz == 1046.50
-                && !c.triangle && simple.lastCommittedSeconds == 0.0;
+                && c.square && !c.triangle && simple.lastCommittedSeconds == 0.0
+                && toneCadenceJson(c).find("\"wave\":\"square\"") != std::string::npos;
         });
 
         suite->addTest("arrow mode is silent when the arrow tone is", []() {

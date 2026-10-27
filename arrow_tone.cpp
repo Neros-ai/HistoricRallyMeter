@@ -46,6 +46,19 @@ Classified classify(double secondsAheadBehind, double target_kph_raw, bool units
 }
 }  // namespace
 
+int arrowToneGapMs(double errorSeconds) {
+    // Fast drop at the small end, where the crew need to tell 0.2 from 0.6 from
+    // 1.0 s apart, then a gentle run down to 70 ms at 3 s.
+    static const int GAP_MS[ARROW_TONE_STEPS] = {
+        1000, 700, 500, 360, 260,     // 0.2 .. 1.0 s
+         220, 190, 165, 145, 130,     // 1.2 .. 2.0 s
+         118, 106,  94,  82,  70 };   // 2.2 .. 3.0 s
+    int step = static_cast<int>(std::floor(std::abs(errorSeconds) / ARROW_TONE_STEP_S + 1e-9));
+    if (step < 1) step = 1;
+    if (step > ARROW_TONE_STEPS) step = ARROW_TONE_STEPS;
+    return GAP_MS[step - 1];
+}
+
 ArrowToneResult computeArrowBasedTone(ArrowToneState& state,
                                         double secondsAheadBehind,
                                         double targetSpeedCountsPerHour,
@@ -95,19 +108,12 @@ ArrowToneResult computeArrowBasedTone(ArrowToneState& state,
         return result;  // arrows/direction stay valid for the label
     }
 
-    Classified latched = classify(committed, target_kph_raw, unitsMph);
-    if (latched.num_arrows == 0) {
-        return result;
-    }
-
+    // The tone follows the error in seconds alone (the arrows keep using the
+    // target speed): a square-wave tick, its gap set by the size of the error
+    // and its pitch by the direction.
     result.tone_active = true;
-    result.freq_hz = latched.increase_speed ? 1046.50 : 1396.91;
-    if (latched.num_arrows >= 3) {
-        result.tone_ms = 700; result.silence_ms = 300;
-    } else if (latched.num_arrows == 2) {
-        result.tone_ms = 500; result.silence_ms = 200;
-    } else {
-        result.tone_ms = 100; result.silence_ms = 100;
-    }
+    result.freq_hz = (committed < 0.0) ? ARROW_TONE_BEHIND_HZ : ARROW_TONE_AHEAD_HZ;
+    result.tone_ms = ARROW_TONE_TICK_MS;
+    result.silence_ms = arrowToneGapMs(committed);
     return result;
 }
