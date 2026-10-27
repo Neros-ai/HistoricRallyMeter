@@ -528,24 +528,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         cairo_move_to(cr, width - 15 - te.x_advance, foot_baseline);
         cairo_show_text(cr, cpu_text);
 
-        // Single-display mode: rally clock hard top-right, bright white
-        // (replaces the alarm panel's clock)
-        if (data->singleDisplayMode && data->copilotRallyClockLabel) {
-            // Pinned, not scaled with the gauge's own fonts. This clock
-            // stands in for the alarm panel's clock that single-display mode
-            // replaces -- it is not one of the gauge's readings, and shrinking
-            // it with them left nothing fixed to judge their size against.
-            // 27px is what the box drew it at before the fonts were rescaled.
-            double clock_size = 27.0;
-            cairo_set_font_size(cr, clock_size);
-            cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-            const char* clock_text = gtk_label_get_text(data->copilotRallyClockLabel);
-            cairo_text_extents(cr, clock_text, &te);
-            // Align the glyph ink (bearing + width), not the advance, so the
-            // visible right edge sits flush with the panel edge
-            cairo_move_to(cr, width - (te.x_bearing + te.width), clock_size);
-            cairo_show_text(cr, clock_text);
-        }
+        // (Single-display mode: the rally clock now sits above the gauge, on the page.)
     }
 
     return FALSE;
@@ -759,7 +742,8 @@ void updateDriverDisplay(AppData* data) {
         if (data->toneGen) {
             const ToneCadence& t = data->currentTone;
             data->toneGen->setCadence(t.tone_ms, t.silence_ms, t.freq_hz,
-                t.triangle ? ToneWaveform::Triangle : ToneWaveform::Sine);
+                t.square ? ToneWaveform::Square
+                         : t.triangle ? ToneWaveform::Triangle : ToneWaveform::Sine);
         }
 
         // Redraw gauge

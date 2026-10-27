@@ -87,7 +87,7 @@
         <table id="stage-table"><thead><tr><th id="stage-speed-head">KPH</th><th>at m</th></tr></thead><tbody></tbody></table>
       </div>
       <div class="card arr"><span class="cyan">Stage arrival</span>
-        <span class="fig"><span><small>kph</small><b class="cyan" id="arr-kph">--</b></span><span><small>min</small><b id="arr-min">--</b></span></span></div>
+        <span class="fig"><span><small id="arr-unit">kph</small><b class="cyan" id="arr-kph">--</b></span><span><small>min</small><b id="arr-min">--</b></span></span></div>
     </div>
     <div class="card hist">Trip history&nbsp; <span id="trip-history">-</span></div>
 
@@ -208,9 +208,9 @@
     <canvas id="driver-gauge" width="390" height="360" aria-label="Driver gauge"></canvas>
     <div class="driver-footer">
       <section class="dist-box" id="drv-box-total"><span class="dl">Total</span><strong id="drv-total-m">0</strong>
-        <span class="rt"><span class="avg">avg <b id="drv-total-avg">0.0</b></span></span></section>
+        <span class="rt"><span class="avg">avg <b id="drv-total-avg">0.0</b> <small class="avg-unit">kph</small></span></span></section>
       <section class="dist-box" id="drv-box-trip"><span class="dl">Trip</span><strong id="drv-trip-m">0</strong>
-        <span class="rt"><span class="avg">avg <b id="drv-trip-avg">0.0</b></span></span></section>
+        <span class="rt"><span class="avg">avg <b id="drv-trip-avg">0.0</b> <small class="avg-unit">kph</small></span></span></section>
     </div>
   </main>
 

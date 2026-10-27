@@ -21,6 +21,9 @@ static double waveSample(double phase, ToneWaveform wave) {
     }
     double t = phase / (2.0 * M_PI);
     t -= std::floor(t);
+    // Square, scaled down: a square wave of the same peak is much louder than a
+    // sine or triangle, so it is trimmed to sit at a similar loudness.
+    if (wave == ToneWaveform::Square) return (t < 0.5 ? 0.6 : -0.6);
     return 4.0 * std::fabs(t - 0.5) - 1.0;
 }
 

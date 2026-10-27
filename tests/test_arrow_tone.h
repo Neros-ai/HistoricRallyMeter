@@ -190,29 +190,41 @@ public:
             return r.num_arrows == 3 && r.increase_speed == false;
         });
 
-        suite->addTest("behind schedule sounds C6 with the 3-arrow cadence", [CAL, TARGET_100KPH]() {
+        suite->addTest("behind schedule ticks at the lower-pitched behind tone", [CAL, TARGET_100KPH]() {
             ArrowToneState st7;
             ArrowToneResult r = computeArrowBasedTone(st7, -2.0, TARGET_100KPH, CAL, false, 1000.0, false);
-            return r.tone_active == true && std::abs(r.freq_hz - 1046.50) < 0.01
-                && r.tone_ms == 700 && r.silence_ms == 300;
+            return r.tone_active == true && std::abs(r.freq_hz - ARROW_TONE_BEHIND_HZ) < 0.01
+                && r.tone_ms == ARROW_TONE_TICK_MS && r.silence_ms == 130;
         });
 
-        suite->addTest("ahead of schedule sounds F6", [CAL, TARGET_100KPH]() {
+        suite->addTest("ahead of schedule ticks at the ahead pitch", [CAL, TARGET_100KPH]() {
             ArrowToneState st8;
             ArrowToneResult r = computeArrowBasedTone(st8, 2.0, TARGET_100KPH, CAL, false, 1000.0, false);
-            return r.tone_active == true && std::abs(r.freq_hz - 1396.91) < 0.01;
+            return r.tone_active == true && std::abs(r.freq_hz - ARROW_TONE_AHEAD_HZ) < 0.01;
         });
 
-        suite->addTest("1-arrow cadence is 100ms/100ms", [CAL, TARGET_100KPH]() {
-            ArrowToneState st9;
-            ArrowToneResult r = computeArrowBasedTone(st9, -0.3, TARGET_100KPH, CAL, false, 1000.0, false);
-            return r.tone_active == true && r.tone_ms == 100 && r.silence_ms == 100;
+        suite->addTest("the gap shrinks with every 0.2 s step of error", []() {
+            const int expected[ARROW_TONE_STEPS] = {
+                1000, 700, 500, 360, 260, 220, 190, 165, 145, 130, 118, 106, 94, 82, 70 };
+            for (int i = 0; i < ARROW_TONE_STEPS; i++) {
+                double e = 0.2 * (i + 1);
+                ASSERT_EQ(arrowToneGapMs(e), expected[i]);
+                ASSERT_EQ(arrowToneGapMs(-e), expected[i]);   // either direction
+            }
+            // Inside a step it holds; beyond 3 s the last gap holds.
+            ASSERT_EQ(arrowToneGapMs(0.39), 1000);
+            ASSERT_EQ(arrowToneGapMs(29.0), 70);
+            for (int i = 1; i < ARROW_TONE_STEPS; i++)
+                ASSERT_TRUE(expected[i] < expected[i - 1]);
+            return true;
         });
 
-        suite->addTest("2-arrow cadence is 500ms/200ms", [CAL, TARGET_100KPH]() {
-            ArrowToneState st10;
-            ArrowToneResult r = computeArrowBasedTone(st10, -1.0, TARGET_100KPH, CAL, false, 1000.0, false);
-            return r.tone_active == true && r.tone_ms == 500 && r.silence_ms == 200;
+        suite->addTest("the tick does not depend on the target speed", [CAL]() {
+            ArrowToneState a, b;
+            ArrowToneResult slow = computeArrowBasedTone(a, -1.0, 30.0 * 1e9 / CAL, CAL, false, 1000.0, false);
+            ArrowToneResult fast = computeArrowBasedTone(b, -1.0, 100.0 * 1e9 / CAL, CAL, false, 1000.0, false);
+            return slow.tone_active && fast.tone_active
+                && slow.silence_ms == fast.silence_ms && slow.tone_ms == fast.tone_ms;
         });
 
         suite->addTest("arrows still show but tone is silent before 250m", [CAL, TARGET_100KPH]() {

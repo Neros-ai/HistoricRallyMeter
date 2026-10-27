@@ -371,14 +371,6 @@ void updateCopilotDisplay(AppData* data) {
         return;
     }
     
-    // Update Adj. driver Zero button label (old layout; the Nero2.0 key is fixed text)
-    if (data->singleDisplayMode) {
-        double offset_s = data->state->ahead_behind_zero_offset_ms / 1000.0;
-        char lbl[64];
-        snprintf(lbl, sizeof(lbl), "driver Zero (%.2f)", offset_s);
-        gtk_button_set_label(GTK_BUTTON(data->adjZeroBtn), lbl);
-    }
-    
     // Total distance
     long total_m = adjustedDistanceMeters(
         countsToCentimeters(total_count_diff, data->state->calibration),
@@ -480,6 +472,70 @@ void updateCopilotDisplay(AppData* data) {
 }
 
 // Create TwinMaster screen - two-column layout for 1280x400
+// The driver's compact gauge for single-display mode, with the autostart
+// countdown laid over it. Sets copilotGaugeArea and the three countdown
+// pointers; the caller packs the returned overlay.
+GtkWidget* createEmbeddedGauge(AppData* data) {
+    // The gauge goes inside an overlay so the autostart countdown can be
+    // laid over it. The driver window owns a countdown of its own, but
+    // that window is never shown in single-display mode, so the crew saw
+    // no countdown at all. The overlay covers the gauge panel only,
+    // leaving the navigator their controls while it runs.
+    GtkWidget* gaugeOverlay = gtk_overlay_new();
+    gtk_widget_set_hexpand(gaugeOverlay, TRUE);
+    gtk_widget_set_vexpand(gaugeOverlay, TRUE);
+
+    data->copilotGaugeArea = gtk_drawing_area_new();
+    gtk_widget_set_hexpand(data->copilotGaugeArea, TRUE);
+    gtk_widget_set_vexpand(data->copilotGaugeArea, TRUE);
+    g_signal_connect(data->copilotGaugeArea, "draw", G_CALLBACK(on_gauge_draw), data);
+    gtk_container_add(GTK_CONTAINER(gaugeOverlay), data->copilotGaugeArea);
+
+    // Rebuilt here rather than reparented: the driver window's widgets are
+    // already packed into that window's own overlay. Its copies stay where
+    // they are, unseen. updateDriverDisplay() drives whichever widgets
+    // these three pointers name, so it needs no change -- but this must run
+    // after createDriverWindow(), which sets them first. main.cpp creates
+    // the driver window before the co-pilot one.
+    data->countdownLabel = GTK_LABEL(gtk_label_new("T- 00:00:00"));
+    gtk_widget_set_margin_start(GTK_WIDGET(data->countdownLabel), 20);
+    gtk_widget_set_margin_end(GTK_WIDGET(data->countdownLabel), 20);
+    gtk_widget_set_margin_top(GTK_WIDGET(data->countdownLabel), 10);
+    gtk_widget_set_margin_bottom(GTK_WIDGET(data->countdownLabel), 10);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(GTK_WIDGET(data->countdownLabel)),
+        "countdown-label-embedded");
+
+    GtkWidget* countdownBox = gtk_event_box_new();
+    gtk_container_add(GTK_CONTAINER(countdownBox), GTK_WIDGET(data->countdownLabel));
+    gtk_widget_set_halign(countdownBox, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(countdownBox, GTK_ALIGN_CENTER);
+    gtk_style_context_add_class(gtk_widget_get_style_context(countdownBox),
+                                "countdown-box-embedded");
+
+    data->earlyDepartureLabel = GTK_LABEL(gtk_label_new(""));
+    gtk_label_set_justify(data->earlyDepartureLabel, GTK_JUSTIFY_CENTER);
+    gtk_label_set_xalign(data->earlyDepartureLabel, 0.5);
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(GTK_WIDGET(data->earlyDepartureLabel)),
+        "early-departure-label-embedded");
+
+    GtkWidget* countdownStack = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    gtk_widget_set_halign(countdownStack, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(countdownStack, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(countdownStack), countdownBox, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(countdownStack),
+                       GTK_WIDGET(data->earlyDepartureLabel), FALSE, FALSE, 0);
+    data->countdownContainer = countdownStack;
+
+    gtk_overlay_add_overlay(GTK_OVERLAY(gaugeOverlay), countdownStack);
+    gtk_widget_show_all(countdownStack);
+    gtk_widget_hide(countdownStack);
+
+
+    return gaugeOverlay;
+}
+
 GtkWidget* createTwinMasterScreen(AppData* data) {
     GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_container_set_border_width(GTK_CONTAINER(screen), 5);
@@ -701,62 +757,7 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(mainArea), rightPanel, FALSE, data->singleDisplayMode ? TRUE : FALSE, 0);
 
     if (data->singleDisplayMode) {
-        // The gauge goes inside an overlay so the autostart countdown can be
-        // laid over it. The driver window owns a countdown of its own, but
-        // that window is never shown in single-display mode, so the crew saw
-        // no countdown at all. The overlay covers the gauge panel only,
-        // leaving the navigator their controls while it runs.
-        GtkWidget* gaugeOverlay = gtk_overlay_new();
-        gtk_widget_set_hexpand(gaugeOverlay, TRUE);
-        gtk_widget_set_vexpand(gaugeOverlay, TRUE);
-        gtk_box_pack_start(GTK_BOX(rightPanel), gaugeOverlay, TRUE, TRUE, 0);
-
-        data->copilotGaugeArea = gtk_drawing_area_new();
-        gtk_widget_set_hexpand(data->copilotGaugeArea, TRUE);
-        gtk_widget_set_vexpand(data->copilotGaugeArea, TRUE);
-        g_signal_connect(data->copilotGaugeArea, "draw", G_CALLBACK(on_gauge_draw), data);
-        gtk_container_add(GTK_CONTAINER(gaugeOverlay), data->copilotGaugeArea);
-
-        // Rebuilt here rather than reparented: the driver window's widgets are
-        // already packed into that window's own overlay. Its copies stay where
-        // they are, unseen. updateDriverDisplay() drives whichever widgets
-        // these three pointers name, so it needs no change -- but this must run
-        // after createDriverWindow(), which sets them first. main.cpp creates
-        // the driver window before the co-pilot one.
-        data->countdownLabel = GTK_LABEL(gtk_label_new("T- 00:00:00"));
-        gtk_widget_set_margin_start(GTK_WIDGET(data->countdownLabel), 20);
-        gtk_widget_set_margin_end(GTK_WIDGET(data->countdownLabel), 20);
-        gtk_widget_set_margin_top(GTK_WIDGET(data->countdownLabel), 10);
-        gtk_widget_set_margin_bottom(GTK_WIDGET(data->countdownLabel), 10);
-        gtk_style_context_add_class(
-            gtk_widget_get_style_context(GTK_WIDGET(data->countdownLabel)),
-            "countdown-label-embedded");
-
-        GtkWidget* countdownBox = gtk_event_box_new();
-        gtk_container_add(GTK_CONTAINER(countdownBox), GTK_WIDGET(data->countdownLabel));
-        gtk_widget_set_halign(countdownBox, GTK_ALIGN_CENTER);
-        gtk_widget_set_valign(countdownBox, GTK_ALIGN_CENTER);
-        gtk_style_context_add_class(gtk_widget_get_style_context(countdownBox),
-                                    "countdown-box-embedded");
-
-        data->earlyDepartureLabel = GTK_LABEL(gtk_label_new(""));
-        gtk_label_set_justify(data->earlyDepartureLabel, GTK_JUSTIFY_CENTER);
-        gtk_label_set_xalign(data->earlyDepartureLabel, 0.5);
-        gtk_style_context_add_class(
-            gtk_widget_get_style_context(GTK_WIDGET(data->earlyDepartureLabel)),
-            "early-departure-label-embedded");
-
-        GtkWidget* countdownStack = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
-        gtk_widget_set_halign(countdownStack, GTK_ALIGN_CENTER);
-        gtk_widget_set_valign(countdownStack, GTK_ALIGN_CENTER);
-        gtk_box_pack_start(GTK_BOX(countdownStack), countdownBox, FALSE, FALSE, 0);
-        gtk_box_pack_start(GTK_BOX(countdownStack),
-                           GTK_WIDGET(data->earlyDepartureLabel), FALSE, FALSE, 0);
-        data->countdownContainer = countdownStack;
-
-        gtk_overlay_add_overlay(GTK_OVERLAY(gaugeOverlay), countdownStack);
-        gtk_widget_show_all(countdownStack);
-        gtk_widget_hide(countdownStack);
+        gtk_box_pack_start(GTK_BOX(rightPanel), createEmbeddedGauge(data), TRUE, TRUE, 0);
 
         data->alarmCountdownLabel = nullptr;
         data->alarmClearBtn = nullptr;
@@ -957,8 +958,7 @@ GtkWidget* createCopilotWindow(AppData* data) {
     // Create all screens
     // Two displays get the Nero2.0 Home page; the single-display box keeps the
     // embedded-gauge layout until the driver-display plan reworks it.
-    data->twinMasterScreen = data->singleDisplayMode ? createTwinMasterScreen(data)
-                                                      : createHomeScreen(data);
+    data->twinMasterScreen = createHomeScreen(data);   // both modes: single-display embeds the gauge in it
     data->stageSetupScreen = createStageSetupScreen(data);
     data->calibrationScreen = createCalibrationScreen(data);
     data->dateTimeScreen = createDateTimeScreen(data);

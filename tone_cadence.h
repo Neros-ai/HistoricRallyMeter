@@ -14,6 +14,7 @@ struct ToneCadence {
     int silence_ms = 0;
     double freq_hz = 0.0;
     bool triangle = false;   // else sine
+    bool square = false;     // type 1's tick; else triangle or sine
 
     bool sounding() const { return tone_ms > 0 && freq_hz > 0.0; }
 };

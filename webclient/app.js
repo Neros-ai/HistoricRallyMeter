@@ -4,6 +4,12 @@
   let ws = null;
   let reconnectTimer = null;
   let units = 'kph';
+  let lastArrival = null;
+  function renderArrival() {
+    $('arr-unit').textContent = units === 'mph' ? 'mph' : 'kph';
+    $('arr-kph').textContent = lastArrival
+      ? (units === 'mph' ? Math.round(lastArrival.kph * 0.621371) : lastArrival.kph) : '--';
+  }
   // The last state message, kept so a units change arriving on telemetry can
   // re-title the stage panel without waiting for the next state broadcast.
   let lastState = null;
@@ -133,6 +139,7 @@
     const previousUnits = units;
     units = msg.units || 'kph';
     if (units !== previousUnits && lastState) renderStagePanel(lastState);
+    if (units !== previousUnits) renderArrival();
 
     if (!frozen) {
       $('trip-m').textContent = formatDist(msg.trip_m);
@@ -145,8 +152,10 @@
     // Driver tab footer (HTML under the gauge — keeps dial clear).
     $('drv-trip-m').textContent = formatDist(msg.trip_m);
     $('drv-total-m').textContent = formatDist(msg.total_m);
-    $('drv-trip-avg').textContent = Number(msg.trip_avg_kph || 0).toFixed(1);
-    $('drv-total-avg').textContent = Number(msg.total_avg_kph || 0).toFixed(1);
+    const avgF = units === 'mph' ? 0.621371 : 1;
+    $('drv-trip-avg').textContent = (Number(msg.trip_avg_kph || 0) * avgF).toFixed(1);
+    $('drv-total-avg').textContent = (Number(msg.total_avg_kph || 0) * avgF).toFixed(1);
+    document.querySelectorAll('.avg-unit').forEach((e) => { e.textContent = units; });
 
     $('btn-next').disabled = !msg.next_enabled;
     $('btn-prev').disabled = !msg.prev_enabled;
@@ -158,7 +167,8 @@
     setWhoop(!!(lastTelemetry && lastTelemetry.reverse) || frozen);
 
     // Stage arrival
-    $('arr-kph').textContent = msg.arrival ? msg.arrival.kph : '--';
+    lastArrival = msg.arrival || null;
+    renderArrival();
     $('arr-min').textContent = msg.arrival ? msg.arrival.min : '--';
     const sp = $('stage-pick');
     if (document.activeElement !== sp && msg.stage_no >= 1) sp.value = String(msg.stage_no);
@@ -253,12 +263,17 @@
     $('stage-speed-head').textContent = units === 'mph' ? 'MPH' : 'KPH';
     const tbody = $('stage-table').querySelector('tbody');
     tbody.innerHTML = '';
-    const rows = state.rows || [];
-    const cur = Math.max(0, (Number(state.segment_current_number) || 0));
-    const first = cur > 0 ? Math.min(cur - 1, Math.max(0, rows.length - 3)) : 0;
-    rows.slice(first, first + 3).forEach((r, i) => {
+    // Speed changes only, as on the box: row 1 and every row that starts a new speed.
+    const rows = [];
+    (state.rows || []).forEach((r, i) => { if (i === 0 || r.chg) rows.push({ r: r, idx: i }); });
+    const cur = Number(state.segment_current_number);
+    let curChange = 0;
+    rows.forEach((x, c) => { if (x.idx <= cur) curChange = c; });
+    const first = curChange > 0 ? Math.min(curChange - 1, Math.max(0, rows.length - 3)) : 0;
+    rows.slice(first, first + 3).forEach((x, i) => {
+      const r = x.r;
       const tr = document.createElement('tr');
-      if (first + i === state.segment_current_number) tr.className = 'now';
+      if (cur >= 0 && first + i === curChange) tr.className = 'now';
       const speed = Number(r.kph || 0) * (units === 'mph' ? 0.621371 : 1);
       tr.innerHTML = '<td>' + speed.toFixed(1) + '</td><td>' + Number(r.from).toLocaleString() + '</td>';
       tbody.appendChild(tr);
@@ -754,8 +769,8 @@
     const on = t.toneMs / 1000;
     const fade = Math.min(0.005, on / 2);
     g.setValueAtTime(0, at);
-    g.linearRampToValueAtTime(TONE_LEVEL, at + fade);
-    g.setValueAtTime(TONE_LEVEL, at + Math.max(fade, on - fade));
+    g.linearRampToValueAtTime(t.level, at + fade);
+    g.setValueAtTime(t.level, at + Math.max(fade, on - fade));
     g.linearRampToValueAtTime(0, at + on);
   }
 
@@ -815,12 +830,13 @@
     const ctx = audio();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.type = c.wave === 'triangle' ? 'triangle' : 'sine';
+    osc.type = (c.wave === 'triangle' || c.wave === 'square') ? c.wave : 'sine';
     osc.frequency.value = c.freq_hz;
     gain.gain.value = 0;
     osc.connect(gain).connect(ctx.destination);
     osc.start();
-    const t = { osc: osc, gain: gain, key: key, freq: c.freq_hz, toneMs: c.tone_ms,
+    // A square wave of the same peak is much louder; the box trims it to 0.6.
+    const t = { level: c.wave === 'square' ? TONE_LEVEL * 0.6 : TONE_LEVEL, osc: osc, gain: gain, key: key, freq: c.freq_hz, toneMs: c.tone_ms,
                 periodS: (c.tone_ms + c.silence_ms) / 1000, nextAt: ctx.currentTime,
                 gen: audioGen, timer: null };
     tone = t;
