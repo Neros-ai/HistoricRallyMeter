@@ -663,7 +663,8 @@ NeedleGeometry computeNeedleGeometry(double seconds, double max_seconds, double 
 // then always exactly +-1, with no separate clamp needed anywhere else. The
 // tick count (one per second of this value) grows around the pinned needle
 // instead of the needle continuing to sweep a fixed dial.
-double gaugeEffectiveMaxSeconds(double seconds);
+// range_s is the Settings full scale (1, 2 or 3 s; default 3).
+double gaugeEffectiveMaxSeconds(double seconds, double range_s = 3.0);
 
 // Which zone the reading is in: 0 = green (|seconds| < 10, still deflecting
 // or just pinned), 1 = amber (10 to 30), 2 = red (30 and beyond, capped).

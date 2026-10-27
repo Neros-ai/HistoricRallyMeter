@@ -4,6 +4,7 @@
 #include "config_file.h"
 #include "nero_frame.h"
 #include "rally_state.h"
+#include "ui_setup.h"
 #include "webserver/qr_display.h"
 #include <cstdio>
 #include <string>
@@ -18,13 +19,14 @@ constexpr int QR_SIZE = 3 * ROW_H + 2 * GAP;   // 124: the QR code spans three r
 
 enum Setting {
     BEEP_NAV, BEEP_TIMING, TONE_ON, TONE_BEHIND, TONE_AHEAD,
-    UNITS, STAGE_LOG, SENSOR_LOG, FORCE_SINGLE
+    UNITS, STAGE_LOG, SENSOR_LOG, FORCE_SINGLE, GAUGE_RANGE
 };
 
 struct SegCtl {
     AppData* data;
     Setting id;
-    GtkWidget* btn[2];
+    GtkWidget* btn[3];
+    int n;
 };
 
 void addClass(GtkWidget* w, const char* c) { gtk_style_context_add_class(gtk_widget_get_style_context(w), c); }
@@ -57,6 +59,7 @@ void apply(AppData* d, Setting id, int idx) {
         break;
     case STAGE_LOG:   s.stage_logging = (idx == 1); break;
     case SENSOR_LOG:  s.debug_logs_enabled = (idx == 1); setDebugLogging(d, s.debug_logs_enabled); break;
+    case GAUGE_RANGE: s.gauge_range_s = idx + 1; break;
     case FORCE_SINGLE:
         on_force_single_display_toggle(nullptr, idx == 1, d);   // saves itself; applies at next start
         break;
@@ -80,27 +83,29 @@ int stateIndex(const RallyState& s, Setting id) {
     case STAGE_LOG:    return s.stage_logging ? 1 : 0;
     case SENSOR_LOG:   return s.debug_logs_enabled ? 1 : 0;
     case FORCE_SINGLE: return s.force_single_display ? 1 : 0;
+    case GAUGE_RANGE:  return s.gauge_range_s - 1;
     }
     return 0;
 }
 
 void onSeg(GtkWidget* w, gpointer) {
     SegCtl* c = static_cast<SegCtl*>(g_object_get_data(G_OBJECT(w), "ctl"));
-    const int idx = (w == c->btn[1]) ? 1 : 0;
-    setLit(c->btn[0], idx == 0);
-    setLit(c->btn[1], idx == 1);
+    int idx = 0;
+    for (int i = 0; i < c->n; i++) if (w == c->btn[i]) idx = i;
+    for (int i = 0; i < c->n; i++) setLit(c->btn[i], i == idx);
     apply(c->data, c->id, idx);
 }
 
-// A two-key selector; `active` is 0 or 1.
-GtkWidget* seg(AppData* d, Setting id, const char* a, const char* b, int active) {
-    SegCtl* c = new SegCtl{d, id, {nullptr, nullptr}};
+// A two-key selector (or three with `c3`); `active` is the lit key's index.
+GtkWidget* seg(AppData* d, Setting id, const char* a, const char* b, int active, const char* c3 = nullptr) {
+    const int n = c3 ? 3 : 2;
+    SegCtl* c = new SegCtl{d, id, {nullptr, nullptr, nullptr}, n};
     allCtls().push_back(c);
     GtkWidget* box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    const char* labels[2] = {a, b};
-    for (int i = 0; i < 2; i++) {
+    const char* labels[3] = {a, b, c3};
+    for (int i = 0; i < n; i++) {
         GtkWidget* k = gtk_button_new_with_label(labels[i]);
-        gtk_widget_set_size_request(k, 70, KEY_H);
+        gtk_widget_set_size_request(k, n == 3 ? 56 : 70, KEY_H);
         addClass(k, "dist-heading");
         addClass(k, "key-small");
         g_object_set_data(G_OBJECT(k), "ctl", c);
@@ -169,6 +174,7 @@ GtkWidget* createSettingsScreen(AppData* d) {
     gtk_box_pack_end(GTK_BOX(row(left, "Ahead/Behind Tone")), seg(d, TONE_ON, "off", "on", s.tone_enabled ? 1 : 0), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(left, "Tone when behind")), seg(d, TONE_BEHIND, "1", "2", s.tone_type_behind == 2 ? 1 : 0), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(left, "Tone when ahead")), seg(d, TONE_AHEAD, "1", "2", s.tone_type_ahead == 2 ? 1 : 0), FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(row(left, "Gauge range \u00B1 s")), seg(d, GAUGE_RANGE, "1", "2", s.gauge_range_s - 1, "3"), FALSE, FALSE, 0);
 
     // ── right: SYSTEM, with the version above the speed-units key ──
     GtkWidget* right = gtk_box_new(GTK_ORIENTATION_VERTICAL, GAP);
@@ -181,7 +187,7 @@ GtkWidget* createSettingsScreen(AppData* d) {
     addClass(h2, "seg-head");
     gtk_label_set_xalign(GTK_LABEL(h2), 0.0f);
     gtk_box_pack_start(GTK_BOX(head), h2, TRUE, TRUE, 0);
-    GtkWidget* ver = gtk_label_new("Nero2.0");
+    GtkWidget* ver = gtk_label_new(nero::VERSION);
     addClass(ver, "seg-small");
     gtk_widget_set_size_request(ver, 140, -1);
     gtk_label_set_xalign(GTK_LABEL(ver), 0.0f);
@@ -244,6 +250,10 @@ GtkWidget* createSettingsScreen(AppData* d) {
     GtkWidget* menu = createMenuKey(d);
     gtk_widget_set_valign(menu, GTK_ALIGN_END);
     gtk_box_pack_end(GTK_BOX(base), menu, FALSE, FALSE, 0);
+    // The spanner key, bottom left: opens the Setup page.
+    GtkWidget* spanner = createSpannerKey(d);
+    gtk_widget_set_valign(spanner, GTK_ALIGN_END);
+    gtk_box_pack_start(GTK_BOX(base), spanner, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(kp), base, FALSE, FALSE, 0);
 
     d->settingsScreen = screen;
@@ -254,8 +264,7 @@ void updateSettingsDisplay(AppData* d) {
     if (!d->settingsInfoLabel) return;
     for (SegCtl* c : allCtls()) {
         const int idx = stateIndex(*d->state, c->id);
-        setLit(c->btn[0], idx == 0);
-        setLit(c->btn[1], idx == 1);
+        for (int i = 0; i < c->n; i++) setLit(c->btn[i], idx == i);
     }
     std::string info = std::string("Screen ") + gtk_label_get_text(d->updatesPerSecLabel)
                      + "   " + gtk_label_get_text(d->cpuTempLabel);

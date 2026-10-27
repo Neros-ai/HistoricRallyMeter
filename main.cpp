@@ -23,6 +23,7 @@
 #include "rally_types.h"
 #include "ui_driver.h"
 #include "ui_copilot.h"
+#include "ui_setup.h"
 #include "ui_control.h"
 #include "callbacks.h"
 #include "webserver/rally_web_server.h"
@@ -652,6 +653,7 @@ int main(int argc, char* argv[]) {
             std::cerr << "[DEBUG] Step 11a: Driver window shown" << std::endl;
         }
         gtk_widget_show_all(app_data.copilotWindow);
+        bluetoothAutoconnectOnStartup(&app_data);
         std::cerr << "[DEBUG] Step 11b: Copilot window shown" << std::endl;
 
         if (app_data.controlWindow) {

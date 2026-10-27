@@ -183,7 +183,8 @@ std::string buildTelemetryJson(AppData* data) {
     const int64_t rpm_ms = tenth.time_ms ? raw_poll.time_ms - tenth.time_ms : 0;
     const double rpm = propRpmFromCounts(raw_poll.cntr1, tenth.cntr1, rpm_ms, st.prop_pulses_per_rev);
     std::ostringstream ex;
-    ex << ",\"reverse\":" << (data->poller->reverse() ? "true" : "false")
+    ex << ",\"gauge_range\":" << data->state->gauge_range_s
+       << ",\"reverse\":" << (data->poller->reverse() ? "true" : "false")
        << ",\"total_s\":" << total_s << ",\"trip_s\":" << trip_s
        << ",\"next_m\":" << (has_next_m ? std::to_string(next_m) : std::string("null"))
        << ",\"speed_change\":\"" << speed_change << "\""
@@ -294,7 +295,8 @@ std::string buildStateJson(AppData* data) {
        << ",\"tone_enabled\":" << (data->state->tone_enabled ? "true" : "false")
        << ",\"tone_type\":" << data->state->tone_type_behind
        << ",\"tone_type_behind\":" << data->state->tone_type_behind
-       << ",\"tone_type_ahead\":" << data->state->tone_type_ahead;
+       << ",\"tone_type_ahead\":" << data->state->tone_type_ahead
+       << ",\"gauge_range\":" << data->state->gauge_range_s;
 
     // Which memory slots hold a stage, so the phone can mark them the way the
     // box does instead of offering five identical buttons.

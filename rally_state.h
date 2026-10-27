@@ -182,10 +182,16 @@ public:
     // 1 = the speed/arrow-based tone, 2 = the time-error-only tone.
     int tone_type_behind = 1;
     int tone_type_ahead = 1;
+    int gauge_range_s = 3;   // driver gauge full scale: +-1, +-2 or +-3 s (Settings)
 
     // Settings > System (Nero2.0). Written by the logging plan; stored here so
     // the switches persist.
     bool stage_logging = true;
+    // Remembered Bluetooth speaker (Setup page, spanner key). Both empty when none is remembered.
+    std::string bluetooth_audio_name;
+    std::string bluetooth_audio_address;
+    // When set, the app reconnects that speaker on startup. BlueZ trust follows it.
+    bool bluetooth_audio_autoconnect = false;
     bool debug_logs_enabled = false;   // "Sensor logging": CSV of every counter poll in logs/
 
     // Embedded web server for phone browsers

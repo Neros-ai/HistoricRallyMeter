@@ -115,12 +115,29 @@ void stageEditSetFirst(AppData* d, long number, double from_m) {
     stageEditCommit(d);
 }
 
-void stageEditSetStart(AppData* d, long time_s, long distance_m) {
+void stageEditSetStart(AppData* d, long time_s, long distance_m, std::string* notice) {
     STAGE_EDIT_GUARD(d, );
     RallyState::MemorySlot& slot = slotOf(d);
-    slot.start_time_s = time_s < 0 ? -1 : time_s;
+    const long new_s = time_s < 0 ? -1 : time_s;
+    // A timed autostart armed for this stage follows its start time: it was
+    // armed at the old time, so a new time has to re-arm it (or, if it can no
+    // longer be armed, switch it off) or the box would still fire at the old one.
+    const bool armed_here = d->state->auto_start_rally_time_s != 0
+                         && !d->state->auto_start_early_departure
+                         && !d->autoStartTriggered
+                         && d->autoSlot == d->state->last_memory_slot;
+    const bool retime = armed_here && new_s != slot.start_time_s;
+    slot.start_time_s = new_s;
     if (distance_m >= 0) slot.start_distance_m = distance_m;
     stageEditCommit(d);
+    if (retime) {
+        std::string err;
+        if (!stageEditSetAutostart(d, true, &err)) {
+            stageEditSetAutostart(d, false, nullptr);
+            if (notice) *notice = "Autostart switched off: " + err;
+            notifyWebStateNow(d);
+        }
+    }
 }
 
 void stageEditClearStage(AppData* d) {

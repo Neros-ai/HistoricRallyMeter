@@ -224,6 +224,7 @@
     });
     radios('tone-behind', Number(state.tone_type_behind) || 1);
     radios('tone-ahead', Number(state.tone_type_ahead) || 1);
+    radios('gauge-range', Number(state.gauge_range) || 3);
     radios('units', units);
     setIf($('set-stage-log'), (el) => { el.checked = !!state.stage_logging; });
     setIf($('set-sensor-log'), (el) => { el.checked = !!state.sensor_logging; });
@@ -574,6 +575,8 @@
     r.addEventListener('change', () => { if (r.checked) send({ type: 'tone_set', tone_type_behind: Number(r.value) }); }));
   document.querySelectorAll('input[name="tone-ahead"]').forEach((r) =>
     r.addEventListener('change', () => { if (r.checked) send({ type: 'tone_set', tone_type_ahead: Number(r.value) }); }));
+  document.querySelectorAll('input[name="gauge-range"]').forEach((r) =>
+    r.addEventListener('change', () => { if (r.checked) send({ type: 'gauge_range', seconds: Number(r.value) }); }));
   document.querySelectorAll('input[name="units"]').forEach((r) =>
     r.addEventListener('change', () => { if (r.checked) send({ type: 'setting', name: 'units_mph', on: r.value === 'mph' }); }));
   $('set-stage-log').addEventListener('change', (e) => send({ type: 'setting', name: 'stage_logging', on: e.target.checked }));
