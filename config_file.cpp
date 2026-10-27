@@ -59,6 +59,14 @@ static std::string extractString(const std::string& line) {
     return line.substr(a + 1, b - a - 1);
 }
 
+// The loader above reads up to the next quote, so a quote or backslash in a
+// Bluetooth device name is swapped for an apostrophe rather than escaped.
+static std::string jsonEscape(const std::string& s) {
+    std::string out = s;
+    for (char& c : out) if (c == '"' || c == '\\') c = '\'';
+    return out;
+}
+
 static bool extractBool(const std::string& line) {
     return line.find("true") != std::string::npos;
 }
@@ -264,10 +272,19 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.tone_type_behind = state.tone_type_ahead = extractBool(line) ? 2 : 1;
         } else if (line.find("\"tone_type_behind\"") != std::string::npos) {
             state.tone_type_behind = static_cast<int>(extractLong(line)) == 2 ? 2 : 1;
+        } else if (line.find("\"gauge_range_s\"") != std::string::npos) {
+            const long r = extractLong(line);
+            state.gauge_range_s = (r >= 1 && r <= 3) ? static_cast<int>(r) : 3;
         } else if (line.find("\"tone_type_ahead\"") != std::string::npos) {
             state.tone_type_ahead = static_cast<int>(extractLong(line)) == 2 ? 2 : 1;
         } else if (line.find("\"stage_logging\"") != std::string::npos) {
             state.stage_logging = extractBool(line);
+        } else if (line.find("\"bluetooth_audio_name\"") != std::string::npos) {
+            state.bluetooth_audio_name = extractString(line);
+        } else if (line.find("\"bluetooth_audio_address\"") != std::string::npos) {
+            state.bluetooth_audio_address = extractString(line);
+        } else if (line.find("\"bluetooth_audio_autoconnect\"") != std::string::npos) {
+            state.bluetooth_audio_autoconnect = extractBool(line);
         } else if (line.find("\"debug_logs_enabled\"") != std::string::npos
                    || line.find("\"sensor_logging\"") != std::string::npos) {
             // "Sensor logging" on Settings; the key keeps Papworth's name.
@@ -449,7 +466,11 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"tone_enabled\": " << (state.tone_enabled ? "true" : "false") << ",\n";
     file << "  \"tone_type_behind\": " << state.tone_type_behind << ",\n";
     file << "  \"tone_type_ahead\": " << state.tone_type_ahead << ",\n";
+    file << "  \"gauge_range_s\": " << state.gauge_range_s << ",\n";
     file << "  \"stage_logging\": " << (state.stage_logging ? "true" : "false") << ",\n";
+    file << "  \"bluetooth_audio_name\": \"" << jsonEscape(state.bluetooth_audio_name) << "\",\n";
+    file << "  \"bluetooth_audio_address\": \"" << jsonEscape(state.bluetooth_audio_address) << "\",\n";
+    file << "  \"bluetooth_audio_autoconnect\": " << (state.bluetooth_audio_autoconnect ? "true" : "false") << ",\n";
     file << "  \"debug_logs_enabled\": " << (state.debug_logs_enabled ? "true" : "false") << ",\n";
     file << "  \"web_enabled\": " << (state.web_enabled ? "true" : "false") << ",\n";
     file << "  \"web_port\": " << state.web_port << ",\n";

@@ -8,9 +8,10 @@
   const NEEDLE_HALF_WIDTH = 3.0;   // ticks
   const NEEDLE_BAR_HALF_WIDTH = 5.0;   // Nero2.0: the needle is 10 px thick
 
-  function gaugeEffectiveMaxSeconds(seconds) {
+  function gaugeEffectiveMaxSeconds(seconds, range) {
+    const base = range || 3;
     const abs = Math.abs(seconds);
-    if (abs < 3) return 3;
+    if (abs < base) return base;
     if (abs > 30) return 30;
     return abs;
   }
@@ -157,7 +158,7 @@
 
     const msg = this.last;
     const seconds = Number(msg.ahead_behind_s) || 0;
-    const maxVal = gaugeEffectiveMaxSeconds(seconds);
+    const maxVal = gaugeEffectiveMaxSeconds(seconds, Number(msg.gauge_range) || 3);
     this.zoneShown = gaugeZoneHysteretic(seconds, this.zoneShown);
     const zone = this.zoneShown;
     const arc = gaugeArcColor(zone);
@@ -200,6 +201,23 @@
     ctx.font = 'bold ' + (24 * fscale) + 'px monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    // Fine ticks as the box: every tenth on +-1 s, every two tenths on +-2 s and +-3 s.
+    const range = Number(msg.gauge_range) || 3;
+    const step = (maxVal >= range + 1) ? 0 : (range === 1) ? 1 : 2;
+    if (step) {
+      const lw = ctx.lineWidth;
+      ctx.lineWidth = lw * 0.6;
+      for (let k = -39; k <= 39; k++) {
+        if (k % 10 === 0 || k % step !== 0 || Math.abs(k / 10) > maxVal) continue;
+        const a = gaugeTickAngle(k / 10, maxVal);
+        const inner = (Math.abs(k) % 5 === 0) ? radius - 12 : radius - 2;
+        ctx.beginPath();
+        ctx.moveTo(centerX + inner * Math.cos(a), centerY + inner * Math.sin(a));
+        ctx.lineTo(centerX + (radius + 8) * Math.cos(a), centerY + (radius + 8) * Math.sin(a));
+        ctx.stroke();
+      }
+      ctx.lineWidth = lw;
+    }
     for (let i = -tickCount; i <= tickCount; i++) {
       const angle = gaugeTickAngle(i, maxVal);
       const x1 = centerX + (radius - 20) * Math.cos(angle);

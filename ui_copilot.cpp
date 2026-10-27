@@ -16,6 +16,7 @@
 #include "ui_datetime.h"
 #include "ui_calibration.h"
 #include "ui_settings.h"
+#include "ui_setup.h"
 #include <sstream>
 #include <iostream>
 #include <cstdlib>
@@ -103,6 +104,7 @@ static void applyCopilotCSS() {
         ".cal-entry { font-size: 28px; font-family: monospace; color: #FFFFFF; }"
         "button.key-tiny { font-size: 15px; padding: 0; }"
         ".set-name { font-size: 22px; font-family: monospace; }"
+        ".setup-label { font-size: 20px; font-family: monospace; }"
         ".set-url { font-size: 22px; font-family: monospace; color: #00FFFF; }"
         ".set-note { font-size: 17px; font-family: monospace; color: #AAAAAA; }"
         ".set-entry { font-size: 22px; }"
@@ -973,6 +975,8 @@ GtkWidget* createCopilotWindow(AppData* data) {
     
     data->settingsScreen = createSettingsScreen(data);
     gtk_stack_add_named(data->copilotStack, data->settingsScreen, "settings");
+    data->setupScreen = createSetupScreen(data);
+    gtk_stack_add_named(data->copilotStack, data->setupScreen, "setup");
 
     // The menu page last: it greys any key whose page is not in the stack.
     data->menuScreen = createMenuScreen(data);

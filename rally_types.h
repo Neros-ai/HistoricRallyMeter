@@ -104,6 +104,13 @@ struct AppData {
     GtkLabel* copilotRallyClockLabel;
     GtkWidget* menuScreen = nullptr;  // Nero2.0 full-screen menu page
     GtkWidget* settingsScreen = nullptr;   // Nero2.0 Settings page
+    GtkWidget* setupScreen = nullptr;      // Setup page, opened by the spanner key on Settings
+    GtkWidget* setupDisplayRow = nullptr;  // one card per connected display
+    GtkLabel* setupStatusLabel = nullptr;
+    GtkWidget* setupWifiRow = nullptr;     // one key per saved Wi-Fi network
+    GtkLabel* bluetoothAudioLabel = nullptr;
+    GtkWidget* setupBtConnectBtn = nullptr;
+    GtkWidget* setupBtDisconnectBtn = nullptr;
     GtkLabel* settingsInfoLabel = nullptr; // "Screen N fps  CPU N C"
     // Nero2.0 Date/Time and Calibration pages
     GtkWidget* sensor1Btn = nullptr;

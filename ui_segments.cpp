@@ -401,7 +401,11 @@ void segmentsCommitImpl(AppData* d, bool quiet) {
         if (stop && *stop == '\0' && v >= 0.0 && !text.empty()) stageEditSetSpeed(d, row, v);
     } else if (!strcmp(kind, "start_time")) {
         long t = parseTimeOfDay(text);
-        if (t >= 0 || text.empty()) stageEditSetStart(d, t >= 0 ? t : -1, -1);
+        if (t >= 0 || text.empty()) {
+            std::string notice;
+            stageEditSetStart(d, t >= 0 ? t : -1, -1, &notice);
+            if (!notice.empty() && !quiet) flashNotice(GTK_WIDGET(e), notice);
+        }
     } else if (!strcmp(kind, "start_dist")) {
         long m = parseMetres(text);
         if (m >= 0) stageEditSetStart(d, slot.start_time_s, m);

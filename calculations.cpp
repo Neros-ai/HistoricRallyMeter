@@ -887,9 +887,9 @@ NeedleGeometry computeNeedleGeometry(double seconds, double max_seconds, double 
     return n;
 }
 
-double gaugeEffectiveMaxSeconds(double seconds) {
+double gaugeEffectiveMaxSeconds(double seconds, double range_s) {
     double abs_sec = std::abs(seconds);
-    if (abs_sec < 3.0) return 3.0;
+    if (abs_sec < range_s) return range_s;
     if (abs_sec > 30.0) return 30.0;
     return abs_sec;
 }

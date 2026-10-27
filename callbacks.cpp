@@ -1503,7 +1503,10 @@ void on_menu_choice(GtkWidget* widget, gpointer user_data) {
     const nero::MenuItem* item = static_cast<const nero::MenuItem*>(
         g_object_get_data(G_OBJECT(widget), "menu-item"));
     if (!item) return;
-    if (!item->page) { on_exit_app(widget, data); return; }
+    if (!item->page) {
+        if (confirmYesNo(widget, "Exit", "Close the app?")) on_exit_app(widget, data);
+        return;
+    }
     if (!gtk_stack_get_child_by_name(data->copilotStack, item->page)) return;
 
     const std::string page = item->page;

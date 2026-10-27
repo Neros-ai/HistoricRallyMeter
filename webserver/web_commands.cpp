@@ -391,6 +391,13 @@ bool webHandleCommand(AppData* data, const char* json) {
         ConfigFile::save(*data->state);
         return true;
     }
+    if (strcmp(type, "gauge_range") == 0) {
+        int r = 0;
+        if (!jsonFindInt(json, "seconds", &r) || r < 1 || r > 3) return false;
+        data->state->gauge_range_s = r;
+        ConfigFile::save(*data->state);
+        return true;
+    }
     if (strcmp(type, "tone_set") == 0) {
         bool flag = false;
         int tone_type = 0;

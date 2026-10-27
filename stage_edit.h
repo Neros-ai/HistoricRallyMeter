@@ -35,7 +35,7 @@ void stageEditDeleteRow(AppData* data, size_t row);
 bool stageEditSetRowTo(AppData* data, size_t row, double new_to_m);
 void stageEditSetFirst(AppData* data, long number, double from_m);
 // time_s < 0 clears the time.
-void stageEditSetStart(AppData* data, long time_s, long distance_m);
+void stageEditSetStart(AppData* data, long time_s, long distance_m, std::string* notice = nullptr);
 void stageEditClearStage(AppData* data);
 void stageEditClearAll(AppData* data);
 

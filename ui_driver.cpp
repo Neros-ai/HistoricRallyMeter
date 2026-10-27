@@ -81,7 +81,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // recomputed fresh every frame -- there is no discrete "scale" to
     // debounce or switch between any more.
     double seconds = data->aheadBehindSeconds;
-    double max_val = gaugeEffectiveMaxSeconds(seconds);
+    double max_val = gaugeEffectiveMaxSeconds(seconds, data->state->gauge_range_s);
     // Hysteretic: gaugeZone() alone is recomputed every frame and drives the
     // digital format, arc colour, chevron count and tick labels, so a reading
     // sitting on 10.0 or 30.0 flickered all four on every 10ms redraw.
@@ -138,6 +138,25 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // colour is the at-a-glance signal instead.
     bool labels_visible = gaugeTickLabelsVisibleInZone(zone);
     int tick_count = static_cast<int>(max_val);
+    // Fine ticks on the short ranges, while the sweep is still within a second
+    // of the range: every tenth of a second on +-1 s, every two tenths on +-2 s and +-3 s.
+    // Shorter than the second ticks; the half second a little longer.
+    const int range = data->state->gauge_range_s;
+    const int step = (max_val >= range + 1.0) ? 0 : (range == 1) ? 1 : 2;
+    if (step) {
+        for (int k = -39; k <= 39; k++) {
+            if (k % 10 == 0 || k % step != 0) continue;
+            const double h = k / 10.0;
+            if (std::abs(h) > max_val) continue;
+            const double inner = (std::abs(k) % 5 == 0) ? radius - 12 : radius - 2;
+            double angle = M_PI + M_PI / 2 + (h / max_val) * (M_PI / 2);
+            cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
+            cairo_set_line_width(cr, NEEDLE_HALF_WIDTH * 2 * 0.6);
+            cairo_move_to(cr, centerX + inner * cos(angle), centerY + inner * sin(angle));
+            cairo_line_to(cr, centerX + (radius + 8) * cos(angle), centerY + (radius + 8) * sin(angle));
+            cairo_stroke(cr);
+        }
+    }
     for (int i = -tick_count; i <= tick_count; i++) {
         // gaugeTickAngle() uses max_val (the true sweep end), matching
         // computeNeedleGeometry()'s seconds/max_seconds mapping -- not

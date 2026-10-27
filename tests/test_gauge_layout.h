@@ -249,6 +249,16 @@ public:
                 && std::abs(gaugeEffectiveMaxSeconds(-100.0) - 30.0) < 1e-9;
         });
 
+        suite->addTest("Settings gauge range sets the full scale (1, 2 or 3 s)", []() {
+            // Within the range the dial holds at it; past it the reading is
+            // tracked exactly as on the default 3 s scale.
+            return std::abs(gaugeEffectiveMaxSeconds(0.4, 1.0) - 1.0) < 1e-9
+                && std::abs(gaugeEffectiveMaxSeconds(-1.5, 1.0) - 1.5) < 1e-9
+                && std::abs(gaugeEffectiveMaxSeconds(1.9, 2.0) - 2.0) < 1e-9
+                && std::abs(gaugeEffectiveMaxSeconds(2.5, 2.0) - 2.5) < 1e-9
+                && std::abs(gaugeEffectiveMaxSeconds(40.0, 1.0) - 30.0) < 1e-9;
+        });
+
         suite->addTest("zone follows the 10s and 30s boundaries, sign-independent", []() {
             return gaugeZone(5.0) == 0 && gaugeZone(9.9) == 0
                 && gaugeZone(10.0) == 1 && gaugeZone(29.9) == 1
