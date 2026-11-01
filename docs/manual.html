@@ -18,6 +18,7 @@
   }
   h2 { font-size: 13pt; margin: 8mm 0 2mm; text-transform: uppercase; }
   h3 { font-size: 11pt; margin: 5mm 0 1mm; }
+  h4 { font-size: 10.5pt; margin: 4mm 0 1mm; font-style: italic; }
   p { margin: 0 0 2.5mm; }
   ol, ul { margin: 0 0 2.5mm; padding-left: 6mm; }
   li { margin-bottom: 1mm; }
@@ -54,7 +55,7 @@
     h1 { page-break-before: always; }
     h1:first-of-type { page-break-before: avoid; }
     .screen-page { page-break-before: always; page-break-after: always; }
-    h2, h3 { page-break-after: avoid; }
+    h2, h3, h4 { page-break-after: avoid; }
     .screen, table, .note { page-break-inside: avoid; }
     a { text-decoration: none; color: var(--ink); }
   }
@@ -65,10 +66,11 @@
 <div style="page-break-after: always">
 
 <h1 id="top">Rallybox User Manual</h1>
+<p style="margin-top: -2mm; color: #555">Software Nero2.1 &middot; manual updated 30 October 2026</p>
 
 <figure class="screen">
-  <img src="manual-images/main-screen.png" alt="The co-pilot navigation page">
-  <figcaption>Co-pilot display, navigation page.</figcaption>
+  <img src="manual-images/main-screen.png" alt="The co-pilot navigation page, greek rally type">
+  <figcaption>Co-pilot display, navigation page (greek rally type, stage running).</figcaption>
 </figure>
 
 <figure class="screen">
@@ -77,13 +79,32 @@
 </figure>
 
 <figure class="screen">
-  <img src="manual-images/single-display.png" alt="The co-pilot screen in single-display mode">
-  <figcaption>Single-display mode: the gauge sits on the co-pilot screen.</figcaption>
+  <img src="manual-images/italian-pc.png" alt="The co-pilot navigation page, italian rally type">
+  <figcaption>Co-pilot display, navigation page (italian rally type, inside a timed trial).</figcaption>
 </figure>
 
 </div>
 
 <section class="screen-page">
+
+<h2 id="rally-types">Rally types</h2>
+
+<p>The box works in one of three <b>rally types</b>, chosen under
+<code>settings</code> &rsaquo; <b>Rally type</b>. The choice changes the navigation and
+segments pages.</p>
+
+<table>
+<tr><th style="width: 18%">Rally type</th><th>Use it for</th><th style="width: 34%">In this manual</th></tr>
+<tr><td><b>greek</b></td><td>Stages start at roadbook boxes with zero distance at a set minute;
+speeds change at roadbook boxes.</td><td><a href="#segments">Programming</a>,
+<a href="#starting">Starting</a>, <a href="#main-screen">Navigating</a></td></tr>
+<tr><td><b>italian</b></td><td>A stage is a <b>sector</b> from one time control (CO) to the next,
+made of untimed driving, timed trials (pc), average trials (pm), stamp checks (ct) and the closing
+time control (co).</td><td><a href="#italian-programming">Programming</a>,
+<a href="#starting-sector">Starting</a>, <a href="#italian-navigation">Navigating</a></td></tr>
+<tr><td><b>surrey</b></td><td>Stages start at landmarks (with unspecified distances) within roadbook boxes displaying cumulative distance; scored on time taken.</td><td><a href="#surrey-programming">Programming</a>,
+<a href="#surrey-starting">Starting</a>, <a href="#surrey-navigation">Navigating</a></td></tr>
+</table>
 
 <h2 id="menu">Getting around</h2>
 
@@ -92,360 +113,360 @@
   <figcaption>The menu page.</figcaption>
 </figure>
 
-<p>Every page has a <code>menu</code> key, always directly under the keypad (on
-the navigation page it is the bottom key of the right-hand column). Press it to
-reach the menu, then press the page you want. <code>navigation</code> returns
-to the main page.</p>
+<p>Every page has a <code>menu</code> key at the bottom right. Press it to reach the main menu.</p>
 
 <ul>
-<li><b>navigation</b> &ndash; the main page, used while driving.</li>
+<li><b>navigation</b> &ndash; used while navigating and on stages.</li>
 <li><b>segments</b> &ndash; stage setup.</li>
-<li><b>date / time</b> &ndash; the rally clock.</li>
-<li><b>calibration</b> &ndash; pulses per kilometre.</li>
-<li><b>settings</b> &ndash; beep, tone, units, logging and the phone link.</li>
-<li><b>exit</b> &ndash; saves the settings and closes the program. It does not
-switch the Raspberry Pi off.</li>
+<li><b>date / time</b> &ndash; set rally time.</li>
+<li><b>calibration</b> &ndash; set pulses per kilometre.</li>
+<li><b>settings</b> &ndash; beep, tone, rally type, units and logging; the spanner key opens
+the <b>Setup</b> sub menu (displays, Bluetooth speaker, Wi-Fi and the phone link, software updates).</li>
+<li><b>exit</b> &ndash; saves the settings and closes the program. It does not switch the
+Raspberry Pi off.</li>
 </ul>
 
-<p>Numbers are typed on the on-screen keypad: tap a box, then use the keys.
-<code>C</code> clears the box and the arrow key deletes one character. The box
-has no Enter key, so an entry is saved when you tap another box or leave it
-alone for a second.</p>
-
-<p>Speeds are shown in kph or mph, as chosen under settings (speeds in the
-stage table and the small <code>40&lt;&gt;50 kph</code> line follow the choice).
-The stage setup entries are always kph.</p>
+<p>Numbers are typed on the on-screen keypad: <code>C</code> clears a selected entry and the
+arrow key deletes one character. There is no Enter key: an entry is saved when you tap another box
+or leave it alone for a second.</p>
 
 </section>
 
 <section class="screen-page">
 
-<h2 id="main-screen">The navigation page</h2>
+<h2 id="greek">Greek rally type</h2>
+
+<h3 id="segments">Programming Greek Stages</h3>
+
+<p>Select <b>greek</b> rally from the settings page and then select <code>segments</code> from the
+main menu. The segments page will display a Greek flag. The system defaults to metres (rather than
+km) but this can be overridden in settings.</p>
 
 <figure class="screen">
-  <img src="manual-images/main-screen.png" alt="The navigation page">
+  <svg viewBox="0 0 1346 664" style="display: block; width: 100%; height: auto"
+       role="img" aria-label="The greek segments page with each control labelled"
+       font-family="Univers, 'Univers Next', 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <defs>
+      <marker id="seg-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#111"/>
+      </marker>
+      <clipPath id="seg-torn"><path id="seg-torn-edge" d="M8,145 L1020,145 L1020,155 L1006,165 L1020,175 L1006,185 L1020,195 L1006,205 L1020,215 L1006,225 L1020,235 L1006,245 L1020,255 L1006,265 L1020,275 L1006,285 L1020,295 L1006,305 L1020,315 L1006,325 L1020,335 L1006,345 L1020,355 L1006,365 L1020,375 L1006,385 L1020,395 L1006,405 L1020,415 L1006,425 L1020,435 L1006,445 L1020,455 L1006,465 L1020,475 L1006,485 L1020,495 L1006,505 L1020,515 L1006,525 L1020,535 L1020,545 L8,545 Z"/></clipPath>
+    </defs>
+    <image href="manual-images/segments.png" x="8" y="145" width="1280" height="400"
+           clip-path="url(#seg-torn)"/>
+    <use href="#seg-torn-edge" fill="none" stroke="#bbb"/>
+    <g fill="#111">
+      <rect x="8" y="8" width="248" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="20" y="40" font-size="24" font-weight="bold">box</text>
+      <text x="20" y="65" font-size="21">Roadbook box number.</text>
+      <rect x="270" y="8" width="212" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="282" y="40" font-size="24" font-weight="bold">chg</text>
+      <text x="282" y="65" font-size="21">Tick for new speed.</text>
+      <rect x="496" y="8" width="342" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="508" y="40" font-size="24" font-weight="bold">auto</text>
+      <text x="508" y="65" font-size="21">Tick for automatic speed change.</text>
+      <rect x="852" y="8" width="145" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="864" y="40" font-size="24" font-weight="bold">X</text>
+      <text x="864" y="65" font-size="21">Deletes row.</text>
+      <rect x="1050" y="145" width="199" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1062" y="177" font-size="24" font-weight="bold">Select Stage</text>
+      <text x="1062" y="202" font-size="21">Stage to program.</text>
+      <rect x="1050" y="227" width="234" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1062" y="259" font-size="24" font-weight="bold">Start time</text>
+      <text x="1062" y="284" font-size="21">Time the stage starts.</text>
+      <rect x="1050" y="310" width="289" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1062" y="342" font-size="24" font-weight="bold">Distance at start</text>
+      <text x="1062" y="366" font-size="21">Roadbook distance at start.</text>
+      <rect x="1050" y="392" width="231" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1062" y="424" font-size="24" font-weight="bold">Autostart</text>
+      <text x="1062" y="449" font-size="21">Tick to arm autostart.</text>
+      <rect x="1050" y="474" width="262" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1062" y="506" font-size="24" font-weight="bold">clear stage / all</text>
+      <text x="1062" y="531" font-size="21">Empty stage / all stages.</text>
+      <rect x="8" y="585" width="288" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="20" y="617" font-size="24" font-weight="bold">add distance</text>
+      <text x="20" y="642" font-size="21">Type distances, then press.</text>
+      <rect x="310" y="585" width="217" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="322" y="617" font-size="24" font-weight="bold">from -m- to, dist</text>
+      <text x="322" y="642" font-size="21">Distances.</text>
+      <rect x="541" y="585" width="144" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="553" y="617" font-size="24" font-weight="bold">KPH/MPH</text>
+      <text x="553" y="642" font-size="21">Speed.</text>
+      <rect x="699" y="585" width="327" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="711" y="617" font-size="24" font-weight="bold">dur, elapsed</text>
+      <text x="711" y="642" font-size="21">Row duration and running total.</text>
+    </g>
+    <g fill="none" stroke="#111" stroke-width="3.5" stroke-linejoin="round" marker-end="url(#seg-arrow)">
+      <line x1="43" y1="81" x2="43" y2="145"/>
+      <polyline points="290,81 290,95 105,95 105,145"/>
+      <polyline points="516,81 516,109 163,109 163,145"/>
+      <polyline points="872,81 872,123 795,123 795,177"/>
+      <line x1="1048" y1="180" x2="1019" y2="227"/>
+      <line x1="1048" y1="263" x2="1021" y2="311"/>
+      <line x1="1048" y1="345" x2="1021" y2="381"/>
+      <line x1="1048" y1="427" x2="962" y2="416"/>
+      <line x1="1048" y1="510" x2="999" y2="502"/>
+      <line x1="113" y1="583" x2="113" y2="544"/>
+      <line x1="335" y1="583" x2="335" y2="448"/>
+      <polyline points="561,583 561,569 548,569 548,448"/>
+      <line x1="728" y1="583" x2="728" y2="448"/>
+    </g>
+  </svg>
+  <figcaption>Stage 8: one row per roadbook box, speed changes at boxes 103, 106 and 108.</figcaption>
 </figure>
 
-<h3>total</h3>
-
-<p>Shows the distance and elapsed time since the start. Pressing it resets the
-distance to zero.</p>
-
-<ul>
-<li>Outside a stage it resets the distance and the timer, but not Trip.</li>
-<li>Waiting for a timed autostart it resets Total, Trip and the timer at once,
-with no question; the stage zeroes everything again at its start time.</li>
-<li>Waiting for an early departure it resets Total and Trip at once, with no
-question, and leaves the timer alone: the minute starts it.</li>
-<li>During a stage you are asked to confirm (a missed start). Total and Trip go
-to zero from the moment you pressed, and the stage clock keeps running.</li>
-</ul>
-
-<h3>trip</h3>
-
-<p>An intermediate distance and time. Pressing it resets Trip, and the figure it
-showed is added to the <b>Trip history</b> column. Trip also restarts by itself
-at each speed change, whether the box makes it or <code>next</code> does, so it
-reads the distance driven in the present leg. <code>prev</code> puts Trip back
-to what it read before the change.</p>
-
-<h3>next and prev</h3>
-
-<p>The <code>next</code> figure is the distance still to run before the speed
-changes; below the key, <code>40&lt;&gt;50 kph</code> shows the present speed and
-the speed it changes to. <code>---</code> means there is no further change or no
-stage is running.</p>
-
-<p>Press <code>next</code> at the speed change when the stage is not set to
-change by itself, or to move on early. What this section gives up is handed to
-the next, so the following change point stays where the roadbook puts it. If
-you press it after the next leg's whole length has gone (a missed change point),
-there is nothing left to take: the stage simply runs long and later change points
-move out. <code>next</code> works only during a stage, and does nothing after the
-last speed change. <code>prev</code> undoes the last speed change (whether the crew or the box made
-it); it is grey when there is nothing to undo.</p>
-
-<h3>+10, set and &minus;10</h3>
-
-<p>Correct the measured distance. <code>+10</code> and <code>-10</code> move
-Total and Trip by ten metres a press. <code>set</code> opens a box to type the
-exact Total figure (Trip is not affected). Corrections during a stage re-work
-the average speeds and the timing error.</p>
-
-<h3>freeze and reverse</h3>
-
-<p><code>freeze</code> holds the Total, Trip and next figures and the Trip
-history while it is lit, so they can be read or copied; the clock and the stage
-panel carry on. Freeze is shared: pressing it on the box or on a phone holds
-the box and every phone together, and pressing it on either releases both. <code>reverse</code> makes Total,
-Trip and next count down while the car backs up; speed is unaffected. While
-either is lit the box repeats a low tone as a reminder.</p>
-
-<h3>A-B, B-C zero</h3>
-
-<p>Moves the driver's needle back to zero when the driver is deliberately
-aiming at an error (see <a href="#driver-zero">driver zero</a>).</p>
-
-<h3>The stage panel</h3>
-
-<ul>
-<li><b>&minus; 1 +</b> steps through the saved stages (1 to 5; empty ones are
-skipped). Tap the number to pick one directly. A new stage cannot be loaded
-while one is running.</li>
-<li>Beside it, a cyan clock and a time mean an autostart is armed for that
-time. A red cross means none is armed; a time with a red line through it has
-already gone by.</li>
-<li>The table lists the speed changes only, with the distance each begins at.
-The one in force is lit.</li>
-<li><b>Stage arrival</b> gives the speed needed to reach the start a minute early
-and the minutes to go. It follows the loaded stage's start time and distance
-from the Segments page, and goes blank when under a minute remains.</li>
-</ul>
-
-<h3>Starting and ending a stage</h3>
-
-<p>The three flag keys at the right start the stage; the loaded stage is
-locked while it runs.</p>
-
-<ul>
-<li><b>Flag with a time (for example 13:06)</b> &ndash; autostart on the next
-whole minute, shown on the key. Early departure is allowed: the distance zeroes
-and the stage loads when you press, so the driver display shows its speeds during
-the countdown; the timer zeroes at the minute. Anything rolled before the minute
-counts toward the stage distance and average speed. Pressing Total while waiting
-zeroes the distance and Trip again. If a stage is running you are asked first
-whether to abort it.</li>
-<li><b>Flag with now</b> &ndash; starts the stage immediately, zeroing Total,
-Trip and the timer. Use it for a flying start. Once a stage is armed or running
-this key reads <b>stage abort</b> and, after a confirmation, ends the stage: the
-needle returns to zero, the tone stops, Total and Trip keep their readings and
-any autostart is cancelled. (A timed start still waiting does not change the
-key: nothing is live yet.)</li>
-<li><b>Flag with auto</b> &ndash; arms an autostart at the loaded stage's start
-time (set on the Segments page). It turns white while armed; press it again to
-cancel. It is refused while a stage is running, or if the start time has passed.
-Early departure is not allowed with this start. (The Autostart tick on the
-Segments page can arm one during a running stage; that stage carries on until
-the autostart fires.)</li>
-</ul>
-
-</section>
-
-<section class="screen-page">
-
-<h2 id="segments">segments</h2>
-
-<figure class="screen">
-  <img src="manual-images/segments.png" alt="The segments page">
-  <figcaption>The segments page.</figcaption>
-</figure>
-
-<p>Stages are kept in five memories, chosen with <b>&minus; 1 +</b> under the
-clock. Everything typed is saved to the stage on show about a second after you
-stop typing. A stage cannot be edited while it is running.</p>
-
-<h3>Entering a stage</h3>
-
+<h4 id="greek-stage-data">Entering Greek stage data</h4>
+<p>Enter every roadbook box in the stage, or only the rows with speed changes. With every box entered, Beep
+Assist navigation (when on) beeps ahead of each box.</p>
 <ol>
-<li>Tap the box beside <code>add distance</code> and type the distance at which
-each leg ends, as a roadbook total, separated by semicolons, for example
-<code>1200;2400;5000;8000</code>. Each must be larger than the one before.</li>
-<li>Press <code>add distance</code>; the rows appear in the table.</li>
-<li>Tick <code>chg</code> on each row where the speed changes and type the new
-speed in the <code>KPH</code> box. A row without a tick carries the speed on
-(shown as &quot;).</li>
-<li>Tick <code>auto</code> to have the box move to the next speed by itself at
-the end of that row; leave it clear to press <code>next</code>. The box is only
-available where there is a speed change.</li>
+<li>Select the stage with <b>&minus; n +</b>, or tap the number (1&ndash;99).</li>
+<li>Tap the box beside <code>add distance</code> and type the cumulative distance at which each
+row ends, separated by semicolons: <code>540;1320;2010</code> (or <code>0.54;1.32;2.01</code> in
+km). Later entries are appended or inserted as needed.</li>
+<li>Press <code>add distance</code>.</li>
+<li>For rows with speed changes tick <b>chg</b> and enter the speed.</li>
+<li>Tick <b>auto</b> for the box to change speed automatically at the specified distance. If
+unticked, the navigator must press <code>next speed</code> on the navigation page.</li>
+<li><b>Start time</b> &ndash; when the stage starts (hh:mm:ss).</li>
+<li><b>Distance at start</b> &ndash; the roadbook distance at the start line; used for Stage
+arrival.</li>
+<li><b>Autostart</b> &ndash; tick to arm an autostart at today's start time (a past time is
+refused). It can also be switched on/off on the navigation page.</li>
 </ol>
+<p>Entries save automatically under the stage number shown. A running stage cannot be edited.</p>
 
-<p>The first row's <code>#</code> and <code>from m</code> can be typed over to
-match the roadbook; changing <code>from m</code> moves every row's
-<code>from m</code> and <code>to m</code> together without changing any leg's
-length. A <code>to m</code> figure can be corrected in place: the boundary moves
-and the next row takes up the difference, so later rows do not move. It must stay
-past that row's start and short of the next row's end; on the last row it simply
-lengthens or shortens the stage. The table also shows each leg's length, the
-speed in m/s, the time and the running total time. <code>del</code> removes a row
-and hands its length to the row above; deleting the first row moves
-<code>from m</code> up by its length instead.</p>
+<p><code>upload stage</code> &ndash; currently only available on phone app.</p>
 
-<h3>The stage column</h3>
-
-<ul>
-<li><b>Stage Start time</b> &ndash; the time the stage starts (hh:mm:ss).</li>
-<li><b>Distance at start</b> &ndash; the roadbook distance at the start line;
-used for Stage arrival on the navigation page.</li>
-<li><b>Autostart</b> &ndash; tick to arm an autostart at the start time today
-(a time already past is refused). Typing a time only stores it.</li>
-<li><code>clear stage</code> empties this stage; <code>clear all</code> empties
-every stage. Both ask first.</li>
-</ul>
-
-<h3>Beep Assist</h3>
-
-<p>The <code>to m</code> figures double as the roadbook boxes for Beep Assist, so
-nothing more needs entering. Switch the beeps on under <a href="#settings">settings</a>.
-Navigation gives a double beep a set number of metres before each box. Timing
-gives a single beep when the car should be passing it, and shows up distance
-errors from wheel spin, corner cutting or a skipping sensor. The beeps follow the
-Total reading, which is zero at the start of the stage, so a correction made with
-<code>+10</code>, <code>-10</code> or <code>set</code> moves every beep with it.</p>
+<h4>Clearing stages</h4>
+<p><code>clear stage</code> empties the stage shown; <code>clear all</code> empties every stage.
+Both ask first.</p>
 
 </section>
 
 <section class="screen-page">
 
-<h2 id="datetime">date / time</h2>
+<h3 id="starting">Starting a Greek Stage</h3>
 
 <figure class="screen">
-  <img src="manual-images/datetime.png" alt="The date and time page">
-  <figcaption>The date / time page.</figcaption>
+  <svg viewBox="0 0 1346 650" style="display: block; width: 100%; height: auto"
+       role="img" aria-label="The stage selector, start time, speed table, Stage arrival and the three start keys at the right of the navigation page"
+       font-family="Univers, 'Univers Next', 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <defs>
+      <marker id="start-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#111"/>
+      </marker>
+      <clipPath id="start-torn">
+        <path id="start-torn-edge" d="M789,110 L394,110 L380,120 L394,130 L380,140 L394,150 L380,160 L394,170 L380,180 L394,190 L380,200 L394,210 L380,220 L394,230 L380,240 L394,250 L380,260 L394,270 L380,280 L394,290 L380,300 L394,310 L380,320 L394,330 L380,340 L394,350 L380,360 L394,370 L380,380 L394,390 L380,400 L394,410 L380,420 L394,430 L380,440 L394,450 L380,460 L394,470 L380,480 L394,490 L380,500 L394,510 L789,510 Z"/>
+      </clipPath>
+    </defs>
+    <image href="manual-images/start-keys.png" x="389" y="110" width="400" height="400"
+           clip-path="url(#start-torn)"/>
+    <use href="#start-torn-edge" fill="none" stroke="#bbb"/>
+    <g fill="#f4f4f4" stroke="#111" stroke-width="2">
+      <rect x="898" y="117" width="440" height="66" rx="5"/>
+      <rect x="898" y="223" width="440" height="66" rx="5"/>
+      <rect x="898" y="329" width="440" height="66" rx="5"/>
+      <rect x="388" y="8" width="240" height="66" rx="5"/>
+      <rect x="280" y="548" width="620" height="94" rx="5"/>
+      <rect x="8" y="133" width="330" height="130" rx="5"/>
+      <rect x="8" y="299" width="330" height="66" rx="5"/>
+    </g>
+    <g fill="none" stroke="#111" stroke-width="3.5" marker-end="url(#start-arrow)">
+      <line x1="894" y1="150" x2="796" y2="150"/>
+      <line x1="894" y1="256" x2="796" y2="256"/>
+      <line x1="894" y1="362" x2="796" y2="362"/>
+      <line x1="508" y1="76" x2="508" y2="110"/>
+      <line x1="560" y1="546" x2="560" y2="430"/>
+      <line x1="340" y1="198" x2="410" y2="198"/>
+      <line x1="340" y1="332" x2="420" y2="300"/>
+    </g>
+    <g font-size="26" font-weight="bold" fill="#111" text-anchor="middle">
+      <text x="1118" y="159">Start Stage Immediately</text>
+      <text x="1118" y="265">Start Stage on next minute</text>
+      <text x="1118" y="371">Autostart On / Off</text>
+      <text x="1118" y="212">OR</text>
+      <text x="1118" y="318">OR</text>
+      <text x="508" y="50">Select Stage</text>
+      <text x="590" y="587">Speed required and time remaining to arrive</text>
+      <text x="590" y="621">at next stage with 1 minute to spare</text>
+    </g>
+    <g font-size="24" font-weight="bold" fill="#111">
+      <text x="26" y="171">Time of stage start</text>
+      <text x="26" y="211"><tspan fill="#0aa">auto</tspan> autostart set</text>
+      <text x="26" y="247"><tspan fill="#e80">manual</tspan> not set</text>
+      <text x="173" y="340" text-anchor="middle">Speed changes (KPH at m)</text>
+    </g>
+  </svg>
 </figure>
 
-<p>The <b>Rally time</b> (white) is the clock every stage is timed against. The
-<b>Computer time</b> (cyan) is the Raspberry Pi's own clock. <b>Phone time</b>
-is the linked phone's clock, or <code>no phone</code>. <b>Offset to computer</b>
-is how far the rally clock is ahead (+) or behind (&minus;) the computer; it is
-shown as <code>+2.3</code>, or <code>-11:49.2</code> once beyond a minute.</p>
+<p>A stage can be started via preprogrammed autostart (using the time programmed in the Segments
+section), or by pressing the Start Now <img src="manual-images/key-start-now.png" alt="Start Now key" style="height: 1.8em; vertical-align: middle"> or Start On Next Minute
+<img src="manual-images/key-next-minute.png" alt="Start On Next Minute key" style="height: 1.8em; vertical-align: middle"> button.</p>
 
-<h3>Setting the rally clock</h3>
+<p><b>Autostart:</b> When autostart is armed the button <img src="manual-images/key-autostart.png" alt="Autostart key" style="height: 1.8em; vertical-align: middle"> will appear as
+black on white, and the word <b>auto</b> (cyan) appears next to the start time. Autostart can be
+quickly toggled on/off using the Autostart button on the navigation display. When Autostart is not
+armed the word <b>manual</b> (orange) appears next to the start time. A start time that has passed,
+with nothing armed or running, is crossed out in red.</p>
 
+<p>What happens with autostart:</p>
 <ul>
-<li><code>set rally to computer time</code> makes the two the same.</li>
-<li>Type the time in the <b>Enter rally time</b> box as <code>hh:mm:ss</code>
-(or <code>hh:mm</code>), then press <code>set rally to entered time</code>.
-Today's date is used. Do not enter tenths.</li>
-<li><code>set computer to phone time</code> sets the Pi's clock from the phone
-while keeping the rally clock where it is. It is grey until a phone is
-connected. It needs the Pi's usual permission to set its clock without a
-password; if it cannot, the box says <code>The computer clock could not be
-set</code> and nothing changes.</li>
+<li>With less than 5 minutes to the start the driver's display will show a countdown clock.</li>
+<li>The Total and Trip distances will zero at the start time.</li>
+<li>The timer resets at the start time.</li>
 </ul>
 
-<h3>Trimming</h3>
+<p><b>Start on Next Minute:</b> The Start on Next Minute button constantly updates to show the next
+whole minute. Pressing it sets a type of autostart at that minute.</p>
 
-<p><code>-0.1</code> and <code>+0.1</code> adjust the rally clock a tenth of a
-second at a time. Hold to repeat. Each press is saved at once.</p>
+<p>What happens with Start on Next Minute:</p>
+<ul>
+<li>Pressing the button automatically overrides any programmed autostart.</li>
+<li>The Total and Trip distances zero immediately (not at the departure minute). Any distance driven
+between pressing and the start minute will be included in the stage distance.</li>
+<li>The timer resets at the start minute.</li>
+</ul>
+
+<p><b>Start Now:</b> Pressing it starts a stage immediately.</p>
+
+<p>What happens with Start Now:</p>
+<ul>
+<li>Pressing the button overrides any programmed autostart.</li>
+<li>The Total and Trip distances zero immediately.</li>
+<li>The timer resets immediately.</li>
+</ul>
+
+<h4>Starting scenarios</h4>
+
+<p><b>Regular on-schedule start</b> &ndash; in most instances this will be handled correctly by a
+pre-programmed autostart which resets the distances and timer at the allotted start time.</p>
+
+<p><b>Late arrival at start</b> &ndash; there are 2 ways to handle this scenario.</p>
+<ul>
+<li>Have autostart start the stage on time (before you have arrived) and press Total to zero the
+distances at the start line and attempt to catch up during the stage. This is the preferred
+method.</li>
+<li>Press Start Now &ndash; if a stage is already running the box will ask you to confirm but will
+measure as of the original button press. Because the timer will have started late the driver will
+need to catch up and target a reading where the seconds ahead is equal to the delay in
+starting.</li>
+</ul>
+
+<p><b>Obstructed start</b> &ndash; if traffic or the car may make you late to the first timing
+point, press the next-minute start key (flag with a time) on the start line instead of using autostart, and move off
+shortly before departure. Total and Trip reset when pressed; timing starts at the minute.</p>
 
 </section>
 
 <section class="screen-page">
 
-<h2 id="calibration">calibration</h2>
+<h3 id="main-screen">Navigating a Greek Stage</h3>
 
 <figure class="screen">
-  <img src="manual-images/calibration.png" alt="The calibration page">
-  <figcaption>The calibration page.</figcaption>
+  <img src="manual-images/main-screen.png" alt="The greek navigation page with a stage running">
+  <figcaption>Stage 8 running, 709 m in: 1,301 m and 2 min 10 s to the speed change at 2010 m. Trip was zeroed twice (Trip history 299, 254); Stage arrival needs 23 kph to reach the next stage with 22 min to go.</figcaption>
 </figure>
-
-<h3>Calibrating over a set distance</h3>
-
-<ol>
-<li>Press <code>zero counters</code>, or skip this step to use the distance
-counted since the last Total reset.</li>
-<li>Drive the measured distance (from 500 m to 100,000 m).</li>
-<li>Type the <b>actual</b> distance driven in the Actual distance box, not the
-distance the box shows.</li>
-<li>Press <code>sensor 1</code> or <code>sensor 1&amp;2</code> to choose which
-counter is used; the choice is shown in white.</li>
-<li>Press <code>save calibration</code>.</li>
-</ol>
-
-<p>The page shows the calculated distance, each sensor's count and the pulses per
-kilometre now in use. If the actual distance is outside the range, or nothing has
-been counted, <code>save calibration</code> does nothing and gives no message, so
-check that the pulses per kilometre figure has changed.</p>
-
-<h3>Setting the pulses directly</h3>
-
-<p>If the figure is already known, type it into the <b>Reset to</b> box and press
-<code>save pulses</code>. No driving is needed. Zero or less is ignored.</p>
-
-<h3>Prop/Wheel RPM</h3>
-
-<p>The last row shows propshaft or wheel revolutions per minute from sensor 1.
-Type the pulses the sensor gives per revolution into the small box for it to
-read correctly.</p>
-
-</section>
-
-<section class="screen-page">
-
-<h2 id="settings">settings</h2>
 
 <figure class="screen">
-  <img src="manual-images/settings.png" alt="The settings page">
-  <figcaption>The settings page.</figcaption>
+  <svg viewBox="0 0 1346 596" style="display: block; width: 100%; height: auto" role="img" aria-label="The keys on the left of the greek navigation page"
+       font-family="Univers, 'Univers Next', 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <defs>
+      <marker id="greek-left-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#111"/>
+      </marker>
+      <clipPath id="greek-left-torn">
+        <path id="greek-left-torn-edge" d="M356,60 L994,60 L984,70 L994,80 L984,90 L994,100 L984,110 L994,120 L984,130 L994,140 L984,150 L994,160 L984,170 L994,180 L984,190 L994,200 L984,210 L994,220 L984,230 L994,240 L984,250 L994,260 L984,270 L994,280 L984,290 L994,300 L984,310 L994,320 L984,330 L994,340 L984,350 L994,360 L984,370 L994,380 L984,390 L994,400 L984,410 L994,420 L984,430 L994,440 L984,450 L994,460 L994,468 L356,468 Z"/>
+      </clipPath>
+    </defs>
+    <image href="manual-images/greek-left.png" x="356" y="60" width="634" height="408"
+           clip-path="url(#greek-left-torn)"/>
+    <use href="#greek-left-torn-edge" fill="none" stroke="#bbb"/>
+    <g fill="#f4f4f4" stroke="#111" stroke-width="2">
+      <rect x="8" y="70" width="330" height="92" rx="5"/>
+      <rect x="8" y="176" width="330" height="66" rx="5"/>
+      <rect x="8" y="282" width="330" height="66" rx="5"/>
+      <rect x="8" y="388" width="330" height="66" rx="5"/>
+      <rect x="1030" y="70" width="308" height="66" rx="5"/>
+      <rect x="1030" y="176" width="308" height="66" rx="5"/>
+      <rect x="1030" y="282" width="308" height="66" rx="5"/>
+      <rect x="335" y="520" width="270" height="66" rx="5"/>
+      <rect x="625" y="520" width="270" height="66" rx="5"/>
+      <rect x="900" y="520" width="330" height="66" rx="5"/>
+    </g>
+    <g fill="none" stroke="#111" stroke-width="3.5" marker-end="url(#greek-left-arrow)">
+      <line x1="340" y1="103" x2="372" y2="103"/>
+      <line x1="340" y1="209" x2="372" y2="209"/>
+      <line x1="340" y1="315" x2="372" y2="315"/>
+      <line x1="340" y1="421" x2="372" y2="421"/>
+      <line x1="1028" y1="103" x2="980" y2="103"/>
+      <line x1="1028" y1="209" x2="980" y2="209"/>
+      <line x1="1028" y1="315" x2="980" y2="315"/>
+      <line x1="470" y1="518" x2="591" y2="457"/>
+      <line x1="760" y1="518" x2="751" y2="457"/>
+      <line x1="1060" y1="518" x2="913" y2="457"/>
+    </g>
+    <g font-weight="bold" fill="#111">
+      <text x="22" y="98" font-size="24">total</text><text x="22" y="126" font-size="20" font-weight="normal">distance and time from the start</text><text x="22" y="152" font-size="20" font-weight="normal">press to zero</text>
+      <text x="22" y="204" font-size="24">trip</text><text x="22" y="232" font-size="20" font-weight="normal">press to zero</text>
+      <text x="22" y="310" font-size="24">countdown</text><text x="22" y="338" font-size="20" font-weight="normal">metres left until speed change</text>
+      <text x="22" y="416" font-size="24">next speed</text><text x="22" y="444" font-size="20" font-weight="normal">go on to the next speed manually</text>
+      <text x="1044" y="98" font-size="24">set</text><text x="1044" y="126" font-size="20" font-weight="normal">type the exact Total</text>
+      <text x="1044" y="204" font-size="24">+10</text><text x="1044" y="232" font-size="20" font-weight="normal">add 10 m to Total and Trip</text>
+      <text x="1044" y="310" font-size="24">&minus;10</text><text x="1044" y="338" font-size="20" font-weight="normal">take 10 m off Total and Trip</text>
+      <text x="349" y="548" font-size="24">prev speed</text><text x="349" y="576" font-size="20" font-weight="normal">undo the last speed change</text>
+      <text x="639" y="548" font-size="24">freeze</text><text x="639" y="576" font-size="20" font-weight="normal">hold the distances</text>
+      <text x="914" y="548" font-size="24">reverse</text><text x="914" y="576" font-size="20" font-weight="normal">count backwards when reversing</text>
+    </g>
+  </svg>
 </figure>
 
-<p>Each switch shows its present state lit. Changes are saved at once.</p>
-
-<h3>Beep Assist &amp; Tone</h3>
-
+<h4>total</h4>
+<p>Distance and elapsed time since the start. Press to zero the distance.</p>
 <ul>
-<li><b>Beep navigation</b> &ndash; off/on. <b>Navigation advance</b> is how many
-metres before a roadbook box the double beep sounds (100 is sensible).</li>
-<li><b>Beep timing</b> &ndash; off/on. <b>Timing advance</b> is how many seconds
-before the box time the single beep sounds (0 is sensible).</li>
-<li><b>Ahead/Behind Tone</b> &ndash; the driver's error tone, off/on.</li>
-<li><b>Tone when behind</b> and <b>Tone when ahead</b> &ndash; each is type 1
-or 2, and both tones stay silent for errors under 0.2 s and in the first 250 m.
-<b>Type 1</b> is a short buzzer tick. The bigger the error, the faster the
-ticking, in steps of 0.2 s: about one tick a second at 0.2 s, three a second at
-1 s and about eight a second by 3 s. Behind is the slightly higher tick, ahead the
-lower. <b>Type 2</b> is one steady tone whose pitch rises with the error, in
-steps of 0.2 s up to 3 s: behind is the higher, harsher pitch, ahead the lower,
-smoother one.</li>
+<li>Outside a stage: zeroes the distance and timer, not Trip.</li>
+<li>Waiting for a timed autostart: zeroes Total, Trip and the timer without asking; the autostart
+zeroes them again at its start time. (An autostart cannot be armed during a stage.)</li>
+<li>If Start on Next Minute has been selected: zeroes Total and Trip without asking; the timer starts at the
+minute.</li>
+<li>During a stage (a missed start): asks first, then zeroes Total and Trip from the press; the
+stage clock keeps running.</li>
 </ul>
 
-<h3>System</h3>
+<h4>trip</h4>
+<p>Shows intermediate distance and time. Press to zero it; the old figure appears in the <b>Trip
+history</b> column. Trip also restarts at every speed change.</p>
 
-<ul>
-<li><b>Speed units</b> &ndash; kph or mph.</li>
-<li><b>Stage data logging</b> &ndash; records a file for each stage, one row a
-second (distance, speed and ahead/behind error). It starts when the stage starts
-and stops when the stage ends or is aborted; switching it on during a stage
-starts a file at once. If the box cannot write the file it switches stage logging
-off by itself, without a message, and carries on.</li>
-<li><b>Sensor logging</b> &ndash; records the raw counter readings continuously
-while it is on, many rows a second, so its files are much larger. Both kinds of
-log are deleted after 60 days, when the program starts, and can be downloaded
-from the phone (Set tab).</li>
-<li><b>Force single display</b> &ndash; when on, the driver's gauge is placed on
-the co-pilot screen the next time the program starts, and the driver display is
-not used.</li>
-<li><b>Wi-Fi phone link</b> &ndash; the address, and a QR code, to open the
-phone app. Part 2 describes it. The note beside it advises adding the page to the
-phone's home screen so it runs without the browser's bars.</li>
-<li>The foot of the column shows the screen update rate and the Pi's temperature.</li>
-</ul>
+<h4>countdown</h4>
+<p>Distance and time to the next speed change. If that change is not automatic, press
+<code>next speed</code> there.</p>
 
-</section>
+<h4>next speed and prev speed</h4>
+<p><code>next speed</code> is used to move to the next speed manually. <code>prev speed</code> undoes
+the last speed change. The buttons can also be used to override automated speed changes.</p>
 
-<section class="screen-page">
+<h4>+10, set and &minus;10</h4>
+<p><code>+10</code> / <code>-10</code> move Total and Trip 10 m per press; <code>set</code> allows a
+precise distance to be entered for Total (Trip unchanged). During a stage, corrections apply across
+average speeds and timing errors.</p>
 
-<h2 id="driver-zero">The driver display and A-B, B-C zero</h2>
+<h4>freeze and reverse</h4>
+<p><code>freeze</code> stops the distances from counting while lit; clocks and timers continue &ndash;
+use it after a navigation error. On release, counting resumes from the frozen figures.
+<code>reverse</code> makes Total and Trip (as well as countdown) count backwards. It is typically
+used when reversing after overshooting a junction, as the box only counts pulses and has no concept
+of direction. Freeze overrules Reverse if both are pressed. The buttons display as black on white
+when active and a whooping sound is emitted.</p>
 
-<figure class="screen">
-  <img src="manual-images/driver-screen.png" alt="The driver display" style="width: 42%; margin-left: auto; margin-right: auto">
-</figure>
+<h4>A-B, B-C zero</h4>
+<p>Where a rally is measured on an AB, BC basis and this option is selected in settings, the
+<code>A-B, B-C zero</code> button appears under the Trip history. Pressing this during a stage when a
+timing mark or timing marshal is seen sets the timing error in the driver's display to zero, so that
+the average speed calculation is made independently between each timing mark.</p>
 
-<p>The gauge shows the <b>Target</b> speed (yellow) and the stage number at top
-left, the present speed at top right, and the ahead/behind needle with the error
-in seconds in the box beneath it. Total and Trip distance, and their average
-speeds, are at the foot.</p>
-
-<p>While an autostart is pending a <code>T- hh:mm:ss</code> box appears in the
-middle of the display, counting down to the start, with <b>Early Departure
-ENABLED</b> or <b>DISABLED</b> beneath it. A start on the next minute shows it
-all the way; a start set for later shows it only for the last five minutes. With
-early departure enabled the error and the average speeds are held at zero until
-the minute arrives, when the box disappears and the clock starts.</p>
-
-<p>The <code>A-B, B-C zero</code> key rebases the needle when the driver is
-aiming at an error other than zero. The popup shows the error to be taken off and
-the adjustment already in force.</p>
+<p>The popup shows the error to remove and the adjustment
+already applied.</p>
 
 <figure class="screen">
   <img src="manual-images/driver-zero.png" alt="The Adjust Driver Zero question" style="width: 70%; margin-left: auto; margin-right: auto">
@@ -457,13 +478,810 @@ the adjustment already in force.</p>
 <li><code>No</code> changes nothing.</li>
 </ul>
 
-<p>Only the driver's gauge changes; distances, schedule and clock are untouched.
-Starting a stage clears the adjustment.</p>
+<h4>The stage panel display</h4>
+<p>The column shows the selected stage, the start time of the stage and autostart status, the
+distances at which speed changes commence and the speed needed (and allotted time) to reach the
+next stage with 1 minute to spare.</p>
+
+</section>
+
+<section class="screen-page">
+
+<h3 id="driver-zero">The Driver Display in Greek mode</h3>
+
+<p>The driver display has two pages in Greek mode: one between stages (navigation) and one in a stage.</p>
+
+<h4>Navigation (between stages)</h4>
 
 <figure class="screen">
-  <img src="manual-images/driver-gauge.png" alt="The driver display after zeroing" style="width: 42%; margin-left: auto; margin-right: auto">
-  <figcaption>After pressing Yes.</figcaption>
+  <svg viewBox="0 0 1346 603" style="display: block; width: 100%; height: auto"
+       role="img" aria-label="The Greek driver display between stages, each item labelled"
+       font-family="Univers, 'Univers Next', 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <defs>
+      <marker id="drvgn-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#111" stroke="#fff" stroke-width="1"/>
+      </marker>
+    </defs>
+    <image href="manual-images/driver-gr-nav.png" x="273" y="8" width="800" height="480"/>
+    <g fill="#111">
+      <rect x="8" y="8" width="230" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="20" y="40" font-size="24" font-weight="bold">Arrival</text>
+      <text x="20" y="65" font-size="21">Speed for next stage.</text>
+      <rect x="8" y="212" width="182" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="20" y="244" font-size="24" font-weight="bold">Trip average</text>
+      <text x="20" y="270" font-size="21">Average on Trip.</text>
+      <rect x="8" y="417" width="216" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="20" y="449" font-size="24" font-weight="bold">Total average</text>
+      <text x="20" y="474" font-size="21">Average since start.</text>
+      <rect x="1168" y="8" width="170" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1180" y="40" font-size="24" font-weight="bold">Speed</text>
+      <text x="1180" y="65" font-size="21">Present speed.</text>
+      <rect x="1161" y="212" width="177" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1173" y="244" font-size="24" font-weight="bold">Trip distance</text>
+      <text x="1173" y="270" font-size="21">Trip (km).</text>
+      <rect x="1148" y="417" width="190" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1160" y="449" font-size="24" font-weight="bold">Total distance</text>
+      <text x="1160" y="474" font-size="21">Total (km).</text>
+      <rect x="214" y="524" width="197" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="226" y="556" font-size="24" font-weight="bold">Navigation</text>
+      <text x="226" y="581" font-size="21">No stage running.</text>
+    </g>
+    <g fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round">
+      <line x1="240" y1="44" x2="333" y2="58"/>
+      <line x1="192" y1="248" x2="503" y2="290"/>
+      <line x1="226" y1="452" x2="503" y2="358"/>
+      <line x1="1166" y1="44" x2="973" y2="58"/>
+      <line x1="1159" y1="248" x2="863" y2="291"/>
+      <line x1="1146" y1="452" x2="863" y2="358"/>
+      <line x1="392" y1="522" x2="483" y2="447"/>
+    </g>
+    <g fill="none" stroke="#111" stroke-width="3.5" marker-end="url(#drvgn-arrow)">
+      <line x1="240" y1="44" x2="333" y2="58"/>
+      <line x1="192" y1="248" x2="503" y2="290"/>
+      <line x1="226" y1="452" x2="503" y2="358"/>
+      <line x1="1166" y1="44" x2="973" y2="58"/>
+      <line x1="1159" y1="248" x2="863" y2="291"/>
+      <line x1="1146" y1="452" x2="863" y2="358"/>
+      <line x1="392" y1="522" x2="483" y2="447"/>
+    </g>
+  </svg>
 </figure>
+
+<p>With no stage running there is no needle. The top left shows the
+<b>arrival</b> speed: the speed needed to reach the next stage with a minute to spare, the same
+figure as the co-pilot's Stage arrival. The distances and averages are Trip and Total.</p>
+
+<h4>In a stage</h4>
+
+<p>The stage display differs where marked.</p>
+
+<figure class="screen">
+  <svg viewBox="0 0 1346 603" style="display: block; width: 100%; height: auto"
+       role="img" aria-label="The Greek driver display in a stage, each item labelled"
+       font-family="Univers, 'Univers Next', 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <defs>
+      <marker id="drvgs-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#111" stroke="#fff" stroke-width="1"/>
+      </marker>
+    </defs>
+    <image href="manual-images/driver-gr-stage.png" x="273" y="8" width="800" height="480"/>
+    <g fill="#111">
+      <rect x="8" y="8" width="171" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="20" y="40" font-size="24" font-weight="bold">Target</text>
+      <text x="20" y="65" font-size="21">Speed to drive.</text>
+      <rect x="8" y="144" width="177" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="20" y="176" font-size="24" font-weight="bold">Needle</text>
+      <text x="20" y="201" font-size="21">Ahead / behind.</text>
+      <rect x="8" y="281" width="251" height="96" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="20" y="313" font-size="24" font-weight="bold">Sub average</text>
+      <text x="20" y="338" font-size="21">Average speed during</text>
+      <text x="20" y="363" font-size="21">current speed measure.</text>
+      <rect x="8" y="417" width="237" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="20" y="449" font-size="24" font-weight="bold">Chevron</text>
+      <text x="20" y="474" font-size="21">Counts down the row.</text>
+      <rect x="1115" y="150" width="223" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1127" y="182" font-size="24" font-weight="bold">Row end line</text>
+      <text x="1127" y="207" font-size="21">Where the row ends.</text>
+      <rect x="230" y="524" width="166" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="242" y="556" font-size="24" font-weight="bold">Stage</text>
+      <text x="242" y="581" font-size="21">Stage number.</text>
+      <rect x="636" y="524" width="275" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="648" y="556" font-size="24" font-weight="bold">Error</text>
+      <text x="648" y="581" font-size="21">Seconds ahead or behind.</text>
+    </g>
+    <g fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round">
+      <line x1="181" y1="44" x2="333" y2="58"/>
+      <line x1="187" y1="180" x2="598" y2="248"/>
+      <line x1="261" y1="329" x2="503" y2="290"/>
+      <line x1="247" y1="452" x2="645" y2="353"/>
+      <line x1="1113" y1="186" x2="557" y2="162"/>
+      <line x1="376" y1="522" x2="483" y2="447"/>
+      <line x1="673" y1="522" x2="673" y2="447"/>
+    </g>
+    <g fill="none" stroke="#111" stroke-width="3.5" marker-end="url(#drvgs-arrow)">
+      <line x1="181" y1="44" x2="333" y2="58"/>
+      <line x1="187" y1="180" x2="598" y2="248"/>
+      <line x1="261" y1="329" x2="503" y2="290"/>
+      <line x1="247" y1="452" x2="645" y2="353"/>
+      <line x1="1113" y1="186" x2="557" y2="162"/>
+      <line x1="376" y1="522" x2="483" y2="447"/>
+      <line x1="673" y1="522" x2="673" y2="447"/>
+    </g>
+  </svg>
+</figure>
+
+<p>During a timed stage the needle shows how far ahead/behind the driver is in seconds. If the
+error exceeds the current gauge scale (changeable from 1&ndash;3 seconds in settings) the needle will
+stay pinned far left (or far right if ahead) and the scale will expand. The red logo shows the stage
+number (S1, S2 &hellip;). The cyan <b>sub</b> average is your average speed since the current speed section began, that
+is, the distance driven divided by the time elapsed since the last speed change in the stage data
+(see <a href="#greek-stage-data">Entering Greek stage data</a>). It restarts at each speed change, so
+it goes with the time error; the white average is the average since the start. The
+<a href="#chevron-greek">chevron</a> slides up the needle and reaches the <b>row end line</b>, the
+short cross-bar on the needle, as the box ends.</p>
+
+<h4 id="chevron-greek">The chevron</h4>
+<p>One chevron rides the needle. At the start of each row it sits 20% of the way up the needle; as
+the row is driven it slides up toward the <b>row end line</b>, arriving as the row ends, then drops
+back to the start for the next row. It only counts the row down: it does not show how far ahead or
+behind you are (the needle does that) and there is only ever one. Between stages there is no needle
+and no chevron.</p>
+
+<p>While an autostart is pending, a <code>T- hh:mm:ss</code> countdown shows mid-display with
+<b>Early Departure ENABLED</b> or <b>DISABLED</b> beneath, depending on whether a regular autostart
+or a start on next minute is triggered.</p>
+
+</section>
+
+<section class="screen-page">
+
+<h2 id="italian">Italian rally type</h2>
+
+<p>Italian rallies have many short back-to-back timed trials, so each time-control section is
+programmed as linked substages.</p>
+
+<p>The substage types:</p>
+
+<table>
+<tr><th style="width: 16%">Type</th><th>What it is</th><th style="width: 38%">How the box treats it</th></tr>
+<tr><td><b>navi</b> (grey)</td><td>Untimed driving between controls.</td><td>A required speed is worked out from
+the sector's total duration so the car arrives mid-way through its arrival minute.</td></tr>
+<tr><td><b>pc</b> (red, stopwatch)</td><td>Timed trial between two pressure tubes. Between linked
+pcs a single tube ends one pc and starts the next.</td><td>Speed is worked out from the subsector's
+duration.</td></tr>
+<tr><td><b>pm</b> (yellow)</td><td>Average speed check with unknown timing points.</td><td>Duration
+is worked out from the given speed.</td></tr>
+<tr><td><b>ct</b> (blue)</td><td>Stamp check: no time.</td><td>Untimed, like navi.</td></tr>
+<tr><td><b>co</b> (green)</td><td>The time control that ends the sector; arrive in your minute.</td><td>The
+last row; the co arrival time is worked out from the card.</td></tr>
+</table>
+
+<h3 id="italian-programming">Programming Italian Sectors</h3>
+
+<p>Select <b>italian</b> rally from the settings page and then select <code>segments</code> from the
+main menu. The segments page will display an Italian flag. The system defaults to km (two decimals)
+but this can be overridden in settings.</p>
+
+<figure class="screen">
+  <svg viewBox="0 0 1346 664" style="display: block; width: 100%; height: auto"
+       role="img" aria-label="The italian segments page with each control labelled"
+       font-family="Univers, 'Univers Next', 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <defs>
+      <marker id="segit-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#111"/>
+      </marker>
+      <clipPath id="segit-torn"><path id="segit-torn-edge" d="M8,145 L1020,145 L1020,155 L1006,165 L1020,175 L1006,185 L1020,195 L1006,205 L1020,215 L1006,225 L1020,235 L1006,245 L1020,255 L1006,265 L1020,275 L1006,285 L1020,295 L1006,305 L1020,315 L1006,325 L1020,335 L1006,345 L1020,355 L1006,365 L1020,375 L1006,385 L1020,395 L1006,405 L1020,415 L1006,425 L1020,435 L1006,445 L1020,455 L1006,465 L1020,475 L1006,485 L1020,495 L1006,505 L1020,515 L1006,525 L1020,535 L1020,545 L8,545 Z"/></clipPath>
+    </defs>
+    <image href="manual-images/italian-segments.png" x="8" y="145" width="1280" height="400"
+           clip-path="url(#segit-torn)"/>
+    <use href="#segit-torn-edge" fill="none" stroke="#bbb"/>
+    <g fill="#111">
+      <rect x="8" y="8" width="201" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="20" y="40" font-size="24" font-weight="bold">sub</text>
+      <text x="20" y="65" font-size="21">Substage number.</text>
+      <rect x="223" y="8" width="211" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="235" y="40" font-size="24" font-weight="bold">type</text>
+      <text x="235" y="65" font-size="21">Tap to set the type.</text>
+      <rect x="448" y="8" width="156" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="460" y="40" font-size="24" font-weight="bold">ref</text>
+      <text x="460" y="65" font-size="21">Card number.</text>
+      <rect x="680" y="8" width="145" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="692" y="40" font-size="24" font-weight="bold">X</text>
+      <text x="692" y="65" font-size="21">Deletes row.</text>
+      <rect x="1050" y="145" width="206" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1062" y="177" font-size="24" font-weight="bold">Select Sector</text>
+      <text x="1062" y="202" font-size="21">Sector to program.</text>
+      <rect x="1050" y="227" width="287" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1062" y="259" font-size="24" font-weight="bold">Start time</text>
+      <text x="1062" y="284" font-size="21">Departure minute at the co.</text>
+      <rect x="1050" y="310" width="208" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1062" y="342" font-size="24" font-weight="bold">Duration</text>
+      <text x="1062" y="366" font-size="21">Card's sector time.</text>
+      <rect x="1050" y="392" width="252" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1062" y="424" font-size="24" font-weight="bold">Average</text>
+      <text x="1062" y="449" font-size="21">Check against the card.</text>
+      <rect x="1050" y="474" width="276" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1062" y="506" font-size="24" font-weight="bold">clear stage / all</text>
+      <text x="1062" y="531" font-size="21">Empty sector / all sectors.</text>
+      <rect x="8" y="585" width="288" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="20" y="617" font-size="24" font-weight="bold">add distance</text>
+      <text x="20" y="642" font-size="21">Type distances, then press.</text>
+      <rect x="310" y="585" width="231" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="322" y="617" font-size="24" font-weight="bold">from -km- to, dist</text>
+      <text x="322" y="642" font-size="21">Distances (progr).</text>
+      <rect x="555" y="585" width="144" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="567" y="617" font-size="24" font-weight="bold">KPH/MPH</text>
+      <text x="567" y="642" font-size="21">Speed.</text>
+      <rect x="713" y="585" width="327" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="725" y="617" font-size="24" font-weight="bold">dur, elapsed</text>
+      <text x="725" y="642" font-size="21">Row duration and running total.</text>
+    </g>
+    <g fill="none" stroke="#111" stroke-width="3.5" stroke-linejoin="round" marker-end="url(#segit-arrow)">
+      <line x1="49" y1="81" x2="49" y2="145"/>
+      <polyline points="243,81 243,95 105,95 105,145"/>
+      <polyline points="468,81 468,109 168,109 168,145"/>
+      <line x1="795" y1="81" x2="795" y2="177"/>
+      <line x1="1048" y1="180" x2="1019" y2="227"/>
+      <line x1="1048" y1="263" x2="1021" y2="311"/>
+      <line x1="1048" y1="345" x2="1021" y2="381"/>
+      <line x1="1048" y1="427" x2="1015" y2="416"/>
+      <line x1="1048" y1="510" x2="999" y2="502"/>
+      <line x1="113" y1="583" x2="113" y2="544"/>
+      <line x1="335" y1="583" x2="335" y2="448"/>
+      <polyline points="575,583 575,569 548,569 548,448"/>
+      <polyline points="733,583 733,555 728,555 728,448"/>
+    </g>
+  </svg>
+  <figcaption>An example first sector, co 1 &rarr; co 2, with one of each substage type: navi, two linked pcs, navi, pm, ct and the closing co.</figcaption>
+</figure>
+
+<h4>Entering Italian sector data</h4>
+<p>Enter every substage on the organiser's Times and Distance Table (TDT) starting from the row
+after the opening time control, up to and including the closing one (here co 2). The opening co
+line (0.00 km) is not entered but its time goes in <b>Start time</b>.</p>
+<ol>
+<li>Select the sector with <b>&minus; n +</b>, or tap the number (1&ndash;99): the number of its
+starting time control.</li>
+<li>Tap the box beside <code>add distance</code> and type the cumulative distance (<b>progr</b>) at
+which each substage ends, separated by semicolons: <code>1.20;1.38;1.44;6.80;9.20;15.60;18.40</code>
+(or <code>1200;1380;1440;6800;9200;15600;18400</code> in metres). Later entries are appended or
+inserted as needed; take care inserting a distance inside an existing pc or pm which will get recalculated.</li>
+<li>Press <code>add distance</code>.</li>
+<li>Tap the <b>type</b> tag to cycle navi &rarr; pc &rarr; ct &rarr; pm &rarr; co. <b>ref</b> is
+the card's number (a new row gets the last of its type plus one but can be overridden).</li>
+<li>For pc rows enter the card's time (m:ss) in <b>dur</b>; the speed is worked out.</li>
+<li>For pm rows enter the speed in the KPH/MPH column; the duration is worked out.</li>
+<li><b>Start time</b> &ndash; enter the departure minute at the opening co (hh:mm:ss).</li>
+<li><b>Duration</b> &ndash; enter the card's sector duration (h:mm:ss). The <b>Average</b>
+displayed faintly below should correspond to that given on the TDT sheet.</li>
+</ol>
+<p>Typed figures are white on dark boxes; worked-out figures grey. Entries are saved
+automatically. A running sector cannot be edited.</p>
+
+<p><code>upload stage</code> &ndash; currently only available on phone app.</p>
+
+<h4>Clearing sectors</h4>
+<p><code>clear stage</code> empties the sector shown; <code>clear all</code> empties every sector.
+Both ask first.</p>
+
+</section>
+
+<section class="screen-page">
+
+<h3 id="starting-sector">Starting an Italian Sector</h3>
+
+<figure class="screen">
+  <svg viewBox="0 0 1346 662" style="display: block; width: 100%; height: auto"
+       role="img" aria-label="The clock, sector selector, start key, active substage, count down, next substage, co2 arrival and the minutes ahead or behind on the italian navigation page with a sector running"
+       font-family="Univers, 'Univers Next', 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <defs>
+      <marker id="it-start-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#111"/>
+      </marker>
+      <clipPath id="it-start-torn">
+        <path id="it-start-torn-edge" d="M990,110 L366,110 L356,120 L366,130 L356,140 L366,150 L356,160 L366,170 L356,180 L366,190 L356,200 L366,210 L356,220 L366,230 L356,240 L366,250 L356,260 L366,270 L356,280 L366,290 L356,300 L366,310 L356,320 L366,330 L356,340 L366,350 L356,360 L366,370 L356,380 L366,390 L356,400 L366,410 L356,420 L366,430 L356,440 L366,450 L356,460 L366,470 L356,480 L366,490 L356,500 L366,510 L366,516 L990,516 Z"/>
+      </clipPath>
+    </defs>
+    <image href="manual-images/italian-start.png" x="356" y="110" width="634" height="406"
+           clip-path="url(#it-start-torn)"/>
+    <use href="#it-start-torn-edge" fill="none" stroke="#bbb"/>
+    <g fill="#f4f4f4" stroke="#111" stroke-width="2">
+      <rect x="588" y="8" width="240" height="66" rx="5"/>
+      <rect x="8" y="110" width="330" height="66" rx="5"/>
+      <rect x="8" y="239" width="330" height="66" rx="5"/>
+      <rect x="8" y="328" width="330" height="118" rx="5"/>
+      <rect x="1030" y="119" width="308" height="66" rx="5"/>
+      <rect x="950" y="560" width="388" height="94" rx="5"/>
+      <rect x="1030" y="254" width="308" height="120" rx="5"/>
+      <rect x="306" y="560" width="620" height="94" rx="5"/>
+    </g>
+    <g fill="none" stroke="#111" stroke-width="3.5" marker-end="url(#it-start-arrow)">
+      <line x1="708" y1="76" x2="708" y2="116"/>
+      <line x1="340" y1="143" x2="364" y2="143"/>
+      <line x1="340" y1="272" x2="364" y2="272"/>
+      <line x1="340" y1="385" x2="364" y2="385"/>
+      <line x1="1028" y1="152" x2="990" y2="152"/>
+      <line x1="616" y1="558" x2="616" y2="508"/>
+      <line x1="1000" y1="558" x2="814" y2="508"/>
+      <line x1="1028" y1="314" x2="990" y2="314"/>
+    </g>
+    <g font-size="26" font-weight="bold" fill="#111" text-anchor="middle">
+      <text x="708" y="50">Select Sector</text>
+      <text x="1184" y="161">Start Sector Now</text>
+      <text x="1144" y="599">Minutes ahead (green)</text>
+      <text x="1144" y="633">or behind (red)</text>
+      <text x="1184" y="290" font-size="22">Count down to the next</text>
+      <text x="1184" y="322" font-size="22">substage, average speed</text>
+      <text x="1184" y="354" font-size="22">in substage</text>
+      <text x="616" y="599">Arrival time control number, scheduled</text>
+      <text x="616" y="633">minute, required speed and time allowed</text>
+    </g>
+    <g font-size="24" font-weight="bold" fill="#111">
+      <text x="26" y="152">Rally clock</text>
+      <text x="26" y="281">Active substage</text>
+      <text x="26" y="362">Next substage</text>
+      <text x="26" y="396" font-size="22">press Next (not shown)</text>
+      <text x="26" y="428" font-size="22">to start next substage</text>
+    </g>
+  </svg>
+</figure>
+
+<p>A sector is started at the time control by pressing the start now button
+<img src="manual-images/key-start-now.png" alt="Start Now key" style="height: 1.8em; vertical-align: middle">
+during the <b>departure minute</b>. The sector counter counts from that whole minute (11:30:40
+counts as 11:30:00) and sets an elapsed time at 30s into the minute, targeting arrival in the middle
+of the arrival minute. Sector total and sub distances zero; navi distance does not zero at the same
+time. The <code>stage now</code> key reads <code>stage abort</code> when a sector is in progress.</p>
+
+<h4>Starting a new substage</h4>
+
+<ul>
+<li>Press <code>next substage</code> to enter the next substage (pc, pm etc). NB that this sets the
+sector total distance counter to the total distance on the card's <b>progr</b> entry. The navi
+distance increments independently &ndash; any variation will give a guide to calibration errors as
+long as Navi is not reset.</li>
+<li>If <code>next</code> is pressed early or by mistake press <code>prev substage</code> to undo it.</li>
+</ul>
+
+</section>
+
+<section class="screen-page">
+
+<h3 id="italian-navigation">Navigating an Italian Sector</h3>
+
+
+<figure class="screen">
+  <img src="manual-images/italian-pc.png" alt="The italian navigation page inside a timed trial">
+  <figcaption>Inside pc 1, 100 m in: 80 m and 18.7 s to its end tube; average so far 29.80.</figcaption>
+</figure>
+
+<figure class="screen">
+  <svg viewBox="0 0 1346 596" style="display: block; width: 100%; height: auto" role="img" aria-label="The keys on the left of the italian navigation page"
+       font-family="Univers, 'Univers Next', 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <defs>
+      <marker id="italian-left-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#111"/>
+      </marker>
+      <clipPath id="italian-left-torn">
+        <path id="italian-left-torn-edge" d="M356,60 L994,60 L984,70 L994,80 L984,90 L994,100 L984,110 L994,120 L984,130 L994,140 L984,150 L994,160 L984,170 L994,180 L984,190 L994,200 L984,210 L994,220 L984,230 L994,240 L984,250 L994,260 L984,270 L994,280 L984,290 L994,300 L984,310 L994,320 L984,330 L994,340 L984,350 L994,360 L984,370 L994,380 L984,390 L994,400 L984,410 L994,420 L984,430 L994,440 L984,450 L994,460 L994,468 L356,468 Z"/>
+      </clipPath>
+    </defs>
+    <image href="manual-images/italian-left.png" x="356" y="60" width="634" height="408"
+           clip-path="url(#italian-left-torn)"/>
+    <use href="#italian-left-torn-edge" fill="none" stroke="#bbb"/>
+    <g fill="#f4f4f4" stroke="#111" stroke-width="2">
+      <rect x="8" y="64" width="330" height="84" rx="5"/>
+      <rect x="8" y="170" width="330" height="84" rx="5"/>
+      <rect x="8" y="276" width="330" height="84" rx="5"/>
+      <rect x="8" y="388" width="330" height="66" rx="5"/>
+      <rect x="1030" y="70" width="308" height="66" rx="5"/>
+      <rect x="1030" y="176" width="308" height="66" rx="5"/>
+      <rect x="1030" y="282" width="308" height="66" rx="5"/>
+      <rect x="335" y="520" width="270" height="66" rx="5"/>
+      <rect x="625" y="520" width="270" height="66" rx="5"/>
+      <rect x="925" y="520" width="270" height="66" rx="5"/>
+    </g>
+    <g fill="none" stroke="#111" stroke-width="3.5" marker-end="url(#italian-left-arrow)">
+      <line x1="340" y1="103" x2="372" y2="103"/>
+      <line x1="340" y1="209" x2="372" y2="209"/>
+      <line x1="340" y1="315" x2="372" y2="315"/>
+      <line x1="340" y1="421" x2="372" y2="421"/>
+      <line x1="1028" y1="103" x2="980" y2="103"/>
+      <line x1="1028" y1="209" x2="980" y2="209"/>
+      <line x1="1028" y1="315" x2="980" y2="315"/>
+      <line x1="470" y1="518" x2="591" y2="457"/>
+      <line x1="760" y1="518" x2="751" y2="457"/>
+      <line x1="1060" y1="518" x2="913" y2="457"/>
+    </g>
+    <g font-weight="bold" fill="#111">
+      <text x="22" y="92" font-size="24">sector total</text><text x="22" y="118" font-size="20" font-weight="normal">distance and time from sector</text><text x="22" y="140" font-size="20" font-weight="normal">start; press to zero</text>
+      <text x="22" y="198" font-size="24">sub</text><text x="22" y="224" font-size="20" font-weight="normal">distance and time from substage</text><text x="22" y="246" font-size="20" font-weight="normal">start; press to zero</text>
+      <text x="22" y="304" font-size="24">navi</text><text x="22" y="330" font-size="20" font-weight="normal">independent distance counter</text><text x="22" y="352" font-size="20" font-weight="normal">press to change the distance</text>
+      <text x="22" y="416" font-size="24">next substage</text><text x="22" y="444" font-size="20" font-weight="normal">press at every line</text>
+      <text x="1044" y="98" font-size="24">set</text><text x="1044" y="126" font-size="20" font-weight="normal">type the sector total</text>
+      <text x="1044" y="204" font-size="24">+10</text><text x="1044" y="232" font-size="20" font-weight="normal">add 10 m to sector total, sub</text>
+      <text x="1044" y="310" font-size="24">&minus;10</text><text x="1044" y="338" font-size="20" font-weight="normal">take 10 m off sector total, sub</text>
+      <text x="349" y="548" font-size="24">prev substage</text><text x="349" y="576" font-size="20" font-weight="normal">undo the last next</text>
+      <text x="639" y="548" font-size="24">freeze</text><text x="639" y="576" font-size="20" font-weight="normal">hold the distances</text>
+      <text x="939" y="548" font-size="24">reverse</text><text x="939" y="576" font-size="20" font-weight="normal">count back when reversing</text>
+    </g>
+  </svg>
+</figure>
+
+<h4>sector total</h4>
+<p>Distance and elapsed time in the sector, matching the card's <b>progr</b> value. Press to zero.</p>
+<ul>
+<li>Outside a sector, it zeroes the distance and the timer but not sub.</li>
+<li>During a sector, it asks first, then zeroes sector total and sub from the press while the sector
+clock keeps running.</li>
+</ul>
+
+<h4>sub</h4>
+<p>Distance in the current substage; zeroes at every new substage when <code>next substage</code>
+is pressed. Press to zero.</p>
+
+<h4>navi</h4>
+<p>An independent distance counter. Press to change the distance.</p>
+
+<figure class="screen">
+  <img src="manual-images/italian-navi-set.png" alt="The Set Navi pop-up">
+  <figcaption>Tapping navi: Set Navi.</figcaption>
+</figure>
+
+<h4>next substage and prev substage</h4>
+<p><code>next substage</code> is pressed to move to the next substage. <code>prev substage</code>
+undoes the change.</p>
+
+<h4>+10, set and &minus;10</h4>
+<p><code>+10</code> / <code>-10</code> move sector total and sub 10 m per press (navi unchanged);
+<code>set</code> allows a precise distance to be entered for sector total.</p>
+
+<h4>freeze and reverse</h4>
+<p><code>freeze</code> stops the distances from counting while lit; clocks and timers continue &ndash;
+use it after a navigation error. On release, counting resumes from the frozen figures.
+<code>reverse</code> makes the distances count backwards. It is typically used when reversing after
+overshooting a junction, as the box only counts pulses and has no concept of direction. Freeze
+overrules Reverse if both are pressed. Operates on sector total, sub and navi distances. The
+buttons display as black on white when active and a whooping sound is emitted.</p>
+
+<h4>The substage display</h4>
+<figure class="screen">
+  <svg viewBox="0 0 1346 506" style="display: block; width: 100%; height: auto" role="img" aria-label="The substage display on the italian navigation page"
+       font-family="Univers, 'Univers Next', 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <defs>
+      <marker id="italian-card-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#111"/>
+      </marker>
+      <clipPath id="italian-card-torn">
+        <path id="italian-card-torn-edge" d="M358,150 L979,150 L989,160 L979,170 L989,180 L979,190 L989,200 L979,210 L989,220 L979,230 L989,240 L979,250 L989,260 L979,270 L989,280 L979,290 L989,300 L979,310 L989,320 L979,330 L989,340 L979,350 L989,360 L979,365 L358,365 Z"/>
+      </clipPath>
+    </defs>
+    <image href="manual-images/italian-card.png" x="358" y="150" width="631" height="215" clip-path="url(#italian-card-torn)"/>
+    <use href="#italian-card-torn-edge" fill="none" stroke="#bbb"/>
+    <g fill="#111">
+      <rect x="132" y="10" width="236" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="146" y="38" font-size="24" font-weight="bold">km</text><text x="146" y="66" font-size="20">length of this substage</text>
+      <rect x="378" y="10" width="236" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="392" y="38" font-size="24" font-weight="bold">progr</text><text x="392" y="66" font-size="20">card distance at its end</text>
+      <rect x="624" y="10" width="236" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="638" y="38" font-size="24" font-weight="bold">mm:ss</text><text x="638" y="66" font-size="20">substage duration</text>
+      <rect x="870" y="10" width="236" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="884" y="38" font-size="24" font-weight="bold">km/h</text><text x="884" y="66" font-size="20">target speed</text>
+      <rect x="8" y="147" width="330" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="22" y="175" font-size="24" font-weight="bold">pc1</text><text x="22" y="203" font-size="20">the substage being driven</text>
+      <rect x="8" y="226" width="330" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="22" y="254" font-size="24" font-weight="bold">count down</text><text x="22" y="282" font-size="20">km and time to end of substage</text>
+      <rect x="8" y="306" width="330" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="22" y="334" font-size="24" font-weight="bold">pc2 (faded)</text><text x="22" y="362" font-size="20">the next substage</text>
+      <rect x="592" y="430" width="300" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="606" y="458" font-size="24" font-weight="bold">time left</text><text x="606" y="486" font-size="20">tenths; red with + once past</text>
+      <rect x="1038" y="270" width="300" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1052" y="298" font-size="24" font-weight="bold">average</text><text x="1052" y="326" font-size="20">so far (0.00 until known)</text>
+    </g>
+    <g stroke="#111" stroke-width="2.5" marker-end="url(#italian-card-arrow)">
+      <line x1="250" y1="76" x2="500" y2="206"/>
+      <line x1="496" y1="76" x2="635" y2="206"/>
+      <line x1="742" y1="76" x2="758" y2="206"/>
+      <line x1="988" y1="76" x2="872" y2="206"/>
+      <line x1="338" y1="180" x2="365" y2="222"/>
+      <line x1="338" y1="258" x2="503" y2="270"/>
+      <line x1="338" y1="339" x2="365" y2="339"/>
+      <line x1="742" y1="430" x2="745" y2="306"/>
+      <line x1="1038" y1="303" x2="978" y2="290"/>
+    </g>
+  </svg>
+  <figcaption>The substage display, inside pc 1.</figcaption>
+</figure>
+
+</section>
+
+<section class="screen-page">
+
+<h3 id="italian-driver">The Driver Display in Italian mode</h3>
+
+<p>Two pages: one on navi, ct and co rows, and one inside a pc or pm. All figures are in km and
+kph.</p>
+
+<h4>Navigation (navi, ct and co rows)</h4>
+
+<figure class="screen">
+  <svg viewBox="0 0 1346 603" style="display: block; width: 100%; height: auto"
+       role="img" aria-label="The Italian driver display on a navi row, each item labelled"
+       font-family="Univers, 'Univers Next', 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <defs>
+      <marker id="drvin-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#111" stroke="#fff" stroke-width="1"/>
+      </marker>
+    </defs>
+    <image href="manual-images/driver-it-navi.png" x="273" y="8" width="800" height="480"/>
+    <g fill="#111">
+      <rect x="8" y="8" width="248" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="20" y="40" font-size="24" font-weight="bold">Target</text>
+      <text x="20" y="65" font-size="21">Substage target speed.</text>
+      <rect x="8" y="212" width="217" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="20" y="244" font-size="24" font-weight="bold">Substage time</text>
+      <text x="20" y="270" font-size="21">Time it takes (m:ss).</text>
+      <rect x="8" y="417" width="174" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="20" y="449" font-size="24" font-weight="bold">Average</text>
+      <text x="20" y="474" font-size="21">Average speed.</text>
+      <rect x="1168" y="8" width="170" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1180" y="40" font-size="24" font-weight="bold">Speed</text>
+      <text x="1180" y="65" font-size="21">Present speed.</text>
+      <rect x="1161" y="212" width="177" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1173" y="244" font-size="24" font-weight="bold">Trip distance</text>
+      <text x="1173" y="270" font-size="21">Trip (km).</text>
+      <rect x="1148" y="417" width="190" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1160" y="449" font-size="24" font-weight="bold">Total distance</text>
+      <text x="1160" y="474" font-size="21">Sector total (km).</text>
+      <rect x="204" y="524" width="217" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="216" y="556" font-size="24" font-weight="bold">Navi substage</text>
+      <text x="216" y="581" font-size="21">No pc / pm running.</text>
+      <rect x="606" y="524" width="214" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="618" y="556" font-size="24" font-weight="bold">Empty box</text>
+      <text x="618" y="581" font-size="21">No error, no needle.</text>
+      <rect x="900" y="524" width="266" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="912" y="556" font-size="24" font-weight="bold">Minutes box</text>
+      <text x="912" y="581" font-size="21">Green ahead, red behind.</text>
+    </g>
+    <g fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round">
+      <line x1="258" y1="44" x2="333" y2="58"/>
+      <line x1="227" y1="248" x2="338" y2="136"/>
+      <line x1="184" y1="452" x2="503" y2="358"/>
+      <line x1="1166" y1="44" x2="973" y2="58"/>
+      <line x1="1159" y1="248" x2="863" y2="291"/>
+      <line x1="1146" y1="452" x2="863" y2="358"/>
+      <line x1="402" y1="522" x2="483" y2="447"/>
+      <line x1="673" y1="522" x2="673" y2="447"/>
+      <line x1="1146" y1="522" x2="863" y2="447"/>
+    </g>
+    <g fill="none" stroke="#111" stroke-width="3.5" marker-end="url(#drvin-arrow)">
+      <line x1="258" y1="44" x2="333" y2="58"/>
+      <line x1="227" y1="248" x2="338" y2="136"/>
+      <line x1="184" y1="452" x2="503" y2="358"/>
+      <line x1="1166" y1="44" x2="973" y2="58"/>
+      <line x1="1159" y1="248" x2="863" y2="291"/>
+      <line x1="1146" y1="452" x2="863" y2="358"/>
+      <line x1="402" y1="522" x2="483" y2="447"/>
+      <line x1="673" y1="522" x2="673" y2="447"/>
+      <line x1="1146" y1="522" x2="863" y2="447"/>
+    </g>
+  </svg>
+</figure>
+
+<p>The top left shows the row's target speed and, under it in yellow, how long the row takes at that
+speed (m:ss). There is no needle and the middle box is empty: on these rows crews drive flat out and
+a lead of many minutes is normal. The right-hand box shows the <b>minutes</b> in hand: green when
+ahead, red when behind.</p>
+
+<h4>In a pc or pm</h4>
+
+<figure class="screen">
+  <svg viewBox="0 0 1346 603" style="display: block; width: 100%; height: auto"
+       role="img" aria-label="The Italian driver display inside a pc, each item labelled"
+       font-family="Univers, 'Univers Next', 'Helvetica Neue', Helvetica, Arial, sans-serif">
+    <defs>
+      <marker id="drvip-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+              markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#111" stroke="#fff" stroke-width="1"/>
+      </marker>
+    </defs>
+    <image href="manual-images/driver-it-pc.png" x="273" y="8" width="800" height="480"/>
+    <g fill="#111">
+      <rect x="8" y="8" width="181" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="20" y="40" font-size="24" font-weight="bold">Target</text>
+      <text x="20" y="65" font-size="21">pc target speed.</text>
+      <rect x="8" y="144" width="264" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="20" y="176" font-size="24" font-weight="bold">pc time</text>
+      <text x="20" y="201" font-size="21">Time the pc takes (m:ss).</text>
+      <rect x="8" y="281" width="109" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="20" y="313" font-size="24" font-weight="bold">Needle</text>
+      <text x="20" y="338" font-size="21">pc error.</text>
+      <rect x="8" y="417" width="228" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="20" y="449" font-size="24" font-weight="bold">pc average</text>
+      <text x="20" y="474" font-size="21">Average over this pc.</text>
+      <rect x="1168" y="8" width="170" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1180" y="40" font-size="24" font-weight="bold">Speed</text>
+      <text x="1180" y="65" font-size="21">Present speed.</text>
+      <rect x="1201" y="144" width="137" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1213" y="176" font-size="24" font-weight="bold">Line tick</text>
+      <text x="1213" y="201" font-size="21">The pc line.</text>
+      <rect x="1094" y="281" width="244" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1106" y="313" font-size="24" font-weight="bold">Chevron</text>
+      <text x="1106" y="338" font-size="21">Countdown to the line.</text>
+      <rect x="1148" y="417" width="190" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="1160" y="449" font-size="24" font-weight="bold">Total distance</text>
+      <text x="1160" y="474" font-size="21">Sector total (km).</text>
+      <rect x="262" y="524" width="103" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="274" y="556" font-size="24" font-weight="bold">pc1</text>
+      <text x="274" y="581" font-size="21">This pc.</text>
+      <rect x="576" y="524" width="275" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="588" y="556" font-size="24" font-weight="bold">Error</text>
+      <text x="588" y="581" font-size="21">Seconds ahead or behind.</text>
+      <rect x="924" y="524" width="217" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="936" y="556" font-size="24" font-weight="bold">Countdown</text>
+      <text x="936" y="581" font-size="21">Seconds to the line.</text>
+    </g>
+    <g fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round">
+      <line x1="191" y1="44" x2="333" y2="58"/>
+      <line x1="274" y1="180" x2="338" y2="136"/>
+      <line x1="119" y1="316" x2="735" y2="198"/>
+      <line x1="238" y1="452" x2="503" y2="358"/>
+      <line x1="1166" y1="44" x2="973" y2="58"/>
+      <line x1="1199" y1="180" x2="741" y2="141"/>
+      <line x1="1092" y1="316" x2="710" y2="270"/>
+      <line x1="1146" y1="452" x2="863" y2="358"/>
+      <line x1="344" y1="522" x2="483" y2="447"/>
+      <line x1="673" y1="522" x2="673" y2="447"/>
+      <line x1="1122" y1="522" x2="863" y2="447"/>
+    </g>
+    <g fill="none" stroke="#111" stroke-width="3.5" marker-end="url(#drvip-arrow)">
+      <line x1="191" y1="44" x2="333" y2="58"/>
+      <line x1="274" y1="180" x2="338" y2="136"/>
+      <line x1="119" y1="316" x2="735" y2="198"/>
+      <line x1="238" y1="452" x2="503" y2="358"/>
+      <line x1="1166" y1="44" x2="973" y2="58"/>
+      <line x1="1199" y1="180" x2="741" y2="141"/>
+      <line x1="1092" y1="316" x2="710" y2="270"/>
+      <line x1="1146" y1="452" x2="863" y2="358"/>
+      <line x1="344" y1="522" x2="483" y2="447"/>
+      <line x1="673" y1="522" x2="673" y2="447"/>
+      <line x1="1122" y1="522" x2="863" y2="447"/>
+    </g>
+  </svg>
+</figure>
+
+<p>Inside a pc or pm the needle and the error box give the <b>error</b> from the start tube, in
+seconds. The yellow time is how long the pc takes. The box on the right counts down the seconds to
+the line, from 5.0 to 0.0.</p>
+
+<h4 id="chevron-italian">The chevron</h4>
+<p>Inside a pc or pm one chevron sits at the start of the needle, with the line tick further up. It
+waits there until 5 seconds are left to the line; then it slides up the needle to the tick, arriving
+as the countdown reads 0.0. It only does the countdown, and there is only one. On navi, ct and co
+rows there is no needle and no chevron.</p>
+</section>
+
+<section class="screen-page">
+
+<h2 id="surrey">Surrey rally type</h2>
+
+<div class="note"><b>Not built yet:</b> the surrey key in settings is greyed. This section
+describes the agreed design.</div>
+
+<p>For British road-book regularities such as the GoodBrook Surrey Hill Ramble. The roadbook gives
+one <b>running total</b> per section, from 0 at the section start, never reset at a box. A stage
+starts at a loosely given point in a box (&ldquo;about 75&nbsp;m after box 11&rdquo;), runs over
+several boxes and finishes at a point in a known box, perhaps with no printed distance. The crew
+writes the <b>time taken</b> on the yellow sheet. Surrey works as greek except as noted here.</p>
+
+<table>
+<tr><th style="width: 22%"></th><th>greek</th><th>surrey</th></tr>
+<tr><td>Readouts</td><td><b>total</b> / <b>trip</b> / <b>countdown</b></td><td><b>total</b> (from the
+<code>now</code> press) / <b>trip</b> / <b>navi</b>, the roadbook's running total, zeroed only at a
+section start. countdown moves to the stage column.</td></tr>
+<tr><td>Stage start</td><td>on a time (autostart) or <code>now</code></td><td><code>now</code>
+pressed at the landmark (autostart still works if a start time is entered)</td></tr>
+<tr><td>Speed changes</td><td>at the row distance, <code>auto</code> or <code>next</code></td><td>the
+same, at the roadbook total of the box</td></tr>
+<tr><td>Stage end</td><td>on distance, or <code>next</code> on the last row</td><td><code>next</code>
+pressed at the finish landmark; on distance if not pressed</td></tr>
+<tr><td>Result</td><td>ahead / behind</td><td>ahead / behind while driving, then <b>time taken</b>
+(<code>9:20.6</code>)</td></tr>
+</table>
+
+<h3 id="surrey-programming">Programming Surrey Stages</h3>
+
+<p>Select <b>surrey</b> rally from the settings page and then select <code>segments</code> from the
+main menu. The segments page will display a Union Jack and is otherwise as in
+<a href="#segments">Programming Greek Stages</a>.</p>
+
+<h4>Entering Surrey stage data</h4>
+<p>Start time is usually blank: a surrey stage has no start minute.</p>
+<ol>
+<li><b>from</b> &ndash; the roadbook total of the box the start lies in (SS2: box 27, <code>22307</code>).</li>
+<li>Each row's <b>to</b> &ndash; the roadbook total where the speed next changes, or the finish.
+Set speed changes after the first row to <code>auto</code>: box totals are known, so they happen by
+themselves.</li>
+<li>If the finish has no printed distance, the last <b>to</b> is the end of its box, which is the next
+box's total (SS3: finish in box 62, last to <code>53897</code>, the total at box 63).</li>
+</ol>
+<table>
+<tr><th style="width: 14%">Stage</th><th style="width: 16%">from</th><th>rows (box, to, kph)</th><th style="width: 30%">finish</th></tr>
+<tr><td>SS1</td><td>9148</td><td>11, 18566, 60</td><td>at box 23</td></tr>
+<tr><td>SS2</td><td>22307</td><td>27, 24024, 65 &middot; 30, 26752, 50 auto</td><td>at box 32</td></tr>
+<tr><td>SS3</td><td>49732</td><td>59, 53897, 58</td><td>signpost in box 62</td></tr>
+</table>
+
+<p><code>upload stage</code>, <code>clear stage</code> and <code>clear all</code> work as in greek.</p>
+
+<h3 id="surrey-starting">Starting a Surrey Stage</h3>
+
+<p>A surrey stage is started with <code>now</code> (Start Now) as the car passes the start landmark.
+Autostart still works if a start time is entered.</p>
+
+<h4>Driving a section</h4>
+<table class="controls">
+<tr><th>When</th><th>Press</th><th>What the box does</th></tr>
+<tr><td>Section start (box 1, box 66)</td><td><code>navi</code> &rsaquo; reset</td><td>navi = 0.</td></tr>
+<tr><td>At a box, if navi is out</td><td><code>navi</code> &rsaquo; set</td><td>navi set to the box figure
+(total unchanged). Always do this at the start box.</td></tr>
+<tr><td>Passing the start landmark</td><td><code>now</code></td><td>Stage clock and distance start;
+navi carries on. Row 1 is shortened to end at its box, so later speed changes match the
+roadbook.</td></tr>
+<tr><td>A speed change at a box</td><td>nothing (<code>auto</code>)</td><td>Changes speed at the box.
+<code>next</code> and <code>prev</code> work as in greek.</td></tr>
+<tr><td>Passing the finish landmark</td><td><code>next</code> on the last row</td><td>The stage ends; <b>time
+taken</b> shows under Trip history and on the phone.</td></tr>
+</table>
+
+<h3 id="surrey-navigation">Navigating a Surrey Stage</h3>
+
+<h4>The navigation page</h4>
+<p>Rows: <code>total</code> (from the <code>now</code> press) / <code>trip</code> /
+<code>navi</code> (cyan, the roadbook running total; tap to set or reset). During a stage,
+<b>countdown</b> (metres and minutes to the next speed change or finish) sits at the foot of the
+stage column; between stages Stage arrival shows there. Under the Trip history (last four),
+<b>time taken</b> for the last stage stays until the next one finishes. <code>check total</code>
+shows in orange where <code>manual</code> normally is.</p>
+
+<h4>When things go wrong</h4>
+<table>
+<tr><th style="width: 30%">Situation</th><th>What to do</th></tr>
+<tr><td>navi total out at the start (a wrong turn before the stage)</td><td>Best: <code>set</code> the start
+box's figure as you pass it, then press <code>now</code>. Left uncorrected, the stage runs
+correctly from the press but automatic speed changes come at the wrong place: for each one, press
+<code>prev</code> if it comes early and <code>next</code> at the box. A large error (over
+300&nbsp;m before the start box figure, or past the end of row 1) also shows
+<code>check total</code>.</td></tr>
+<tr><td>A wrong turn inside the stage</td><td>Correct <b>total</b> with <code>set</code> or
+<code>&plusmn;10</code>, as in greek, and <b>navi</b> separately with <code>navi</code> &rsaquo; set
+at the next box.</td></tr>
+<tr><td><code>next</code> pressed too early at the finish</td><td>Press <code>prev</code>: the stage
+carries on as if nothing happened. Works until navi passes the last row's <b>to</b>.</td></tr>
+<tr><td>Finish passed without pressing <code>next</code></td><td>The stage ends by itself at the last
+row's <b>to</b>, as in greek, and time taken is to that point: right for a printed finish distance,
+but for a finish inside a box it is the time to the box end, not the landmark.</td></tr>
+<tr><td><code>now</code> pressed before the real start</td><td>As greek: press <code>now</code> again,
+confirm the abort, then press <code>now</code> at the real landmark. navi is unaffected.</td></tr>
+</table>
+
+<p>The section target time (90 min for each section on the GoodBrook roadbook) is not shown.</p>
+
+<h4>The driver display</h4>
+<p>The Surrey stage pages are the <a href="#driver-zero">Greek ones</a>: in a stage, the needle,
+error box and red <b>S</b> logo; between stages, the arrival speed, the <b>navi</b> logo and no
+needle.</p>
+
+<h4 id="chevron-surrey">The chevron</h4>
+<p>As in <a href="#chevron-greek">greek</a>. One chevron rides the needle: it starts 20% up at the
+beginning of each row and slides up toward the row end line as the row is driven, arriving as the
+row ends. In Surrey a row ends at a box or at the finish, so the chevron counts down to the next
+box. Between stages there is no needle and no chevron.</p>
 
 </section>
 
@@ -475,17 +1293,12 @@ Starting a stage clears the adjustment.</p>
   <img src="manual-images/single-display.png" alt="The single-display page">
 </figure>
 
-<p>With <b>Force single display</b> on, the driver's gauge shares the co-pilot
-screen and there is only one screen. The keys work as described for the
-navigation page. The layout is: the Total / Trip / next block with
-<code>+10</code>, <code>set</code> and <code>-10</code> on the left, with
-<code>prev</code>, <code>freeze</code>, <code>reverse</code> and
-<code>A-B, B-C zero</code> along the foot; the rally clock and the
-<b>&minus; 1 +</b> stage selector above the gauge in the middle; and the three
-flag keys and <code>menu</code> in a column on the right. There is no Trip
-history or stage table on this screen; segments, date / time and calibration are
-reached through <code>menu</code>, as on two displays. While a start is pending,
-the countdown box appears over the gauge.</p>
+<p>With <b>Force single display</b> on, the driver's gauge shares the co-pilot screen. Keys work as
+on the navigation page. Left: Total / Trip / next with <code>+10</code>, <code>set</code> and
+<code>-10</code>; along the foot: <code>prev speed</code>, <code>freeze</code>, <code>reverse</code>
+and <code>A-B, B-C zero</code>; middle: rally clock and <b>&minus; 1 +</b> stage selector above the
+gauge; right: the three flag keys and <code>menu</code>. No Trip history or stage table; other pages
+are reached through <code>menu</code>. A pending start's countdown shows over the gauge.</p>
 
 </section>
 
@@ -493,19 +1306,19 @@ the countdown box appears over the gauge.</p>
 
 <h2 id="phone-app">The phone app</h2>
 
-<p><b>Connecting:</b> tether the rally box to the phone over Wi-Fi, then open the
-address shown on the settings page (or scan its QR code). The top of the page
-reads <b>connected</b> in green when linked. Adding the page to the phone's home
-screen runs it full screen.</p>
+<p><b>Connecting:</b> link the box and phone over Wi-Fi, then open the address shown on the
+settings page (or scan its QR code). The page top reads <b>connected</b> in green when linked. Added
+to the phone's home screen, it runs full screen.</p>
 
-<p><b>Sounds:</b> the top key reads <b>Tap for sound</b> until the phone's audio is
-allowed; afterwards it toggles Sound is on / Sound is off.</p>
+<p><b>Sounds:</b> the top key reads <b>Tap for sound</b> until the phone allows audio, then
+toggles Sound is on / off.</p>
 
-<p>Six tabs mirror the box: <b>Navi</b> (navigation, including total, trip,
-freeze, reverse, the three flag keys and A-B, B-C zero), <b>Seg</b> (segments),
-<b>Time</b> (date / time), <b>Cal</b> (calibration), <b>Set</b> (settings, plus
-<code>download logs</code>) and <b>Drv</b> (the driver gauge with Total and Trip).
-On Navi and Drv, press Total or Trip to reset them.</p>
+<p><b>Nero2.1:</b> the phone's stage selectors run 1&ndash;99 like the box; the phone does not yet show the italian columns, and its screenshots below are from 27 October (before Nero2.1).</p>
+
+<p>Six tabs mirror the box: <b>Navi</b> (navigation, with total, trip, freeze, reverse, the three
+flag keys and A-B, B-C zero), <b>Seg</b> (segments), <b>Time</b> (date / time), <b>Cal</b>
+(calibration), <b>Set</b> (settings, plus <code>download logs</code>) and <b>Drv</b> (driver gauge
+with Total and Trip). On Navi and Drv, press Total or Trip to zero it.</p>
 
 <div style="display: flex; gap: 6mm; align-items: flex-start; justify-content: flex-start">
   <figure class="screen" style="flex: 0 0 43.2%; margin: 0">
@@ -543,6 +1356,215 @@ On Navi and Drv, press Total or Trip to reset them.</p>
     <img src="manual-images/phone-cal.png" alt="The phone app, Cal tab">
   </figure>
 </div>
+
+</section>
+
+<section class="screen-page">
+
+<h2 id="beep-assist">Beep assist</h2>
+
+<p>Beep Assist uses the segments <b>to</b> figures as the roadbook boxes; nothing more is entered.
+Switch it on in settings. Navigation double-beeps a set distance before each box. Timing single-beeps
+when the car should pass it, revealing distance errors from wheel spin, corner cutting or a skipping
+sensor. Beeps follow Total, so +10, -10 or set moves them all.</p>
+
+<ul>
+<li><b>Beep navigation</b> &ndash; off/on. <b>Navigation advance</b>: metres before the box for the
+double beep (100 recommended).</li>
+<li><b>Beep timing</b> &ndash; off/on. <b>Timing advance</b>: seconds before the box time for the
+single beep (0 recommended).</li>
+</ul>
+<div class="note">Beep Assist is for greek stages and is silent in italian. There, inside a pc, the
+box instead beeps the countdown to the end tube: at 30 s and 15 s, then 5, 4, 3, 2, 1, and a short
+beep on 0.</div>
+
+</section>
+
+<section class="screen-page">
+
+<h2 id="adjusting-settings">Adjusting settings</h2>
+
+<h3 id="datetime">date / time</h3>
+
+<figure class="screen">
+  <img src="manual-images/datetime.png" alt="The date and time page">
+  <figcaption>The date / time page.</figcaption>
+</figure>
+
+<p><b>Rally time</b> (white) is the clock all stages are timed against; <b>Computer time</b> (cyan)
+is the Raspberry Pi's clock; <b>Phone time</b> is the linked phone's, or <code>no phone</code>.
+<b>Offset to computer</b> is how far rally time is ahead (+) or behind (&minus;), for example
+<code>+2.3</code>, or <code>-11:49.2</code> beyond a minute.</p>
+
+<h4>Setting the rally clock</h4>
+
+<ul>
+<li><code>set rally to computer time</code> makes them equal.</li>
+<li>Type <code>hh:mm:ss</code> (or <code>hh:mm</code>, no tenths) in <b>Enter rally time</b> and press
+<code>set rally to entered time</code>. Today's date is used.</li>
+<li><code>set computer to phone time</code> sets the Pi's clock from the phone, leaving the rally
+clock as it is. Grey until a phone connects. It needs the Pi's usual password-free permission to
+set its clock; without it the box says <code>The computer clock could not be set</code> and nothing
+changes.</li>
+</ul>
+
+<h4>Trimming</h4>
+
+<p><code>-0.1</code> / <code>+0.1</code> trim the rally clock by a tenth of a second; hold to
+repeat. Saved at once.</p>
+
+</section>
+
+<section class="screen-page">
+
+<h3 id="calibration">calibration</h3>
+
+<figure class="screen">
+  <img src="manual-images/calibration.png" alt="The calibration page">
+  <figcaption>The calibration page.</figcaption>
+</figure>
+
+<h4>Calibrating over a set distance</h4>
+
+<ol>
+<li>Press <code>zero counters</code> (or skip, to use the distance since the last Total reset).</li>
+<li>Drive the measured distance (from 500 m to 100,000 m).</li>
+<li>Type the <b>actual</b> distance driven (not what the box shows) in Actual distance.</li>
+<li>Choose the counter: <code>sensor 1</code> or <code>sensor 1&amp;2</code> (shown in white).</li>
+<li>Press <code>save calibration</code>.</li>
+</ol>
+
+<p>The page shows the calculated distance, each sensor's count and the pulses per km in use. If the
+distance is out of range or nothing was counted, <code>save calibration</code> silently does
+nothing, so check the pulses per km figure has changed.</p>
+
+<h4>Setting the pulses directly</h4>
+
+<p>If the figure is known, type it in <b>Reset to</b> and press <code>save pulses</code>; no
+driving needed. Zero or less is ignored.</p>
+
+<h4>Prop/Wheel RPM</h4>
+
+<p>The last row shows propshaft or wheel rpm from sensor 1. Type the sensor's pulses per
+revolution in the small box.</p>
+
+</section>
+
+<section class="screen-page">
+
+<h3 id="settings">settings</h3>
+
+<figure class="screen">
+  <img src="manual-images/settings.png" alt="The settings page" style="width: 85%">
+  <figcaption>The settings page.</figcaption>
+</figure>
+
+<p>Each switch shows its present state lit. Changes are saved at once.</p>
+
+<h4>Tone</h4>
+<ul>
+<li><b>Ahead/Behind Tone</b> &ndash; the driver's error tone, off/on.</li>
+<li><b>Tone when behind</b> / <b>Tone when ahead</b> &ndash; type 1 or 2; both silent under 0.2 s
+error and in the first 250 m. <b>Type 1</b>: a buzzer tick that speeds up with the error in 0.2 s
+steps, from about one a second at 0.2 s to about eight by 3 s; behind ticks slightly higher.
+<b>Type 2</b>: a steady tone rising in pitch in 0.2 s steps to 3 s; behind is higher and harsher,
+ahead lower and smoother.</li>
+<li><b>Gauge range &plusmn; s</b> &ndash; 1, 2 or 3 seconds at each end of the gauge.</li>
+</ul>
+
+<h4>System</h4>
+<ul>
+<li><b>Rally type</b> &ndash; greek / surrey / italian. See <a href="#rally-types">Rally
+types</a>. The software version (Nero2.1) is shown above it.</li>
+<li><b>Speed units</b> &ndash; kph or mph.</li>
+<li><b>Distance units</b> &ndash; <b>00.00</b> (km) or <b>0,000</b> (metres) for
+<code>add distance</code>.</li>
+<li><b>Measure type</b> &ndash; <b>AB,BC</b> shows the A-B, B-C zero key on the greek navigation
+page; <b>AB,AC</b> hides it.</li>
+<li><b>Stage data logging</b> &ndash; one file per stage, a row a second (distance, speed,
+ahead/behind error), from stage start to end or abort; switched on mid-stage, it starts at once. If
+the file cannot be written, logging silently switches off.</li>
+<li><b>Sensor logging</b> &ndash; raw counter readings, many rows a second while on, so much larger
+files. Both logs are deleted after 60 days (at program start) and can be downloaded on the phone's
+Set tab.</li>
+</ul>
+<p>The column foot shows the screen update rate and Pi temperature. The spanner key (keypad,
+bottom left) opens Setup.</p>
+
+<h3 id="setup">Setup</h3>
+
+<figure class="screen">
+  <img src="manual-images/setup.png" alt="The Setup page" style="width: 75%">
+  <figcaption>The Setup page (in the sandbox no real displays are found).</figcaption>
+</figure>
+
+<ul>
+<li><b>Screen setup</b> &ndash; each display found, with <code>rotate</code> and a touch keyboard
+switch; <code>reset layout</code>; <b>Force single display</b> puts the gauge on the co-pilot screen
+from the next program start.</li>
+<li><b>Bluetooth speaker setup</b> &ndash; <code>remember playing speaker</code> stores the speaker
+now playing; <code>connect</code> / <code>disconnect</code> it later.</li>
+<li><b>Wi-Fi setup</b> &ndash; one key per saved network: the box's own <b>hotspot</b> (lit when
+used) or <b>join</b> another. Below: the phone app address and QR code. Opened from the phone's home
+screen, it runs without browser bars.</li>
+<li><code>check for software updates</code> &ndash; closes the program and checks for an update
+(needs internet).</li>
+<li><code>settings</code> returns to the settings page.</li>
+</ul>
+
+</section>
+
+<section class="screen-page">
+
+<h2 id="not-built">Not built yet</h2>
+
+<p>Agreed or planned, but the box does <b>not</b> do these today:</p>
+<ul>
+<li><code>upload stage</code> on the segments page (greyed): loading a stage from a file.</li>
+<li>Italian: the count down <b>km</b> turning red and counting up past the line (the time already
+does).</li>
+<li>Italian driver display in km (it still reads <i>Distance (metres)</i>, Total and Trip).</li>
+<li>Beep Assist settings greyed in italian (it already stays silent there).</li>
+<li><b>Reaction time offset</b> setting (all rally types).</li>
+<li>Italian columns on the phone's Seg tab; keeping phone edits made while disconnected.</li>
+</ul>
+
+<h2 id="check" style="page-break-before: always">Things to check</h2>
+
+<p>Seen while making this manual in the sandbox (30 October 2026). Each needs your judgement:
+is it what you want?</p>
+
+<table>
+<tr><th style="width: 5%">#</th><th>What was seen</th><th style="width: 30%">Where</th></tr>
+<tr><td>1</td><td>After <b>start now</b> (a manual flying start) the stage panel read
+<b>auto 18:01:56</b> &ndash; the word <i>auto</i> and the press time &ndash; not <i>manual</i>.</td><td>Greek
+navigation page, stage panel</td></tr>
+<tr><td>2</td><td>The Trip history (101, 368) was empty once the stage had started.</td><td>Greek
+navigation page</td></tr>
+<tr><td>3</td><td>Fixed 31 October: the greek Beep Assist no longer sounds in italian.</td><td>Italian, Beep timing on</td></tr>
+<tr><td>4</td><td>Inside pc 1 the driver's gauge was marked to &plusmn;5 s although Gauge range was
+set to 3.</td><td>Italian driver display</td></tr>
+<tr><td>5</td><td>The count down km stays at 0.00 once the line has gone by (a missed
+<code>next substage</code> does not show).</td><td>Italian navigation page</td></tr>
+<tr><td>6</td><td>After the sector ended, the preview showed pc 1 as the line, not the opening navi
+substage.</td><td>Italian navigation page, idle</td></tr>
+<tr><td>7</td><td>The word <i>manual</i> sits tight against a crossed-out start time.</td><td>Greek stage
+panel</td></tr>
+<tr><td>8</td><td>Nothing in this manual has been tried on the real box, a phone, or in mph.</td><td>Everywhere</td></tr>
+</table>
+
+<h3>Suggested run-through</h3>
+<ol>
+<li><b>Greek</b>: load a stage with Choose Stage (tap the stage number); start it each of the three ways; press
+<code>next speed</code> at a box; <code>prev speed</code>; +10 / set; freeze; abort. Check the countdown key's
+two figures against the segments page.</li>
+<li><b>Italian</b>: load sector 1; start in a minute and watch the +/&minus; box; press
+<code>next substage</code> at the first tube and follow pc 1's count down to its end; press late at a tube
+and watch the time turn red; <code>prev substage</code>; drive a pm; finish at the co and compare the
+arrival time with the card.</li>
+<li><b>Settings</b>: switch rally type both ways and look at the segments and navigation pages;
+Measure type AB,BC / AB,AC; Gauge range.</li>
+</ol>
 
 </section>
 
