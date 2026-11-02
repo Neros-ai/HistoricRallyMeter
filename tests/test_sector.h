@@ -738,6 +738,17 @@ public:
             return sectorEndsOnDistance(s);
         });
 
+        suite->addTest("RB-WEB-21: past the line the count down km is +0.04 and the seconds +0:01.4, as the box", []() {
+            SectorPanel p; p.running = true; p.metresPast = 40; p.metresToGo = 0;
+            return sectorCountdownKmText(p) == "+0.04" && sectorSecondsText(-1.45) == "+0:01.4"
+                && sectorSecondsText(75.5) == "1:15.5";
+        });
+
+        suite->addTest("RB-WEB-21: before the line the count down km has no sign", []() {
+            SectorPanel p; p.running = true; p.metresToGo = 1240;
+            return sectorCountdownKmText(p) == "1.24";
+        });
+
         return suite;
     }
 };

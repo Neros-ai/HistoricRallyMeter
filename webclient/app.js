@@ -153,7 +153,13 @@
       $('time-taken-label').textContent = 'time taken ss' + (Number(msg.time_taken_stage) >= 1 ? msg.time_taken_stage : '-');
       $('time-taken').textContent = msg.time_taken || '';
     }
-    $('next-m').textContent = (msg.next_m === null || msg.next_m === undefined) ? '---' : formatDist(msg.next_m);
+    // Italian: the box's count down text, red past the line (RB-WEB-21).
+    const ic = msg.it_count;
+    $('next-m').textContent = ic ? ic.km
+      : ((msg.next_m === null || msg.next_m === undefined) ? '---' : formatDist(msg.next_m));
+    $('next-m').style.color = (ic && ic.past) ? '#ff2626' : '';
+    $('next-s').textContent = (ic && ic.s) ? ic.s : '';
+    $('next-s').style.color = (ic && ic.s_past) ? '#ff2626' : '';
     $('total-el').textContent = mmss(msg.total_s);
     $('trip-el').textContent = mmss(msg.trip_s);
     $('speed-change').textContent = msg.speed_change || '';

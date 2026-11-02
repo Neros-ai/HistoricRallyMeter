@@ -79,15 +79,7 @@ std::string kph2(double kph) {
 }
 
 // m:ss.t, with a "+" and red when the line has gone by.
-std::string tenths(double s) {
-    const bool late = s < 0;
-    const double a = std::fabs(s);
-    const long whole = static_cast<long>(a);
-    char b[32];
-    snprintf(b, sizeof(b), "%s%ld:%02ld.%ld", late ? "+" : "", whole / 60, whole % 60,
-             static_cast<long>((a - whole) * 10.0));
-    return b;
-}
+std::string tenths(double s) { return sectorSecondsText(s); }
 
 // Local time of day, as the rally clock shows it (rally_ms is system time plus the rally offset).
 std::string hhmm(int64_t rally_ms) {

@@ -481,3 +481,20 @@ SectorPanel sectorPanel(const RallyState& s, int64_t now_ms, long stage_m) {
     }
     return p;
 }
+
+std::string sectorCountdownKmText(const SectorPanel& p) {
+    char b[32];
+    if (p.metresPast > 0) snprintf(b, sizeof(b), "+%.2f", p.metresPast / 1000.0);
+    else snprintf(b, sizeof(b), "%.2f", p.metresToGo / 1000.0);
+    return b;
+}
+
+std::string sectorSecondsText(double s) {
+    const bool late = s < 0;
+    const double a = std::fabs(s);
+    const long whole = static_cast<long>(a);
+    char b[32];
+    snprintf(b, sizeof(b), "%s%ld:%02ld.%ld", late ? "+" : "", whole / 60, whole % 60,
+             static_cast<long>((a - whole) * 10.0));
+    return b;
+}

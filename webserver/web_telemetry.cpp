@@ -191,6 +191,17 @@ std::string buildTelemetryJson(AppData* data) {
     CounterPoll tenth = data->poller->get10th();
     const int64_t rpm_ms = tenth.time_ms ? raw_poll.time_ms - tenth.time_ms : 0;
     const double rpm = propRpmFromCounts(raw_poll.cntr1, tenth.cntr1, rpm_ms, st.prop_pulses_per_rev);
+    // RB-WEB-21: italian count down as the box prints it (same sectorPanel, same text).
+    std::string itCount = "null";
+    if (st.rally_type == 2) {
+        const long stage_m = countsToCentimeters(stageCountsCorrected(data, current_poll), st.calibration) / 100;
+        const SectorPanel sp = sectorPanel(st, current_time_ms, stage_m);
+        if (sp.running) {
+            itCount = "{\"km\":\"" + sectorCountdownKmText(sp) + "\",\"past\":" + (sp.metresPast > 0 ? "true" : "false") +
+                      ",\"s\":" + (sp.secondsValid ? "\"" + sectorSecondsText(sp.secondsToLine) + "\"" : std::string("null")) +
+                      ",\"s_past\":" + (sp.secondsValid && sp.secondsToLine < 0 ? "true" : "false") + "}";
+        }
+    }
     std::ostringstream ex;
     ex << ",\"gauge_range\":" << data->state->gauge_range_s
        << ",\"reaction_offset_ms\":" << data->state->reaction_offset_ms
@@ -200,6 +211,7 @@ std::string buildTelemetryJson(AppData* data) {
        << ",\"time_taken\":\"" << (isSurrey(st) ? surreyTimeTakenText(st.time_taken_ms) : std::string()) << "\""
        << ",\"time_taken_stage\":" << (isSurrey(st) ? st.time_taken_stage : 0)
        << ",\"total_s\":" << total_s << ",\"trip_s\":" << trip_s
+       << ",\"it_count\":" << itCount
        << ",\"next_m\":" << (has_next_m ? std::to_string(next_m) : std::string("null"))
        << ",\"speed_change\":\"" << speed_change << "\""
        << ",\"next_key\":\"" << (st.rally_type == 2 ? "next substage" : "next speed") << "\""

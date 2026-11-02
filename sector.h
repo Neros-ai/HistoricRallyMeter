@@ -165,5 +165,10 @@ struct SectorPanel {
     long coMinutes = 0;            // minutes left to it
 };
 SectorPanel sectorPanel(const RallyState& s, int64_t now_ms, long sector_m);
+// RB-WEB-21: the count down figures as the box prints them, so the phone can show the same text.
+// km to the line with two decimals; "+0.04" once the line has gone by.
+std::string sectorCountdownKmText(const SectorPanel& p);
+// m:ss.t; "+m:ss.t" when negative (the line has gone by).
+std::string sectorSecondsText(double s);
 
 #endif
