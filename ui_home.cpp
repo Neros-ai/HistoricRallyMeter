@@ -170,7 +170,7 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         const char* word = h->autoArmed ? "auto" : (check ? "check total" : "manual");
         // Measure both texts so the time shrinks rather than touch the word. Surrey's amber
         // "check total" is 24 px when it has the line to itself (mockup), 18 px beside a start time.
-        const double wordPx = (check && h->autoTime.empty()) ? 24 : 18;
+        const double wordPx = check ? 24 : 18;
         cairo_text_extents_t we, te26;
         cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
         cairo_set_font_size(cr, wordPx);
@@ -185,8 +185,9 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         }
         drawText(cr, word, 4, ay, wordPx, LEFT);
         white(cr);
-        drawText(cr, h->autoTime, width - 4, ay, timeFont, RIGHT);
-        if (h->autoTimePast && !h->autoTime.empty()) {
+        // "check total" stands alone on the line (mockup S3): no start time, no strike-through.
+        if (!check) drawText(cr, h->autoTime, width - 4, ay, timeFont, RIGHT);
+        if (!check && h->autoTimePast && !h->autoTime.empty()) {
             cairo_text_extents_t te;
             cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
             cairo_set_font_size(cr, timeFont);
