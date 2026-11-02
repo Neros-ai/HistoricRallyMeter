@@ -3,6 +3,7 @@
 #include "home_calc.h"
 #include "freeze.h"
 #include "sector.h"
+#include "surrey.h"
 #include "stage_rows.h"
 #include "ui_home_italian.h"
 #include "ui_segments.h"
@@ -123,7 +124,7 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
     case FIGURE:
         // 88 px digits, right-aligned; their foot sits a quarter of the way
         // into the gap below the key (key bottom + 9).
-        white(cr);
+        if (h->surrey && idx == 2) cyan(cr); else white(cr);   // navi total in cyan, as italian
         drawText(cr, h->figure[idx], width, KEY_H + 9, 88, RIGHT);
         break;
     case ELAPSED:
@@ -151,17 +152,28 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         const double right = (width + 6 * 24) / 2.0;
         for (size_t i = 0; i < HOME_HISTORY_ENTRIES; i++)
             drawText(cr, h->history[i], right, 24 + (i + 1) * 46 - 10, 40, RIGHT);
+        if (h->surrey && !h->timeTaken.empty()) {
+            // The last stage's time taken at the foot of the column (mockup surrey-mode.html).
+            const int height = gtk_widget_get_allocated_height(w);
+            cyan(cr);
+            drawText(cr, h->timeTakenLabel, width / 2.0, height - 46 - 6, 18, CENTRE);
+            white(cr);
+            drawText(cr, h->timeTaken, width / 2.0, height - 10, 40, CENTRE);
+        }
         break;
     }
     case STAGE: {
         // "auto" (armed, or the autostart that started the running stage) or "manual"
         // in orange, then the start time from Segments.
         const double ay = 12 + 28;
-        const char* word = h->autoArmed ? "auto" : "manual";
-        // Measure both texts so the time shrinks rather than touch the word.
+        const bool check = h->surreyCheck && !h->autoArmed;
+        const char* word = h->autoArmed ? "auto" : (check ? "check total" : "manual");
+        // Measure both texts so the time shrinks rather than touch the word. Surrey's amber
+        // "check total" is 24 px when it has the line to itself (mockup), 18 px beside a start time.
+        const double wordPx = (check && h->autoTime.empty()) ? 24 : 18;
         cairo_text_extents_t we, te26;
         cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-        cairo_set_font_size(cr, 18);
+        cairo_set_font_size(cr, wordPx);
         cairo_text_extents(cr, word, &we);
         cairo_set_font_size(cr, 26);
         cairo_text_extents(cr, h->autoTime.c_str(), &te26);
@@ -171,7 +183,7 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         } else {
             setColour(cr, 1.0, 0.55, 0.0);
         }
-        drawText(cr, word, 4, ay, 18, LEFT);
+        drawText(cr, word, 4, ay, wordPx, LEFT);
         white(cr);
         drawText(cr, h->autoTime, width - 4, ay, timeFont, RIGHT);
         if (h->autoTimePast && !h->autoTime.empty()) {
@@ -204,6 +216,17 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         // Stage arrival: speed to arrive a minute early, and minutes to go.
         const double base = STAGE_AREA_H - 130;
         cyan(cr);
+        if (h->surreyRunning) {
+            // Surrey, stage running: the countdown (metres, minutes) takes the arrival slot.
+            drawText(cr, "countdown", width / 2.0, base + 26, 22, CENTRE);
+            grey(cr);
+            drawText(cr, "m", width * 0.25, base + 62, 18, CENTRE);
+            drawText(cr, "min", width * 0.75, base + 62, 18, CENTRE);
+            white(cr);
+            drawText(cr, h->cdMetres, width * 0.25, base + 106, 28, CENTRE);
+            drawText(cr, h->cdTime, width * 0.75, base + 106, 28, CENTRE);
+            break;
+        }
         drawText(cr, "Stage arrival", width / 2.0, base + 26, 22, CENTRE);
         grey(cr);
         drawText(cr, h->unitsMph ? "mph" : "kph", width * 0.25, base + 62, 18, CENTRE);
@@ -720,7 +743,7 @@ static void updateItalianHome(AppData* data) {
             if (GTK_IS_LABEL(lbl)) gtk_label_set_justify(GTK_LABEL(lbl), GTK_JUSTIFY_CENTER);
             GtkStyleContext* c = gtk_widget_get_style_context(h->leftKeys[i]);
             if (it && i == 0) gtk_style_context_add_class(c, "key-18"); else gtk_style_context_remove_class(c, "key-18");
-            if (i == 2) { if (it) gtk_style_context_remove_class(c, "key-21"); else gtk_style_context_add_class(c, "key-21"); }
+            if (i == 2) { if (it || data->state->rally_type == 1) gtk_style_context_remove_class(c, "key-21"); else gtk_style_context_add_class(c, "key-21"); }
         }
         if (data->nextPrevBtn) {
             gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), readoutKeyName(data->state->rally_type, 3));
@@ -738,6 +761,12 @@ static void updateItalianHome(AppData* data) {
             if (!k) continue;
             gtk_widget_set_opacity(k, it ? 0.0 : 1.0);
             gtk_widget_set_sensitive(k, !it);
+        }
+        // Surrey keeps a time-taken foot under Trip history, so its area is taller.
+        if (h->historyArea) {
+            const int rows = tripHistoryRows(*data->state);
+            gtk_widget_set_size_request(h->historyArea, HIST_W,
+                                        24 + 46 * rows + (data->state->rally_type == 1 ? 82 : 0));
         }
     }
     if (!h->italianCard) return;   // single-display has no italian card
@@ -942,14 +971,14 @@ void updateHomeDisplay(AppData* data) {
     // "---.---" (no segment) is wider than the 88 px figure column.
     std::string next_fig = gtk_label_get_text(data->nextDistLabel);
     if (!next_fig.empty() && next_fig[0] == '-' && next_fig.find('.') != std::string::npos) next_fig = "---";
-    mirror(h->figure[2], next_fig.c_str(), h->figureArea[2]);
+    if (!isSurrey(*data->state)) mirror(h->figure[2], next_fig.c_str(), h->figureArea[2]);   // surrey: navi, below
     mirror(h->elapsed[0], gtk_label_get_text(data->totalTimeLabel), h->elapsedArea[0]);
     mirror(h->elapsed[1], gtk_label_get_text(data->tripTimeLabel), h->elapsedArea[1]);
 
     // mm:ss to the next speed change, driving at the segments' speeds.
     std::string line;
     const RallyState& st = *data->state;
-    if (st.rally_type != 2 && st.segment_current_number >= 0 &&
+    if (st.rally_type == 0 && st.segment_current_number >= 0 &&
         st.segment_current_number < static_cast<long>(st.stage_segments.size()) && data->poller) {
         const Segment& cur_seg = st.stage_segments[st.segment_current_number];
         const CounterPoll poll = data->poller->getMostRecent();
@@ -960,6 +989,44 @@ void updateHomeDisplay(AppData* data) {
         if (ok) line = formatClockMmSs(secs);
     }
     mirror(h->speedLine, line.c_str(), h->elapsedArea[2]);
+
+    // Surrey (RB-NAV-43): navi total in row 3, the countdown panel while a stage runs,
+    // "check total" for a failed start fit, the last time taken under Trip history.
+    {
+        const bool sur = isSurrey(st);
+        bool stage_dirty = false, hist_dirty = false;
+        if (sur != h->surrey) { h->surrey = sur; stage_dirty = hist_dirty = true; markDirty(h->figureArea[2]); }
+        bool running = false;
+        std::string cdM, cdT;
+        if (sur && data->poller) {
+            const CounterPoll poll = data->poller->getMostRecent();
+            const std::string navi = formatDistanceGrouped(surreyNaviMetres(st, poll.cntr1, poll.cntr2));
+            mirror(h->figure[2], navi.c_str(), h->figureArea[2]);
+            if (st.segment_current_number >= 0 && !st.stage_complete &&
+                st.segment_current_number < static_cast<long>(st.stage_segments.size())) {
+                running = true;
+                const Segment& cur_seg = st.stage_segments[st.segment_current_number];
+                const int64_t remaining_counts = static_cast<int64_t>(cur_seg.distance_counts) - segmentCountsCorrected(data, poll);
+                const long remaining_cm = countsToCentimeters(remaining_counts, st.calibration);
+                long remaining_m = (remaining_cm >= 0) ? (remaining_cm + 99) / 100 : -((-remaining_cm) / 100);
+                remaining_m = metresToNextChange(st.stage_segments, st.segment_current_number, remaining_m);
+                cdM = formatDistanceGrouped(remaining_m < 0 ? 0 : remaining_m);
+                cdT = surreyCountdownTime(static_cast<double>(remaining_m), cur_seg.target_speed_kph);
+            }
+        }
+        const bool check = sur && st.surrey_fit_failed && !st.stage_complete;
+        std::string tt_label, tt;
+        if (sur && st.time_taken_ms >= 0) {
+            tt_label = "time taken ss" + (st.last_memory_slot >= 1 ? std::to_string(st.last_memory_slot) : std::string("-"));
+            tt = surreyTimeTakenText(st.time_taken_ms);
+        }
+        if (running != h->surreyRunning || cdM != h->cdMetres || cdT != h->cdTime || check != h->surreyCheck) stage_dirty = true;
+        if (tt != h->timeTaken || tt_label != h->timeTakenLabel) hist_dirty = true;
+        h->surreyRunning = running; h->cdMetres = cdM; h->cdTime = cdT; h->surreyCheck = check;
+        h->timeTaken = tt; h->timeTakenLabel = tt_label;
+        if (stage_dirty) markDirty(h->stageArea);
+        if (hist_dirty) markDirty(h->historyArea);
+    }
 
     std::vector<long> hist = homeTripHistory(st);
     bool hchanged = false;

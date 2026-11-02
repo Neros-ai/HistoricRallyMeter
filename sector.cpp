@@ -322,7 +322,7 @@ bool setOdometerMetres(RallyState& s, uint64_t c1, uint64_t c2, double metres) {
 }
 
 void markSectorOdometer(RallyState& s, uint64_t c1, uint64_t c2) {
-    if (s.rally_type != 2) return;
+    if (s.rally_type == 0) return;   // italian and surrey keep navi total through a stage start
     s.sector_start_odometer_cm = countsToCentimeters(odometerCounts(s, c1, c2), s.calibration);
 }
 
@@ -385,10 +385,12 @@ long minutesInHand(double ahead_s) {
 
 const char* readoutKeyName(int rally_type, int row) {
     // Rows 3 and 4 are the next and prev keys: greek / surrey step by speed, italian by substage.
-    static const char* names[2][5] = { {"total", "trip", "countdown", "next\nspeed", "prev\nspeed"},
+    // Surrey's third row is navi (the countdown moves to the stage column).
+    static const char* names[3][5] = { {"total", "trip", "countdown", "next\nspeed", "prev\nspeed"},
+                                       {"total", "trip", "navi", "next\nspeed", "prev\nspeed"},
                                        {"sector\ntotal", "sub", "navi", "next\nsubstage", "prev\nsubstage"} };
     if (row < 0 || row > 4) return "";
-    return names[rally_type == 2 ? 1 : 0][row];
+    return names[rally_type == 2 ? 2 : (rally_type == 1 ? 1 : 0)][row];
 }
 
 bool sectorPreviewWanted(const RallyState& s) {

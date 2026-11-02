@@ -434,7 +434,7 @@ int chooseStageDialog(GtkWidget* widget, AppData* data, int current) {
 
 void on_navi_dialog(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
-    if (data->state->rally_type != 2) return;
+    if (data->state->rally_type == 0) return;   // italian and surrey
 
     GtkWidget* dialog = gtk_dialog_new_with_buttons(
         "Set Navi Distance", GTK_WINDOW(gtk_widget_get_toplevel(widget)), GTK_DIALOG_MODAL, nullptr);
