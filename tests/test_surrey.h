@@ -244,6 +244,19 @@ public:
             return s.time_taken_ms == 560600;
         });
 
+        suite->addTest("surrey beeps measure from navi total", []() {
+            RallyState s; s.rally_type = 1; s.calibration = 1000000;
+            setOdometerMetres(s, 0, 0, 11060.0);
+            RallyState g = s; g.rally_type = 0;
+            return beepDistanceM(s, 0, 0, 1837.0) == 11060.0 && beepDistanceM(g, 0, 0, 1837.0) == 1837.0;
+        });
+        suite->addTest("surrey beeps count from the start box (waypoints are stage distances)", []() {
+            RallyState s; s.rally_type = 1; s.calibration = 1000000;
+            s.last_memory_slot = 1; s.memory_slots[0].first_from_m = 9148.0;
+            setOdometerMetres(s, 0, 0, 11060.0);
+            return beepDistanceM(s, 0, 0, 1837.0) == 11060.0 - 9148.0;
+        });
+
         return suite;
     }
 };

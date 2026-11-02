@@ -1235,7 +1235,8 @@ gboolean update_display(gpointer user_data) {
                     data->aheadBehindSeconds);
             }
         } else if (data->stageLog->isRunning()) {
-            data->stageLog->stop();   // stage ended, aborted or the switch went off
+            data->stageLog->stop(isSurrey(*data->state) && data->state->stage_complete
+                                     ? surreyTimeTakenText(data->state->time_taken_ms) : std::string());   // stage ended, aborted or the switch went off
         }
     }
 

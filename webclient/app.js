@@ -144,6 +144,15 @@
     // Freeze stops the box counting distance, so these figures already hold.
     $('trip-m').textContent = formatDist(msg.trip_m);
     $('total-m').textContent = formatDist(msg.total_m);
+    // Surrey: navi total in its own row, and the last time taken under Trip history.
+    const sur = !!msg.surrey;
+    $('row-navi').style.display = sur ? '' : 'none';
+    $('time-taken-row').style.display = (sur && msg.time_taken) ? '' : 'none';
+    if (sur) {
+      $('navi-m').textContent = formatDist(msg.navi_m);
+      $('time-taken-label').textContent = 'time taken ss' + (Number(msg.time_taken_stage) >= 1 ? msg.time_taken_stage : '-');
+      $('time-taken').textContent = msg.time_taken || '';
+    }
     $('next-m').textContent = (msg.next_m === null || msg.next_m === undefined) ? '---' : formatDist(msg.next_m);
     $('total-el').textContent = mmss(msg.total_s);
     $('trip-el').textContent = mmss(msg.trip_s);

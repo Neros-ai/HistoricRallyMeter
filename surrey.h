@@ -59,4 +59,9 @@ bool surreyUndoAvailableNow(const RallyState& s, uint64_t cntr1, uint64_t cntr2)
 // The last row's "to" in roadbook metres: the slot's from figure plus its typed row distances.
 double surreyLastToMetres(const RallyState::MemorySlot& slot);
 
+// Distance the Beep Assist waypoints are measured against. Waypoints are stage distances from the
+// start box, so surrey takes navi total (roadbook km, which a stage start never zeroes) less the
+// loaded stage's start box figure (first_from_m); greek and italian use stage_travelled_m as today.
+double beepDistanceM(const RallyState& s, uint64_t c1, uint64_t c2, double stage_travelled_m);
+
 #endif

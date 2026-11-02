@@ -118,6 +118,22 @@ public:
                 && logKind("2026-10-12_21-31-00.csv") == "sensor";
         });
 
+        suite->addTest("stage log carries time taken", []() {
+            std::string dir = freshDir("taken");
+            StageLog log;
+            log.start(dir, 1760000000000LL, 1);
+            log.record(1760000001000LL, 10, 50.0, 0.0);
+            const std::string path = log.path();
+            log.stop("9:20.6");
+            auto l = lines(path);
+            StageLog plain;
+            plain.start(dir, 1760000005000LL, 2);
+            const std::string p2 = plain.path();
+            plain.stop();
+            return l.size() == 3 && l.back().find("9:20.6") != std::string::npos
+                && lines(p2).size() == 1;
+        });
+
         return suite;
     }
 };

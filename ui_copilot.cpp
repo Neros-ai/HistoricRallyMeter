@@ -271,6 +271,7 @@ void updateCopilotDisplay(AppData* data) {
         double travelled_m = static_cast<double>(adjustedDistanceMeters(
             countsToCentimeters(total_count_diff, data->state->calibration),
             data->state->total_distance_adjust_cm));
+        travelled_m = beepDistanceM(*data->state, current_poll.cntr1, current_poll.cntr2, travelled_m);   // surrey: navi
         bool stage_active = data->state->segment_current_number >= 0;
         double elapsed_stage_s = (current_time_ms - data->state->total_start_time_ms) / 1000.0;
 

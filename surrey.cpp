@@ -102,3 +102,11 @@ double surreyLastToMetres(const RallyState::MemorySlot& slot) {
     for (const Segment& g : slot.segments) to += g.distance_m;
     return to;
 }
+
+double beepDistanceM(const RallyState& s, uint64_t c1, uint64_t c2, double stage_travelled_m) {
+    if (!isSurrey(s)) return stage_travelled_m;
+    double from = 0.0;
+    if (s.last_memory_slot >= 1 && s.last_memory_slot <= RallyState::MAX_MEMORY_SLOTS)
+        from = s.memory_slots[s.last_memory_slot - 1].first_from_m;
+    return static_cast<double>(surreyNaviMetres(s, c1, c2)) - from;
+}

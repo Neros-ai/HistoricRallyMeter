@@ -64,9 +64,13 @@ void StageLog::flush() {
     buffer.clear();
 }
 
-void StageLog::stop() {
+void StageLog::stop(const std::string& time_taken) {
     if (!running) return;
     flush();
+    if (!time_taken.empty() && !file_path.empty()) {
+        std::ofstream out(file_path, std::ios::out | std::ios::app);
+        if (out) out << "time taken," << time_taken << '\n';
+    }
     running = false;
     file_path.clear();
 }

@@ -23,7 +23,8 @@ public:
     void record(int64_t system_ms, long distance_m, double speed_kph, double ahead_behind_s);
 
     // Write what is buffered and close the file.
-    void stop();
+    // time_taken (surrey): written as a last "time taken,<text>" line when not empty.
+    void stop(const std::string& time_taken = "");
 
     bool isRunning() const { return running; }
     const std::string& path() const { return file_path; }

@@ -194,6 +194,10 @@ std::string buildTelemetryJson(AppData* data) {
     std::ostringstream ex;
     ex << ",\"gauge_range\":" << data->state->gauge_range_s
        << ",\"reverse\":" << (data->poller->reverse() ? "true" : "false")
+       << ",\"navi_m\":" << ((isSurrey(st) || st.rally_type == 2) ? std::to_string(surreyNaviMetres(st, current_poll.cntr1, current_poll.cntr2)) : std::string("null"))
+       << ",\"surrey\":" << (isSurrey(st) ? "true" : "false")
+       << ",\"time_taken\":\"" << (isSurrey(st) ? surreyTimeTakenText(st.time_taken_ms) : std::string()) << "\""
+       << ",\"time_taken_stage\":" << (isSurrey(st) ? st.time_taken_stage : 0)
        << ",\"total_s\":" << total_s << ",\"trip_s\":" << trip_s
        << ",\"next_m\":" << (has_next_m ? std::to_string(next_m) : std::string("null"))
        << ",\"speed_change\":\"" << speed_change << "\""
