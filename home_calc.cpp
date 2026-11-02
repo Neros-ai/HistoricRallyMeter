@@ -64,6 +64,18 @@ std::string driverSpeedText(double speed, int rally_type) {
     return buf;
 }
 
+StartWord homeStartWord(bool armedPending, bool firedThisStage, bool startedByAuto) {
+    if (armedPending) return StartWord::AUTO;
+    if (firedThisStage && startedByAuto) return StartWord::AUTO;
+    return StartWord::MANUAL;
+}
+
+double homeStartTimeFont(double wordWidth, double timeWidthAt26, double columnW) {
+    for (int f = 26; f > 18; f--)
+        if (4 + wordWidth + 12 + timeWidthAt26 * f / 26.0 <= columnW - 4) return f;
+    return 18;
+}
+
 bool showAdjZeroKey(const RallyState& s, bool single_display) {
     return s.measure_ab_bc && s.rally_type == 0 && !single_display;
 }

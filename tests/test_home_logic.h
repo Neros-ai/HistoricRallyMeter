@@ -413,6 +413,28 @@ public:
             return formatDistanceGrouped(2140) == "2,140" && formatDistanceGrouped(-15) == "-15";
         });
 
+        suite->addTest("start word: armed autostart pending reads auto", []() {
+            return homeStartWord(true, false, false) == StartWord::AUTO;
+        });
+        suite->addTest("start word: stage started by start now reads manual", []() {
+            return homeStartWord(false, true, false) == StartWord::MANUAL;
+        });
+        suite->addTest("start word: stage started by autostart reads auto", []() {
+            return homeStartWord(false, true, true) == StartWord::AUTO;
+        });
+        suite->addTest("start word: nothing armed or running reads manual", []() {
+            return homeStartWord(false, false, false) == StartWord::MANUAL;
+        });
+        suite->addTest("start time font shrinks to keep a 12 px gap", []() {
+            // 4 + 60 + 12 + w <= 196  ->  w <= 120 at 26 px: fits.
+            const bool fits = homeStartTimeFont(60, 120, 200) == 26;
+            // 140 * f / 26 <= 120  ->  f <= 22.28: 22.
+            const double f = homeStartTimeFont(60, 140, 200);
+            const bool shrunk = f == 22 && 4 + 60 + 12 + 140 * f / 26 <= 196;
+            // Too wide even at the floor.
+            return fits && shrunk && homeStartTimeFont(60, 400, 200) == 18;
+        });
+
         return suite;
     }
 };

@@ -46,4 +46,15 @@ std::string driverSpeedText(double speed, int rally_type);
 // single-display layout has no room for it.
 bool showAdjZeroKey(const RallyState& s, bool single_display);
 
+// What the Home stage panel calls the start: "auto" while an autostart is armed
+// for this stage, or for the running stage if an autostart started it; "manual"
+// otherwise (including a stage started by start now).
+enum class StartWord { AUTO, MANUAL };
+StartWord homeStartWord(bool armedPending, bool firedThisStage, bool startedByAuto);
+
+// Font size (26 down to 18) for the start time so that, beside the word, it
+// keeps a 12 px gap inside the column: 4 + wordWidth + 12 + width <= columnW - 4.
+// timeWidthAt26 is the time's width at 26 px; width scales with the font.
+double homeStartTimeFont(double wordWidth, double timeWidthAt26, double columnW);
+
 #endif

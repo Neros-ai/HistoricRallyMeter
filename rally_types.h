@@ -167,6 +167,10 @@ struct AppData {
     // that time only beside that stage, and every other stage shows its own start
     // time from the Segments page.
     int autoSlot = 0;
+    // True only while the running stage was started by an autostart (either
+    // branch); a start now clears it. Home reads "auto" or "manual" from it.
+    // Runtime only: after a restart it is false.
+    bool startedByAuto = false;
     
     // TwinMaster screen
     GtkWidget* twinMasterScreen;

@@ -157,19 +157,27 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         // "auto" (armed, or the autostart that started the running stage) or "manual"
         // in orange, then the start time from Segments.
         const double ay = 12 + 28;
+        const char* word = h->autoArmed ? "auto" : "manual";
+        // Measure both texts so the time shrinks rather than touch the word.
+        cairo_text_extents_t we, te26;
+        cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+        cairo_set_font_size(cr, 18);
+        cairo_text_extents(cr, word, &we);
+        cairo_set_font_size(cr, 26);
+        cairo_text_extents(cr, h->autoTime.c_str(), &te26);
+        const double timeFont = homeStartTimeFont(we.x_advance, te26.x_advance, width);
         if (h->autoArmed) {
             cyan(cr);
-            drawText(cr, "auto", 4, ay, 18, LEFT);
         } else {
             setColour(cr, 1.0, 0.55, 0.0);
-            drawText(cr, "manual", 4, ay, 18, LEFT);
         }
+        drawText(cr, word, 4, ay, 18, LEFT);
         white(cr);
-        drawText(cr, h->autoTime, width - 4, ay, 26, RIGHT);
+        drawText(cr, h->autoTime, width - 4, ay, timeFont, RIGHT);
         if (h->autoTimePast && !h->autoTime.empty()) {
             cairo_text_extents_t te;
             cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-            cairo_set_font_size(cr, 26);
+            cairo_set_font_size(cr, timeFont);
             cairo_text_extents(cr, h->autoTime.c_str(), &te);
             const double x1 = width - 4 - te.x_advance, x2 = width - 4;
             setColour(cr, 1.0, 0.1, 0.1);
@@ -823,9 +831,15 @@ void updateHomeDisplay(AppData* data) {
         // "auto" crossed out as it is not armed for that stage.
         const bool mine = (data->autoSlot == slot);
         if (armed != "none" && !mine) armed = "none";
+        const bool armed_pending = (armed != "none");
+        bool fired_this_stage = false;
         if (armed == "none" && mine && data->autoFiredTime_s != 0 && !data->state->stage_complete)
+        {
             armed = formatAutoStartStatus(data->autoFiredTime_s, false, getAutoStartEpochMs());
+            fired_this_stage = true;
+        }
         const bool is_armed = (armed != "none");
+        const bool word_auto = homeStartWord(armed_pending, fired_this_stage, data->startedByAuto) == StartWord::AUTO;
         std::string auto_time = armed;
         if (!is_armed) {
             auto_time.clear();
@@ -891,7 +905,7 @@ void updateHomeDisplay(AppData* data) {
             }
         }
 
-        bool changed = (data->state->units != h->unitsMph) || (is_armed != h->autoArmed) || (auto_time != h->autoTime)
+        bool changed = (data->state->units != h->unitsMph) || (word_auto != h->autoArmed) || (auto_time != h->autoTime)
                     || (time_past != h->autoTimePast)
                     || (arr.valid != h->arrivalValid) || (arr.speed_kph != h->arrivalKph)
                     || (arr.minutes != h->arrivalMin);
@@ -901,7 +915,7 @@ void updateHomeDisplay(AppData* data) {
             h->rows[r] = rows[r];
         }
         h->unitsMph = data->state->units;
-        h->autoArmed = is_armed;
+        h->autoArmed = word_auto;
         h->autoTimePast = time_past;
         h->autoTime = auto_time;
         h->arrivalValid = arr.valid;

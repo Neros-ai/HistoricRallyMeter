@@ -681,6 +681,7 @@ void performAutoStart(AppData* data) {
         data->state->auto_start_rally_time_s = 0;
         data->state->auto_start_early_departure = false;
         data->autoFiredTime_s = armed_time_s;
+        data->startedByAuto = true;
         ConfigFile::save(*data->state);
         notifyWebState(data);
         return;
@@ -688,6 +689,7 @@ void performAutoStart(AppData* data) {
     // Ordinary autostart: distance and clock both zero at the appointed time.
     performStageGo(data);
     data->autoFiredTime_s = armed_time_s;   // after performStageGo, which drops it
+    data->startedByAuto = true;
 }
 
 void performStageGo(AppData* data) {
@@ -696,6 +698,7 @@ void performStageGo(AppData* data) {
     data->autoFiredTime_s = autoStartSecondsFromTargetMs(getRallyTime_ms(*data->state),
                                                          getAutoStartEpochMs());
     data->autoSlot = data->state->last_memory_slot;
+    data->startedByAuto = false;   // a start now; performAutoStart sets it after
     // Distance and clock together: this is the ordinary "start now" case.
     zeroDistanceBaselines(data);
     zeroTimeBaselines(data);
