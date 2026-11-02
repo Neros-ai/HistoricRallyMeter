@@ -118,17 +118,9 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
     // a copy of the state, the real one is never touched).
     std::unique_ptr<RallyState> preview;
     if (!p.running && sectorPreviewWanted(live)) {
-        preview.reset(new RallyState(live));
-        preview->stage_segments = live.segments;
-        long first = 0;   // the first timed line, as the card reads in a pc
-        for (size_t i = 0; i < live.segments.size(); i++)
-            if (live.segments[i].type == SEG_PC) { first = static_cast<long>(i); break; }
-        preview->segment_current_number = first;
-        preview->stage_complete = false;
-        preview->segment_start_time_ms = now_ms;
-        preview->total_start_time_ms = now_ms;
-        markSectorStart(*preview);           // arrival as if the sector started this minute
-        stage_m = static_cast<long>(endOf(live.segments, first - 1));   // standing at the line's start
+        preview.reset(new RallyState(sectorPreviewState(live, now_ms)));
+        const long first = 0;   // the sector's opening row
+        stage_m = 0;            // standing at the line's start
         if (rowStartsTube(live.segments, first)) {
             preview->trial_start_ms = now_ms;
             preview->trial_start_m = stage_m;

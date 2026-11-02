@@ -395,6 +395,17 @@ bool sectorPreviewWanted(const RallyState& s) {
     return s.stage_complete && !s.segments.empty() && stageIsSector(s.segments);
 }
 
+RallyState sectorPreviewState(const RallyState& live, int64_t now_ms) {
+    RallyState v(live);
+    v.stage_segments = live.segments;
+    v.segment_current_number = 0;
+    v.stage_complete = false;
+    v.segment_start_time_ms = now_ms;
+    v.total_start_time_ms = now_ms;
+    markSectorStart(v);   // arrival as if the sector started this minute
+    return v;
+}
+
 void zeroOdometer(RallyState& s, uint64_t c1, uint64_t c2) {
     s.odometer_start_cntr1 = c1;
     s.odometer_start_cntr2 = c2;

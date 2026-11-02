@@ -626,6 +626,32 @@ public:
             return s.odometer_start_cntr1 == 3000 && s.odometer_start_cntr2 == 3100 && s.odometer_adjust_cm == 500;
         });
 
+        suite->addTest("preview: opens on the opening navi", []() {
+            RallyState s = running();
+            s.stage_complete = true; s.segment_current_number = 3;
+            RallyState v = sectorPreviewState(s, 5000);
+            return v.segment_current_number == 0 && sectorPanel(v, 5000, 0).kind == SectorPanel::NAVI;
+        });
+
+        suite->addTest("preview: a sector that opens with a pc shows pc 1", []() {
+            RallyState s = running();
+            s.segments.erase(s.segments.begin());
+            applySectorRules(s.segments, 10800);
+            recomputeSegmentCounts(s.segments, s.calibration);
+            s.stage_complete = true;
+            RallyState v = sectorPreviewState(s, 5000);
+            SectorPanel p = sectorPanel(v, 5000, 0);
+            return v.segment_current_number == 0 && p.kind == SectorPanel::PC && p.inTag == "pc1";
+        });
+
+        suite->addTest("preview: live state untouched", []() {
+            RallyState s = running();
+            s.stage_complete = true; s.segment_current_number = 3; s.total_start_time_ms = 123;
+            RallyState v = sectorPreviewState(s, 5000);
+            (void)v;
+            return s.segment_current_number == 3 && s.stage_complete && s.total_start_time_ms == 123;
+        });
+
         return suite;
     }
 };

@@ -132,6 +132,9 @@ long minutesInHand(double ahead_s);
 const char* readoutKeyName(int rally_type, int row);   // rows 3, 4: the next and prev keys
 // True when the italian page should draw the idle preview: no sector running and a sector loaded.
 bool sectorPreviewWanted(const RallyState& s);
+// The idle card as it will look when the sector starts: a copy of `live` on the sector's first
+// row, with the start times at now_ms and the sector marked started. The live state is never touched.
+RallyState sectorPreviewState(const RallyState& live, int64_t now_ms);
 
 // Everything the italian navi page shows beside its keys.
 struct SectorPanel {
