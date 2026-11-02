@@ -253,5 +253,12 @@ void updateSettingsDisplay(AppData* d) {
     std::string info = std::string("Screen ") + gtk_label_get_text(d->updatesPerSecLabel)
                      + "   " + gtk_label_get_text(d->cpuTempLabel);
     gtk_label_set_text(d->settingsInfoLabel, info.c_str());
+    // Greek beep assist is silent in italian: grey its keys and advance entries (stored values kept).
+    const bool beepOn = !greekBeepSettingsLocked(*d->state);
+    for (SegCtl* c : allCtls())
+        if (c->id == BEEP_NAV || c->id == BEEP_TIMING)
+            for (int i = 0; i < c->n; i++) gtk_widget_set_sensitive(c->btn[i], beepOn);
+    if (d->beepAdvanceSecondsEntry) gtk_widget_set_sensitive(GTK_WIDGET(d->beepAdvanceSecondsEntry), beepOn);
+    if (d->beepAdvanceMetresEntry) gtk_widget_set_sensitive(GTK_WIDGET(d->beepAdvanceMetresEntry), beepOn);
     updateWebLinkDisplay(d);   // the link itself now lives on the Setup page
 }

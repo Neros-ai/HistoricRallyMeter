@@ -302,4 +302,8 @@ public:
 // choosing it changes nothing.
 void applyRallyTypeDefaults(RallyState& s, int type);
 
+// The greek Beep navigation / Beep timing settings are greyed while the rally type is italian
+// (no navigation beep assist there). The stored values are never changed.
+bool greekBeepSettingsLocked(const RallyState& s);
+
 #endif // RALLY_STATE_H

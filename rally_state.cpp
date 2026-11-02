@@ -10,6 +10,10 @@ RallyState::RallyState() {
     segment_start_time_ms = ms;
 }
 
+bool greekBeepSettingsLocked(const RallyState& s) {
+    return s.rally_type == 2;
+}
+
 void applyRallyTypeDefaults(RallyState& s, int type) {
     if (type == 2) {
         s.rally_type = 2;

@@ -169,6 +169,22 @@ public:
             return b.typed_pulses_per_km == 99999.0;
         });
 
+        suite->addTest("beep settings locked in italian", []() {
+            RallyState s;
+            s.rally_type = 2; const bool it = greekBeepSettingsLocked(s);
+            s.rally_type = 0; const bool gr = greekBeepSettingsLocked(s);
+            s.rally_type = 1; const bool su = greekBeepSettingsLocked(s);
+            return it && !gr && !su;
+        });
+
+        suite->addTest("switching to italian keeps the beep choices", []() {
+            RallyState s;
+            s.beep_navigation_mode = true;
+            applyRallyTypeDefaults(s, 2);
+            applyRallyTypeDefaults(s, 0);
+            return s.beep_navigation_mode;
+        });
+
         return suite;
     }
 };
