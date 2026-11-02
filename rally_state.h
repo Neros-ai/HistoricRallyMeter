@@ -50,6 +50,10 @@ public:
     // baselines. Not the engaged flag: the box always starts going forward.
     long long reverse_shift1 = 0;
     long long reverse_shift2 = 0;
+    // Freeze (navigation error): on, and the distance count held at the press.
+    bool freeze_on = false;
+    long long freeze_virt1 = 0;
+    long long freeze_virt2 = 0;
 
     // Seconds since 1/1/2020, 0 = not set. Seconds, not minutes: the setup
     // screen accepts HH:MM:SS and a minute-resolution store threw the seconds
@@ -94,7 +98,7 @@ public:
     // Starts true: nothing is under way until something starts.
     bool stage_complete = true;
 
-    // Which memory slot the loaded roadbook was recalled from, 1-5, or 0 for
+    // Which memory slot the loaded roadbook was recalled from, 1-99, or 0 for
     // "not from a slot" -- never recalled, or edited since. Tracked and
     // persisted but not currently shown anywhere: the status panel dropped
     // it because "Stage: N" was the widest field on the line and pushed the
@@ -106,7 +110,7 @@ public:
     // load() decides it per file.
     bool stage_segments_recorded = true;
     
-    // Up to 5 memory slots for storing/recalling a whole stage setup.
+    // Up to 99 memory slots (stage numbers 1-99) for storing/recalling a whole stage setup.
     // A slot carries its Beep Assist waypoints alongside its segments: the
     // two are one setup, and recalling segments while leaving the PREVIOUS
     // stage's waypoints loaded is a trap rather than a feature. Beep Assist's
@@ -136,6 +140,8 @@ public:
         // The roadbook number of the first row, and the distance it starts at.
         long first_number = 1;
         double first_from_m = 0.0;
+        // Italian: the sector's set duration (CO to CO) in seconds, -1 = not set.
+        long sector_duration_s = -1;
 
         bool empty() const { return segments.empty(); }
         void clear() {
@@ -146,11 +152,13 @@ public:
             start_distance_m = 0;
             first_number = 1;
             first_from_m = 0.0;
+            sector_duration_s = -1;
         }
     };
 
-    static constexpr int MAX_MEMORY_SLOTS = 5;
-    MemorySlot memory_slots[5];
+    // Nero2.1: stages are numbered by the organiser, 1-99; stage n is memory_slots[n - 1].
+    static constexpr int MAX_MEMORY_SLOTS = 99;
+    MemorySlot memory_slots[MAX_MEMORY_SLOTS];
     
     // Alarm: co-pilot sets distance alarm that rings a doorbell
     int alarm_distance_km = 0;          // 0 = no alarm active
@@ -184,6 +192,14 @@ public:
     int tone_type_ahead = 1;
     int gauge_range_s = 3;   // driver gauge full scale: +-1, +-2 or +-3 s (Settings)
 
+    // Nero2.1 Settings > System (RB-SET-09).
+    // Rally type: 0 greek (today), 1 surrey (not built; the key is greyed), 2 italian.
+    int rally_type = 0;
+    // Distance units: false 0,000 (metres), true 00.00 (km, two decimals).
+    bool distance_km = false;
+    // Measure type: true AB,BC (the A-B, B-C zero key shows on the greek navi page), false AB,AC.
+    bool measure_ab_bc = false;
+
     // Settings > System (Nero2.0). Written by the logging plan; stored here so
     // the switches persist.
     bool stage_logging = true;
@@ -216,6 +232,50 @@ public:
     int driver_window_height = 400;
     int driver_window_monitor = 0;
 
+    // Italian (RB-NAV-44). "navi total": the running count that a stage start
+    // does not zero (the sector total is Total). Own baselines, moved only by the
+    // Total key at rest and by a power loss; +10 / -10 correct it too.
+    uint64_t odometer_start_cntr1 = 0;
+    uint64_t odometer_start_cntr2 = 0;
+    long odometer_adjust_cm = 0;
+    bool odometer_recorded = true;      // false for a config written before it existed; not persisted
+    // When the running italian sector actually started (rally ms, floored to the
+    // minute): the co's in-time is this plus the sector duration.
+    int64_t sector_start_ms = 0;
+    // Navi total (cm) when the sector started: the car's position in the roadbook is navi minus this.
+    long sector_start_odometer_cm = 0;
+    // The card's sector duration (ms), fixed when the sector starts: the co in-time is
+    // sector_start_ms plus this, whatever later presses do to the rows.
+    int64_t sector_card_ms = 0;
+    // The pc / pm being driven: when its start tube was pressed (rally ms, the real press)
+    // and the card km of that tube. trial_start_m < 0: not in a pc or pm.
+    int64_t trial_start_ms = 0;
+    double trial_start_m = -1.0;
+    // The pc just finished: its card ref, how far off the card time (seconds, actual
+    // minus card) and the card distance (metres) the end press was. Display only.
+    struct PcError { bool valid = false; int ref = 0; double seconds = 0.0; long metres = 0; };
+    PcError last_pc_error;
+    // What a tube press changed, so prev can put it back (not persisted).
+    struct SectorUndo {
+        bool valid = false;
+        long index = -1;                // the segment the press left
+        int64_t total_start_ms = 0;
+        long total_adjust_cm = 0;
+        uint64_t seg_c1 = 0, seg_c2 = 0;
+        long seg_adjust_cm = 0;
+        int64_t seg_start_ms = 0;
+        uint64_t trip_c1 = 0, trip_c2 = 0;
+        int64_t trip_start_ms = 0;
+        long trip_adjust_cm = 0;
+        std::string trip_history;
+        PcError pc_error;
+        int64_t trial_start_ms = 0;
+        double trial_start_m = -1.0;
+        long after_total_adjust_cm = 0;   // the corrections as next left them: a -10 or set
+        long after_trip_adjust_cm = 0;    // made since is carried through prev
+    };
+    SectorUndo sector_undo;
+
     // The last speed change of the running stage -- a "next" press or the
     // box's own auto-advance -- so "prev" can undo it (see
     // undoSegmentChange). Taken just before the change, from the stage's own
@@ -236,5 +296,10 @@ public:
     
     RallyState();
 };
+
+// Choosing a rally type lights its matching distance units and measure type
+// (italian -> 00.00; greek -> 0,000 and AB,AC). Surrey is not built, so
+// choosing it changes nothing.
+void applyRallyTypeDefaults(RallyState& s, int type);
 
 #endif // RALLY_STATE_H

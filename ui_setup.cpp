@@ -4,6 +4,7 @@
 #include "nero_frame.h"
 #include "pi_setup.h"
 #include "rally_state.h"
+#include "webserver/qr_display.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
@@ -16,6 +17,7 @@ namespace {
 
 constexpr int KEY_H = 34;
 constexpr int SPANNER_W = 70, SPANNER_H = 70;
+constexpr int QR_SIZE = 124;   // the QR code spans the Wi-Fi block: heading 26 + keys 34 + status 24 + note 24 + 3 gaps x 6
 
 void addClass(GtkWidget* w, const char* c) { gtk_style_context_add_class(gtk_widget_get_style_context(w), c); }
 
@@ -175,10 +177,10 @@ void rebuildDisplays(AppData* d) {
         }
         const PiOutput& out = outputs[i];
         GtkWidget* card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
-        gtk_box_pack_start(GTK_BOX(card), text(out.name), FALSE, FALSE, 0);
+        // Name, size and orientation on one line.
         gtk_box_pack_start(GTK_BOX(card),
-            text(std::to_string(out.logicalW()) + "x" + std::to_string(out.logicalH())), FALSE, FALSE, 0);
-        gtk_box_pack_start(GTK_BOX(card), text(out.orientationName()), FALSE, FALSE, 0);
+            text(out.name + "  " + std::to_string(out.logicalW()) + "x" + std::to_string(out.logicalH())
+                 + "  " + out.orientationName()), FALSE, FALSE, 0);
 
         GtkWidget* rotate = key("rotate");
         g_object_set_data_full(G_OBJECT(rotate), "output-name", g_strdup(out.name.c_str()), g_free);
@@ -375,6 +377,23 @@ void onShowSetup(GtkWidget*, gpointer p) {
     rebuildWifi(d);
     refreshAudioKeys(d);
     setStatus(d, wifiStatusLine());
+    updateWebLinkDisplay(d);
+}
+
+// Force single display: off / on, applied at the next start (the status line says so).
+void lightForceKeys(AppData* d) {
+    for (int i = 0; i < 2; i++) {
+        GtkStyleContext* c = gtk_widget_get_style_context(d->setupForceBtn[i]);
+        if ((i == 1) == d->state->force_single_display) gtk_style_context_add_class(c, "key-lit");
+        else gtk_style_context_remove_class(c, "key-lit");
+    }
+}
+
+void onForceSingle(GtkWidget* w, gpointer p) {
+    AppData* d = static_cast<AppData*>(p);
+    on_force_single_display_toggle(nullptr, w == d->setupForceBtn[1], d);   // saves itself
+    lightForceKeys(d);
+    setStatus(d, "Restart the app so its windows follow the displays.");
 }
 
 void onBackToSettings(GtkWidget*, gpointer p) {
@@ -417,24 +436,34 @@ GtkWidget* createSetupScreen(AppData* d) {
     gtk_container_add(GTK_CONTAINER(hold), left);
     gtk_box_pack_start(GTK_BOX(screen), hold, FALSE, FALSE, 0);
 
-    // title: SETUP, version, hostname
-    GtkWidget* title = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 24);
-    gtk_box_pack_start(GTK_BOX(title), text("SETUP", "seg-head"), FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(title), text(std::string("version ") + nero::VERSION, "set-name"), FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(title), text("hostname " + piHostname(), "set-name"), FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(left), title, FALSE, FALSE, 0);
+    // heading: Screen setup
+    gtk_box_pack_start(GTK_BOX(left), text("Screen setup", "seg-head"), FALSE, FALSE, 0);
 
     // displays
     d->setupDisplayRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
     gtk_box_pack_start(GTK_BOX(left), d->setupDisplayRow, FALSE, FALSE, 0);
+    // reset layout, with Force single display off / on beside it
+    GtkWidget* resetRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     GtkWidget* reset = key("reset layout");
-    gtk_widget_set_halign(reset, GTK_ALIGN_START);
     g_signal_connect(reset, "clicked", G_CALLBACK(onResetLayout), d);
-    gtk_box_pack_start(GTK_BOX(left), reset, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(left), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), FALSE, FALSE, 2);
+    gtk_box_pack_start(GTK_BOX(resetRow), reset, FALSE, FALSE, 0);
+    GtkWidget* forceLbl = text("Force single display", "set-name");
+    gtk_widget_set_valign(forceLbl, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(resetRow), forceLbl, FALSE, FALSE, 14);
+    GtkWidget* forceKeys = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    const char* onoff[2] = {"off", "on"};
+    for (int i = 0; i < 2; i++) {
+        d->setupForceBtn[i] = key(onoff[i]);
+        gtk_widget_set_size_request(d->setupForceBtn[i], 70, KEY_H);
+        g_signal_connect(d->setupForceBtn[i], "clicked", G_CALLBACK(onForceSingle), d);
+        gtk_box_pack_start(GTK_BOX(forceKeys), d->setupForceBtn[i], FALSE, FALSE, 0);
+    }
+    lightForceKeys(d);
+    gtk_box_pack_start(GTK_BOX(resetRow), forceKeys, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(left), resetRow, FALSE, FALSE, 0);
 
     // Bluetooth speaker
-    gtk_box_pack_start(GTK_BOX(left), text("Bluetooth speaker", "seg-head"), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(left), text("Bluetooth speaker setup", "seg-head"), FALSE, FALSE, 0);
     GtkWidget* bt = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     GtkWidget* remember = key("remember playing speaker");
     g_signal_connect(remember, "clicked", G_CALLBACK(onRemember), d);
@@ -453,28 +482,55 @@ GtkWidget* createSetupScreen(AppData* d) {
     gtk_box_pack_start(GTK_BOX(bt), d->setupBtDisconnectBtn, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(left), bt, FALSE, FALSE, 0);
 
-    // Wi-Fi
-    gtk_box_pack_start(GTK_BOX(left), text("Wi-Fi", "seg-head"), FALSE, FALSE, 0);
+    // Wi-Fi setup: networks, status line with the phone address, the home-screen
+    // note, and the QR code to the right of the block.
+    GtkWidget* wifiBlock = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    GtkWidget* wifiText = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    gtk_box_pack_start(GTK_BOX(wifiBlock), wifiText, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(wifiText), text("Wi-Fi setup", "seg-head"), FALSE, FALSE, 0);
     d->setupWifiRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_pack_start(GTK_BOX(left), d->setupWifiRow, FALSE, FALSE, 0);
-
+    gtk_box_pack_start(GTK_BOX(wifiText), d->setupWifiRow, FALSE, FALSE, 0);
+    GtkWidget* statusRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     d->setupStatusLabel = GTK_LABEL(text(wifiStatusLine()));
-    gtk_label_set_line_wrap(d->setupStatusLabel, TRUE);
-    gtk_label_set_max_width_chars(d->setupStatusLabel, 60);
-    gtk_box_pack_start(GTK_BOX(left), GTK_WIDGET(d->setupStatusLabel), FALSE, FALSE, 0);
+    gtk_label_set_ellipsize(d->setupStatusLabel, PANGO_ELLIPSIZE_END);
+    gtk_label_set_max_width_chars(d->setupStatusLabel, 44);
+    gtk_box_pack_start(GTK_BOX(statusRow), GTK_WIDGET(d->setupStatusLabel), FALSE, FALSE, 0);
+    d->webUrlLabel = GTK_LABEL(gtk_label_new(""));
+    addClass(GTK_WIDGET(d->webUrlLabel), "set-url");
+    gtk_label_set_xalign(d->webUrlLabel, 0.0f);
+    gtk_box_pack_start(GTK_BOX(statusRow), GTK_WIDGET(d->webUrlLabel), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(wifiText), statusRow, FALSE, FALSE, 0);
+    GtkWidget* wnote = gtk_label_new("load from home screen to avoid landscape tabs");
+    addClass(wnote, "set-note");
+    gtk_label_set_xalign(GTK_LABEL(wnote), 0.0f);
+    gtk_box_pack_start(GTK_BOX(wifiText), wnote, FALSE, FALSE, 0);
+    d->webQrArea = gtk_drawing_area_new();
+    gtk_widget_set_size_request(d->webQrArea, QR_SIZE, QR_SIZE);
+    gtk_widget_set_valign(d->webQrArea, GTK_ALIGN_START);
+    g_signal_connect(d->webQrArea, "draw", G_CALLBACK(on_qr_draw), d);
+    gtk_box_pack_end(GTK_BOX(wifiBlock), d->webQrArea, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(left), wifiBlock, FALSE, FALSE, 0);
 
-    // Software update, at the foot of the page
-    GtkWidget* update = key("check for software updates");
-    gtk_widget_set_halign(update, GTK_ALIGN_START);
-    g_signal_connect(update, "clicked", G_CALLBACK(onUpdate), d);
-    gtk_box_pack_end(GTK_BOX(left), update, FALSE, FALSE, 0);
-
-    // right column: back to Settings, and the menu key in its usual place
+    // right column, top to bottom: version, then settings (back), check for
+    // software updates and menu, each 130 x 70, right-aligned.
     GtkWidget* col = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_set_size_request(col, nero::KEYPAD_COL_W, -1);
     gtk_box_pack_end(GTK_BOX(screen), col, FALSE, FALSE, 0);
-    // "settings" (back) sits directly above the menu key, both right-aligned
-    // and the menu key's width, so the column stays within its 240 px.
+    GtkWidget* ver = text(nero::VERSION, "set-name");
+    gtk_widget_set_halign(ver, GTK_ALIGN_END);
+    gtk_box_pack_start(GTK_BOX(col), ver, FALSE, FALSE, 0);
+    GtkWidget* menu = createMenuKey(d);
+    gtk_widget_set_halign(menu, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(col), menu, FALSE, FALSE, 0);
+    GtkWidget* update = gtk_button_new_with_label("check for\nsoftware\nupdates");
+    gtk_widget_set_size_request(update, nero::MENU_KEY_W, nero::MENU_KEY_H);
+    gtk_widget_set_halign(update, GTK_ALIGN_END);
+    gtk_widget_set_margin_bottom(update, 10);
+    addClass(update, "dist-heading");
+    addClass(update, "key-18");
+    gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(update))), GTK_JUSTIFY_CENTER);
+    g_signal_connect(update, "clicked", G_CALLBACK(onUpdate), d);
+    gtk_box_pack_end(GTK_BOX(col), update, FALSE, FALSE, 0);
     GtkWidget* back = gtk_button_new_with_label("settings");
     gtk_widget_set_size_request(back, nero::MENU_KEY_W, nero::MENU_KEY_H);
     gtk_widget_set_halign(back, GTK_ALIGN_END);
@@ -482,9 +538,6 @@ GtkWidget* createSetupScreen(AppData* d) {
     addClass(back, "dist-heading");
     addClass(back, "key-small");
     g_signal_connect(back, "clicked", G_CALLBACK(onBackToSettings), d);
-    GtkWidget* menu = createMenuKey(d);
-    gtk_widget_set_halign(menu, GTK_ALIGN_END);
-    gtk_box_pack_end(GTK_BOX(col), menu, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(col), back, FALSE, FALSE, 0);
 
     d->setupScreen = screen;

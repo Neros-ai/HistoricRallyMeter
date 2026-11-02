@@ -1,6 +1,8 @@
 #include "ui_driver.h"
+#include "home_calc.h"
 #include "calculations.h"
 #include "rally_types.h"
+#include "sector.h"
 #include "rally_state.h"
 #include "counter_poller.h"
 #include "tone_generator.h"
@@ -9,6 +11,7 @@
 #include "arrow_tone.h"
 #include <iomanip>
 #include <sstream>
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -215,6 +218,10 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
 
     char digital[24];
     formatGaugeDigital(digital, sizeof(digital), seconds, zone);
+    // RB-DRV-19: no needle and an empty error box outside a timed stretch (italian navi rows, between stages).
+    const bool hideNeedle = data->driverCompactMode &&
+        (data->driverPage == AppData::DP_ITALIAN_NAVI || data->driverPage == AppData::DP_GREEK_IDLE);
+    if (hideNeedle) digital[0] = '\0';
 
     // Needle: a constant-width bar rather than a tapered triangle, so its
     // edges stay parallel to the major ticks all the way out and the driver
@@ -230,6 +237,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     double tip_x = centerX + needle_length * dir_x;
     double tip_y = centerY + needle_length * dir_y;
 
+    if (!hideNeedle) {
     cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
     cairo_move_to(cr, tip_x + needle.halfWidth * perp_x, tip_y + needle.halfWidth * perp_y);
     cairo_line_to(cr, tip_x - needle.halfWidth * perp_x, tip_y - needle.halfWidth * perp_y);
@@ -237,6 +245,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     cairo_line_to(cr, centerX + needle.halfWidth * perp_x, centerY + needle.halfWidth * perp_y);
     cairo_close_path(cr);
     cairo_fill(cr);
+    }
 
     // Hub: a plain filled disc in the needle's own colour. The old ring and
     // inner dot were decoration on the one part of the dial that carries no
@@ -251,10 +260,14 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // this readout is the one thing the driver looks at, so it takes the
     // centre of the dial. The wide layout keeps the original smaller box
     // below the hub, where there is nothing to cover.
+    // The error box's rectangle, kept for the pc / pm layout (RB-DRV-18), which sets its
+    // logo to the left of the box and the countdown box to the right.
+    double abBoxX = 0.0, abBoxY = 0.0, abBoxW = 0.0;
+    [[maybe_unused]] double abBoxH = 0.0;
     {
         double digital_size = data->driverCompactMode ? L.boxFontSize : 22.0;
-        // Proportional bold digits (the same face as the speeds and distances below).
-        cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+        // Bold monospace, the same face as the rest of the box.
+        cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
         cairo_set_font_size(cr, digital_size);
 
         cairo_text_extents_t dext;
@@ -270,6 +283,12 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             box_height = L.boxHeight;   // Nero2.0: 64 px at 50 px digits
             double box_center_y = L.boxY + L.boxHeight / 2.0;
             box_y = box_center_y - box_height / 2.0;
+            if (data->driverPage != AppData::DP_CLASSIC) {
+                // RB-DRV-18/19: the logo box, this box and the right-hand box form one row, all
+                // 80 px high, tops level, edges touching (16 px wider than before).
+                box_width += 16.0 * L.fscale;
+                box_height = 80.0 * L.fscale;
+            }
             border = 3.0;
         } else {
             box_width  = std::max(130.0, dext.x_advance + 16);
@@ -278,13 +297,18 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             border     = 2.0;
         }
         double box_x = centerX - box_width / 2;
+        abBoxX = box_x; abBoxY = box_y; abBoxW = box_width; abBoxH = box_height;
 
+        // The outline is centred on the path, so it spills half its width outside the rectangle.
+        // In the compact strip (RB-DRV-19) the box must be exactly as tall as its neighbours, so the
+        // stroke is drawn inside the rectangle instead.
+        const double inset = (data->driverCompactMode && data->driverPage != AppData::DP_CLASSIC) ? border / 2.0 : 0.0;
         cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
         cairo_rectangle(cr, box_x, box_y, box_width, box_height);
         cairo_fill(cr);
         cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
         cairo_set_line_width(cr, border);
-        cairo_rectangle(cr, box_x, box_y, box_width, box_height);
+        cairo_rectangle(cr, box_x + inset, box_y + inset, box_width - 2 * inset, box_height - 2 * inset);
         cairo_stroke(cr);
 
         if (data->driverCompactMode) {
@@ -293,7 +317,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             // leading sign), and centre the digits vertically using the
             // glyphs' actual ink bounds rather than a hand-picked offset --
             // canvas/cairo baseline positioning is a font-metric
-            // approximation that reads slightly off for bold monospace.
+            // approximation that reads slightly off for monospace.
             double box_center_y = box_y + box_height / 2.0;
             const char* dot = strchr(digital, '.');
             double text_start_x;
@@ -327,14 +351,17 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // whole group slides toward the segment-end tick (20% from the tip) in
     // proportion to how much of the segment has been driven. Outside a segment the
     // chevrons stay at the start position and the tick is hidden.
-    {
-        int num_chevrons = zone + 1;  // 0->1 (green), 1->2 (amber), 2->3 (red)
-        if (num_chevrons < 1) num_chevrons = 1;
-        if (num_chevrons > 3) num_chevrons = 3;
+    if (!hideNeedle) {
+        // One chevron only; it carries the countdown (it no longer shows the zone).
+        const int num_chevrons = 1;
 
         const double f_start = 0.20;  // topmost chevron start, fraction from hub
         const double f_tick  = 0.80;  // segment-end tick, 20% from the tip
-        double progress = data->inSegment ? data->segmentProgress : 0.0;
+        // RB-DRV-18: inside an italian pc / pm the chevrons wait at the start and slide to
+        // the end tick over the last 5 s to the line, arriving as the countdown reads 0.00.
+        const bool trialArrow = data->driverTrial.active;
+        double progress = trialArrow ? data->driverTrial.arrowProgress
+                                     : (data->inSegment ? data->segmentProgress : 0.0);
         if (progress < 0.0) progress = 0.0;
         if (progress > 1.0) progress = 1.0;
         double f_top = f_start + progress * (f_tick - f_start);
@@ -345,7 +372,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         double spacing_f = spacing_px / needle_length;
 
         // Segment-end tick: 48px perpendicular line, only while within a segment.
-        if (data->inSegment) {
+        if (trialArrow || data->inSegment) {   // pc / pm: the end tick is there from the start, the chevrons arrive in the last 5 s
             double tx = centerX + f_tick * needle_length * dir_x;
             double ty = centerY + f_tick * needle_length * dir_y;
             cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
@@ -357,9 +384,10 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
 
         cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
         cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
-        // Nero2.0 compact gauge: no arrow head on the needle (the zone is
-        // already carried by the coloured band).
-        for (int i = 0; i < (data->driverCompactMode ? 0 : num_chevrons); i++) {
+        // The chevrons slide up the needle toward the segment-end tick as the
+        // segment is driven, on every layout (RB-DRV-17: RB-DRV-12 had dropped
+        // them from the compact gauge by mistake).
+        for (int i = 0; i < num_chevrons; i++) {
             double f = f_top - i * spacing_f;
             if (f < 0.03) break;  // keep clear of the hub
             double ax = centerX + f * needle_length * dir_x;      // apex (points to tip)
@@ -393,17 +421,17 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // Compact layout: draw the speed values inside the gauge area.
     // Fonts match the wide layout at full size and shrink with the gauge.
     if (data->driverCompactMode) {
-        cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-        // The big figures (target, current speed, stage number, Total and Trip distances) are
-        // proportional bold; everything else on this display stays monospace.
-        auto bigFace = [&]() { cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD); };
-        auto smallFace = [&]() { cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD); };
+        cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
+        // The big figures (target, current speed, stage number, Total and Trip distances) use
+        // bold monospace; the rest stays regular weight.
+        auto bigFace = [&]() { cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD); };
+        auto smallFace = [&]() { cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL); };
         cairo_text_extents_t te;
 
         // Right-aligned Total/Trip value, at the enlarged curTopSize
         // (RB-DRV-08): a fixed right anchor keeps the decimal point in
         // place as the digits change.
-        auto drawValue = [&](const char* text, double baseline) {
+        [[maybe_unused]] auto drawValue = [&](const char* text, double baseline) {
             bigFace();
             cairo_set_font_size(cr, L.valSize);
             cairo_text_extents(cr, text, &te);
@@ -413,7 +441,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         };
         // Row caption, written just to the right of the value column so the
         // values themselves stay in one unbroken vertical line.
-        auto drawCaption = [&](const char* text, double baseline) {
+        [[maybe_unused]] auto drawCaption = [&](const char* text, double baseline) {
             cairo_set_font_size(cr, L.rowCaptionSize);
             cairo_move_to(cr, L.rightAnchor + L.labelGap, baseline);
             cairo_show_text(cr, text);
@@ -423,7 +451,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         // "Distance (metres)" caption right-aligns to (RB-DRV-02), so the
         // value's last digit and the caption's closing ")" share one
         // vertical edge.
-        auto drawDistance = [&](const char* text, double baseline) {
+        [[maybe_unused]] auto drawDistance = [&](const char* text, double baseline) {
             bigFace();
             cairo_set_font_size(cr, L.valSize);
             cairo_text_extents(cr, text, &te);
@@ -460,78 +488,216 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             cairo_show_text(cr, text);
         };
 
-        // Current: top-right corner, right-aligned to the coloured band's
-        // outer edge, top-aligned with the band's topmost point, "Current"
-        // label underneath (RB-DRV-08).
-        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+        // RB-DRV-19: the four compact pages -- italian pc / pm, italian navi, Greek in a stage,
+        // Greek between stages -- share one set of sizes and positions. Everything is placed from
+        // the error box's rectangle. Mockups: tools/layout-preview/nero2/driver-*.html.
         {
-            double baseline = drawTopCorner(gtk_label_get_text(data->currentSpeedLabel), L.bandOuterX, true);
-            drawTopCornerLabel(data->state->units ? "Mph" : "Kph", L.bandOuterX, true, baseline);
-        }
+            const int page = data->driverPage;
+            const DriverTrialView& v = data->driverTrial;
+            const double fs = L.fscale;
+            const bool italianFig = (page == AppData::DP_ITALIAN_TRIAL || page == AppData::DP_ITALIAN_NAVI);
+            const bool mph = data->state->units && !italianFig;
+            const char* speedUnit = mph ? "Mph" : "Kph";
 
-        // Target: top-left corner, mirrored -- left-aligned to the band's
-        // other edge, "Target" label underneath. Still the only row pulled
-        // out of white -- it is the value being driven toward.
-        cairo_set_source_rgb(cr, 1.0, 0.867, 0.0);  // #FFDD00
-        {
-            double baseline = drawTopCorner(gtk_label_get_text(data->targetSpeedLabel), L.bandTargetX, false);
-            drawTopCornerLabel("Target", L.bandTargetX, false, baseline);
-            // (The "> 30" next-speed marker that used to sit here is gone.)
+            // ---- top right: present speed
+            cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+            {
+                const std::string sp = italianFig ? data->driverTrialSpeedText
+                                                  : std::string(gtk_label_get_text(data->currentSpeedLabel));
+                double baseline = drawTopCorner(sp.c_str(), L.bandOuterX, true);
+                drawTopCornerLabel(speedUnit, L.bandOuterX, true, baseline);
+            }
 
-            // The stage number under Target, in Target's yellow, with "Stage" beneath it.
-            const double targetCaption = baseline + L.labelSize + L.labelGap + capDrop;
-            const long stage_no = data->state->last_memory_slot;
-            const std::string stage_text = stage_no >= 1 ? std::to_string(stage_no) : "-";
-            cairo_set_source_rgb(cr, 1.0, 0.867, 0.0);   // #FFDD00, the Target colour: the number and its "Stage" caption
-            bigFace();
-            cairo_set_font_size(cr, L.curTopSize);   // the same size as the speeds
-            cairo_move_to(cr, L.bandTargetX, targetCaption + L.curTopSize * 0.95 + L.labelGap);
-            cairo_show_text(cr, stage_text.c_str());
-            smallFace();
-            drawTopCornerLabel("Stage", L.bandTargetX, false,
-                               targetCaption + L.curTopSize * 0.95 + L.labelGap - capDrop);
-        }
+            // ---- top left: target (stages), or the speed to arrive at the next stage (between stages)
+            cairo_set_source_rgb(cr, 1.0, 0.867, 0.0);  // #FFDD00
+            {
+                std::string big, cap = "Target";
+                if (italianFig) big = data->driverTrialTargetText;
+                else if (page == AppData::DP_GREEK_STAGE) big = gtk_label_get_text(data->targetSpeedLabel);
+                else {
+                    cap = mph ? "Arrival (mph)" : "Arrival (kph)";
+                    if (data->driverArrivalKph < 0) big = "--";
+                    else {
+                        char b[16];
+                        snprintf(b, sizeof(b), "%ld", mph ? std::lround(data->driverArrivalKph * 0.621371)
+                                                          : static_cast<long>(data->driverArrivalKph));
+                        big = b;
+                    }
+                }
+                double baseline = drawTopCorner(big.c_str(), L.bandTargetX, false);
+                drawTopCornerLabel(cap.c_str(), L.bandTargetX, false, baseline);
+                if (italianFig) {   // how long this pc / pm / row takes, m:ss, under the target
+                    const double dur_s = (page == AppData::DP_ITALIAN_TRIAL) ? v.durationS : data->driverRowS;
+                    char dur[24];
+                    const long ds = std::lround(std::max(0.0, dur_s));
+                    snprintf(dur, sizeof(dur), "%ld:%02ld", ds / 60, ds % 60);
+                    bigFace();
+                    const double durSize = L.curTopSize * 0.64;
+                    cairo_set_font_size(cr, durSize);
+                    cairo_move_to(cr, L.bandTargetX,
+                                  baseline + L.labelSize + L.labelGap + capDrop + durSize * 1.05);
+                    cairo_show_text(cr, dur);
+                    smallFace();
+                }
+            }
 
-        // {tot}: white, mirrored by the Total distance on the left. Both at
-        // curTopSize, nudged up with extra line spacing (RB-DRV-08) so the
-        // taller glyphs clear the ahead/behind box above them.
-        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-        drawValue(gtk_label_get_text(data->totalSpeedLabel), L.totalBaseline);
-        drawCaption("Total", L.totalBaseline);
-        drawDistance(data->driverTotalDistText.c_str(), L.totalBaseline);
+            // ---- the two figure rows, as the Greek page: trip above total; averages left, distances right
+            const double lcx = abBoxX + abBoxW / 2.0;
+            const double avgAnchor = abBoxX + 8.0 * fs;          // the original error box's left edge
+            const double distAnchor = lcx + 260.0 * fs;           // 660 of 800
+            const double y1 = abBoxY - 93.0 * fs, y2 = abBoxY - 27.0 * fs;
+            auto drawAt = [&](const std::string& text, double anchor, double baseline) {
+                bigFace();
+                cairo_set_font_size(cr, L.valSize);
+                cairo_text_extents(cr, text.c_str(), &te);
+                cairo_move_to(cr, anchor - te.x_advance, baseline);
+                cairo_show_text(cr, text.c_str());
+                smallFace();
+            };
+            auto distText = [&](double metres) {
+                char b[32];
+                snprintf(b, sizeof(b), "%.2f", (mph ? metres * 0.000621371 : metres / 1000.0));
+                return std::string(b);
+            };
+            auto avgKphText = [&](const char* label) {   // a Greek average label is in the shown units
+                const double x = atof(label);
+                return trialSpeedText(data->state->units ? x / 0.621371 : x);
+            };
+            const std::string totalAvg = (page == AppData::DP_ITALIAN_TRIAL)
+                ? (v.avgValid ? trialSpeedText(v.avgKph) : std::string("--.--"))
+                : (italianFig ? avgKphText(gtk_label_get_text(data->totalSpeedLabel))
+                              : std::string(gtk_label_get_text(data->totalSpeedLabel)));
+            cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+            drawAt(totalAvg, avgAnchor, y2);
+            drawAt(distText(page == AppData::DP_ITALIAN_TRIAL ? v.sectorTotalM : data->driverTotalM), distAnchor, y2);
+            if (page != AppData::DP_ITALIAN_TRIAL) {   // trip row (cyan, as Greek)
+                cairo_set_source_rgb(cr, 0.0, 1.0, 1.0);
+                if (page == AppData::DP_GREEK_STAGE) {   // the substage's own average, to match the time error
+                    char sb[24];
+                    const double sp = data->state->units ? data->driverSubAvgKph * 0.621371 : data->driverSubAvgKph;
+                    if (data->driverSubAvgValid) snprintf(sb, sizeof(sb), "%.1f", sp); else snprintf(sb, sizeof(sb), "--.-");
+                    drawAt(sb, avgAnchor, y1);
+                } else if (!italianFig) {
+                    drawAt(gtk_label_get_text(data->tripSpeedLabel), avgAnchor, y1);
+                }
+                drawAt(distText(data->driverTripM), distAnchor, y1);
+            }
 
-        // Trip speed and Trip distance share a colour so the eye groups them
-        // as one reading, instead of scanning four undifferentiated white
-        // numbers and working out which distance belongs to which speed.
-        cairo_set_source_rgb(cr, 0.0, 1.0, 1.0);  // #00FFFF
-        drawValue(gtk_label_get_text(data->tripSpeedLabel), L.tripBaseline);
-        drawCaption("Trip", L.tripBaseline);
-        drawDistance(data->driverTripDistText.c_str(), L.tripBaseline);
+            // ---- legends: "avg / kph" left of the average, "Trip / km / Total" right of the distances
+            {
+                cairo_set_font_size(cr, 18.0 * fs);
+                const char* unitLow = mph ? "mph" : "kph";
+                const char* distUnit = mph ? "mi" : "km";
+                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+                const char* left[2] = {"avg", unitLow};
+                for (int i = 0; i < 2; ++i) {
+                    cairo_text_extents(cr, left[i], &te);
+                    cairo_move_to(cr, lcx - 288.0 * fs - te.x_advance, y2 - (i == 0 ? 24.0 : 4.0) * fs);
+                    cairo_show_text(cr, left[i]);
+                }
+                if (page == AppData::DP_GREEK_STAGE) {   // marks the cyan average as the substage's, not Trip's
+                    cairo_set_source_rgb(cr, 0.0, 1.0, 1.0);
+                    cairo_text_extents(cr, "sub", &te);
+                    cairo_move_to(cr, lcx - 288.0 * fs - te.x_advance, y1 - 4.0 * fs);
+                    cairo_show_text(cr, "sub");
+                    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+                }
+                const double rx = lcx + 272.0 * fs;
+                cairo_move_to(cr, rx, y2 - 4.0 * fs);
+                cairo_show_text(cr, "Total");
+                if (page == AppData::DP_ITALIAN_TRIAL) {
+                    cairo_move_to(cr, rx, y2 - 24.0 * fs);
+                    cairo_show_text(cr, distUnit);
+                } else {
+                    cairo_set_source_rgb(cr, 0.0, 1.0, 1.0);
+                    cairo_move_to(cr, rx, y1 - 4.0 * fs);
+                    cairo_show_text(cr, "Trip");
+                    cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
+                    cairo_move_to(cr, rx, (y1 + y2) / 2.0 + 2.0 * fs);
+                    cairo_show_text(cr, distUnit);
+                }
+            }
 
-        // Column captions below each half of the panel. They carry the
-        // units so the values above them do not have to repeat them on
-        // every row -- and they follow the live unit, not a fixed string.
-        {
-            std::string dist_caption =
-                distanceColumnCaption(data->driverTotalUnitText.c_str());
-            std::string speed_caption = speedColumnCaption(data->state->units);
+            // ---- the strip: logo box | error box | right-hand box, all 80 px high, edges touching
+            {
+                std::string tag;
+                double bg[3], fgc;
+                int icon = 0;   // 0 none, 1 stopwatch, 2 speedo
+                if (page == AppData::DP_ITALIAN_TRIAL) {
+                    tag = v.tag;
+                    if (v.isPc) { bg[0] = 0.867; bg[1] = 0.0; bg[2] = 0.0; fgc = 1.0; icon = 1; }
+                    else        { bg[0] = 1.0; bg[1] = 0.867; bg[2] = 0.0; fgc = 0.0; icon = 2; }
+                } else if (page == AppData::DP_GREEK_STAGE) {
+                    tag = "S" + std::to_string(data->driverStageNo);
+                    bg[0] = 0.867; bg[1] = 0.0; bg[2] = 0.0; fgc = 1.0; icon = 1;
+                } else {
+                    tag = "navi";
+                    bg[0] = bg[1] = bg[2] = 0.4; fgc = 1.0;
+                }
+                const double w = 160.0 * fs, h = 80.0 * fs;
+                const double x0 = abBoxX - w, y0 = abBoxY;
+                cairo_set_source_rgb(cr, bg[0], bg[1], bg[2]);
+                cairo_rectangle(cr, x0, y0, w, h);
+                cairo_fill(cr);
+                cairo_set_source_rgb(cr, fgc, fgc, fgc);
+                smallFace();
+                cairo_set_font_size(cr, 46.0 * fs);
+                cairo_text_extents(cr, tag.c_str(), &te);
+                const double ic = icon ? 36.0 * fs : 0.0, gap = icon ? 8.0 * fs : 0.0;
+                const double tx = x0 + (w - te.x_advance - gap - ic) / 2.0;
+                cairo_move_to(cr, tx, y0 + h / 2.0 + 16.0 * fs);
+                cairo_show_text(cr, tag.c_str());
+                const double ox = tx + te.x_advance + gap + ic / 2.0;
+                const double oy = y0 + (h - 40.0 * fs) / 2.0 + 24.0 * fs;
+                cairo_set_line_width(cr, 4.0 * fs);
+                if (icon == 1) {   // stopwatch: crown, round case, hand to 12
+                    cairo_rectangle(cr, ox - 5.0 * fs, oy - 24.0 * fs, 10.0 * fs, 5.0 * fs);
+                    cairo_fill(cr);
+                    cairo_new_sub_path(cr);
+                    cairo_arc(cr, ox, oy, 14.0 * fs, 0, 2 * M_PI);
+                    cairo_stroke(cr);
+                    cairo_move_to(cr, ox, oy);
+                    cairo_line_to(cr, ox, oy - 10.0 * fs);
+                    cairo_stroke(cr);
+                } else if (icon == 2) {   // speedo: open dial, needle up-left
+                    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+                    cairo_new_sub_path(cr);
+                    cairo_arc(cr, ox, oy, 15.0 * fs, 0.75 * M_PI, 2.25 * M_PI);
+                    cairo_stroke(cr);
+                    cairo_move_to(cr, ox, oy);
+                    cairo_line_to(cr, ox - 7.0 * fs, oy - 9.0 * fs);
+                    cairo_stroke(cr);
+                    cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
+                }
+            }
 
-            cairo_set_font_size(cr, L.labelSize);
-            cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
-
-            // Right-aligned to the same X the distance values themselves
-            // right-align to (RB-DRV-01's L.distanceAnchor), so the
-            // caption's closing ")" sits directly under the values' last
-            // digit rather than centred under a right-aligned column.
-            cairo_text_extents(cr, dist_caption.c_str(), &te);
-            cairo_move_to(cr, L.distCaptionRight - te.x_advance, L.captionBaseline);
-            cairo_show_text(cr, dist_caption.c_str());
-
-            // Centred (nudged 15px right at the user's request) -- there is
-            // no value column edge on this side to match.
-            cairo_text_extents(cr, speed_caption.c_str(), &te);
-            cairo_move_to(cr, L.speedCaptionLeft, L.captionBaseline);
-            cairo_show_text(cr, speed_caption.c_str());
+            // Right-hand box: the pc / pm countdown (green, 5.0 -> 0.0) or the navi minutes ahead /
+            // behind (green ahead, red behind). None in the Greek pages.
+            if (page == AppData::DP_ITALIAN_TRIAL
+                || (page == AppData::DP_ITALIAN_NAVI && data->driverMinutesValid)) {
+                const double w = 160.0 * fs, h = 80.0 * fs;
+                const double x0 = abBoxX + abBoxW, y0 = abBoxY;
+                std::string txt;
+                bool ahead = true;
+                if (page == AppData::DP_ITALIAN_TRIAL) {
+                    txt = countdownBoxText(v.toLineS);
+                } else {
+                    ahead = data->driverMinutes >= 0;
+                    txt = (data->driverMinutes > 0 ? "+" : "") + std::to_string(data->driverMinutes);
+                }
+                if (ahead) cairo_set_source_rgb(cr, 0.0, 0.667, 0.0);   // green (#0a0)
+                else       cairo_set_source_rgb(cr, 0.867, 0.067, 0.067);
+                cairo_rectangle(cr, x0, y0, w, h);
+                cairo_fill(cr);
+                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+                bigFace();
+                cairo_set_font_size(cr, L.boxFontSize * 1.5);
+                cairo_text_extents(cr, txt.c_str(), &te);
+                const double ascent = -te.y_bearing, descent = te.height + te.y_bearing;
+                cairo_move_to(cr, x0 + (w - te.x_advance) / 2.0, y0 + h / 2.0 + (ascent - descent) / 2.0);
+                cairo_show_text(cr, txt.c_str());
+                smallFace();
+            }
         }
 
         // fps left, cpu right, baseline in line with the bottom of the
@@ -647,6 +813,27 @@ void updateDriverDisplay(AppData* data) {
     std::string trip_dist_str = formatDistanceAutoUnit(trip_dist_m, &trip_unit);
     data->driverTripDistText = trip_dist_str;
     data->driverTripUnitText = trip_unit;
+    data->driverTotalM = static_cast<double>(total_dist_m);
+    data->driverTripM  = static_cast<double>(trip_dist_m);
+    data->driverStageNo = data->state->last_memory_slot;
+    // Stage arrival: the speed to reach the loaded stage's start with a minute spare (as Home).
+    data->driverArrivalKph = -1;
+    {
+        const int slot = data->state->last_memory_slot;
+        if (slot >= 1 && slot <= RallyState::MAX_MEMORY_SLOTS) {
+            const long start_s = data->state->memory_slots[slot - 1].start_time_s;
+            const long start_dist = data->state->memory_slots[slot - 1].start_distance_m;
+            if (start_s >= 0) {
+                time_t tt = current_time_ms / 1000;
+                struct tm* lt = localtime(&tt);
+                if (lt) {
+                    const long tod = lt->tm_hour * 3600L + lt->tm_min * 60L + lt->tm_sec;
+                    StageArrival arr = stageArrival(static_cast<double>(start_dist), (start_s - tod) / 60.0);
+                    if (arr.valid) data->driverArrivalKph = arr.speed_kph;
+                }
+            }
+        }
+    }
 
     // Target speed and ahead/behind
     if (data->state->segment_current_number >= 0 && 
@@ -657,7 +844,7 @@ void updateDriverDisplay(AppData* data) {
             target_kph = target_kph * 0.621371;  // Convert to MPH
         }
         ss.str("");
-        ss << std::fixed << std::setprecision(1) << target_kph;
+        ss << driverSpeedText(target_kph, data->state->rally_type);   // 2 dp in italian
         gtk_label_set_text(data->targetSpeedLabel, ss.str().c_str());
         gtk_label_set_text(data->gaugeTargetLabel, ss.str().c_str());
         // The coming change, in the same units as the value above it.
@@ -667,8 +854,7 @@ void updateDriverDisplay(AppData* data) {
                 // "> " marks it as the speed being moved TO, so it cannot be
                 // misread as a second current value.
                 std::stringstream ns;
-                ns << "> " << std::fixed << std::setprecision(1)
-                   << (data->state->units ? next_kph / 1.60934 : next_kph);
+                ns << "> " << driverSpeedText(data->state->units ? next_kph / 1.60934 : next_kph, data->state->rally_type);
                 gtk_label_set_text(data->nextTargetSpeedLabel, ns.str().c_str());
             } else {
                 gtk_label_set_text(data->nextTargetSpeedLabel, "");
@@ -680,8 +866,9 @@ void updateDriverDisplay(AppData* data) {
         // the time error too, or the gauge keeps crediting distance the crew
         // just told the box they had not driven.
         int64_t total_count_diff_ab = stageCountsCorrected(data, current_poll);
-        double seconds = calculateAheadBehindFromStageStart(*data->state, current_time_ms, total_count_diff_ab);
-        seconds += data->state->ahead_behind_zero_offset_ms / 1000.0;
+        // Italian: the pc / pm error inside one, at rest (tone silent) on navi / ct / co subs.
+        double seconds = gaugeAheadSeconds(*data->state, current_poll.cntr1, current_poll.cntr2,
+                                           current_time_ms, total_count_diff_ab);
         // Nothing to be ahead or behind of until the clock zeroes at the
         // minute. Held before the value is stored, so the gauge needle, the
         // chevrons and the tone all sit at rest too rather than tracking a
@@ -691,10 +878,47 @@ void updateDriverDisplay(AppData* data) {
         // Store for gauge
         data->aheadBehindSeconds = seconds;
 
+        // RB-DRV-18: inside an italian pc / pm the compact gauge shows its own layout
+        // (sector total, pc / pm average, logo, 5 s countdown), every figure in km and km/h.
+        if (holdTimeErrorAtZero) {
+            data->driverTrial = DriverTrialView{};
+        } else {
+            data->driverTrial = driverTrialView(*data->state, current_poll.cntr1, current_poll.cntr2,
+                                                current_time_ms);
+        }
+        {
+            const RallyState& st = *data->state;
+            const bool italian = st.rally_type == 2 && stageIsSector(st.stage_segments);
+            data->driverPage = data->driverTrial.active ? AppData::DP_ITALIAN_TRIAL
+                              : (italian ? AppData::DP_ITALIAN_NAVI : AppData::DP_GREEK_STAGE);
+            if (data->driverPage == AppData::DP_ITALIAN_NAVI) {
+                data->driverRowS = rowSeconds(seg);
+                bool v_ok = false;
+                const double ahead = sectorAheadSeconds(st, current_poll.cntr1, current_poll.cntr2,
+                                                        current_time_ms, &v_ok);
+                data->driverMinutesValid = v_ok;
+                const long m = minutesInHand(ahead);
+                data->driverMinutes = ahead >= 0.0 ? m : -m;
+            }
+        }
+        if (data->driverTrial.active || data->driverPage == AppData::DP_ITALIAN_NAVI) {
+            data->driverTrialTargetText = trialSpeedText(
+                countsPerHourToKPH(seg.target_speed_counts_per_hour, data->state->calibration));
+            double kph = data->smoothedSpeed;
+            if (kph >= 0.0 && data->state->units) kph *= 1.609344;   // smoothedSpeed is mph then
+            data->driverTrialSpeedText = kph < 0.0 ? "--.--" : trialSpeedText(kph);
+        }
+
         // Fraction of the current segment driven, for the needle's scale chevrons
         // and segment-end tick. "In segment" while between the segment start and end.
         {
             int64_t seg_count_diff = segmentCountsCorrected(data, current_poll);
+            {   // average speed over this substage so far (matches the time error, unlike Trip)
+                const double sub_m = countsToMeters(seg_count_diff, data->state->calibration);
+                const double sub_s = (current_time_ms - data->state->segment_start_time_ms) / 1000.0;
+                data->driverSubAvgValid = (sub_s > 0.5 && sub_m > 0.0);
+                data->driverSubAvgKph = data->driverSubAvgValid ? sub_m / sub_s * 3.6 : 0.0;
+            }
             double seg_total = seg.distance_counts;
             if (seg_total > 0.0) {
                 double frac = static_cast<double>(seg_count_diff) / seg_total;
@@ -780,6 +1004,8 @@ void updateDriverDisplay(AppData* data) {
         data->aheadBehindSeconds = 0.0;
         data->segmentProgress = 0.0;
         data->inSegment = false;
+        data->driverTrial = DriverTrialView{};
+        data->driverPage = AppData::DP_GREEK_IDLE;
         if (data->rallyGaugeDrawingArea) {
             gtk_widget_queue_draw(data->rallyGaugeDrawingArea);
         }
@@ -890,15 +1116,15 @@ static void applyDriverCSS(G_GNUC_UNUSED GtkWidget* widget) {
     GtkCssProvider* provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(provider,
         "window, .background { background-color: #000000; }"
-        "label { color: #FFFFFF; font-weight: bold; }"
+        "label { color: #FFFFFF; font-weight: normal; }"
         "button { background-color: #333333; color: #FFFFFF; font-weight: bold; }"
         ".speed-header { font-size: 28px; }"
-        ".speed-value-next { font-size: 51px; font-family: monospace; color: #FFDD00; }"
-        ".speed-value { font-size: 64px; font-family: monospace; }"
-        ".speed-value-xl { font-size: 80px; font-family: monospace; }"
-        ".speed-value-target { font-size: 45px; font-family: monospace; }"
+        ".speed-value-next { font-size: 51px; font-family: monospace; font-weight: bold; color: #FFDD00; }"
+        ".speed-value { font-size: 64px; font-family: monospace; font-weight: bold; }"
+        ".speed-value-xl { font-size: 80px; font-family: monospace; font-weight: bold; }"
+        ".speed-value-target { font-size: 45px; font-family: monospace; font-weight: bold; }"
         ".target-info { font-size: 22px; }"
-        ".ahead-behind { font-size: 28px; font-family: monospace; }"
+        ".ahead-behind { font-size: 28px; font-family: monospace; font-weight: bold; }"
         ".next-info { font-size: 18px; }"
         ".footer-info { font-size: 14px; }"
         ".speed-arrows { font-size: 28px; }",
@@ -1084,8 +1310,8 @@ GtkWidget* createDriverWindow(AppData* data) {
     GtkCssProvider* cdProvider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(cdProvider,
         ".countdown-box { border: 4px solid white; background-color: #000000; }"
-        ".countdown-label { font-size: 60px; font-family: monospace; color: white; font-weight: bold; }"
-        ".early-departure-label { font-size: 22px; color: white; font-weight: bold; }",
+        ".countdown-label { font-size: 60px; font-family: monospace; color: white; }"
+        ".early-departure-label { font-size: 22px; color: white; }",
         -1, nullptr);
     gtk_style_context_add_provider(
         gtk_widget_get_style_context(countdownBox),

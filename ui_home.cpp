@@ -1,4 +1,11 @@
 #include "ui_home.h"
+#include "stage_store.h"
+#include "home_calc.h"
+#include "freeze.h"
+#include "sector.h"
+#include "stage_rows.h"
+#include "ui_home_italian.h"
+#include "ui_segments.h"
 #include "callbacks.h"
 #include "calculations.h"
 #include "counter_poller.h"
@@ -121,8 +128,9 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         break;
     case ELAPSED:
         if (idx == 2) {
+            // mm:ss to the next speed change, right-aligned to the key edge (no stopwatch).
             grey(cr);
-            drawText(cr, h->speedLine, width / 2.0, 22, 22, CENTRE);
+            drawText(cr, h->speedLine, width, 22, 26, RIGHT);
         } else {
             // "54:21" right-aligned to the key edge with a stopwatch before it.
             grey(cr);
@@ -141,51 +149,35 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         // Figures right-aligned inside a block sized for "99,999" (6 x 24 px),
         // and that block centred in the column.
         const double right = (width + 6 * 24) / 2.0;
-        for (int i = 0; i < 6; i++)
+        for (size_t i = 0; i < HOME_HISTORY_ENTRIES; i++)
             drawText(cr, h->history[i], right, 24 + (i + 1) * 46 - 10, 40, RIGHT);
         break;
     }
     case STAGE: {
-        // clock icon (autostart on / off) and the start time
+        // "auto" (armed, or the autostart that started the running stage) or "manual"
+        // in orange, then the start time from Segments.
         const double ay = 12 + 28;
-        // Armed (or the autostart that started the running stage): a wall clock --
-        // round face, two hands, no crown, so it is not the stopwatch of the
-        // elapsed times -- in front of the time. Otherwise just a red cross.
-        const double cx = 15, cy = ay - 10, rad = 13;
         if (h->autoArmed) {
             cyan(cr);
-            cairo_set_line_width(cr, 3.0);
-            cairo_arc(cr, cx, cy, rad, 0, 2 * M_PI);
-            cairo_stroke(cr);
-            cairo_set_line_width(cr, 2.5);
-            cairo_move_to(cr, cx, cy);
-            cairo_line_to(cr, cx, cy - 8);          // minute hand, straight up
-            cairo_move_to(cr, cx, cy);
-            cairo_line_to(cr, cx + 6, cy + 3);      // hour hand
-            cairo_stroke(cr);
+            drawText(cr, "auto", 4, ay, 18, LEFT);
         } else {
-            setColour(cr, 1.0, 0.1, 0.1);
-            cairo_set_line_width(cr, 8.0);
-            cairo_move_to(cr, cx - rad, cy - rad);
-            cairo_line_to(cr, cx + rad, cy + rad);
-            cairo_move_to(cr, cx - rad, cy + rad);
-            cairo_line_to(cr, cx + rad, cy - rad);
-            cairo_stroke(cr);
+            setColour(cr, 1.0, 0.55, 0.0);
+            drawText(cr, "manual", 4, ay, 18, LEFT);
         }
         white(cr);
-        drawText(cr, h->autoTime, width - 4, ay, 30, RIGHT);
+        drawText(cr, h->autoTime, width - 4, ay, 26, RIGHT);
         if (h->autoTimePast && !h->autoTime.empty()) {
             cairo_text_extents_t te;
             cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-            cairo_set_font_size(cr, 30);
+            cairo_set_font_size(cr, 26);
             cairo_text_extents(cr, h->autoTime.c_str(), &te);
             const double x1 = width - 4 - te.x_advance, x2 = width - 4;
             setColour(cr, 1.0, 0.1, 0.1);
             cairo_set_line_width(cr, 3.0);
-            cairo_move_to(cr, x1, ay - 24);
+            cairo_move_to(cr, x1, ay - 22);
             cairo_line_to(cr, x2, ay + 3);
             cairo_move_to(cr, x1, ay + 3);
-            cairo_line_to(cr, x2, ay - 24);
+            cairo_line_to(cr, x2, ay - 22);
             cairo_stroke(cr);
         }
 
@@ -196,7 +188,7 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         drawText(cr, "at m", 193, top + 18, 20, RIGHT);
         for (int i = 0; i < 3; i++) {
             if (h->rows[i].kph.empty()) continue;
-            if (h->rows[i].now) cyan(cr); else white(cr);
+            if (h->rows[i].now) white(cr); else cyan(cr);   // the current row white, the others blue
             drawText(cr, h->rows[i].kph, 79, top + 22 + (i + 1) * 36 - 8, 30, RIGHT);
             drawText(cr, h->rows[i].at, 193, top + 22 + (i + 1) * 36 - 8, 30, RIGHT);
         }
@@ -241,10 +233,9 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
                 drawText(cr, "stage", ww / 2.0, 22, 22, CENTRE);
                 drawText(cr, "abort", ww / 2.0, 46, 22, CENTRE);
             } else {
-                // The flag with "now" under it, laid out like the next-minute key above.
-                drawFlag(cr, ww / 2.0 - 20, 1, 40, 30);
-                white(cr);
-                drawText(cr, "now", ww / 2.0, 50, 24, CENTRE);
+                // The flag and the stopwatch side by side (start now), as the mockups draw it.
+                drawFlag(cr, ww / 2.0 - 48, 20, 40, 30);
+                drawWatch(cr, ww / 2.0 + 6, 16, 38, true);
             }
         }
         break;
@@ -308,7 +299,7 @@ void onFreeze(GtkWidget*, gpointer user_data) {
 // The repeating "whoop" while reversed or frozen.
 gboolean whoopTick(gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
-    if (!(data->poller && data->poller->reverse()) && !data->homeFrozen) {
+    if (!(data->poller && data->poller->reverse()) && !data->state->freeze_on) {
         if (data->home) data->home->whoopTimer = 0;
         return G_SOURCE_REMOVE;
     }
@@ -361,14 +352,10 @@ void onScheduledStart(GtkWidget* w, gpointer user_data) {
 
 // Step to the next populated memory in a direction; no wrap, empties skipped.
 void stepStage(AppData* data, int dir) {
-    int cur = data->state->last_memory_slot;   // 0 = none loaded
-    for (int s = (cur == 0 ? (dir > 0 ? 0 : RallyState::MAX_MEMORY_SLOTS + 1) : cur) + dir;
-         s >= 1 && s <= RallyState::MAX_MEMORY_SLOTS; s += dir) {
-        if (!data->state->memory_slots[s - 1].empty()) {
-            recallMemorySlot(data, s);
-            return;
-        }
-    }
+    const int cur = data->state->last_memory_slot;   // 0 = none loaded
+    const int from = cur != 0 ? cur : (dir > 0 ? 0 : RallyState::MAX_MEMORY_SLOTS + 1);
+    const int to = nextProgrammedStage(*data->state, from, dir);
+    if (validStageNumber(to) && to != cur) recallMemorySlot(data, to);
 }
 // No new stage can be loaded while one is live: say so and leave everything as it is.
 bool confirmStageChange(GtkWidget* w, AppData* data) {
@@ -383,36 +370,37 @@ void onStagePlus(GtkWidget* w, gpointer d) {
     if (confirmStageChange(w, static_cast<AppData*>(d))) stepStage(static_cast<AppData*>(d), +1);
 }
 
+// Load stage n: a programmed stage is recalled; an empty number is selected
+// empty, ready to be programmed.
+void loadStageNumber(AppData* data, int n) {
+    if (!validStageNumber(n)) return;
+    if (!data->state->memory_slots[n - 1].empty()) {
+        recallMemorySlot(data, n);
+    } else {
+        stageEditSelect(data, n);   // guarded: does nothing while a stage is live
+        refreshSegmentList(data);
+    }
+}
+
+// A tap on the stage number opens Choose Stage (the set key's popup).
 void onStageNumber(GtkWidget* w, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
-    HomeUi* h = data->home;
     if (!confirmStageChange(w, data)) return;
-    for (int i = 0; i < 5; i++) {
-        const bool empty = data->state->memory_slots[i].empty();
-        gtk_widget_set_sensitive(h->pickerBtns[i], !empty);
-        setLit(h->pickerBtns[i], data->state->last_memory_slot == i + 1);
-    }
-    if (h->popover) { gtk_popover_popup(GTK_POPOVER(h->popover)); return; }
-    gtk_stack_set_visible_child_name(GTK_STACK(h->stack), "picker");
+    const int n = chooseStageDialog(w, data, data->state->last_memory_slot);
+    if (n) loadStageNumber(data, n);
 }
 
-void onPick(GtkWidget* w, gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
-    recallMemorySlot(data, GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w), "slot")));
-    if (data->home->popover) { gtk_popover_popdown(GTK_POPOVER(data->home->popover)); return; }
-    gtk_stack_set_visible_child_name(GTK_STACK(data->home->stack), "main");
-}
-
-void onPickerCancel(GtkWidget*, gpointer user_data) {
-    gtk_stack_set_visible_child_name(GTK_STACK(static_cast<AppData*>(user_data)->home->stack), "main");
-}
-
-// The picker hides itself whenever Home is left, so it never greets the crew
-// the next time they arrive.
-void onHomeUnmap(GtkWidget*, gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
-    if (data->home && data->home->stack)
-        gtk_stack_set_visible_child_name(GTK_STACK(data->home->stack), "main");
+// The stage row, - n + across STAGE_W: - at the left edge, + at the right, the number
+// centred between them, so a two-figure stage widens the number key in place instead
+// of pushing + along. Greek and italian build theirs here so the two sit identically.
+GtkWidget* makeStageRow(AppData* data, GtkWidget** numBtn) {
+    GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_size_request(row, STAGE_W, STAGE_ROW_H);
+    *numBtn = makeKey("-", 50, 50, G_CALLBACK(onStageNumber), data);
+    gtk_box_pack_start(GTK_BOX(row), makeKey("-", 52, 52, G_CALLBACK(onStageMinus), data), FALSE, FALSE, 0);
+    gtk_box_set_center_widget(GTK_BOX(row), *numBtn);
+    gtk_box_pack_end(GTK_BOX(row), makeKey("+", 52, 52, G_CALLBACK(onStagePlus), data), FALSE, FALSE, 0);
+    return row;
 }
 
 } // namespace
@@ -421,7 +409,7 @@ void onHomeUnmap(GtkWidget*, gpointer user_data) {
 static void updateWhoop(AppData* data) {
     HomeUi* h = data->home;
     if (!h) return;
-    const bool want = (data->poller && data->poller->reverse()) || data->homeFrozen;
+    const bool want = (data->poller && data->poller->reverse()) || data->state->freeze_on;
     if (want && h->whoopTimer == 0) {
         whoopTick(data);
         h->whoopTimer = g_timeout_add(700, whoopTick, data);
@@ -474,7 +462,6 @@ GtkWidget* createHomeScreen(AppData* data) {
 
     GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, single ? 10 : COL_GAP);
     gtk_container_set_border_width(GTK_CONTAINER(screen), 5);
-    g_signal_connect(screen, "unmap", G_CALLBACK(onHomeUnmap), data);
 
     // ── column 1: Total / Trip / next / prev with their figures ──
     // Columns 1 and 2 sit in an overlay so freeze and reverse can be placed by
@@ -489,15 +476,18 @@ GtkWidget* createHomeScreen(AppData* data) {
     gtk_widget_set_size_request(c1, col1W, -1);
     gtk_box_pack_start(GTK_BOX(leftCols), c1, FALSE, FALSE, 0);
 
+    // The third key is "countdown" (a label for the next-segment figure and the mm:ss
+    // under it); next moves to the bottom row.
     struct { const char* label; GCallback cb; } rows[3] = {
         { "total", G_CALLBACK(on_total_reset) },
         { "trip", G_CALLBACK(on_trip_reset) },
-        { "next", G_CALLBACK(on_next_press) },
+        { "countdown", nullptr },
     };
     for (int i = 0; i < 3; i++) {
         GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
         GtkWidget* left = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
         GtkWidget* key = makeKey(rows[i].label, KEY_W, KEY_H, rows[i].cb, data);
+        h->leftKeys[i] = key;
         gtk_box_pack_start(GTK_BOX(left), key, FALSE, FALSE, 0);
         h->elapsedArea[i] = makeArea(data, ELAPSED, i, KEY_W, ROW_GAP);
         gtk_box_pack_start(GTK_BOX(left), h->elapsedArea[i], FALSE, FALSE, 0);
@@ -505,28 +495,33 @@ GtkWidget* createHomeScreen(AppData* data) {
         gtk_box_pack_start(GTK_BOX(row), left, FALSE, FALSE, 0);
         gtk_box_pack_start(GTK_BOX(row), h->figureArea[i], FALSE, FALSE, 0);
         gtk_box_pack_start(GTK_BOX(c1), row, FALSE, FALSE, 0);
-        if (i == 2) data->nextPrevBtn = key;
-        gtk_widget_set_sensitive(key, i == 2 ? FALSE : TRUE);
+        if (i == 2) addClass(key, "key-21");
     }
-    // prev, then freeze and reverse further right (placed over the columns below)
+    // Keeps the column 388 px tall: the bottom row's keys are placed over it below.
     {
+        GtkWidget* spacer = gtk_label_new("");
+        gtk_widget_set_size_request(spacer, 1, KEY_H);
+        gtk_box_pack_start(GTK_BOX(c1), spacer, FALSE, FALSE, 0);
+    }
+    // Bottom row: next, prev, freeze, reverse (placed over the columns above).
+    {
+        data->nextPrevBtn = makeKey("next", KEY_W, KEY_H, G_CALLBACK(on_next_press), data);
+        gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
         data->prevBtn = makeKey("prev", KEY_W, KEY_H, G_CALLBACK(on_prev_press), data);
         gtk_widget_set_sensitive(data->prevBtn, FALSE);
-        gtk_box_pack_start(GTK_BOX(c1), data->prevBtn, FALSE, FALSE, 0);
-        gtk_widget_set_halign(data->prevBtn, GTK_ALIGN_START);   // 130 px, not the column's width
-        h->freezeBtn = makeKey("freeze", -1, KEY_H, G_CALLBACK(onFreeze), data);
-        h->reverseBtn = makeKey("reverse", -1, KEY_H, G_CALLBACK(onReverse), data);
+        h->freezeBtn = makeKey("freeze", KEY_W, KEY_H, G_CALLBACK(onFreeze), data);
+        h->reverseBtn = makeKey("reverse", KEY_W, KEY_H, G_CALLBACK(onReverse), data);
         // 24 px: "reverse" at the keys' usual 28 px is wider than 130 px once the
         // button's padding is added, and was clipped at the overlay's edge.
         addClass(h->freezeBtn, "key-24");
         addClass(h->reverseBtn, "key-24");
     }
 
-    // ── column 2: +10 / set / −10, level with Total / Trip / next ──
+    // ── column 2: set / +10 / −10, level with Total / Trip / next ──
     GtkWidget* c2 = gtk_box_new(GTK_ORIENTATION_VERTICAL, ROW_GAP);
     gtk_widget_set_size_request(c2, COL2_W, -1);
     gtk_box_pack_start(GTK_BOX(leftCols), c2, FALSE, FALSE, 0);
-    struct { const char* label; int delta_m; } adj[3] = { {"+10", 10}, {"set", 0}, {"-10", -10} };
+    struct { const char* label; int delta_m; } adj[3] = { {"set", 0}, {"+10", 10}, {"-10", -10} };
     for (int i = 0; i < 3; i++) {
         GtkWidget* b = makeKey(adj[i].label, COL2_W, KEY_H, nullptr, data);
         if (adj[i].delta_m == 0) {
@@ -537,34 +532,32 @@ GtkWidget* createHomeScreen(AppData* data) {
         }
         gtk_box_pack_start(GTK_BOX(c2), b, FALSE, FALSE, 0);
     }
+    g_signal_connect(h->leftKeys[2], "clicked", G_CALLBACK(on_navi_dialog), data);   // the navi key (italian only)
 
     {
-        // Freeze, reverse and A-B, B-C zero share the prev row: three keys of one
-        // width (128 px, sized for the widest label at 24 px), spread evenly
-        // between prev's right edge and the right edge of the +10 / set / -10
-        // column, so A-B, B-C zero sits under -10 and to the right of reverse.
-        data->adjZeroBtn = makeKey("A-B, B-C\nzero", -1, KEY_H, G_CALLBACK(on_adj_driver_zero), data);
-        addClass(data->adjZeroBtn, "key-24");
-        gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(data->adjZeroBtn))), GTK_JUSTIFY_CENTER);
-        GtkWidget* row_keys[3] = { h->freezeBtn, h->reverseBtn, data->adjZeroBtn };
-        // 128 px: "A-B, B-C" at 24 px (8 x 14.4 = 115) plus the button's padding.
-        const gint key_w = 128;
-        for (GtkWidget* k : row_keys) gtk_widget_set_size_request(k, key_w, KEY_H);
-        const int span_l = KEY_W, span_r = single ? col1W + leftGap + COL2_W - 21 : 594;   // 130 .. the -10 key's right edge, measured on the sandbox screenshot
-        const int gap = (span_r - span_l - 3 * key_w) / 3;
-        const int row_y = 3 * (KEY_H + ROW_GAP);              // 318: the prev row
-        const int frz_x = span_l + gap;
-        const int rev_x = frz_x + key_w + gap;
-        const int ab_x = span_r - key_w;
+        // next, prev, freeze, reverse: four 130 px keys along the bottom row, 31 px apart
+        // (4 x 130 + 3 x 31 = 613, level with the right edge of column 2). In the
+        // single-display layout the left block is 570 wide, so the gaps close up to 16.
+        const int span_w = single ? col1W + leftGap + COL2_W : COL1_W + COL_GAP + COL2_W;   // 570 / 615
+        const int gap = single ? (span_w - 4 * KEY_W) / 3 : 30;   // reverse is drawn ~4 px wider than KEY_W: 30 (not 31) plus a 131 request ends it level with -10 above, unclipped
+        const int row_y = 3 * (KEY_H + ROW_GAP);              // 318: the fourth row
+        GtkWidget* bottom[4] = { data->nextPrevBtn, data->prevBtn, h->freezeBtn, h->reverseBtn };
+        if (!single) gtk_widget_set_size_request(h->reverseBtn, KEY_W + 1, KEY_H);
         GtkWidget* fixed = gtk_fixed_new();
-        gtk_fixed_put(GTK_FIXED(fixed), h->freezeBtn, frz_x, row_y);
-        gtk_fixed_put(GTK_FIXED(fixed), h->reverseBtn, rev_x, row_y);
-        gtk_fixed_put(GTK_FIXED(fixed), data->adjZeroBtn, ab_x, row_y);
+        for (int i = 0; i < 4; i++) gtk_fixed_put(GTK_FIXED(fixed), bottom[i], i * (KEY_W + gap), row_y);
         gtk_widget_set_halign(fixed, GTK_ALIGN_START);
         gtk_widget_set_valign(fixed, GTK_ALIGN_START);
         gtk_overlay_add_overlay(GTK_OVERLAY(leftOverlay), fixed);
         gtk_overlay_set_overlay_pass_through(GTK_OVERLAY(leftOverlay), fixed, TRUE);
     }
+
+    // A-B, B-C zero: runs the existing driver-zero code. On the greek page it sits right of
+    // reverse, in the Trip history column (packed below); shown only when Measure type is AB,BC.
+    data->adjZeroBtn = makeKey("A-B, B-C\nzero", KEY_W, KEY_H, G_CALLBACK(on_adj_driver_zero), data);
+    addClass(data->adjZeroBtn, "key-18");
+    gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(data->adjZeroBtn))), GTK_JUSTIFY_CENTER);
+    gtk_widget_set_no_show_all(data->adjZeroBtn, TRUE);
+    g_object_ref_sink(data->adjZeroBtn);   // single-display: never placed, but the widget must exist
 
     if (single) {
         // ── middle: rally clock and stage selector over the driver gauge ──
@@ -587,25 +580,14 @@ GtkWidget* createHomeScreen(AppData* data) {
         gtk_box_pack_end(GTK_BOX(top), minus, FALSE, FALSE, 0);
         gtk_box_pack_start(GTK_BOX(mid), top, FALSE, FALSE, 0);
 
-        // The picker: five keys in a popover on the stage number.
-        h->popover = gtk_popover_new(h->stageNoBtn);
-        GtkWidget* pbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-        gtk_container_set_border_width(GTK_CONTAINER(pbox), 8);
-        for (int i = 0; i < 5; i++) {
-            GtkWidget* b = makeKey(std::to_string(i + 1).c_str(), 56, 56, G_CALLBACK(onPick), data);
-            g_object_set_data(G_OBJECT(b), "slot", GINT_TO_POINTER(i + 1));
-            h->pickerBtns[i] = b;
-            gtk_box_pack_start(GTK_BOX(pbox), b, FALSE, FALSE, 0);
-        }
-        gtk_container_add(GTK_CONTAINER(h->popover), pbox);
-        gtk_widget_show_all(pbox);
-
         GtkWidget* gauge = createEmbeddedGauge(data);
         gtk_widget_set_size_request(gauge, 544, -1);
         gtk_box_pack_start(GTK_BOX(mid), gauge, TRUE, TRUE, 0);
     } else {
-    // ── columns 3 and 4 live in a stack so the picker can cover both ──
+    // ── columns 3 and 4 live in a stack so the italian page can cover both ──
     h->stack = gtk_stack_new();
+    // Each page is sized to the 442 px these two columns share.
+    gtk_stack_set_hhomogeneous(GTK_STACK(h->stack), FALSE);
     gtk_box_pack_start(GTK_BOX(screen), h->stack, FALSE, FALSE, 0);
 
     GtkWidget* mainPage = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, COL_GAP);
@@ -620,46 +602,48 @@ GtkWidget* createHomeScreen(AppData* data) {
     gtk_widget_set_size_request(GTK_WIDGET(data->copilotRallyClockLabel), HIST_W, CLOCK_H);
     addClass(GTK_WIDGET(data->copilotRallyClockLabel), "home-clock");
     gtk_box_pack_start(GTK_BOX(c3), GTK_WIDGET(data->copilotRallyClockLabel), FALSE, FALSE, 0);
-    h->historyArea = makeArea(data, HISTORY, 0, HIST_W, HIST_H);
+    // Four readings (24 px heading + 4 x 46); the bottom of the column holds the A-B, B-C zero key.
+    h->historyArea = makeArea(data, HISTORY, 0, HIST_W, 24 + 46 * static_cast<int>(HOME_HISTORY_ENTRIES));
     gtk_box_pack_start(GTK_BOX(c3), h->historyArea, FALSE, FALSE, 0);
+    gtk_widget_set_halign(data->adjZeroBtn, GTK_ALIGN_START);
+    gtk_widget_set_valign(data->adjZeroBtn, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(c3), data->adjZeroBtn, FALSE, FALSE, 0);
 
     // column 4: stage - n +, then auto / segment table / Stage arrival
     GtkWidget* c4 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_set_size_request(c4, STAGE_W, -1);
     gtk_box_pack_start(GTK_BOX(mainPage), c4, FALSE, FALSE, 0);
-    // - 1 + spread edge to edge: three keys, each drawn about 53 px wide (the button adds padding to its 50-52 px request), the rest split into two gaps.
-    GtkWidget* stageRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (STAGE_W - 159) / 2);
-    gtk_widget_set_size_request(stageRow, STAGE_W, STAGE_ROW_H);
-    GtkWidget* minus = makeKey("-", 52, 52, G_CALLBACK(onStageMinus), data);
-    h->stageNoBtn = makeKey("-", 50, 50, G_CALLBACK(onStageNumber), data);
-    GtkWidget* plus = makeKey("+", 52, 52, G_CALLBACK(onStagePlus), data);
-    gtk_box_pack_start(GTK_BOX(stageRow), minus, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(stageRow), h->stageNoBtn, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(stageRow), plus, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(c4), stageRow, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(c4), makeStageRow(data, &h->stageNoBtn), FALSE, FALSE, 0);
     h->stageArea = makeArea(data, STAGE, 0, STAGE_W, STAGE_AREA_H);
     gtk_box_pack_start(GTK_BOX(c4), h->stageArea, FALSE, FALSE, 0);
 
-    // picker page: five keys, covering columns 3 and 4 (203 + 39 + 200 = 442)
-    GtkWidget* picker = gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
-    gtk_widget_set_size_request(picker, HIST_W + COL_GAP + STAGE_W, -1);
-    gtk_widget_set_valign(picker, GTK_ALIGN_CENTER);
-    GtkWidget* title = gtk_label_new("Load stage memory");
-    addClass(title, "home-picker-title");
-    gtk_box_pack_start(GTK_BOX(picker), title, FALSE, FALSE, 0);
-    GtkWidget* keys = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-    gtk_widget_set_halign(keys, GTK_ALIGN_CENTER);
-    for (int i = 0; i < 5; i++) {
-        GtkWidget* b = makeKey(std::to_string(i + 1).c_str(), 70, 70, G_CALLBACK(onPick), data);
-        g_object_set_data(G_OBJECT(b), "slot", GINT_TO_POINTER(i + 1));
-        h->pickerBtns[i] = b;
-        gtk_box_pack_start(GTK_BOX(keys), b, FALSE, FALSE, 0);
+    // italian page: the clock and - n + exactly where greek has them (clock centred in
+    // column 3, the stage row in column 4), then the sector card, over columns 3 and 4 (442 wide)
+    {
+        const int pageW = HIST_W + COL_GAP + STAGE_W;
+        GtkWidget* page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+        gtk_widget_set_size_request(page, pageW, -1);
+        GtkWidget* top = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, COL_GAP);
+        gtk_widget_set_size_request(top, pageW, STAGE_ROW_H);
+        h->italianClock = gtk_label_new("");
+        gtk_label_set_xalign(GTK_LABEL(h->italianClock), 0.5f);
+        gtk_label_set_width_chars(GTK_LABEL(h->italianClock), 8);
+        gtk_widget_set_size_request(h->italianClock, HIST_W, CLOCK_H);
+        gtk_widget_set_valign(h->italianClock, GTK_ALIGN_START);
+        addClass(h->italianClock, "home-clock");
+        gtk_box_pack_start(GTK_BOX(top), h->italianClock, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(top), makeStageRow(data, &h->stageNoBtn2), FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(page), top, FALSE, FALSE, 0);
+        // The card itself lies over columns 3 to 5 (its own overlay, below).
+        // Two areas, so neither lies over the "now" or menu keys: the table (below "now") and the strip under it.
+        h->italianCard = createItalianCard(data, pageW + COL_GAP + RC_W, 343 - 96, 1);
+        h->italianFoot = createItalianCard(data, pageW + COL_GAP - 3, 80, 2);   // 3 px short of the menu key: the ahead/behind box sits at its right end
+        g_object_ref_sink(h->italianCard);
+        g_object_ref_sink(h->italianFoot);
+        gtk_widget_set_no_show_all(h->italianCard, TRUE);
+        gtk_widget_set_no_show_all(h->italianFoot, TRUE);
+        gtk_stack_add_named(GTK_STACK(h->stack), page, "italian");
     }
-    gtk_box_pack_start(GTK_BOX(picker), keys, FALSE, FALSE, 0);
-    GtkWidget* cancel = makeKey("cancel", 130, 56, G_CALLBACK(onPickerCancel), data);
-    gtk_widget_set_halign(cancel, GTK_ALIGN_CENTER);
-    gtk_box_pack_start(GTK_BOX(picker), cancel, FALSE, FALSE, 0);
-    gtk_stack_add_named(GTK_STACK(h->stack), picker, "picker");
     gtk_stack_set_visible_child_name(GTK_STACK(h->stack), "main");
     }
 
@@ -669,29 +653,125 @@ GtkWidget* createHomeScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(screen), c5, FALSE, FALSE, 0);
     h->minuteCaption = gtk_label_new("");   // text carrier for the flag key's caption
     g_object_ref_sink(h->minuteCaption);
-    GtkWidget* flagKey = makeIconKey(data, FLAG, G_CALLBACK(onNextMinute), h);
-    h->flagArea = gtk_bin_get_child(GTK_BIN(flagKey));
-    gtk_box_pack_start(GTK_BOX(c5), flagKey, FALSE, FALSE, 0);
-    GtkWidget* goKey = makeIconKey(data, FLAG_WATCH, G_CALLBACK(onLateArrival), h);
+    // Top to bottom: start now, start next minute, auto, menu.
+    GtkWidget* goKey = makeIconKey(data, FLAG_WATCH, G_CALLBACK(onLateArrival), h);   // (italian keeps this one)
     h->goArea = gtk_bin_get_child(GTK_BIN(goKey));
     gtk_box_pack_start(GTK_BOX(c5), goKey, FALSE, FALSE, 0);
+    GtkWidget* flagKey = makeIconKey(data, FLAG, G_CALLBACK(onNextMinute), h);
+    h->flagKey = flagKey;
+    h->flagArea = gtk_bin_get_child(GTK_BIN(flagKey));
+    gtk_box_pack_start(GTK_BOX(c5), flagKey, FALSE, FALSE, 0);
     GtkWidget* schedKey = makeIconKey(data, FLAG_SCHED, G_CALLBACK(onScheduledStart), h);
+    h->schedKey = schedKey;
     h->schedArea = gtk_bin_get_child(GTK_BIN(schedKey));
     gtk_box_pack_start(GTK_BOX(c5), schedKey, FALSE, FALSE, 0);
     GtkWidget* menu = createMenuKey(data);
     gtk_widget_set_size_request(menu, RC_W, KEY_H);
     gtk_box_pack_start(GTK_BOX(c5), menu, FALSE, FALSE, 0);
 
+    if (h->italianCard) {
+        // The sector card lies over the blank part of the key column; "now" and menu stay clear of it.
+        GtkWidget* ov = gtk_overlay_new();
+        gtk_container_add(GTK_CONTAINER(ov), screen);
+        const int x0 = 5 + col1W + leftGap + 90 + COL_GAP;   // where column 3 starts
+        gtk_overlay_add_overlay(GTK_OVERLAY(ov), h->italianCard);
+        gtk_widget_set_halign(h->italianCard, GTK_ALIGN_START);
+        gtk_widget_set_valign(h->italianCard, GTK_ALIGN_START);
+        gtk_widget_set_margin_start(h->italianCard, x0);
+        gtk_widget_set_margin_top(h->italianCard, 76);        // 96 on screen: below the "now" key
+        gtk_overlay_add_overlay(GTK_OVERLAY(ov), h->italianFoot);
+        gtk_widget_set_halign(h->italianFoot, GTK_ALIGN_START);
+        gtk_widget_set_valign(h->italianFoot, GTK_ALIGN_START);
+        gtk_widget_set_margin_start(h->italianFoot, x0);
+        gtk_widget_set_margin_top(h->italianFoot, 313);       // 333 on screen, level with the menu key
+        g_object_unref(h->italianCard);
+        g_object_unref(h->italianFoot);
+        return ov;
+    }
     return screen;
+}
+
+// Italian (RB-NAV-44): the page and the left block follow the rally type. The keys read
+// sector total / trip / navi, the figures read in km to two decimals (the third is
+// navi total, the count a stage start does not zero), the sector card replaces Trip
+// history and the stage panel, and the next-minute and auto keys are blanked.
+static void updateItalianHome(AppData* data) {
+    HomeUi* h = data->home;
+    const bool it = data->state->rally_type == 2;
+    if (h->stack && gtk_stack_get_child_by_name(GTK_STACK(h->stack), "italian")) {
+        const char* shown = gtk_stack_get_visible_child_name(GTK_STACK(h->stack));
+        const char* want = it ? "italian" : "main";
+        if (shown && strcmp(shown, want) != 0) gtk_stack_set_visible_child_name(GTK_STACK(h->stack), want);
+    }
+    if (h->labelMode != data->state->rally_type) {
+        h->labelMode = data->state->rally_type;
+        for (int i = 0; i < 3; i++) {
+            if (!h->leftKeys[i]) continue;
+            gtk_button_set_label(GTK_BUTTON(h->leftKeys[i]), readoutKeyName(data->state->rally_type, i));
+            GtkWidget* lbl = gtk_bin_get_child(GTK_BIN(h->leftKeys[i]));
+            if (GTK_IS_LABEL(lbl)) gtk_label_set_justify(GTK_LABEL(lbl), GTK_JUSTIFY_CENTER);
+            GtkStyleContext* c = gtk_widget_get_style_context(h->leftKeys[i]);
+            if (it && i == 0) gtk_style_context_add_class(c, "key-18"); else gtk_style_context_remove_class(c, "key-18");
+            if (i == 2) { if (it) gtk_style_context_remove_class(c, "key-21"); else gtk_style_context_add_class(c, "key-21"); }
+        }
+        if (data->nextPrevBtn) {
+            gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), readoutKeyName(data->state->rally_type, 3));
+            GtkWidget* lbl = gtk_bin_get_child(GTK_BIN(data->nextPrevBtn));
+            if (GTK_IS_LABEL(lbl)) gtk_label_set_justify(GTK_LABEL(lbl), GTK_JUSTIFY_CENTER);
+            addClass(data->nextPrevBtn, "key-21");
+        }
+        if (data->prevBtn) {
+            gtk_button_set_label(GTK_BUTTON(data->prevBtn), readoutKeyName(data->state->rally_type, 4));
+            GtkWidget* lbl = gtk_bin_get_child(GTK_BIN(data->prevBtn));
+            if (GTK_IS_LABEL(lbl)) gtk_label_set_justify(GTK_LABEL(lbl), GTK_JUSTIFY_CENTER);
+            addClass(data->prevBtn, "key-21");
+        }
+        for (GtkWidget* k : {h->flagKey, h->schedKey}) {
+            if (!k) continue;
+            gtk_widget_set_opacity(k, it ? 0.0 : 1.0);
+            gtk_widget_set_sensitive(k, !it);
+        }
+    }
+    if (!h->italianCard) return;   // single-display has no italian card
+    gtk_widget_set_visible(h->italianCard, it);
+    gtk_widget_set_visible(h->italianFoot, it);
+    if (!it) return;
+
+    gtk_label_set_text(GTK_LABEL(h->italianClock), gtk_label_get_text(data->copilotRallyClockLabel));
+    gtk_button_set_label(GTK_BUTTON(h->stageNoBtn2), h->stageNo.c_str());
+    updateItalianCard(h->italianCard);
+    updateItalianCard(h->italianFoot);
+
+    if (!data->poller) return;
+    // Figures in km, two decimals: sector total (Total), trip, navi total.
+    const RallyState& st = *data->state;
+    const CounterPoll poll = data->poller->getMostRecent();
+    const long sector_m = countsToCentimeters(stageCountsCorrected(data, poll), st.calibration) / 100;
+    const long trip_m = adjustedDistanceMeters(
+        countsToCentimeters(calculateDistanceCounts(st, poll.cntr1, poll.cntr2, st.trip_start_cntr1, st.trip_start_cntr2), st.calibration),
+        st.trip_distance_adjust_cm);
+    const long navi_m = adjustedDistanceMeters(countsToCentimeters(odometerCounts(st, poll.cntr1, poll.cntr2), st.calibration), 0);
+    const std::string figs[3] = { formatDistance(sector_m, true), formatDistance(trip_m, true), formatDistance(navi_m, true) };
+    for (int i = 0; i < 3; i++) {
+        if (h->figure[i] != figs[i]) { h->figure[i] = figs[i]; markDirty(h->figureArea[i]); }
+    }
 }
 
 void updateHomeDisplay(AppData* data) {
     HomeUi* h = data->home;
     if (!h) return;
+    // The stack shows whichever child became visible first when the window opened;
+    // put it on the main page once.
+    if (!h->stackSettled && h->stack && gtk_widget_get_mapped(h->stack)) {
+        gtk_stack_set_visible_child_name(GTK_STACK(h->stack), "main");
+        h->stackSettled = true;
+    }
 
-    // Freeze holds the Total / Trip / next readouts and the Trip history
-    // (below). The clock, the flag caption and the stage panel keep running.
+    // Freeze stops the distance count itself (freeze.h); nothing here holds figures.
     const int64_t now_ms = getRallyTime_ms(*data->state);
+
+    // A-B, B-C zero: greek page with Measure type AB,BC only.
+    if (data->adjZeroBtn) gtk_widget_set_visible(data->adjZeroBtn, showAdjZeroKey(*data->state, data->singleDisplayMode));
 
     // hh:mm under the next-minute flag
     std::string cap = nextMinuteCaption(data);
@@ -830,7 +910,14 @@ void updateHomeDisplay(AppData* data) {
         if (changed) markDirty(h->stageArea);
     }
 
-    if (data->homeFrozen) return;
+    // Freeze needs nothing here: it stops the distance count itself (freeze.h),
+    // so the figures hold while the timers run. Keep the key lit to match,
+    // also after a restart that came back frozen.
+    {
+        static int lit = -1;
+        const int want = data->state->freeze_on ? 1 : 0;
+        if (lit != want && h->freezeBtn) { lit = want; setLit(h->freezeBtn, want); updateWhoop(data); }
+    }
 
     // Drawn mirrors of the TwinMaster readouts that updateCopilotDisplay just wrote.
     auto mirror = [&](std::string& dst, const char* src, GtkWidget* area) {
@@ -845,31 +932,39 @@ void updateHomeDisplay(AppData* data) {
     mirror(h->elapsed[0], gtk_label_get_text(data->totalTimeLabel), h->elapsedArea[0]);
     mirror(h->elapsed[1], gtk_label_get_text(data->tripTimeLabel), h->elapsedArea[1]);
 
-    // "50<>60 kph": this segment's speed and the next one's.
+    // mm:ss to the next speed change, driving at the segments' speeds.
     std::string line;
     const RallyState& st = *data->state;
-    if (st.segment_current_number >= 0 &&
-        st.segment_current_number + 1 < static_cast<long>(st.stage_segments.size())) {
-        line = speedChangeLine(st.stage_segments[st.segment_current_number].target_speed_kph,
-                               st.stage_segments[st.segment_current_number + 1].target_speed_kph,
-                               true, st.units);
+    if (st.rally_type != 2 && st.segment_current_number >= 0 &&
+        st.segment_current_number < static_cast<long>(st.stage_segments.size()) && data->poller) {
+        const Segment& cur_seg = st.stage_segments[st.segment_current_number];
+        const CounterPoll poll = data->poller->getMostRecent();
+        const int64_t remaining_counts = static_cast<int64_t>(cur_seg.distance_counts) - segmentCountsCorrected(data, poll);
+        const double remaining_m = countsToCentimeters(remaining_counts, st.calibration) / 100.0;
+        bool ok = false;
+        const double secs = nextChangeSeconds(st.stage_segments, st.segment_current_number, remaining_m, &ok);
+        if (ok) line = formatClockMmSs(secs);
     }
     mirror(h->speedLine, line.c_str(), h->elapsedArea[2]);
 
-    std::vector<long> hist = parseTripHistory(st.trip_history_m);
+    std::vector<long> hist = homeTripHistory(st);
     bool hchanged = false;
-    for (int i = 0; i < 6; i++) {
-        std::string v = (i < static_cast<int>(hist.size())) ? formatDistanceGrouped(hist[i]) : "";
+    for (size_t i = 0; i < HOME_HISTORY_ENTRIES; i++) {
+        std::string v = (i < hist.size()) ? formatDistanceGrouped(hist[i]) : "";
         if (v != h->history[i]) { h->history[i] = v; hchanged = true; }
     }
     if (hchanged) markDirty(h->historyArea);
+
+    updateItalianHome(data);   // after the greek mirrors, so italian's km figures win
 }
 
 // Freeze is one state for the box and every phone: either end toggles it and
 // the other follows.
 void toggleHomeFreeze(AppData* data) {
-    data->homeFrozen = !data->homeFrozen;
-    if (data->home) setLit(data->home->freezeBtn, data->homeFrozen);
+    if (!data->poller) return;
+    applyFreeze(*data->state, *data->poller, !data->state->freeze_on);
+    ConfigFile::save(*data->state);
+    if (data->home) setLit(data->home->freezeBtn, data->state->freeze_on);
     updateWhoop(data);
     notifyWebStateNow(data);
 }

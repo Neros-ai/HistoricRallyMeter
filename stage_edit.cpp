@@ -3,6 +3,7 @@
 #include "calculations.h"
 #include "config_file.h"
 #include "rally_state.h"
+#include "sector.h"
 #include "stage_rows.h"
 
 int stageEditSlot(AppData* d) {
@@ -32,6 +33,8 @@ static RallyState::MemorySlot& slotOf(AppData* d) {
 void stageEditCommit(AppData* d) {
     RallyState& s = *d->state;
     RallyState::MemorySlot& slot = slotOf(d);
+    // Italian: the row rules (every row waits for next, speeds worked out from the card).
+    if (s.rally_type == 2 && stageIsSector(s.segments)) applySectorRules(s.segments, slot.sector_duration_s);
     recomputeSegmentCounts(s.segments, s.calibration);
     s.beep_waypoints_m = deriveWaypoints(s.segments);
     slot.segments = s.segments;
@@ -57,22 +60,26 @@ void stageEditSelect(AppData* d, int slot_1) {
     notifyWebStateNow(d);
 }
 
-int stageEditAddDistances(AppData* d, const std::string& text, std::string* rest) {
+int stageEditAddDistances(AppData* d, const std::string& text, std::string* rest, std::string* notice) {
     STAGE_EDIT_GUARD(d, 0);
     RallyState::MemorySlot& slot = slotOf(d);
     // An empty table has no frame to keep (rows deleted one by one can leave
     // it at their old end): distances are measured from 0 again. The stage's
     // start time and distance at start are separate and stay.
     if (d->state->segments.empty()) slot.first_from_m = 0.0;
-    double end = slot.first_from_m;
-    for (const Segment& sg : d->state->segments) end += sg.distance_m;
-    DistanceParse pr = parseStageDistances(text, end);
+    DistanceParse pr = parseStageDistances(text, d->state->distance_km);
+    const size_t before = d->state->segments.size();
+    std::string note;
     if (!pr.accepted.empty()) {
-        appendStageDistances(d->state->segments, slot.first_from_m, pr.accepted);
+        note = d->state->rally_type == 2
+            ? insertSectorDistances(d->state->segments, slot.first_from_m, pr.accepted)
+            : insertStageDistances(d->state->segments, slot.first_from_m, pr.accepted);
         stageEditCommit(d);
     }
+    if (notice) *notice = note;
     if (rest) *rest = pr.rest;
-    return static_cast<int>(pr.accepted.size());
+    // Rows made = distances that were placed (a split adds a row too).
+    return static_cast<int>(d->state->segments.size() - before);
 }
 
 void stageEditSetSpeed(AppData* d, size_t row, double kph) {
@@ -104,6 +111,15 @@ bool stageEditSetRowTo(AppData* d, size_t row, double new_to_m) {
 void stageEditDeleteRow(AppData* d, size_t row) {
     STAGE_EDIT_GUARD(d, );
     deleteRow(d->state->segments, slotOf(d).first_from_m, row);
+    stageEditCommit(d);
+}
+
+void stageEditSetBox(AppData* d, size_t row, long box) {
+    STAGE_EDIT_GUARD(d, );
+    if (box < 0) return;
+    if (row == 0) slotOf(d).first_number = box;
+    else if (row < d->state->segments.size()) d->state->segments[row].box = box;
+    else return;
     stageEditCommit(d);
 }
 

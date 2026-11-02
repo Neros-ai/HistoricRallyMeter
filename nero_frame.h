@@ -10,7 +10,7 @@
 namespace nero {
 
 // The release name shown on Settings, the Setup page and the phone's Set tab.
-constexpr const char* VERSION = "Nero2.01";
+constexpr const char* VERSION = "Nero2.1";
 
 // Usable area of the fixed 1280x400 co-pilot panel (1px border, 5px padding).
 constexpr int PANEL_W = 1268;

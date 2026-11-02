@@ -62,10 +62,15 @@ bool CounterPoller::poll(ICounter* cntr1, ICounter* cntr2, uint8_t reg) {
         // Virtual (distance) count: follows the raw advance, added going
         // forward and subtracted while reverse is engaged.
         if (!virt_init) {
-            virt1 = static_cast<int64_t>(val1) - pending_shift1;
-            virt2 = static_cast<int64_t>(val2) - pending_shift2;
+            if (held_init) {          // restarted while frozen: stay on the held figure
+                virt1 = held_v1;
+                virt2 = held_v2;
+            } else {
+                virt1 = static_cast<int64_t>(val1) - pending_shift1;
+                virt2 = static_cast<int64_t>(val2) - pending_shift2;
+            }
             virt_init = true;
-        } else {
+        } else if (!hold_on) {        // frozen: travel is not counted
             int64_t d1 = static_cast<int64_t>(val1) - static_cast<int64_t>(prev_raw1);
             int64_t d2 = static_cast<int64_t>(val2) - static_cast<int64_t>(prev_raw2);
             virt1 += reverse_on ? -d1 : d1;

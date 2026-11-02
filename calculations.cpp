@@ -50,6 +50,10 @@ void restartDistancesAfterPowerLoss(RallyState& state, uint64_t cntr1, uint64_t 
     // counts that no longer exist.
     state.reverse_shift1 = 0;
     state.reverse_shift2 = 0;
+    // Freeze held a count on the old chips' scale: it ends with them.
+    state.freeze_on = false;
+    state.freeze_virt1 = 0;
+    state.freeze_virt2 = 0;
 }
 
 bool handleCounterPowerLoss(ICounter& counter1, ICounter& counter2, uint8_t register_addr,

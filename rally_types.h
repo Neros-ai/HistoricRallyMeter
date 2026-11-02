@@ -12,6 +12,7 @@
 #include "simple_tone.h"
 #include "arrow_tone.h"
 #include "tone_cadence.h"
+#include "driver_trial.h"
 
 // Forward declarations
 class ICounter;
@@ -34,6 +35,14 @@ struct Segment {
     // Nero2.0: false on a leg that carries the speed above it (the table shows
     // a ditto mark); true where the speed changes. Row 1 always counts as a change.
     bool changesSpeed = true;
+    // Roadbook box number typed for this row; -1 = the row above's + 1 (row 1
+    // takes the memory's first_number). Shown on the Segments page, never used
+    // in a calculation.
+    long box = -1;
+    // Italian rally type (RB-NAV-44). SEG_LEG is every greek row; the others make a stage a sector.
+    int type = 0;                 // SegmentType (sector.h)
+    int ref = 0;                  // the time card's number (pc16, pm1, ct6, co2); a label only
+    double pc_duration_s = 0.0;   // pc rows: the card's time, typed in whole seconds
 };
 
 // Counter polling data with 10-second rolling average
@@ -82,6 +91,24 @@ struct AppData {
     double smoothedSpeed = -1.0;      // EMA-filtered current speed for display
     double segmentProgress = 0.0;     // fraction (0..1) of the current segment driven
     bool inSegment = false;           // true while within the current segment's distance
+    // RB-DRV-18: inside an italian pc / pm the compact gauge draws this layout instead.
+    DriverTrialView driverTrial;
+    std::string driverTrialTargetText;   // km/h, 2 dp
+    std::string driverTrialSpeedText;    // km/h, 2 dp
+    // RB-DRV-19: which compact page the driver gauge draws (one set of sizes and positions).
+    static constexpr int DP_CLASSIC = 0, DP_ITALIAN_TRIAL = 1, DP_ITALIAN_NAVI = 2,
+                         DP_GREEK_STAGE = 3, DP_GREEK_IDLE = 4;
+    int driverPage = DP_GREEK_IDLE;
+    double driverTotalM = 0.0, driverTripM = 0.0;   // distances with their corrections, metres
+    int driverArrivalKph = -1;      // speed to reach the next stage with a minute spare (kph), -1 = none
+    long driverStageNo = 0;         // the loaded stage, 1-99
+    // Greek stage page: the average speed over the substage being driven (since it began), the
+    // figure that matches the time error -- not the trip average. kph, valid once 0.5 s and > 0 m in.
+    double driverSubAvgKph = 0.0;
+    bool driverSubAvgValid = false;
+    double driverRowS = 0.0;        // italian navi row: its duration at its target speed
+    bool driverMinutesValid = false;
+    long driverMinutes = 0;         // italian navi: minutes ahead (+) / behind (-)
 
     // Runtime latch for the alternative time-error-only tone
     // (simple_tone.h). Deliberately not persisted -- restarting the app
@@ -129,7 +156,6 @@ struct AppData {
     HomeUi* home = nullptr;           // Nero2.0 Home page; null in single-display mode
     // Freeze (Home): the co-pilot readouts hold their figures. The driver
     // display and the phone never see it.
-    bool homeFrozen = false;
     // The autostart moment (seconds since 2020) that has just started the stage
     // that is running, kept so Home goes on showing "auto hh:mm:ss" -- the time
     // the stage actually began -- instead of reverting to "manual" and the
@@ -175,6 +201,7 @@ struct AppData {
     int64_t alarmSoundStartTime = 0;    // when doorbell started (0 = not ringing)
 
     GtkLabel* webUrlLabel = nullptr;
+    GtkWidget* setupForceBtn[2] = {nullptr, nullptr};   // Setup page: Force single display off / on
     GtkWidget* webQrArea = nullptr;
     RallyWebServer* webServer = nullptr;
     
@@ -213,6 +240,10 @@ struct AppData {
     // unpolled counter yields a negative travelled distance, a cursor of 0,
     // and a replay of every waypoint already behind the car.
     bool beepCursorsStale = true;
+    // pc countdown beeps (italian): the pc being counted (its tube press time) and
+    // the last seconds-to-line reading, so each mark is heard once as it is crossed.
+    int64_t pcBeepTrialMs = -1;
+    double pcBeepPrevS = 0.0;
     // Debounce for waypoint-list edits: the buffer's "changed" signal fires
     // per keystroke, and committing on each one both saved the whole config
     // to the SD card per character and could beep on a half-typed number.

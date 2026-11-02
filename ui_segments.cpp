@@ -1,10 +1,14 @@
+#include <algorithm>
 #include "ui_segments.h"
+#include "stage_store.h"
 #include "callbacks.h"
 #include "calculations.h"
 #include "config_file.h"
 #include "nero_frame.h"
 #include "rally_state.h"
 #include "stage_edit.h"
+#include "sector.h"
+#include "sector_edit.h"
 #include "stage_rows.h"
 #include <cmath>
 #include <cstdio>
@@ -21,22 +25,26 @@ namespace {
 // number entry (3 digits) and the scroll bar both fit inside the 756 px list.
 // from m, to m and dist m are wide enough for "99,999" in an entry (92 / 92 / 84);
 // the 3-digit # column gave up a little to pay for it.
-constexpr int COLS[11] = {56, 92, 92, 84, 40, 60, 40, 44, 56, 56, 44};
-constexpr int COL_GAP = 8;
+// RB-SEG-17, the approved shared layout (segments-shared.html): box, chg, auto, from, to,
+// dist, KPH, dur, elapsed, del = 737 + 9 gaps x 5 = 782, plus the frame's 14 = 796.
+constexpr int COLS[10] = {52, 64, 40, 96, 93, 88, 76, 103, 103, 36};
+constexpr int COL_GAP = 5;
 // The stage column is 200 px (was 240); the 40 px it gave up widen the table.
-constexpr int LEFT_W = 1012, NEWPT_H = nero::MENU_KEY_H;
+constexpr int LEFT_W = 980, NEWPT_H = nero::MENU_KEY_H;
 // The left side is as deep as keypad + menu, so the add row sits on the menu line.
 constexpr int TOP_H = nero::KEYPAD_H + nero::KEYPAD_MENU_GAP + nero::MENU_KEY_H - 10 - NEWPT_H;   // 308
 
 struct RowW {
-    GtkWidget* num = nullptr;     // entry on row 1, label below
-    GtkWidget* from = nullptr;    // same
+    GtkWidget* num = nullptr;     // box: an entry on every row
+    GtkWidget* from = nullptr;    // entry on row 1, label below
     GtkWidget* to = nullptr;
     GtkWidget* dist = nullptr;
     GtkWidget* kph = nullptr;     // entry where chg, label (") otherwise
-    GtkWidget* ms = nullptr;
-    GtkWidget* time = nullptr;
-    GtkWidget* total = nullptr;
+    GtkWidget* time = nullptr;    // dur
+    GtkWidget* total = nullptr;   // elapsed
+    GtkWidget* grid = nullptr;    // the row, for the current-row outline
+    GtkWidget* tag = nullptr;     // italian: the type tag (tap to step)
+    GtkWidget* ref = nullptr;     // italian: the time card number
 };
 
 }  // namespace
@@ -45,7 +53,6 @@ struct SegUi {
     GtkWidget* list = nullptr;
     GtkLabel* clock = nullptr;
     GtkWidget* selBtn = nullptr;
-    GtkWidget* popover = nullptr;
     GtkWidget* timeEntry = nullptr;
     GtkWidget* distEntry = nullptr;
     GtkWidget* autoCheck = nullptr;
@@ -53,7 +60,89 @@ struct SegUi {
     std::vector<RowW> rows;
     guint rebuildIdle = 0;
     guint autoCommitTimer = 0;   // saves the entry being typed in after a pause
+    GtkWidget* scrolled = nullptr;
+    GtkWidget* fromToHead = nullptr;   // "from -m- to" / "from -km- to"
+    int curRow = -1;             // row outlined as the one being driven
+    GtkWidget* headLbl[10] = {};     // column headings (greek and italian words differ)
+    GtkWidget* distCaption = nullptr;   // greek: "Distance at start" caption and entry
+    GtkWidget* autoRow = nullptr;       // greek: the Autostart tick row
+    GtkWidget* durCaption = nullptr;    // italian: "Duration" caption, entry and the faint average
+    GtkWidget* durEntry = nullptr;
+    GtkWidget* avgLabel = nullptr;
+    int builtType = -1;              // the rally type the rows were built for
+    GtkWidget* modeBadge = nullptr;  // the rally mode's flag with "mode" on it
+    int badgeType = -1;              // the rally type the badge was drawn for
 };
+
+// The mode badge (owner, 2026-10-31): a 96 x 24 key-shaped tile, not pressable,
+// whose face is the flag of the rally mode (greek: Greece, surrey: the Union Jack,
+// italian: Italy) with "mode" in white, outlined in black, across it.
+static gboolean drawModeBadge(GtkWidget* w, cairo_t* cr, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    const double W = gtk_widget_get_allocated_width(w), H = gtk_widget_get_allocated_height(w);
+    auto rect = [cr](double x, double y, double rw, double rh, double r, double g, double b) {
+        cairo_set_source_rgb(cr, r, g, b);
+        cairo_rectangle(cr, x, y, rw, rh);
+        cairo_fill(cr);
+    };
+    cairo_save(cr);
+    switch (data->state->rally_type) {
+    case 2:   // Italy: green, white, red
+        rect(0, 0, W / 3, H, 0x00 / 255.0, 0x92 / 255.0, 0x46 / 255.0);
+        rect(W / 3, 0, W / 3, H, 1, 1, 1);
+        rect(2 * W / 3, 0, W - 2 * W / 3, H, 0xce / 255.0, 0x2b / 255.0, 0x37 / 255.0);
+        break;
+    case 1: {   // Union Jack, drawn on a 60 x 30 grid
+        cairo_scale(cr, W / 60.0, H / 30.0);
+        rect(0, 0, 60, 30, 0x01 / 255.0, 0x21 / 255.0, 0x69 / 255.0);
+        cairo_move_to(cr, 0, 0); cairo_line_to(cr, 60, 30);
+        cairo_move_to(cr, 60, 0); cairo_line_to(cr, 0, 30);
+        cairo_set_source_rgb(cr, 1, 1, 1); cairo_set_line_width(cr, 6); cairo_stroke(cr);
+        cairo_move_to(cr, 0, 0); cairo_line_to(cr, 60, 30);
+        cairo_move_to(cr, 60, 0); cairo_line_to(cr, 0, 30);
+        cairo_set_source_rgb(cr, 0xc8 / 255.0, 0x10 / 255.0, 0x2e / 255.0); cairo_set_line_width(cr, 2); cairo_stroke(cr);
+        rect(25, 0, 10, 30, 1, 1, 1);
+        rect(0, 10, 60, 10, 1, 1, 1);
+        rect(27, 0, 6, 30, 0xc8 / 255.0, 0x10 / 255.0, 0x2e / 255.0);
+        rect(0, 12, 60, 6, 0xc8 / 255.0, 0x10 / 255.0, 0x2e / 255.0);
+        break;
+    }
+    default: {   // Greece: nine blue and white stripes, white cross on blue in the corner
+        const double blue[3] = {0x0d / 255.0, 0x5e / 255.0, 0xaf / 255.0};
+        const double sh = H / 9.0;
+        for (int i = 0; i < 9; i++) {
+            const bool white = i % 2 == 1;
+            rect(0, i * sh, W, sh + 0.5, white ? 1 : blue[0], white ? 1 : blue[1], white ? 1 : blue[2]);
+        }
+        const double c = 5 * sh;
+        rect(0, 0, c, c, blue[0], blue[1], blue[2]);
+        rect(2 * sh, 0, sh, c, 1, 1, 1);
+        rect(0, 2 * sh, c, sh, 1, 1, 1);
+        break;
+    }
+    }
+    cairo_restore(cr);
+
+    // the key's edge
+    cairo_set_source_rgb(cr, 0xbb / 255.0, 0xbb / 255.0, 0xbb / 255.0);
+    cairo_set_line_width(cr, 1);
+    cairo_rectangle(cr, 0.5, 0.5, W - 1, H - 1);
+    cairo_stroke(cr);
+
+    // "mode": black outline, white face
+    cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 18);
+    cairo_text_extents_t ext;
+    cairo_text_extents(cr, "mode", &ext);
+    cairo_move_to(cr, (W - ext.width) / 2 - ext.x_bearing, (H - ext.height) / 2 - ext.y_bearing);
+    cairo_text_path(cr, "mode");
+    cairo_set_source_rgb(cr, 0, 0, 0);
+    cairo_set_line_width(cr, 3);
+    cairo_stroke_preserve(cr);
+    cairo_set_source_rgb(cr, 1, 1, 1);
+    cairo_fill(cr);
+    return FALSE;
+}
 
 namespace {
 
@@ -66,9 +155,20 @@ void addClass(GtkWidget* w, const char* c) {
 int editSlot(AppData* d) { return stageEditSlot(d); }
 RallyState::MemorySlot& slotOf(AppData* d) { return d->state->memory_slots[editSlot(d) - 1]; }
 
-std::string metres(double m) { return formatDistanceGrouped(static_cast<long>(std::lround(m))); }
+void markCurrentRow(AppData* d, bool scroll);
 
 void commitStage(AppData* d) { stageEditCommit(d); }
+
+// Column headings follow the rally type: greek box | chg | auto, italian row | type | ref.
+void applyHeadings(AppData* d) {
+    SegUi* u = ui(d);
+    const bool it = d->state->rally_type == 2;
+    gtk_label_set_text(GTK_LABEL(u->headLbl[0]), it ? "sub" : "box");
+    gtk_label_set_text(GTK_LABEL(u->headLbl[1]), it ? "type" : "chg");
+    gtk_label_set_text(GTK_LABEL(u->headLbl[2]), it ? "ref" : "auto");
+    gtk_label_set_xalign(GTK_LABEL(u->headLbl[2]), it ? 1.0f : 0.5f);
+    gtk_label_set_text(GTK_LABEL(u->fromToHead), d->state->distance_km ? "from -km- to" : "from -m- to");
+}
 
 // Text and numbers of every row, in place (no widget is created or destroyed,
 // so an entry that is being typed into is never pulled from under the finger).
@@ -79,24 +179,39 @@ void updateRowText(AppData* d) {
     for (size_t i = 0; i < rows.size() && i < u->rows.size(); i++) {
         RowW& w = u->rows[i];
         const StageRow& r = rows[i];
-        auto setText = [](GtkWidget* wd, const std::string& t) {
+        auto setText = [d](GtkWidget* wd, const std::string& t) {
             if (!wd) return;
             if (GTK_IS_ENTRY(wd)) {
-                if (!gtk_widget_has_focus(wd)) gtk_entry_set_text(GTK_ENTRY(wd), t.c_str());
+                // The keypad takes keyboard focus off the entry, so "being typed in" is the active entry, not the focused one.
+                if (!gtk_widget_has_focus(wd) && GTK_ENTRY(wd) != d->activeEntry) gtk_entry_set_text(GTK_ENTRY(wd), t.c_str());
             } else {
                 gtk_label_set_text(GTK_LABEL(wd), t.c_str());
             }
         };
+        const bool km = d->state->distance_km;
+        if (d->state->rally_type == 2) {
+            const Segment& sg = d->state->segments[i];
+            char kb[24];
+            snprintf(kb, sizeof(kb), "%.2f", sg.target_speed_kph);
+            setText(w.num, std::to_string(i + 1));
+            setText(w.ref, (sg.type == SEG_NAVI || sg.type == SEG_LEG) ? "" : std::to_string(sg.ref));
+            setText(w.from, formatDistance(r.from_m, km));
+            setText(w.to, formatDistance(r.to_m, km));
+            setText(w.dist, formatDistance(r.dist_m, km));
+            setText(w.kph, sg.target_speed_kph > 0 ? kb : "");
+            setText(w.time, sg.type == SEG_PC ? formatMmSs(sg.pc_duration_s) : formatHMmSs(r.time_s));
+            setText(w.total, formatHMmSs(r.total_s));
+            continue;
+        }
         setText(w.num, std::to_string(r.number));
-        setText(w.from, metres(r.from_m));
-        setText(w.to, metres(r.to_m));
-        setText(w.dist, metres(r.dist_m));
+        setText(w.from, formatDistance(r.from_m, km));
+        setText(w.to, formatDistance(r.to_m, km));
+        setText(w.dist, formatDistance(r.dist_m, km));
         char b[24];
         snprintf(b, sizeof(b), "%g", r.kph);
         if (r.chg) setText(w.kph, r.kph > 0 ? b : "");
-        setText(w.ms, r.chg && r.kph > 0 ? std::to_string(r.ms) : "");
-        setText(w.time, formatMmSs(r.time_s));
-        setText(w.total, formatMmSs(r.total_s));
+        setText(w.time, formatHMmSs(r.time_s));
+        setText(w.total, formatHMmSs(r.total_s));
     }
 }
 
@@ -167,6 +282,15 @@ void onAutoToggled(GtkWidget* w, gpointer p) {
     stageEditSetAuto(d, row, gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w)));
 }
 
+// Tap on an italian row's type tag: step navi -> pc -> ct -> pm -> co.
+void onTypeTag(GtkWidget* w, gpointer p) {
+    AppData* d = static_cast<AppData*>(p);
+    if (editRefused(w, d)) return;
+    segmentsCommitImpl(d);
+    sectorEditStepType(d, static_cast<size_t>(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w), "row"))));
+    scheduleRebuild(d);
+}
+
 void onDelete(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
     if (editRefused(w, d)) return;
@@ -176,10 +300,49 @@ void onDelete(GtkWidget* w, gpointer p) {
     scheduleRebuild(d);
 }
 
+// The row being driven, when the stage on show is the one running; -1 otherwise.
+int drivenRow(AppData* d) {
+    const RallyState& s = *d->state;
+    if (s.stage_complete || s.segment_current_number < 0) return -1;
+    if (s.last_memory_slot != editSlot(d)) return -1;
+    if (s.segment_current_number >= static_cast<long>(s.segments.size())) return -1;
+    return static_cast<int>(s.segment_current_number);
+}
+
+gboolean scrollToCurrentCb(gpointer p) {
+    AppData* d = static_cast<AppData*>(p);
+    SegUi* u = ui(d);
+    if (!u || u->curRow < 0 || u->curRow >= static_cast<int>(u->rows.size())) return G_SOURCE_REMOVE;
+    GtkWidget* row = gtk_widget_get_parent(u->rows[u->curRow].grid);   // the list box row
+    gint x = 0, y = 0;
+    if (row && gtk_widget_translate_coordinates(row, u->list, 0, 0, &x, &y)) {
+        GtkAdjustment* a = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(u->scrolled));
+        gtk_adjustment_set_value(a, y > 66 ? y - 66 : 0);   // two rows of context above
+    }
+    return G_SOURCE_REMOVE;
+}
+
+// Outline the driven row in cyan; `scroll` also brings it into view (on open / rebuild).
+void markCurrentRow(AppData* d, bool scroll) {
+    SegUi* u = ui(d);
+    const int cur = drivenRow(d);
+    if (cur != u->curRow) {
+        for (size_t i = 0; i < u->rows.size(); i++) {
+            GtkStyleContext* c = gtk_widget_get_style_context(u->rows[i].grid);
+            if (static_cast<int>(i) == cur) gtk_style_context_add_class(c, "seg-current");
+            else gtk_style_context_remove_class(c, "seg-current");
+        }
+        u->curRow = cur;
+    }
+    if (scroll && cur >= 0) g_idle_add(scrollToCurrentCb, d);
+}
+
 void rebuildNow(AppData* d) {
     SegUi* u = ui(d);
     // The active entry may be about to be destroyed.
     d->activeEntry = nullptr;
+    applyHeadings(d);
+    u->builtType = d->state->rally_type;
     GList* kids = gtk_container_get_children(GTK_CONTAINER(u->list));
     for (GList* l = kids; l; l = l->next) gtk_widget_destroy(GTK_WIDGET(l->data));
     g_list_free(kids);
@@ -196,9 +359,23 @@ void rebuildNow(AppData* d) {
             gtk_widget_set_size_request(wd, COLS[col], 32);
             gtk_grid_attach(GTK_GRID(grid), wd, col, 0, 1, 1);
         };
+        // A tick box centred in its column (a check button given the column width draws its box at the left edge).
+        auto putCentered = [&](GtkWidget* wd, int col) {
+            GtkWidget* cell = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+            gtk_widget_set_size_request(cell, COLS[col], 32);
+            gtk_widget_set_halign(wd, GTK_ALIGN_CENTER);
+            gtk_widget_set_valign(wd, GTK_ALIGN_CENTER);
+            gtk_box_set_center_widget(GTK_BOX(cell), wd);
+            gtk_grid_attach(GTK_GRID(grid), cell, col, 0, 1, 1);
+        };
         auto makeLabel = [&](int col, bool right, bool dim) {
             GtkWidget* l = gtk_label_new("");
             gtk_label_set_xalign(GTK_LABEL(l), right ? 1.0f : 0.5f);
+            // Fixed width: a long figure may not widen its column in this row only
+            // (the columns after it would no longer line up with the other rows).
+            gtk_label_set_width_chars(GTK_LABEL(l), 1);
+            gtk_label_set_max_width_chars(GTK_LABEL(l), 1);
+            gtk_label_set_ellipsize(GTK_LABEL(l), PANGO_ELLIPSIZE_START);
             if (dim) addClass(l, "seg-dim");
             put(l, col);
             return l;
@@ -221,10 +398,30 @@ void rebuildNow(AppData* d) {
             return e;
         };
 
-        w.num = (i == 0) ? makeEntry(0, "num") : makeLabel(0, true, false);
-        w.from = (i == 0) ? makeEntry(1, "from") : makeLabel(1, true, false);
-        w.to = makeEntry(2, "to");
-        w.dist = makeLabel(3, true, false);
+        w.grid = grid;
+        if (d->state->rally_type == 2) {
+            // Italian row (segments-shared.html): row | type tag | ref | from | to | dist | KPH | dur | elapsed | del.
+            // pc: the card time is typed (dur) and the speed worked out; pm: the speed is typed; the rest are worked out.
+            const Segment& sg = d->state->segments[i];
+            w.num = makeLabel(0, true, false);
+            w.tag = gtk_button_new_with_label(sg.type == SEG_LEG ? "-" : typeLabel(sg.type).c_str());   // "-": a greek row not yet typed, tap to type it
+            gtk_widget_set_halign(w.tag, GTK_ALIGN_CENTER);
+            g_object_set_data(G_OBJECT(w.tag), "row", GINT_TO_POINTER(static_cast<int>(i)));
+            g_signal_connect(w.tag, "clicked", G_CALLBACK(onTypeTag), d);
+            addClass(w.tag, "seg-tag");
+            addClass(w.tag, (std::string("seg-tag-") + typeLabel(sg.type)).c_str());
+            put(w.tag, 1);
+            const bool noRef = sg.type == SEG_NAVI || sg.type == SEG_LEG;
+            w.ref = noRef ? nullptr : makeEntry(2, "ref");
+            if (noRef) makeLabel(2, true, true);   // empty, but it holds the column open so the row lines up
+            w.from = (i == 0) ? makeEntry(3, "from") : makeLabel(3, true, true);   // greyed: the row above's to
+            w.to = makeEntry(4, "to");
+            w.dist = makeLabel(5, true, false);
+            w.kph = (sg.type == SEG_PM) ? makeEntry(6, "kph") : makeLabel(6, true, true);
+            w.time = (sg.type == SEG_PC) ? makeEntry(7, "pcdur") : makeLabel(7, true, true);
+            w.total = makeLabel(8, true, true);
+        } else {
+        w.num = makeEntry(0, "num");
 
         GtkWidget* chg = gtk_check_button_new();
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(chg), rows[i].chg);
@@ -232,15 +429,7 @@ void rebuildNow(AppData* d) {
         g_object_set_data(G_OBJECT(chg), "row", GINT_TO_POINTER(static_cast<int>(i)));
         g_signal_connect(chg, "toggled", G_CALLBACK(onChgToggled), d);
         gtk_widget_set_halign(chg, GTK_ALIGN_CENTER);
-        put(chg, 4);
-
-        if (rows[i].chg) {
-            w.kph = makeEntry(5, "kph");
-        } else {
-            w.kph = makeLabel(5, true, true);
-            gtk_label_set_text(GTK_LABEL(w.kph), "\"");
-        }
-        w.ms = makeLabel(6, true, true);
+        putCentered(chg, 1);
 
         if (i == 0) {
             // Row 1 has no auto (the stage starts there): a greyed box keeps the
@@ -248,7 +437,7 @@ void rebuildNow(AppData* d) {
             GtkWidget* au0 = gtk_check_button_new();
             gtk_widget_set_sensitive(au0, FALSE);
             gtk_widget_set_halign(au0, GTK_ALIGN_CENTER);
-            put(au0, 7);
+            putCentered(au0, 2);
         }
         if (i >= 1) {
             GtkWidget* au = gtk_check_button_new();
@@ -258,23 +447,38 @@ void rebuildNow(AppData* d) {
             g_object_set_data(G_OBJECT(au), "row", GINT_TO_POINTER(static_cast<int>(i)));
             g_signal_connect(au, "toggled", G_CALLBACK(onAutoToggled), d);
             gtk_widget_set_halign(au, GTK_ALIGN_CENTER);
-            put(au, 7);
+            putCentered(au, 2);
         }
-        w.time = makeLabel(8, true, true);
-        w.total = makeLabel(9, true, true);
 
-        GtkWidget* del = gtk_button_new_with_label("del");
+        w.from = (i == 0) ? makeEntry(3, "from") : makeLabel(3, true, false);
+        w.to = makeEntry(4, "to");
+        w.dist = makeLabel(5, true, false);
+        if (rows[i].chg) {
+            w.kph = makeEntry(6, "kph");
+        } else {
+            w.kph = makeLabel(6, true, true);
+            gtk_label_set_text(GTK_LABEL(w.kph), "\"");
+        }
+        w.time = makeLabel(7, true, true);
+        w.total = makeLabel(8, true, true);
+
+        }
+
+        GtkWidget* del = gtk_button_new_with_label("X");
         gtk_widget_set_halign(del, GTK_ALIGN_START);   // keep its own width, never stretched
         g_object_set_data(G_OBJECT(del), "row", GINT_TO_POINTER(static_cast<int>(i)));
         g_signal_connect(del, "clicked", G_CALLBACK(onDelete), d);
+        gtk_widget_set_size_request(del, 30, 28);
         addClass(del, "seg-del");
-        put(del, 10);
+        put(del, 9);
 
         gtk_container_add(GTK_CONTAINER(u->list), grid);
         u->rows.push_back(w);
     }
     gtk_widget_show_all(u->list);
     updateRowText(d);
+    u->curRow = -2;            // force the outline to be drawn for the new rows
+    markCurrentRow(d, true);
 }
 
 // Fill the stage column from the memory on show.
@@ -292,6 +496,24 @@ void loadFields(AppData* d) {
     }
     gtk_entry_set_text(GTK_ENTRY(u->distEntry),
                        slot.start_distance_m > 0 ? (formatDistanceGrouped(slot.start_distance_m) + " m").c_str() : "");
+    // Greek shows the distance at start and the Autostart tick; italian shows the sector duration instead.
+    const bool it = d->state->rally_type == 2;
+    for (GtkWidget* w : {u->distCaption, u->distEntry, u->autoRow}) gtk_widget_set_visible(w, !it);
+    for (GtkWidget* w : {u->durCaption, u->durEntry, u->avgLabel}) gtk_widget_set_visible(w, it);
+    if (it) {
+        if (slot.sector_duration_s > 0)
+            gtk_entry_set_text(GTK_ENTRY(u->durEntry), formatHMmSs(static_cast<double>(slot.sector_duration_s)).c_str());
+        else gtk_entry_set_text(GTK_ENTRY(u->durEntry), "");
+        double m = 0.0;
+        for (const Segment& sg : d->state->segments) m += sg.distance_m;
+        if (slot.sector_duration_s > 0 && m > 0.0) {
+            char ab[32];
+            snprintf(ab, sizeof(ab), "Average %.2f", m / 1000.0 / (slot.sector_duration_s / 3600.0));
+            gtk_label_set_text(GTK_LABEL(u->avgLabel), ab);
+        } else {
+            gtk_label_set_text(GTK_LABEL(u->avgLabel), "");
+        }
+    }
 }
 
 void selectSlot(AppData* d, int slot_1) {
@@ -302,22 +524,25 @@ void selectSlot(AppData* d, int slot_1) {
     rebuildNow(d);
 }
 
+// - / + step to the next programmed stage, skipping gaps (RB-NAV-45); a new
+// stage is started by typing its number in Choose Stage (tap the number).
 void onStageMinus(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
-    if (!editRefused(w, d)) selectSlot(d, editSlot(d) - 1);
+    if (editRefused(w, d)) return;
+    const int to = nextProgrammedStage(*d->state, editSlot(d), -1);
+    if (to != editSlot(d)) selectSlot(d, to);
 }
 void onStagePlus(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
-    if (!editRefused(w, d)) selectSlot(d, editSlot(d) + 1);
+    if (editRefused(w, d)) return;
+    const int to = nextProgrammedStage(*d->state, editSlot(d), +1);
+    if (to != editSlot(d)) selectSlot(d, to);
 }
 void onStageNumber(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
-    if (!editRefused(w, d)) gtk_popover_popup(GTK_POPOVER(ui(d)->popover));
-}
-void onPickSlot(GtkWidget* w, gpointer p) {
-    AppData* d = static_cast<AppData*>(p);
-    gtk_popover_popdown(GTK_POPOVER(ui(d)->popover));
-    selectSlot(d, GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w), "slot")));
+    if (editRefused(w, d)) return;
+    const int n = chooseStageDialog(w, d, editSlot(d));
+    if (n) selectSlot(d, n);   // an empty number opens empty, ready to program
 }
 
 void onAddDistance(GtkWidget* w, gpointer p) {
@@ -327,15 +552,14 @@ void onAddDistance(GtkWidget* w, gpointer p) {
     segmentsCommitImpl(d);
     RallyState::MemorySlot& slot = slotOf(d);
     if (d->state->segments.empty()) slot.first_from_m = 0.0;   // as stageEditAddDistances does
-    double end = slot.first_from_m;
-    for (const Segment& sg : d->state->segments) end += sg.distance_m;
-    std::string rest;
-    const int added = stageEditAddDistances(d, gtk_entry_get_text(GTK_ENTRY(u->addEntry)), &rest);
+    std::string rest, notice;
+    const int added = stageEditAddDistances(d, gtk_entry_get_text(GTK_ENTRY(u->addEntry)), &rest, &notice);
     if (added > 0) rebuildNow(d);
     gtk_entry_set_text(GTK_ENTRY(u->addEntry), rest.c_str());
     if (!rest.empty())
-        flashNotice(u->addEntry, "Each distance must be larger than the one before ("
-                                 + metres(end) + " m so far).");
+        flashNotice(u->addEntry, "Not a distance (it must be more than 0): " + rest);
+    else if (!notice.empty())
+        flashNotice(u->addEntry, notice);
 }
 
 void onClearStage(GtkWidget* w, gpointer p) {
@@ -385,20 +609,30 @@ void segmentsCommitImpl(AppData* d, bool quiet) {
     RallyState::MemorySlot& slot = slotOf(d);
     const size_t row = static_cast<size_t>(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(e), "row")));
 
+    const bool km = d->state->distance_km;
     if (!strcmp(kind, "num")) {
         long n = parseMetres(text);
-        if (n >= 0) stageEditSetFirst(d, n, -1.0);
+        if (n >= 0) stageEditSetBox(d, row, n);
     } else if (!strcmp(kind, "from")) {
-        long m = parseMetres(text);
+        long m = parseDistance(text, km);
         if (m >= 0) stageEditSetFirst(d, -1, static_cast<double>(m));
     } else if (!strcmp(kind, "to")) {
-        long m = parseMetres(text);
+        long m = parseDistance(text, km);
         if (m >= 0 && !stageEditSetRowTo(d, row, static_cast<double>(m)) && !quiet)
             flashNotice(GTK_WIDGET(e), "That end distance must be past this row's start and short of the next row's end.");
     } else if (!strcmp(kind, "kph")) {
         char* stop = nullptr;
         double v = std::strtod(text.c_str(), &stop);
         if (stop && *stop == '\0' && v >= 0.0 && !text.empty()) stageEditSetSpeed(d, row, v);
+    } else if (!strcmp(kind, "ref")) {
+        long n = parseMetres(text);
+        if (n >= 0) sectorEditSetRef(d, row, static_cast<int>(n));
+    } else if (!strcmp(kind, "pcdur")) {
+        long s = parseDurationSeconds(text);
+        if (s > 0) sectorEditSetPcDuration(d, row, static_cast<double>(s));
+    } else if (!strcmp(kind, "sector_dur")) {
+        long s = parseDurationSeconds(text);
+        if (s > 0 || text.empty()) sectorEditSetSectorDuration(d, s > 0 ? s : -1);
     } else if (!strcmp(kind, "start_time")) {
         long t = parseTimeOfDay(text);
         if (t >= 0 || text.empty()) {
@@ -432,6 +666,17 @@ void updateSegmentsDisplay(AppData* data) {
     SegUi* u = ui(data);
     if (!u) return;
     gtk_label_set_text(u->clock, formatTime(getRallyTime_ms(*data->state)).c_str());
+    // The rally type was changed on Settings: rebuild the rows and the stage column for it.
+    if (u->builtType != data->state->rally_type && !data->activeEntry) {
+        loadFields(data);
+        rebuildNow(data);
+    }
+    applyHeadings(data);
+    if (u->badgeType != data->state->rally_type) {
+        u->badgeType = data->state->rally_type;
+        gtk_widget_queue_draw(u->modeBadge);
+    }
+    markCurrentRow(data, false);
     const bool armed = data->state->auto_start_rally_time_s != 0;
     if (armed != static_cast<bool>(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(u->autoCheck)))) {
         g_signal_handlers_block_by_func(u->autoCheck, (gpointer)onAutostartToggled, data);
@@ -454,13 +699,13 @@ GtkWidget* createStageSetupScreen(AppData* data) {
 
     // The stage column is exactly as wide as the rally clock's text at the top of
     // it ("00:00:00" at 40 px); the table takes the rest of the 1012 px.
-    int STAGE_W = 192;
+    int STAGE_W = 150;
     {
         GtkWidget* probe = gtk_label_new("00:00:00");
         addClass(probe, "seg-clock");
         gint nat = 0;
         gtk_widget_get_preferred_width(probe, nullptr, &nat);
-        if (nat > 100) STAGE_W = nat;
+        (void)nat;   // the probe over-reads; the column is set by hand
         g_object_ref_sink(probe);
         g_object_unref(probe);
     }
@@ -477,21 +722,30 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(top), listCol, FALSE, FALSE, 0);
     GtkWidget* head = gtk_grid_new();
     gtk_grid_set_column_spacing(GTK_GRID(head), COL_GAP);
-    gtk_widget_set_margin_start(head, 7);
-    const char* heads[11] = {"#", "from m", "to m", "dist m", "chg", "KPH", "m/s", "auto", "time", "total", ""};
-    for (int c = 0; c < 11; c++) {
+    gtk_widget_set_margin_start(head, 3);
+    // box chg auto | from -m- to (over both slots, centred) | dist KPH dur elapsed
+    const char* heads[10] = {"box", "chg", "auto", "", "", "dist", "KPH", "dur", "elapsed", ""};
+    for (int c = 0; c < 10; c++) {
+        if (c == 3 || c == 4) continue;
         GtkWidget* l = gtk_label_new(heads[c]);
         addClass(l, "seg-head");
-        gtk_label_set_xalign(GTK_LABEL(l), (c == 4 || c == 7) ? 0.5f : 1.0f);
+        gtk_label_set_xalign(GTK_LABEL(l), (c == 1 || c == 2) ? 0.5f : 1.0f);
         gtk_widget_set_size_request(l, COLS[c], -1);
         gtk_grid_attach(GTK_GRID(head), l, c, 0, 1, 1);
+        u->headLbl[c] = l;
     }
+    u->fromToHead = gtk_label_new(data->state->distance_km ? "from -km- to" : "from -m- to");
+    addClass(u->fromToHead, "seg-head");
+    gtk_label_set_xalign(GTK_LABEL(u->fromToHead), 0.5f);
+    gtk_widget_set_size_request(u->fromToHead, COLS[3] + COL_GAP + COLS[4], -1);
+    gtk_grid_attach(GTK_GRID(head), u->fromToHead, 3, 0, 2, 1);
     gtk_box_pack_start(GTK_BOX(listCol), head, FALSE, FALSE, 0);
     GtkWidget* frame = gtk_frame_new(nullptr);
     addClass(frame, "segment-list-frame");
     gtk_box_pack_start(GTK_BOX(listCol), frame, TRUE, TRUE, 0);
     GtkWidget* scrolled = gtk_scrolled_window_new(nullptr, nullptr);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), GTK_POLICY_NEVER, GTK_POLICY_ALWAYS);
+    u->scrolled = scrolled;
     gtk_container_add(GTK_CONTAINER(frame), scrolled);
     u->list = gtk_list_box_new();
     gtk_list_box_set_selection_mode(GTK_LIST_BOX(u->list), GTK_SELECTION_NONE);
@@ -508,35 +762,24 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(col), GTK_WIDGET(u->clock), FALSE, FALSE, 0);
 
     // - 1 + spread edge to edge: three keys, each drawn about 53 px wide (the button adds padding to its 50-52 px request), the rest split into two gaps.
-    GtkWidget* sel = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, (STAGE_W - 159) / 2);
+    GtkWidget* sel = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
     gtk_widget_set_halign(sel, GTK_ALIGN_CENTER);
     gtk_widget_set_margin_top(sel, 8);           // clear of the rally clock above
-    gtk_widget_set_size_request(sel, STAGE_W, 54);
+    gtk_widget_set_size_request(sel, STAGE_W, 46);
     auto key = [&](const char* t, int w, int h, GCallback cb) {
         GtkWidget* b = gtk_button_new_with_label(t);
         gtk_widget_set_size_request(b, w, h);
         addClass(b, "dist-heading");
-        g_signal_connect(b, "clicked", cb, data);
+        if (cb) g_signal_connect(b, "clicked", cb, data);
         return b;
     };
-    gtk_box_pack_start(GTK_BOX(sel), key("-", 52, 52, G_CALLBACK(onStageMinus)), FALSE, FALSE, 0);
-    u->selBtn = key("1", 50, 50, G_CALLBACK(onStageNumber));
+    gtk_box_pack_start(GTK_BOX(sel), key("-", 44, 44, G_CALLBACK(onStageMinus)), FALSE, FALSE, 0);
+    u->selBtn = key("1", 42, 44, G_CALLBACK(onStageNumber));
     gtk_box_pack_start(GTK_BOX(sel), u->selBtn, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(sel), key("+", 52, 52, G_CALLBACK(onStagePlus)), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(sel), key("+", 44, 44, G_CALLBACK(onStagePlus)), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(col), sel, FALSE, FALSE, 0);
 
-    u->popover = gtk_popover_new(u->selBtn);
-    GtkWidget* pbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_container_set_border_width(GTK_CONTAINER(pbox), 8);
-    for (int i = 1; i <= 5; i++) {
-        GtkWidget* b = key(std::to_string(i).c_str(), 56, 56, G_CALLBACK(onPickSlot));
-        g_object_set_data(G_OBJECT(b), "slot", GINT_TO_POINTER(i));
-        gtk_box_pack_start(GTK_BOX(pbox), b, FALSE, FALSE, 0);
-    }
-    gtk_container_add(GTK_CONTAINER(u->popover), pbox);
-    gtk_widget_show_all(pbox);
-
-    GtkWidget* lbl = gtk_label_new("Stage Start time");
+    GtkWidget* lbl = gtk_label_new("Start time");
     addClass(lbl, "seg-head");
     gtk_label_set_xalign(GTK_LABEL(lbl), 0.0f);
     gtk_widget_set_margin_top(lbl, 10);   // clear of the - 1 + row above
@@ -544,12 +787,13 @@ GtkWidget* createStageSetupScreen(AppData* data) {
 
     // An entry right-aligned in the column; `label` (cyan, like the heading) goes on
     // the row above it, or nothing for the time, which the heading already names.
-    auto startRow = [&](const char* label, const char* kind, GtkWidget** entryOut) {
+    auto startRow = [&](const char* label, const char* kind, GtkWidget** entryOut, GtkWidget** labelOut = nullptr) {
         if (label) {
             GtkWidget* l = gtk_label_new(label);
             addClass(l, "seg-head");
             gtk_label_set_xalign(GTK_LABEL(l), 0.0f);
             gtk_box_pack_start(GTK_BOX(col), l, FALSE, FALSE, 0);
+            if (labelOut) *labelOut = l;
         }
         GtkWidget* e = gtk_entry_new();
         gtk_entry_set_alignment(GTK_ENTRY(e), 1.0f);
@@ -568,9 +812,17 @@ GtkWidget* createStageSetupScreen(AppData* data) {
         *entryOut = e;
     };
     startRow(nullptr, "start_time", &u->timeEntry);
-    startRow("Distance at start", "start_dist", &u->distEntry);
+    startRow("Distance at start", "start_dist", &u->distEntry, &u->distCaption);
+    // Italian: the sector's set duration (h:mm:ss) and, faintly, the average speed it implies.
+    startRow("Duration", "sector_dur", &u->durEntry, &u->durCaption);
+    u->avgLabel = gtk_label_new("");
+    addClass(u->avgLabel, "seg-dim");
+    addClass(u->avgLabel, "seg-small");   // 18 px: fits the 150 px stage column
+    gtk_label_set_xalign(GTK_LABEL(u->avgLabel), 1.0f);
+    gtk_box_pack_start(GTK_BOX(col), u->avgLabel, FALSE, FALSE, 0);
 
     GtkWidget* autoRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    u->autoRow = autoRow;
     GtkWidget* al = gtk_label_new("Autostart");
     addClass(al, "seg-head");   // same 18 px cyan as "Distance at start"
     u->autoCheck = gtk_check_button_new();
@@ -579,10 +831,24 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(autoRow), u->autoCheck, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(col), autoRow, FALSE, FALSE, 0);
 
-    // clear stage at the foot of the column, as tall as menu; clear all is under the keypad.
-    GtkWidget* clrStage = key("clear stage", STAGE_W, nero::MENU_KEY_H, G_CALLBACK(onClearStage));
-    addClass(clrStage, "key-small");
-    gtk_box_pack_end(GTK_BOX(col), clrStage, FALSE, FALSE, 0);
+    // clear stage and clear all at the foot of the column, 97 wide each, on two lines, as tall as menu.
+    const int CLR_W = (STAGE_W - 4) / 2;
+    GtkWidget* clrRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, std::max(2, STAGE_W - 2 * CLR_W));
+    GtkWidget* clrStage = key("clear\nstage", CLR_W, nero::MENU_KEY_H, G_CALLBACK(onClearStage));
+    addClass(clrStage, "seg-clr");
+    gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(clrStage))), GTK_JUSTIFY_CENTER);
+    GtkWidget* clrAll = key("clear\nall", CLR_W, nero::MENU_KEY_H, G_CALLBACK(onClearAll));
+    addClass(clrAll, "seg-clr");
+    gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(clrAll))), GTK_JUSTIFY_CENTER);
+    gtk_box_pack_start(GTK_BOX(clrRow), clrStage, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(clrRow), clrAll, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(col), clrRow, FALSE, FALSE, 0);
+    // The mode badge, centred just above clear stage / clear all.
+    u->modeBadge = gtk_drawing_area_new();
+    gtk_widget_set_size_request(u->modeBadge, 96, 24);
+    gtk_widget_set_halign(u->modeBadge, GTK_ALIGN_CENTER);
+    g_signal_connect(u->modeBadge, "draw", G_CALLBACK(drawModeBadge), data);
+    gtk_box_pack_end(GTK_BOX(col), u->modeBadge, FALSE, FALSE, 0);
 
     // new point row: add distance + the ';' list
     GtkWidget* newPt = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 14);
@@ -603,14 +869,15 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(screen), kp, FALSE, FALSE, 0);
     data->numericKeypad = createNeroKeypad(data);
     gtk_box_pack_start(GTK_BOX(kp), data->numericKeypad, FALSE, FALSE, 0);
-    // clear all sits to the left of menu, as tall as it.
-    const int CLR_W = nero::KEYPAD_COL_W - nero::MENU_KEY_W - 8;
-    GtkWidget* clrAll = key("clear\nall", CLR_W, nero::MENU_KEY_H, G_CALLBACK(onClearAll));
-    addClass(clrAll, "key-small");
-    gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(clrAll))), GTK_JUSTIFY_CENTER);
+    // upload stage (no function yet, so greyed) sits to the left of menu, as tall as it.
+    const int UPL_W = nero::KEYPAD_COL_W - nero::MENU_KEY_W - 8;
+    GtkWidget* upload = key("upload\nstage", UPL_W, nero::MENU_KEY_H, nullptr);
+    addClass(upload, "key-small");
+    gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(upload))), GTK_JUSTIFY_CENTER);
+    gtk_widget_set_sensitive(upload, FALSE);
     GtkWidget* menu = createMenuKey(data);
     GtkWidget* menuRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_box_pack_start(GTK_BOX(menuRow), clrAll, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(menuRow), upload, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(menuRow), menu, FALSE, FALSE, 0);
     gtk_widget_set_halign(menuRow, GTK_ALIGN_END);
     gtk_widget_set_valign(menuRow, GTK_ALIGN_END);

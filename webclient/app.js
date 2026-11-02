@@ -141,14 +141,15 @@
     if (units !== previousUnits && lastState) renderStagePanel(lastState);
     if (units !== previousUnits) renderArrival();
 
-    if (!frozen) {
-      $('trip-m').textContent = formatDist(msg.trip_m);
-      $('total-m').textContent = formatDist(msg.total_m);
-      $('total-el').textContent = mmss(msg.total_s);
-      $('trip-el').textContent = mmss(msg.trip_s);
-      $('next-m').textContent = (msg.next_m === null || msg.next_m === undefined) ? '---' : formatDist(msg.next_m);
-      $('speed-change').textContent = msg.speed_change || '';
-    }
+    // Freeze stops the box counting distance, so these figures already hold.
+    $('trip-m').textContent = formatDist(msg.trip_m);
+    $('total-m').textContent = formatDist(msg.total_m);
+    $('next-m').textContent = (msg.next_m === null || msg.next_m === undefined) ? '---' : formatDist(msg.next_m);
+    $('total-el').textContent = mmss(msg.total_s);
+    $('trip-el').textContent = mmss(msg.trip_s);
+    $('speed-change').textContent = msg.speed_change || '';
+    if (msg.next_key) $('btn-next').textContent = msg.next_key;
+    if (msg.prev_key && $('btn-prev')) $('btn-prev').textContent = msg.prev_key;
     // Driver tab footer (HTML under the gauge — keeps dial clear).
     $('drv-trip-m').textContent = formatDist(msg.trip_m);
     $('drv-total-m').textContent = formatDist(msg.total_m);
@@ -450,11 +451,17 @@
     alert('New stage cannot be loaded while stage is running');
     return false;
   };
+  // Stage numbers are the organiser's own, 1-99.
+  ['stage-pick', 'seg-pick'].forEach((id) => {
+    const sel = $(id);
+    sel.innerHTML = '';
+    for (let n = 1; n <= 99; n++) sel.appendChild(new Option(String(n), String(n)));
+  });
   function stageStep(dir) {
     if (!okToChangeStage()) return;
     const cur = Number($('stage-pick').value) || 1;
     const pop = (lastState && lastState.memory_populated) || [];
-    for (let s = cur + dir; s >= 1 && s <= 5; s += dir) {
+    for (let s = cur + dir; s >= 1 && s <= 99; s += dir) {
       if (pop[s - 1]) { send({ type: 'memory_recall', slot: s }); return; }
     }
   }
@@ -484,6 +491,9 @@
   function resetTrip() { send({ type: 'reset_trip' }); }
   $('btn-total').addEventListener('click', resetTotal);
   $('btn-trip').addEventListener('click', resetTrip);
+  // Drv tab: tapping Total or Trip resets it, as on Navi (same questions).
+  $('drv-box-total').addEventListener('click', resetTotal);
+  $('drv-box-trip').addEventListener('click', resetTrip);
 
   const closeStageMenu = () => $('stage-menu').classList.add('hidden');
   $('menu-abort').addEventListener('click', () => {
@@ -513,10 +523,14 @@
     if (lastState) renderSegments(lastState);
   };
   ['focusin', 'click'].forEach((ev) => $('view-seg').addEventListener(ev, segGuard, true));
+  // - / + step to the next programmed stage, skipping gaps (as the box); the
+  // list itself takes any number 1-99, so a new stage can be started on an empty one.
   const segStep = (dir) => {
     const cur = Number($('seg-pick').value) || 1;
-    const n = cur + dir;
-    if (n >= 1 && n <= 5) send({ type: 'edit_select', slot: n });
+    const pop = (lastState && lastState.memory_populated) || [];
+    for (let n = cur + dir; n >= 1 && n <= 99; n += dir) {
+      if (pop[n - 1]) { send({ type: 'edit_select', slot: n }); return; }
+    }
   };
   $('seg-minus').addEventListener('click', () => segStep(-1));
   $('seg-plus').addEventListener('click', () => segStep(1));

@@ -17,8 +17,8 @@ struct HomeUi {
     // What the drawing areas show. Refreshed by updateHomeDisplay().
     std::string figure[3];      // Total, Trip, next
     std::string elapsed[2];     // Total, Trip (mm:ss)
-    std::string speedLine;      // "50<>60 kph", or empty
-    std::string history[6];     // Trip history, newest first
+    std::string speedLine;      // mm:ss to the next speed change, or empty
+    std::string history[4];     // Trip history, newest four, newest first
     std::string stageNo = "-";
     bool autoArmed = false;
     bool unitsMph = false;      // speed-table header reads MPH
@@ -34,10 +34,19 @@ struct HomeUi {
     GtkWidget* elapsedArea[3] = {};   // Total, Trip, next (speed line)
     GtkWidget* historyArea = nullptr;
     GtkWidget* stageArea = nullptr;
-    GtkWidget* stack = nullptr;       // "main" | "picker"
+    GtkWidget* stack = nullptr;       // "main" | "italian"
     GtkWidget* stageNoBtn = nullptr;
-    GtkWidget* pickerBtns[5] = {};
-    GtkWidget* popover = nullptr;     // single-display: the stage picker, beside the gauge
+    // Italian (RB-NAV-44): the sector card page in the stack, its own clock and stage keys,
+    // the left block's keys (relabelled) and the right column keys that italian blanks.
+    GtkWidget* italianCard = nullptr;
+    GtkWidget* italianFoot = nullptr;    // the strip under the table, left of the menu key
+    GtkWidget* italianClock = nullptr;
+    GtkWidget* stageNoBtn2 = nullptr;
+    GtkWidget* leftKeys[3] = {};
+    GtkWidget* flagKey = nullptr;
+    GtkWidget* schedKey = nullptr;
+    bool stackSettled = false;           // the stack has been put on its main page once it was on screen
+    int labelMode = -1;                  // rally type the labels were last set for
     GtkWidget* freezeBtn = nullptr;
     GtkWidget* reverseBtn = nullptr;
     GtkWidget* minuteCaption = nullptr;   // text carrier: hh:mm under the next-minute flag

@@ -33,6 +33,9 @@
 #include "test_settings.h"
 #include "test_debug_log.h"
 #include "test_stage_log.h"
+#include "test_stage_store.h"
+#include "test_sector.h"
+#include "test_driver_trial.h"
 
 int main() {
     TestRunner runner;
@@ -69,6 +72,9 @@ int main() {
     TestSettings settingsTests;
     TestDebugLog debugLogTests;
     TestStageLog stageLogTests;
+    TestStageStore stageStoreTests;
+    TestSector sectorTests;
+    TestDriverTrial driverTrialTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -102,6 +108,9 @@ int main() {
     runner.addSuite(settingsTests.createSuite());
     runner.addSuite(debugLogTests.createSuite());
     runner.addSuite(stageLogTests.createSuite());
+    runner.addSuite(stageStoreTests.createSuite());
+    runner.addSuite(sectorTests.createSuite());
+    runner.addSuite(driverTrialTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();

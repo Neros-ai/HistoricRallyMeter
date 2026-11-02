@@ -28,10 +28,28 @@ GtkWidget* createNeroKeypad(AppData* data) {
     return keypad;
 }
 
+static gboolean drawBurger(GtkWidget* w, cairo_t* cr, gpointer) {
+    const int ww = gtk_widget_get_allocated_width(w), hh = gtk_widget_get_allocated_height(w);
+    cairo_set_source_rgb(cr, 1, 1, 1);
+    for (int i = 0; i < 3; i++) cairo_rectangle(cr, 0, i * (hh - 3) / 2.0, ww, 3);
+    cairo_fill(cr);
+    return FALSE;
+}
+
 GtkWidget* createMenuKey(AppData* data) {
-    GtkWidget* btn = gtk_button_new_with_label("menu");
+    GtkWidget* btn = gtk_button_new();
     gtk_widget_set_size_request(btn, nero::MENU_KEY_W, nero::MENU_KEY_H);
     addClass(btn, "dist-heading");   // 28 px bold, like total / trip (nav-button was 20 px)
+    // Three bars before the word, as the mockups draw the menu key.
+    GtkWidget* box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget* burger = gtk_drawing_area_new();
+    gtk_widget_set_size_request(burger, 28, 22);
+    gtk_widget_set_valign(burger, GTK_ALIGN_CENTER);
+    g_signal_connect(burger, "draw", G_CALLBACK(drawBurger), nullptr);
+    gtk_box_pack_start(GTK_BOX(box), burger, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), gtk_label_new("menu"), FALSE, FALSE, 0);
+    gtk_widget_set_halign(box, GTK_ALIGN_CENTER);
+    gtk_container_add(GTK_CONTAINER(btn), box);
     g_signal_connect(btn, "clicked", G_CALLBACK(on_show_menu), data);
     return btn;
 }

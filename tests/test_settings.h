@@ -53,6 +53,57 @@ public:
                 && s.tone_type_behind == 1 && s.tone_type_ahead == 1;
         });
 
+        // RB-SET-09: Rally type, Distance units and Measure type
+        suite->addTest("an older file loads greek, metres and AB,AC", []() {
+            const char* path = "test_settings_rally_old.json";
+            { std::ofstream f(path); f << "{\n  \"tone_enabled\": true\n}\n"; }
+            RallyState s;
+            ConfigFile::load(s, path);
+            std::remove(path);
+            return s.rally_type == 0 && !s.distance_km && !s.measure_ab_bc;
+        });
+
+        suite->addTest("rally type, distance units and measure type survive a round trip", []() {
+            const char* path = "test_settings_rally.json";
+            RallyState a;
+            a.rally_type = 2; a.distance_km = true; a.measure_ab_bc = true;
+            ConfigFile::save(a, path);
+            RallyState b;
+            ConfigFile::load(b, path);
+            std::remove(path);
+            return b.rally_type == 2 && b.distance_km && b.measure_ab_bc;
+        });
+
+        suite->addTest("an unknown rally type in a file falls back to greek", []() {
+            const char* path = "test_settings_rally_bad.json";
+            { std::ofstream f(path); f << "{\n  \"rally_type\": 7\n}\n"; }
+            RallyState s;
+            ConfigFile::load(s, path);
+            std::remove(path);
+            return s.rally_type == 0;
+        });
+
+        suite->addTest("choosing italian lights 00.00; choosing greek lights 0,000 and AB,AC", []() {
+            RallyState s;
+            applyRallyTypeDefaults(s, 2);
+            const bool italian_ok = s.rally_type == 2 && s.distance_km;
+            s.measure_ab_bc = true;
+            applyRallyTypeDefaults(s, 0);
+            return italian_ok && s.rally_type == 0 && !s.distance_km && !s.measure_ab_bc;
+        });
+
+        suite->addTest("surrey is not built: choosing it changes nothing", []() {
+            RallyState s;
+            applyRallyTypeDefaults(s, 2);
+            applyRallyTypeDefaults(s, 1);
+            return s.rally_type == 2 && s.distance_km;
+        });
+
+        suite->addTest("a fresh state starts with greek defaults", []() {
+            RallyState s;
+            return s.rally_type == 0 && !s.distance_km && !s.measure_ab_bc;
+        });
+
         // RB-DRV-13
         suite->addTest("a preprogrammed autostart's countdown shows only inside 5 minutes", []() {
             const int64_t min = 60 * 1000;

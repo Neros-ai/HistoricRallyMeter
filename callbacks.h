@@ -195,5 +195,13 @@ bool applyDistanceSet(AppData* data, double meters);
 // an exact roadbook figure has no Trip equivalent.
 void on_distance_adjust(GtkWidget* widget, gpointer user_data);
 void on_distance_set(GtkWidget* widget, gpointer user_data);
+// Choose Stage: the set key's popup (keypad, Set / Cancel) on a tap of the
+// stage number. Returns the stage number entered, or 0 on Cancel or a
+// number that is not a stage. `current` is shown pre-selected.
+int chooseStageDialog(GtkWidget* widget, AppData* data, int current);
+
+// The navi key on the italian page: a pop-up like set, for navi total only -- Set types a
+// distance, reset zeroes it, Cancel closes. Does nothing outside the italian rally type.
+void on_navi_dialog(GtkWidget* widget, gpointer user_data);
 
 #endif // CALLBACKS_H

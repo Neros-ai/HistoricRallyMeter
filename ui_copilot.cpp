@@ -1,7 +1,9 @@
 #include "ui_copilot.h"
+#include <cstring>
 #include "ui_driver.h"
 #include "ui_control.h"
 #include "calculations.h"
+#include "sector.h"
 #include "rally_types.h"
 #include "rally_state.h"
 #include "counter_poller.h"
@@ -12,6 +14,7 @@
 #include "tone_generator.h"
 #include "nero_frame.h"
 #include "ui_home.h"
+#include "home_calc.h"
 #include "ui_segments.h"
 #include "ui_datetime.h"
 #include "ui_calibration.h"
@@ -81,17 +84,26 @@ static void applyCopilotCSS() {
         // Nero2.0 menu page: 40 px key name over a 20 px grey caption.
         // Keys that must stay inside a narrow column ("A-B, B-C", +10).
         "button.key-small { font-size: 22px; }"
+        "button.seg-clr { font-size: 16px; font-weight: bold; padding: 0; }"
         "button.key-clr { padding-left: 2px; padding-right: 2px; }"
         "button.key-24 { font-size: 24px; }"
+        "button.key-21 { font-size: 21px; padding: 0; }"
         "button.key-17 { font-size: 17px; padding: 0; }"
         "button.key-18 { font-size: 18px; padding: 0; }"
         ".seg-head { color: #00FFFF; font-size: 18px; }"
-        ".seg-clock { font-size: 40px; font-family: monospace; }"
+        ".seg-clock { font-size: 30px; font-family: monospace; }"
         ".seg-small { font-size: 18px; }"
         ".seg-row label, .seg-row entry { font-size: 21px; }"
         ".seg-dim { color: #AAAAAA; }"
+        ".seg-current { border: 2px solid #00FFFF; }"
+        "button.seg-tag { font-size: 18px; font-weight: bold; padding: 0; }"
+        "button.seg-tag-navi { background-image: none; background-color: #666666; color: #FFFFFF; }"
+        "button.seg-tag-pc { background-image: none; background-color: #D01010; color: #FFFFFF; }"
+        "button.seg-tag-ct { background-image: none; background-color: #1E50C8; color: #FFFFFF; }"
+        "button.seg-tag-pm { background-image: none; background-color: #F0D000; color: #000000; }"
+        "button.seg-tag-co { background-image: none; background-color: #10A030; color: #FFFFFF; }"
         ".seg-entry { padding-left: 4px; padding-right: 4px; }"
-        ".seg-del { font-size: 17px; font-family: monospace; font-weight: bold; padding: 0; }"
+        ".seg-del { font-size: 13px; font-family: monospace; font-weight: bold; padding: 0; }"
         ".seg-startentry { font-size: 26px; border-color: transparent; }"
         ".seg-addentry { font-size: 24px; }"
         ".dt-label { color: #00FFFF; font-size: 24px; }"
@@ -109,8 +121,7 @@ static void applyCopilotCSS() {
         ".set-note { font-size: 17px; font-family: monospace; color: #AAAAAA; }"
         ".set-entry { font-size: 22px; }"
         ".home-clock { font-size: 42px; font-family: monospace; }"
-        ".home-picker-title { font-size: 22px; color: #00FFFF; }"
-        // An engaged key (freeze, reverse, the loaded stage in the picker).
+        // An engaged key (freeze, reverse).
         "button.key-lit { background-image: none; background-color: #FFFFFF; }"
         "button.key-lit label { color: #000000; }"
         ".menu-item { font-size: 40px; }"
@@ -169,6 +180,12 @@ static constexpr int BEEP_ASSIST_NAV_GAP_MS = 150;
 // default. Raising that default instead would have made every button click
 // on the box louder too, since the global click hook shares playBeep().
 static constexpr double BEEP_ASSIST_AMP = 0.45;
+
+// pc countdown beeps: a tick at each mark, and a short beep on 0 -- short so
+// its start marks the instant to be on the tube.
+static constexpr double PC_BEEP_FREQ_HZ = 3200.0;
+static constexpr int PC_BEEP_TICK_MS = 150;
+static constexpr int PC_BEEP_ZERO_MS = 60;
 
 static void fireBeepAssist(AppData* data, double waypoint_m, double travelled_m, bool navigation) {
     // Navigation mode plays its tone twice in quick succession ("bing
@@ -241,8 +258,10 @@ void updateCopilotDisplay(AppData* data) {
         data->state->total_start_cntr1, data->state->total_start_cntr2);
 
     // Beep Assist. Checked here rather than on the stage-setup screen so the
-    // beeps keep coming while the operator is on any screen at all.
-    if (data->state->beep_assist_enabled && !data->state->beep_waypoints_m.empty()) {
+    // beeps keep coming while the operator is on any screen at all. Greek only:
+    // italian has no navigation beeps (owner 2026-10-30), only the pc countdown below.
+    if (data->state->rally_type != 2 &&
+        data->state->beep_assist_enabled && !data->state->beep_waypoints_m.empty()) {
         // The corrected Total, not the raw counter: both readouts apply
         // total_distance_adjust_cm (RB-NAV-03), and a waypoint is a roadbook
         // distance the operator compares against what the display shows. On
@@ -301,6 +320,36 @@ void updateCopilotDisplay(AppData* data) {
             fireBeepAssist(data, data->state->beep_waypoints_m[static_cast<size_t>(timing_due)],
                            travelled_m, /*navigation=*/false);
             data->beepNextTimingIndex = static_cast<size_t>(timing_due) + 1;
+        }
+    }
+
+    // pc countdown beeps (italian): 30 s, 15 s, 5-4-3-2-1 and a short beep on 0,
+    // by the pc's own clock. A new pc (a new tube press) starts from its present
+    // reading, so marks already gone are skipped (an 8 s pc gets 5...0).
+    {
+        bool pc_ok = false;
+        const double pc_s = data->state->rally_type == 2
+            ? pcCountdownSeconds(*data->state, current_time_ms, &pc_ok) : 0.0;
+        if (!pc_ok) {
+            data->pcBeepTrialMs = -1;
+        } else if (data->pcBeepTrialMs != data->state->trial_start_ms) {
+            data->pcBeepTrialMs = data->state->trial_start_ms;
+            data->pcBeepPrevS = pc_s + 1e-6;   // a pc starting exactly on a mark still hears it
+        } else {
+            const PcBeep beep = pcCountdownBeep(data->pcBeepPrevS, pc_s);
+            data->pcBeepPrevS = pc_s;
+            if (beep != PcBeep::None) {
+                const int duration_ms = beep == PcBeep::Zero ? PC_BEEP_ZERO_MS : PC_BEEP_TICK_MS;
+                data->lastBeep.seq++;          // the phone sounds it too
+                data->lastBeep.freq_hz = PC_BEEP_FREQ_HZ;
+                data->lastBeep.duration_ms = duration_ms;
+                data->lastBeep.amplitude = BEEP_ASSIST_AMP;
+                data->lastBeep.triangle = false;
+                data->lastBeep.twice = false;
+                data->lastBeep.gap_ms = 0;
+                if (data->toneGen)
+                    data->toneGen->playBeep(PC_BEEP_FREQ_HZ, ToneWaveform::Sine, duration_ms, BEEP_ASSIST_AMP);
+            }
         }
     }
 
@@ -425,6 +474,22 @@ void updateCopilotDisplay(AppData* data) {
         }
     }
 
+    // The next / prev keys name what they step by: speed (greek / surrey) or
+    // substage (italian). Shared by the home page and the single-display layout.
+    {
+        GtkWidget* keys[2] = { data->nextPrevBtn, data->prevBtn };
+        for (int k = 0; k < 2; k++) {
+            if (!keys[k]) continue;
+            const char* want = readoutKeyName(data->state->rally_type, 3 + k);
+            const char* have = gtk_button_get_label(GTK_BUTTON(keys[k]));
+            if (!have || strcmp(have, want) != 0) {
+                gtk_button_set_label(GTK_BUTTON(keys[k]), want);
+                GtkWidget* lbl = gtk_bin_get_child(GTK_BIN(keys[k]));
+                if (GTK_IS_LABEL(lbl)) gtk_label_set_justify(GTK_LABEL(lbl), GTK_JUSTIFY_CENTER);
+            }
+        }
+    }
+
     // Next segment info: distance remaining in current segment + speed of next segment
     if (data->state->segment_current_number >= 0 &&
         data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
@@ -433,13 +498,20 @@ void updateCopilotDisplay(AppData* data) {
         int64_t remaining_counts = cur_seg.distance_counts - seg_count_diff;
         long remaining_cm = countsToCentimeters(remaining_counts, data->state->calibration);
         long remaining_m = (remaining_cm >= 0) ? (remaining_cm + 99) / 100 : -((-remaining_cm) / 100);
+        // The countdown runs to the next speed change, on through rows that
+        // carry the speed on (Nero2.0 ditto rows); italian counts each row.
+        const bool greek_like = data->state->rally_type != 2;
+        if (greek_like)
+            remaining_m = metresToNextChange(data->state->stage_segments, data->state->segment_current_number, remaining_m);
         const char* next_unit = "m";
         std::string next_str = formatDistanceAutoUnit(remaining_m, &next_unit);
         gtk_label_set_text(data->nextDistLabel, next_str.c_str());
         gtk_label_set_text(data->nextUnitLabel, next_unit);
         
-        long next_seg_idx = data->state->segment_current_number + 1;
-        bool has_next = next_seg_idx < static_cast<long>(data->state->stage_segments.size());
+        long next_seg_idx = greek_like
+            ? nextChangeIndex(data->state->stage_segments, data->state->segment_current_number)
+            : data->state->segment_current_number + 1;
+        bool has_next = next_seg_idx >= 0 && next_seg_idx < static_cast<long>(data->state->stage_segments.size());
         double next_kph = has_next ? data->state->stage_segments[next_seg_idx].target_speed_kph : 0.0;
         double next_display_speed = next_kph;
         // Same conversion updateDriverDisplay() already applies to
@@ -454,7 +526,7 @@ void updateCopilotDisplay(AppData* data) {
         // Live at any point in the segment: next while one follows, prev
         // while one precedes.
         gtk_widget_set_sensitive(data->nextPrevBtn, nextAvailable(*data->state));
-        gtk_widget_set_sensitive(data->prevBtn, prevAvailable(*data->state));
+        gtk_widget_set_sensitive(data->prevBtn, prevAvailable(*data->state) || sectorUndoAvailable(*data->state));
     } else if (data->state->stage_segments.empty()) {
         gtk_label_set_text(data->nextDistLabel, "---.---");
         gtk_label_set_text(data->nextUnitLabel, "m");

@@ -9,3 +9,14 @@ RallyState::RallyState() {
     trip_start_time_ms = ms;
     segment_start_time_ms = ms;
 }
+
+void applyRallyTypeDefaults(RallyState& s, int type) {
+    if (type == 2) {
+        s.rally_type = 2;
+        s.distance_km = true;
+    } else if (type == 0) {
+        s.rally_type = 0;
+        s.distance_km = false;
+        s.measure_ab_bc = false;
+    }
+}

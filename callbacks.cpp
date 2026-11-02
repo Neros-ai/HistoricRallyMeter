@@ -1,9 +1,13 @@
 #include "callbacks.h"
+#include "stage_store.h"
 #include "webserver/rally_web_server.h"
 #include "rally_types.h"
 #include "rally_state.h"
 #include "config_file.h"
 #include "calculations.h"
+#include "sector.h"
+#include "stage_rows.h"
+#include "home_calc.h"
 #include "ui_driver.h"
 #include "ui_copilot.h"
 #include "ui_control.h"
@@ -104,6 +108,7 @@ bool applyTotalReset(AppData* data, TotalResetChoice choice) {
     }
     case TotalResetCase::Idle:
         applyTotalResetToIdle(state, poll.cntr1, poll.cntr2, now_ms, false);
+        // navi is independent (owner 2026-10-31): Total does not zero it.
         break;
     }
 
@@ -371,6 +376,131 @@ void on_distance_set(GtkWidget* widget, gpointer user_data) {
     updateCopilotDisplay(data);
 }
 
+int chooseStageDialog(GtkWidget* widget, AppData* data, int current) {
+    GtkWidget* dialog = gtk_dialog_new_with_buttons(
+        "Choose Stage", GTK_WINDOW(gtk_widget_get_toplevel(widget)), GTK_DIALOG_MODAL, nullptr);
+    GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_set_border_width(GTK_CONTAINER(content), 10);
+
+    GtkWidget* promptRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_pack_start(GTK_BOX(content), promptRow, FALSE, FALSE, 3);
+    gtk_box_pack_start(GTK_BOX(promptRow), gtk_label_new("Choose Stage"), FALSE, FALSE, 0);
+
+    GtkEntry* entry = GTK_ENTRY(gtk_entry_new());
+    gtk_entry_set_text(entry, current >= 1 ? std::to_string(current).c_str() : "");
+    gtk_entry_set_max_length(entry, 2);
+    gtk_editable_select_region(GTK_EDITABLE(entry), 0, -1);
+    gtk_box_pack_start(GTK_BOX(promptRow), GTK_WIDGET(entry), TRUE, TRUE, 0);
+
+    GtkEntry* previous_entry = data->activeEntry;
+    data->activeEntry = entry;
+
+    GtkWidget* keypadRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_pack_start(GTK_BOX(content), keypadRow, FALSE, FALSE, 3);
+    gtk_box_pack_start(GTK_BOX(keypadRow), createNumericKeypad(data), FALSE, FALSE, 0);
+
+    GtkWidget* actionCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_box_pack_start(GTK_BOX(keypadRow), actionCol, FALSE, FALSE, 0);
+    GtkWidget* setBtn = gtk_button_new_with_label("Set");
+    g_object_set_data(G_OBJECT(setBtn), "response_id", GINT_TO_POINTER(GTK_RESPONSE_OK));
+    g_signal_connect(setBtn, "clicked", G_CALLBACK(on_dialog_response_button), dialog);
+    gtk_box_pack_start(GTK_BOX(actionCol), setBtn, TRUE, TRUE, 0);
+    GtkWidget* cancelBtn = gtk_button_new_with_label("Cancel");
+    g_object_set_data(G_OBJECT(cancelBtn), "response_id", GINT_TO_POINTER(GTK_RESPONSE_CANCEL));
+    g_signal_connect(cancelBtn, "clicked", G_CALLBACK(on_dialog_response_button), dialog);
+    gtk_box_pack_start(GTK_BOX(actionCol), cancelBtn, TRUE, TRUE, 0);
+
+    applyDialogStyle(dialog);
+    gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_NONE);
+    gtk_widget_show_all(dialog);
+
+    // Anchored near the top of the co-pilot panel, as Set Total Distance.
+    GtkWidget* parentWindow = gtk_widget_get_toplevel(widget);
+    gint parent_x = 0, parent_y = 0, parent_w = 0;
+    gtk_window_get_position(GTK_WINDOW(parentWindow), &parent_x, &parent_y);
+    gtk_window_get_size(GTK_WINDOW(parentWindow), &parent_w, nullptr);
+    gint dialog_w = 0;
+    gtk_window_get_size(GTK_WINDOW(dialog), &dialog_w, nullptr);
+    gtk_window_move(GTK_WINDOW(dialog), parent_x + (parent_w - dialog_w) / 2, parent_y + 10);
+
+    int chosen = 0;
+    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_OK)
+        chosen = chosenStageNumber(gtk_entry_get_text(entry));
+
+    data->activeEntry = previous_entry;
+    gtk_widget_destroy(dialog);
+    return chosen;
+}
+
+void on_navi_dialog(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (data->state->rally_type != 2) return;
+
+    GtkWidget* dialog = gtk_dialog_new_with_buttons(
+        "Set Navi Distance", GTK_WINDOW(gtk_widget_get_toplevel(widget)), GTK_DIALOG_MODAL, nullptr);
+    GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_set_border_width(GTK_CONTAINER(content), 10);
+
+    GtkWidget* promptRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_pack_start(GTK_BOX(content), promptRow, FALSE, FALSE, 3);
+    gtk_box_pack_start(GTK_BOX(promptRow), gtk_label_new("Set Navi (m)"), FALSE, FALSE, 0);
+
+    auto poll = data->poller->getMostRecent();
+    GtkEntry* entry = GTK_ENTRY(gtk_entry_new());
+    gtk_entry_set_text(entry, std::to_string(adjustedDistanceMeters(
+        countsToCentimeters(odometerCounts(*data->state, poll.cntr1, poll.cntr2), data->state->calibration), 0)).c_str());
+    gtk_entry_set_max_length(entry, 6);
+    gtk_editable_select_region(GTK_EDITABLE(entry), 0, -1);
+    gtk_box_pack_start(GTK_BOX(promptRow), GTK_WIDGET(entry), TRUE, TRUE, 0);
+
+    GtkEntry* previous_entry = data->activeEntry;
+    data->activeEntry = entry;
+
+    GtkWidget* keypadRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_pack_start(GTK_BOX(content), keypadRow, FALSE, FALSE, 3);
+    gtk_box_pack_start(GTK_BOX(keypadRow), createNumericKeypad(data), FALSE, FALSE, 0);
+
+    GtkWidget* actionCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_box_pack_start(GTK_BOX(keypadRow), actionCol, FALSE, FALSE, 0);
+    const struct { const char* label; int response; } buttons[3] = {
+        { "Set", GTK_RESPONSE_OK }, { "reset", GTK_RESPONSE_APPLY }, { "Cancel", GTK_RESPONSE_CANCEL } };
+    for (const auto& b : buttons) {
+        GtkWidget* btn = gtk_button_new_with_label(b.label);
+        g_object_set_data(G_OBJECT(btn), "response_id", GINT_TO_POINTER(b.response));
+        g_signal_connect(btn, "clicked", G_CALLBACK(on_dialog_response_button), dialog);
+        gtk_box_pack_start(GTK_BOX(actionCol), btn, TRUE, TRUE, 0);
+    }
+
+    applyDialogStyle(dialog);
+    gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_NONE);
+    gtk_widget_show_all(dialog);
+
+    GtkWidget* parentWindow = gtk_widget_get_toplevel(widget);
+    gint parent_x = 0, parent_y = 0, parent_w = 0;
+    gtk_window_get_position(GTK_WINDOW(parentWindow), &parent_x, &parent_y);
+    gtk_window_get_size(GTK_WINDOW(parentWindow), &parent_w, nullptr);
+    gint dialog_w = 0;
+    gtk_window_get_size(GTK_WINDOW(dialog), &dialog_w, nullptr);
+    gtk_window_move(GTK_WINDOW(dialog), parent_x + (parent_w - dialog_w) / 2, parent_y + 10);
+
+    const gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    poll = data->poller->getMostRecent();
+    if (response == GTK_RESPONSE_OK) {
+        try {
+            setOdometerMetres(*data->state, poll.cntr1, poll.cntr2, std::stod(gtk_entry_get_text(entry)));
+        } catch (const std::exception&) {
+            // Unparseable entry: leave navi as it was.
+        }
+    } else if (response == GTK_RESPONSE_APPLY) {
+        resetOdometerKeepingPosition(*data->state, poll.cntr1, poll.cntr2);
+    }
+    if (response == GTK_RESPONSE_OK || response == GTK_RESPONSE_APPLY) ConfigFile::save(*data->state);
+
+    data->activeEntry = previous_entry;
+    gtk_widget_destroy(dialog);
+    updateCopilotDisplay(data);
+}
+
 // Every segment's count-based fields re-derived from its stable human values
 // after a change to calibration or sensor mode. Covers the snapshot the
 // running stage is being judged against as well as the editable roadbook and
@@ -470,7 +600,8 @@ void endStageAsIdle(AppData* data) {
 }
 
 void adoptRoadbookAsStage(AppData* data) {
-    data->state->stage_segments = data->state->segments;
+    // Ditto rows step in by themselves (stageForDriving); auto is for speed changes.
+    data->state->stage_segments = stageForDriving(data->state->segments);
     data->state->segment_current_number =
         data->state->stage_segments.empty() ? -1 : 0;
     data->state->stage_complete = data->state->stage_segments.empty();
@@ -522,6 +653,10 @@ void applyAutoStartArming(AppData* data, const AutoStartArming& arming) {
         // looked ignored, and re-pressing the button changed nothing because
         // the arming path never touched the roadbook at all.
         adoptRoadbookAsStage(data);
+        {   // italian: the sector's distance starts here, with Total
+            const CounterPoll arm_poll = data->poller->getMostRecent();
+            markSectorOdometer(*data->state, arm_poll.cntr1, arm_poll.cntr2);
+        }
         // Paired with the segment counters zeroDistanceBaselines just moved,
         // so segment 1 measures from the same instant in both quantities.
         // The clock baselines stay put: the stage's time still starts at the
@@ -540,6 +675,7 @@ void performAutoStart(AppData* data) {
         // starts now and everything rolled on the way to the line counts
         // toward the stage distance -- and therefore toward its average speed.
         zeroTimeBaselines(data);
+        markSectorStart(*data->state);   // italian: the sector starts at the appointed minute
         // Spent. Leaving the target armed would let a restart of the app --
         // which forgets autoStartTriggered -- see it as pending again.
         data->state->auto_start_rally_time_s = 0;
@@ -563,6 +699,14 @@ void performStageGo(AppData* data) {
     // Distance and clock together: this is the ordinary "start now" case.
     zeroDistanceBaselines(data);
     zeroTimeBaselines(data);
+    markSectorStart(*data->state);   // italian: the start time is 30 s through the minute pressed
+    if (data->state->rally_type == 2 && stageIsSector(data->state->stage_segments))
+        data->autoFiredTime_s = autoStartSecondsFromTargetMs(data->state->total_start_time_ms,
+                                                             getAutoStartEpochMs());
+    {
+        const CounterPoll start_poll = data->poller->getMostRecent();
+        markSectorOdometer(*data->state, start_poll.cntr1, start_poll.cntr2);
+    }
     // Deliberately does NOT clear autoStartTriggered: the driver display sets
     // that flag just before calling this on the autostart tick, and clearing
     // it here would let the same 2-second trigger window re-enter on every
@@ -902,6 +1046,22 @@ void applyDriverZero(AppData* data, bool reset) {
 void on_next_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     if (!nextAvailable(*data->state)) return;
+    // Italian sector: every line pins sector total to the card and starts or ends the pc / pm
+    // clock (a press out of a pc records its error). On any other stage this does nothing.
+    {
+        auto p = data->poller->getMostRecent();
+        if (applySectorNext(*data->state, p.cntr1, p.cntr2, getRallyTime_ms(*data->state))) {
+            ConfigFile::save(*data->state);
+            notifyWebState(data);
+            return;
+        }
+    }
+    // "next speed" (greek / surrey): go to the next speed change, not just the
+    // next row. Rows that carry the speed on join the one being driven first,
+    // so a press at the change point is not taken for a missed one. Italian
+    // keeps a plain one-row step.
+    if (data->state->rally_type != 2)
+        foldCarriedRows(data->state->stage_segments, data->state->segment_current_number);
     // Before the retime, so prev can put it back.
     recordSegmentChange(*data->state, data->state->segment_current_number, false);
 
@@ -932,6 +1092,11 @@ void on_next_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 // auto-advance before the real change point. See undoSegmentChange.
 void on_prev_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    if (undoSectorTube(*data->state)) {   // prev straight after an italian next
+        ConfigFile::save(*data->state);
+        notifyWebState(data);
+        return;
+    }
     if (!prevAvailable(*data->state)) return;
 
     auto poll = data->poller->getMostRecent();

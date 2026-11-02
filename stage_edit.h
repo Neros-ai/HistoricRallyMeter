@@ -23,9 +23,15 @@ int stageEditSlot(AppData* data);
 // Make memory slot_1 (1-5, empty ones included) the stage on show.
 void stageEditSelect(AppData* data, int slot_1);
 
-// "1,000;1,500": append rows. Returns how many were added; `rest` (optional)
-// gets the text from the first rejected distance on.
-int stageEditAddDistances(AppData* data, const std::string& text, std::string* rest);
+// "1,000;1,500": add a row at each distance, splitting a row a distance falls
+// inside (RB-SEG-16). Returns how many rows were made; `rest` (optional) gets
+// the text from the first unreadable distance on; `notice` (optional) names
+// distances that were refused (already a point / not past the start).
+int stageEditAddDistances(AppData* data, const std::string& text, std::string* rest,
+                          std::string* notice = nullptr);
+
+// The roadbook box of a row, typed on the Segments page (row 0 sets the stage's first box).
+void stageEditSetBox(AppData* data, size_t row, long box);
 
 void stageEditSetSpeed(AppData* data, size_t row, double kph);
 void stageEditSetChange(AppData* data, size_t row, bool chg);

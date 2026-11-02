@@ -67,6 +67,24 @@ static std::string jsonEscape(const std::string& s) {
     return out;
 }
 
+// "memory_N..." key on a line -> N (1..99), or 0 when the line has none.
+// `tail` receives what follows the number up to the closing quote:
+// "" for the segments array, "_waypoints", "_start_time_s", ...
+static int memoryKeyNumber(const std::string& line, std::string* tail) {
+    const size_t k = line.find("\"memory_");
+    if (k == std::string::npos) return 0;
+    size_t i = k + 8;
+    int n = 0, digits = 0;
+    while (i < line.size() && line[i] >= '0' && line[i] <= '9' && digits < 3) {
+        n = n * 10 + (line[i] - '0'); i++; digits++;
+    }
+    if (digits == 0 || n < 1 || n > RallyState::MAX_MEMORY_SLOTS) return 0;
+    const size_t q = line.find('"', i);
+    if (q == std::string::npos) return 0;
+    if (tail) *tail = line.substr(i, q - i);
+    return n;
+}
+
 static bool extractBool(const std::string& line) {
     return line.find("true") != std::string::npos;
 }
@@ -127,6 +145,15 @@ static void parseSegmentArray(std::istringstream& stream, std::vector<Segment>& 
                 seg.changesSpeed = extractBool(line);
             } else if (line.find("\"autoNext\"") != std::string::npos) {
                 seg.autoNext = extractBool(line);
+            } else if (line.find("\"box\"") != std::string::npos) {
+                seg.box = static_cast<long>(extractLong(line));
+            } else if (line.find("\"seg_type\"") != std::string::npos) {
+                const long ty = static_cast<long>(extractLong(line));
+                seg.type = (ty >= 0 && ty <= 5) ? static_cast<int>(ty) : 0;
+            } else if (line.find("\"seg_ref\"") != std::string::npos) {
+                seg.ref = static_cast<int>(extractLong(line));
+            } else if (line.find("\"pc_duration_s\"") != std::string::npos) {
+                seg.pc_duration_s = extractDouble(line);
             }
         }
     }
@@ -161,22 +188,16 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
         state.memory_slots[i].waypoints_recorded = false;
     }
 
+    std::string memTail;
+    state.odometer_recorded = false;   // set again when the file carries the odometer
     while (std::getline(stream, line)) {
         if (line.find("\"stage_segments\"") != std::string::npos) {
             parseSegmentArray(stream, state.stage_segments, state.calibration);
             state.stage_segments_recorded = true;
         } else if (line.find("\"segments\"") != std::string::npos && line.find("\"memory_") == std::string::npos) {
             parseSegmentArray(stream, state.segments, state.calibration);
-        } else if (line.find("\"memory_1\"") != std::string::npos) {
-            parseSegmentArray(stream, state.memory_slots[0].segments, state.calibration);
-        } else if (line.find("\"memory_2\"") != std::string::npos) {
-            parseSegmentArray(stream, state.memory_slots[1].segments, state.calibration);
-        } else if (line.find("\"memory_3\"") != std::string::npos) {
-            parseSegmentArray(stream, state.memory_slots[2].segments, state.calibration);
-        } else if (line.find("\"memory_4\"") != std::string::npos) {
-            parseSegmentArray(stream, state.memory_slots[3].segments, state.calibration);
-        } else if (line.find("\"memory_5\"") != std::string::npos) {
-            parseSegmentArray(stream, state.memory_slots[4].segments, state.calibration);
+        } else if (line.find("\"memory_") != std::string::npos && memoryKeyNumber(line, &memTail) > 0 && memTail.empty()) {
+            parseSegmentArray(stream, state.memory_slots[memoryKeyNumber(line, nullptr) - 1].segments, state.calibration);
         } else if (line.find("\"units\"") != std::string::npos) {
             state.units = extractBool(line);
         } else if (line.find("\"calibration\"") != std::string::npos) {
@@ -199,27 +220,32 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.reverse_shift1 = extractLong(line);
         } else if (line.find("\"reverse_shift2\"") != std::string::npos) {
             state.reverse_shift2 = extractLong(line);
+        } else if (line.find("\"freeze_on\"") != std::string::npos) {
+            state.freeze_on = extractBool(line);
+        } else if (line.find("\"freeze_virt1\"") != std::string::npos) {
+            state.freeze_virt1 = extractLong(line);
+        } else if (line.find("\"freeze_virt2\"") != std::string::npos) {
+            state.freeze_virt2 = extractLong(line);
         } else if (line.find("\"typed_pulses_per_km\"") != std::string::npos) {
             state.typed_pulses_per_km = extractDouble(line);
         } else if (line.find("\"trip_history_m\"") != std::string::npos) {
             state.trip_history_m = extractString(line);
         } else if (line.find("\"memory_") != std::string::npos
-                   && (line.find("_start_") != std::string::npos
-                       || line.find("_first_") != std::string::npos)) {
-            // "memory_N_start_time_s" / "memory_N_start_distance_m"
-            size_t k = line.find("\"memory_") + 8;
-            int n = (k < line.size()) ? line[k] - '0' : 0;
-            if (n >= 1 && n <= RallyState::MAX_MEMORY_SLOTS) {
-                auto& slot = state.memory_slots[n - 1];
-                if (line.find("_first_number") != std::string::npos)
-                    slot.first_number = static_cast<long>(extractLong(line));
-                else if (line.find("_first_from_m") != std::string::npos)
-                    slot.first_from_m = extractDouble(line);
-                else if (line.find("_start_time_s") != std::string::npos)
-                    slot.start_time_s = static_cast<long>(extractLong(line));
-                else if (line.find("_start_distance_m") != std::string::npos)
-                    slot.start_distance_m = static_cast<long>(extractLong(line));
-            }
+                   && memoryKeyNumber(line, &memTail) > 0
+                   && (memTail.find("_start_") == 0 || memTail.find("_first_") == 0
+                       || memTail == "_sector_duration_s")) {
+            // "memory_N_start_time_s" / "memory_N_start_distance_m" / "_first_number" / "_first_from_m"
+            auto& slot = state.memory_slots[memoryKeyNumber(line, nullptr) - 1];
+            if (memTail == "_first_number")
+                slot.first_number = static_cast<long>(extractLong(line));
+            else if (memTail == "_first_from_m")
+                slot.first_from_m = extractDouble(line);
+            else if (memTail == "_sector_duration_s")
+                slot.sector_duration_s = static_cast<long>(extractLong(line));
+            else if (memTail == "_start_time_s")
+                slot.start_time_s = static_cast<long>(extractLong(line));
+            else if (memTail == "_start_distance_m")
+                slot.start_distance_m = static_cast<long>(extractLong(line));
         } else if (line.find("\"segment_start_cntr1\"") != std::string::npos) {
             state.segment_start_cntr1 = extractCounter(line);
         } else if (line.find("\"segment_start_cntr2\"") != std::string::npos) {
@@ -275,6 +301,30 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
         } else if (line.find("\"gauge_range_s\"") != std::string::npos) {
             const long r = extractLong(line);
             state.gauge_range_s = (r >= 1 && r <= 3) ? static_cast<int>(r) : 3;
+        } else if (line.find("\"odometer_start_cntr1\"") != std::string::npos) {
+            state.odometer_start_cntr1 = extractCounter(line);
+            state.odometer_recorded = true;
+        } else if (line.find("\"odometer_start_cntr2\"") != std::string::npos) {
+            state.odometer_start_cntr2 = extractCounter(line);
+        } else if (line.find("\"odometer_adjust_cm\"") != std::string::npos) {
+            state.odometer_adjust_cm = extractLong(line);
+        } else if (line.find("\"sector_start_odometer_cm\"") != std::string::npos) {
+            state.sector_start_odometer_cm = extractLong(line);
+        } else if (line.find("\"sector_start_ms\"") != std::string::npos) {
+            state.sector_start_ms = extractLong(line);
+        } else if (line.find("\"sector_card_ms\"") != std::string::npos) {
+            state.sector_card_ms = extractLong(line);
+        } else if (line.find("\"trial_start_ms\"") != std::string::npos) {
+            state.trial_start_ms = extractLong(line);
+        } else if (line.find("\"trial_start_m\"") != std::string::npos) {
+            state.trial_start_m = extractDouble(line);
+        } else if (line.find("\"rally_type\"") != std::string::npos) {
+            const long r = extractLong(line);
+            state.rally_type = (r == 2) ? 2 : 0;
+        } else if (line.find("\"distance_km\"") != std::string::npos) {
+            state.distance_km = extractBool(line);
+        } else if (line.find("\"measure_ab_bc\"") != std::string::npos) {
+            state.measure_ab_bc = extractBool(line);
         } else if (line.find("\"tone_type_ahead\"") != std::string::npos) {
             state.tone_type_ahead = static_cast<int>(extractLong(line)) == 2 ? 2 : 1;
         } else if (line.find("\"stage_logging\"") != std::string::npos) {
@@ -311,24 +361,22 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.beep_navigation_mode = extractBool(line);
         } else if (line.find("\"beep_timing_mode\"") != std::string::npos) {
             state.beep_timing_mode = extractBool(line);
-        } else if (line.find("\"memory_1_waypoints\"") != std::string::npos) {
-            parseDoubleArray(stream, state.memory_slots[0].beep_waypoints_m);
-            state.memory_slots[0].waypoints_recorded = true;
-        } else if (line.find("\"memory_2_waypoints\"") != std::string::npos) {
-            parseDoubleArray(stream, state.memory_slots[1].beep_waypoints_m);
-            state.memory_slots[1].waypoints_recorded = true;
-        } else if (line.find("\"memory_3_waypoints\"") != std::string::npos) {
-            parseDoubleArray(stream, state.memory_slots[2].beep_waypoints_m);
-            state.memory_slots[2].waypoints_recorded = true;
-        } else if (line.find("\"memory_4_waypoints\"") != std::string::npos) {
-            parseDoubleArray(stream, state.memory_slots[3].beep_waypoints_m);
-            state.memory_slots[3].waypoints_recorded = true;
-        } else if (line.find("\"memory_5_waypoints\"") != std::string::npos) {
-            parseDoubleArray(stream, state.memory_slots[4].beep_waypoints_m);
-            state.memory_slots[4].waypoints_recorded = true;
+        } else if (line.find("\"memory_") != std::string::npos && memoryKeyNumber(line, &memTail) > 0 && memTail == "_waypoints") {
+            auto& slot = state.memory_slots[memoryKeyNumber(line, nullptr) - 1];
+            parseDoubleArray(stream, slot.beep_waypoints_m);
+            slot.waypoints_recorded = true;
         } else if (line.find("\"beep_waypoints_m\"") != std::string::npos) {
             parseDoubleArray(stream, state.beep_waypoints_m);
         }
+    }
+
+    // A config written before the italian odometer existed: navi total starts as the
+    // Total reads, so nothing jumps on upgrade.
+    if (!state.odometer_recorded) {
+        state.odometer_start_cntr1 = state.total_start_cntr1;
+        state.odometer_start_cntr2 = state.total_start_cntr2;
+        state.odometer_adjust_cm = state.total_distance_adjust_cm;
+        state.odometer_recorded = true;
     }
 
     // A config written before stage_segments existed has one roadbook and a
@@ -401,7 +449,11 @@ static void writeSegmentArray(std::ofstream& file, const std::string& name,
         file << "      \"distance_m\": " << segs[i].distance_m << ",\n";
         file << "      \"distance_counts\": " << segs[i].distance_counts << ",\n";
         file << "      \"changes_speed\": " << (segs[i].changesSpeed ? "true" : "false") << ",\n";
-        file << "      \"autoNext\": " << (segs[i].autoNext ? "true" : "false") << "\n";
+        file << "      \"autoNext\": " << (segs[i].autoNext ? "true" : "false") << ",\n";
+        file << "      \"box\": " << segs[i].box << ",\n";
+        file << "      \"seg_type\": " << segs[i].type << ",\n";
+        file << "      \"seg_ref\": " << segs[i].ref << ",\n";
+        file << "      \"pc_duration_s\": " << segs[i].pc_duration_s << "\n";
         file << "    }";
         if (i < segs.size() - 1) file << ",";
         file << "\n";
@@ -433,13 +485,21 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"typed_pulses_per_km\": " << state.typed_pulses_per_km << ",\n";
     file << "  \"reverse_shift1\": " << state.reverse_shift1 << ",\n";
     file << "  \"reverse_shift2\": " << state.reverse_shift2 << ",\n";
+    file << "  \"freeze_on\": " << (state.freeze_on ? "true" : "false") << ",\n";
+    file << "  \"freeze_virt1\": " << state.freeze_virt1 << ",\n";
+    file << "  \"freeze_virt2\": " << state.freeze_virt2 << ",\n";
     for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
+        // 99 slots: write only those that differ from a cleared slot.
+        const RallyState::MemorySlot& ms = state.memory_slots[i];
+        if (ms.start_time_s == -1 && ms.start_distance_m == 0 && ms.first_number == 1
+            && ms.first_from_m == 0.0 && ms.sector_duration_s == -1) continue;
         file << "  \"memory_" << (i + 1) << "_start_time_s\": "
              << state.memory_slots[i].start_time_s << ",\n";
         file << "  \"memory_" << (i + 1) << "_start_distance_m\": "
              << state.memory_slots[i].start_distance_m << ",\n";
         file << "  \"memory_" << (i + 1) << "_first_number\": "
              << state.memory_slots[i].first_number << ",\n";
+        file << "  \"memory_" << (i + 1) << "_sector_duration_s\": " << ms.sector_duration_s << ",\n";
         file << "  \"memory_" << (i + 1) << "_first_from_m\": "
              << state.memory_slots[i].first_from_m << ",\n";
     }
@@ -467,6 +527,17 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"tone_type_behind\": " << state.tone_type_behind << ",\n";
     file << "  \"tone_type_ahead\": " << state.tone_type_ahead << ",\n";
     file << "  \"gauge_range_s\": " << state.gauge_range_s << ",\n";
+    file << "  \"rally_type\": " << state.rally_type << ",\n";
+    file << "  \"odometer_start_cntr1\": " << static_cast<int64_t>(state.odometer_start_cntr1) << ",\n";
+    file << "  \"odometer_start_cntr2\": " << static_cast<int64_t>(state.odometer_start_cntr2) << ",\n";
+    file << "  \"odometer_adjust_cm\": " << state.odometer_adjust_cm << ",\n";
+    file << "  \"sector_start_ms\": " << state.sector_start_ms << ",\n";
+    file << "  \"sector_start_odometer_cm\": " << state.sector_start_odometer_cm << ",\n";
+    file << "  \"sector_card_ms\": " << state.sector_card_ms << ",\n";
+    file << "  \"trial_start_ms\": " << state.trial_start_ms << ",\n";
+    file << "  \"trial_start_m\": " << std::to_string(state.trial_start_m) << ",\n";
+    file << "  \"distance_km\": " << (state.distance_km ? "true" : "false") << ",\n";
+    file << "  \"measure_ab_bc\": " << (state.measure_ab_bc ? "true" : "false") << ",\n";
     file << "  \"stage_logging\": " << (state.stage_logging ? "true" : "false") << ",\n";
     file << "  \"bluetooth_audio_name\": \"" << jsonEscape(state.bluetooth_audio_name) << "\",\n";
     file << "  \"bluetooth_audio_address\": \"" << jsonEscape(state.bluetooth_audio_address) << "\",\n";

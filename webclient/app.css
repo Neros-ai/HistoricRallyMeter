@@ -507,3 +507,6 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .fig-row .big, .driver-footer .dist-box > strong { font-family: sans-serif; font-weight: bold; font-variant-numeric: tabular-nums; }
 /* Drv: the Trip block in cyan, as on the box. */
 #drv-box-trip .dl, #drv-box-trip > strong, .driver-footer #drv-box-trip .avg b { color: #0ff; }
+
+/* Drv tab: Total and Trip reset when tapped. */
+#drv-box-total, #drv-box-trip { cursor: pointer; }

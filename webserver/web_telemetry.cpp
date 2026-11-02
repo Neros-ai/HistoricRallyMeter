@@ -1,3 +1,4 @@
+#include "../sector.h"
 #include "web_telemetry.h"
 #include "calculations.h"
 #include "callbacks.h"   // autoStartHoldActive
@@ -8,6 +9,7 @@
 #include "stage_edit.h"
 #include "webserver/rally_web_server.h"
 #include "ui_datetime.h"
+#include "home_calc.h"
 
 #include <chrono>
 #include <cmath>
@@ -76,9 +78,9 @@ std::string buildTelemetryJson(AppData* data) {
         // stageCountsCorrected. total_count_diff above stays raw because
         // adjustedDistanceMeters applies the same correction to the odometer
         // itself, and applying it twice would double it.
-        ahead_behind_s = calculateAheadBehindFromStageStart(*data->state, current_time_ms,
-            stageCountsCorrected(data, current_poll));
-        ahead_behind_s += data->state->ahead_behind_zero_offset_ms / 1000.0;
+        // The driver gauge's own figure (italian: the pc / pm error, at rest elsewhere).
+        ahead_behind_s = gaugeAheadSeconds(*data->state, current_poll.cntr1, current_poll.cntr2,
+            current_time_ms, stageCountsCorrected(data, current_poll));
         // The same hold the driver display applies (ui_driver.cpp). Held here
         // too, or the phone would show the previous stage's error climbing at
         // the line while the driver's gauge sits at rest -- two screens
@@ -143,9 +145,14 @@ std::string buildTelemetryJson(AppData* data) {
         long rem_cm = countsToCentimeters(static_cast<int64_t>(cur.distance_counts) - seg_diff, st.calibration);
         next_m = (rem_cm >= 0) ? (rem_cm + 99) / 100 : -((-rem_cm) / 100);
         has_next_m = true;
-        if (st.segment_current_number + 1 < static_cast<long>(st.stage_segments.size())) {
+        // Same countdown as the box: to the next speed change, through carried rows.
+        const bool greek_like = st.rally_type != 2;
+        if (greek_like) next_m = metresToNextChange(st.stage_segments, st.segment_current_number, next_m);
+        const long nxt = greek_like ? nextChangeIndex(st.stage_segments, st.segment_current_number)
+                                    : st.segment_current_number + 1;
+        if (nxt >= 0 && nxt < static_cast<long>(st.stage_segments.size())) {
             speed_change = speedChangeLine(cur.target_speed_kph,
-                st.stage_segments[st.segment_current_number + 1].target_speed_kph, true, st.units);
+                st.stage_segments[nxt].target_speed_kph, true, st.units);
         }
     }
     // Stage arrival
@@ -188,6 +195,8 @@ std::string buildTelemetryJson(AppData* data) {
        << ",\"total_s\":" << total_s << ",\"trip_s\":" << trip_s
        << ",\"next_m\":" << (has_next_m ? std::to_string(next_m) : std::string("null"))
        << ",\"speed_change\":\"" << speed_change << "\""
+       << ",\"next_key\":\"" << (st.rally_type == 2 ? "next substage" : "next speed") << "\""
+       << ",\"prev_key\":\"" << (st.rally_type == 2 ? "prev substage" : "prev speed") << "\""
        << ",\"stage_no\":" << st.last_memory_slot
        << ",\"arrival\":" << (arr.valid
             ? "{\"kph\":" + std::to_string(arr.speed_kph) + ",\"min\":" + std::to_string(arr.minutes) + "}"
@@ -214,7 +223,7 @@ std::string buildStateJson(AppData* data) {
        << "\"segment_current_number\":" << data->state->segment_current_number << ","
        // True when Reset Total would be asked about on the box, so the phone
        // asks the same question instead of a plain "Reset total?".
-       << "\"frozen\":" << (data->homeFrozen ? "true" : "false") << ","
+       << "\"frozen\":" << (data->state->freeze_on ? "true" : "false") << ","
        << "\"total_reset_asks\":"
        << (classifyTotalReset(*data->state) == TotalResetCase::StageRunning ? "true" : "false")
        << ","

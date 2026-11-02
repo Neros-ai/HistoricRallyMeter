@@ -12,12 +12,14 @@
 #include <chrono>
 #include <gtk/gtk.h>
 #include <glib-unix.h>
+#include "freeze.h"
 #include "i2c_counter.h"
 #include "i_counter.h"
 #include "sim_counter.h"
 #include <memory>
 #include <cstdlib>
 #include "rally_state.h"
+#include "sector.h"
 #include "config_file.h"
 #include "counter_poller.h"
 #include "rally_types.h"
@@ -378,9 +380,12 @@ int main(int argc, char* argv[]) {
             std::cerr << "[DEBUG] RALLY_SIM_I2C=1: using simulated counters" << std::endl;
         }
         
-        handleCounterPowerLoss(*counter1, *counter2, REGISTER, state,
-            getRallyTime_ms(state),
-            [](const RallyState& s) { ConfigFile::save(s); });
+        if (handleCounterPowerLoss(*counter1, *counter2, REGISTER, state,
+                getRallyTime_ms(state),
+                [](const RallyState& s) { ConfigFile::save(s); })) {
+            // The chips restarted: navi total starts again with Total (italian).
+            zeroOdometer(state, state.total_start_cntr1, state.total_start_cntr2);
+        }
 
         if (state.total_start_cntr1 == 0 && state.total_start_cntr2 == 0) {
             state.total_start_cntr1 = counter1->readRegister(REGISTER);
@@ -417,6 +422,8 @@ int main(int argc, char* argv[]) {
         // Resume the reverse shift saved with the baselines (zero unless the
         // car was reversed), so distances line up after a restart.
         app_data.poller->setVirtualShift(state.reverse_shift1, state.reverse_shift2);
+        // A box frozen at a navigation error comes back frozen on the held figure.
+        restoreFreeze(state, *app_data.poller);
         // Sim feed can jump after a VM clock step; the hardware glitch guard
         // must not run or one leap freezes the sandbox speed controls.
         if (usingSimCounters()) {

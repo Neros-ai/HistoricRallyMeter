@@ -5,21 +5,20 @@
 #include "nero_frame.h"
 #include "rally_state.h"
 #include "ui_setup.h"
-#include "webserver/qr_display.h"
 #include <cstdio>
 #include <string>
 #include <vector>
 
 namespace {
 
-// Rows and keys sized so each column fits the 388 px panel with the abort-stage
-// row added: heading 26 + 6 rows x 38 + Wi-Fi 80 + 7 gaps x 5 = 369 on the right.
+// Rows and keys sized so each column fits the 388 px panel. Right column (SYSTEM):
+// heading 26 + 7 rows x 38 + info row 38 + 8 gaps x 5 = 370.
 constexpr int COL_W = 423, ROW_H = 38, HEAD_H = 26, KEY_H = 34, GAP = 5;
-constexpr int QR_SIZE = 3 * ROW_H + 2 * GAP;   // 124: the QR code spans three rows, beside the Wi-Fi link and address
 
 enum Setting {
     BEEP_NAV, BEEP_TIMING, TONE_ON, TONE_BEHIND, TONE_AHEAD,
-    UNITS, STAGE_LOG, SENSOR_LOG, FORCE_SINGLE, GAUGE_RANGE
+    UNITS, STAGE_LOG, SENSOR_LOG, GAUGE_RANGE,
+    RALLY_TYPE, DISTANCE_UNITS, NONZERO_START, MEASURE_TYPE
 };
 
 struct SegCtl {
@@ -60,9 +59,13 @@ void apply(AppData* d, Setting id, int idx) {
     case STAGE_LOG:   s.stage_logging = (idx == 1); break;
     case SENSOR_LOG:  s.debug_logs_enabled = (idx == 1); setDebugLogging(d, s.debug_logs_enabled); break;
     case GAUGE_RANGE: s.gauge_range_s = idx + 1; break;
-    case FORCE_SINGLE:
-        on_force_single_display_toggle(nullptr, idx == 1, d);   // saves itself; applies at next start
+    case RALLY_TYPE:
+        // Keys are italian / greek / surrey; surrey is not built (its key is greyed).
+        applyRallyTypeDefaults(s, idx == 0 ? 2 : idx == 1 ? 0 : s.rally_type);
         break;
+    case DISTANCE_UNITS: s.distance_km = (idx == 0); break;   // keys: 00.00 / 0,000
+    case NONZERO_START:  break;                                // surrey only; not built
+    case MEASURE_TYPE:   s.measure_ab_bc = (idx == 0); break;  // keys: AB,BC / AB,AC
     }
     // Beep Assist is on when either mode is: there is no separate master.
     s.beep_assist_enabled = s.beep_navigation_mode || s.beep_timing_mode;
@@ -82,8 +85,11 @@ int stateIndex(const RallyState& s, Setting id) {
     case UNITS:        return s.units ? 1 : 0;
     case STAGE_LOG:    return s.stage_logging ? 1 : 0;
     case SENSOR_LOG:   return s.debug_logs_enabled ? 1 : 0;
-    case FORCE_SINGLE: return s.force_single_display ? 1 : 0;
     case GAUGE_RANGE:  return s.gauge_range_s - 1;
+    case RALLY_TYPE:   return s.rally_type == 2 ? 0 : s.rally_type == 1 ? 2 : 1;
+    case DISTANCE_UNITS: return s.distance_km ? 0 : 1;
+    case NONZERO_START:  return 0;
+    case MEASURE_TYPE:   return s.measure_ab_bc ? 0 : 1;
     }
     return 0;
 }
@@ -94,10 +100,14 @@ void onSeg(GtkWidget* w, gpointer) {
     for (int i = 0; i < c->n; i++) if (w == c->btn[i]) idx = i;
     for (int i = 0; i < c->n; i++) setLit(c->btn[i], i == idx);
     apply(c->data, c->id, idx);
+    // Choosing a rally type moves its linked keys (distance units, measure type).
+    if (c->id == RALLY_TYPE) updateSettingsDisplay(c->data);
 }
 
 // A two-key selector (or three with `c3`); `active` is the lit key's index.
-GtkWidget* seg(AppData* d, Setting id, const char* a, const char* b, int active, const char* c3 = nullptr) {
+// `greyed` is a bit mask of keys that cannot be pressed (bit i = key i); `key_w` 0 = default width.
+GtkWidget* seg(AppData* d, Setting id, const char* a, const char* b, int active, const char* c3 = nullptr,
+               unsigned greyed = 0, int key_w = 0) {
     const int n = c3 ? 3 : 2;
     SegCtl* c = new SegCtl{d, id, {nullptr, nullptr, nullptr}, n};
     allCtls().push_back(c);
@@ -105,7 +115,8 @@ GtkWidget* seg(AppData* d, Setting id, const char* a, const char* b, int active,
     const char* labels[3] = {a, b, c3};
     for (int i = 0; i < n; i++) {
         GtkWidget* k = gtk_button_new_with_label(labels[i]);
-        gtk_widget_set_size_request(k, n == 3 ? 56 : 70, KEY_H);
+        gtk_widget_set_size_request(k, key_w ? key_w : (n == 3 ? 56 : 70), KEY_H);
+        if (greyed & (1u << i)) gtk_widget_set_sensitive(k, FALSE);
         addClass(k, "dist-heading");
         addClass(k, "key-small");
         g_object_set_data(G_OBJECT(k), "ctl", c);
@@ -194,49 +205,22 @@ GtkWidget* createSettingsScreen(AppData* d) {
     gtk_box_pack_end(GTK_BOX(head), ver, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(right), head, FALSE, FALSE, 0);
 
+    // Rally type: italian / greek / surrey (surrey is not built, greyed).
+    gtk_box_pack_end(GTK_BOX(row(right, "Rally type")), seg(d, RALLY_TYPE, "italian", "greek", stateIndex(s, RALLY_TYPE), "surrey", 1u << 2, 76), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(right, "Speed units")), seg(d, UNITS, "kph", "mph", s.units ? 1 : 0), FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(row(right, "Distance units")), seg(d, DISTANCE_UNITS, "00.00", "0,000", stateIndex(s, DISTANCE_UNITS)), FALSE, FALSE, 0);
+    // Only meaningful for surrey: "on" stays greyed until surrey is built.
+    gtk_box_pack_end(GTK_BOX(row(right, "Non-zero stage start")), seg(d, NONZERO_START, "off", "on", 0, nullptr, 1u << 1), FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(row(right, "Measure type")), seg(d, MEASURE_TYPE, "AB,BC", "AB,AC", stateIndex(s, MEASURE_TYPE)), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(right, "Stage data logging")), seg(d, STAGE_LOG, "off", "on", s.stage_logging ? 1 : 0), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(right, "Sensor logging")), seg(d, SENSOR_LOG, "off", "on", s.debug_logs_enabled ? 1 : 0), FALSE, FALSE, 0);
-    gtk_box_pack_end(GTK_BOX(row(right, "Force single display")), seg(d, FORCE_SINGLE, "off", "on", s.force_single_display ? 1 : 0), FALSE, FALSE, 0);
 
     d->settingsInfoLabel = GTK_LABEL(gtk_label_new(""));
     addClass(GTK_WIDGET(d->settingsInfoLabel), "set-name");
     gtk_label_set_xalign(d->settingsInfoLabel, 0.0f);
     gtk_widget_set_size_request(GTK_WIDGET(d->settingsInfoLabel), COL_W, ROW_H);
-    // Not a setting: it sits at the foot of the column, below the Wi-Fi link.
+    // Not a setting: fps and CPU at the foot of the column.
     gtk_box_pack_end(GTK_BOX(right), GTK_WIDGET(d->settingsInfoLabel), FALSE, FALSE, 0);
-
-    // Wi-Fi link: just the address and its QR code (no hotspot switch).
-    GtkWidget* wifi = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_widget_set_size_request(wifi, COL_W, QR_SIZE);
-    // The name and the address each take a row of their own, level with the rows of the
-    // left column (Ahead/Behind Tone, Tone when behind).
-    GtkWidget* wtext = gtk_box_new(GTK_ORIENTATION_VERTICAL, GAP);
-    GtkWidget* wname = gtk_label_new("Wi-Fi phone link");
-    addClass(wname, "set-name");
-    gtk_label_set_xalign(GTK_LABEL(wname), 0.0f);
-    d->webUrlLabel = GTK_LABEL(gtk_label_new(""));
-    addClass(GTK_WIDGET(d->webUrlLabel), "set-url");   // same size as the names, still cyan
-    gtk_label_set_xalign(d->webUrlLabel, 0.0f);
-    gtk_widget_set_size_request(wname, -1, ROW_H);
-    gtk_widget_set_size_request(GTK_WIDGET(d->webUrlLabel), -1, ROW_H);
-    gtk_box_pack_start(GTK_BOX(wtext), wname, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(wtext), GTK_WIDGET(d->webUrlLabel), FALSE, FALSE, 0);
-    // Third row, beside the QR code: how to get the phone page without the browser's bars.
-    GtkWidget* wnote = gtk_label_new("load from home screen to avoid landscape tabs");
-    addClass(wnote, "set-note");
-    gtk_label_set_xalign(GTK_LABEL(wnote), 0.0f);
-    gtk_label_set_line_wrap(GTK_LABEL(wnote), TRUE);
-    gtk_widget_set_size_request(wnote, -1, ROW_H);
-    gtk_box_pack_start(GTK_BOX(wtext), wnote, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(wifi), wtext, TRUE, TRUE, 0);
-    // The QR code under the off/on keys, right-aligned with them.
-    d->webQrArea = gtk_drawing_area_new();
-    gtk_widget_set_size_request(d->webQrArea, QR_SIZE, QR_SIZE);
-    gtk_widget_set_valign(d->webQrArea, GTK_ALIGN_START);
-    g_signal_connect(d->webQrArea, "draw", G_CALLBACK(on_qr_draw), d);
-    gtk_box_pack_end(GTK_BOX(wifi), d->webQrArea, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(right), wifi, FALSE, FALSE, 0);
 
     // ── keypad and menu key, far right ──
     GtkWidget* kp = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
@@ -269,5 +253,5 @@ void updateSettingsDisplay(AppData* d) {
     std::string info = std::string("Screen ") + gtk_label_get_text(d->updatesPerSecLabel)
                      + "   " + gtk_label_get_text(d->cpuTempLabel);
     gtk_label_set_text(d->settingsInfoLabel, info.c_str());
-    updateWebLinkDisplay(d);
+    updateWebLinkDisplay(d);   // the link itself now lives on the Setup page
 }

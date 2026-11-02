@@ -25,6 +25,21 @@ public:
     TestSuite* createSuite() {
         auto* suite = new TestSuite("Stage Rows (RB-SEG-08)");
 
+        suite->addTest("a stage taken for driving steps into ditto rows by itself; speed-change auto untouched", []() {
+            // Stage 8 as stored: every auto off. 36 kph rows 0-2 (1, 2 ditto), 49 kph row 3, row 4 ditto.
+            std::vector<Segment> v(5);
+            v[0].target_speed_kph = 36; v[1].changesSpeed = false; v[2].changesSpeed = false;
+            v[3].target_speed_kph = 49; v[4].changesSpeed = false;
+            for (auto& seg : v) seg.autoNext = false;
+            const std::vector<Segment> d = stageForDriving(v);
+            return d.size() == 5
+                && d[0].autoNext && d[1].autoNext      // into ditto rows 1 and 2
+                && !d[2].autoNext                      // into the 49 kph change: the crew's auto (off)
+                && d[3].autoNext                       // into ditto row 4
+                && d[1].target_speed_kph == 36 && d[4].target_speed_kph == 49
+                && !v[0].autoNext;                     // the stored roadbook is not touched
+        });
+
         suite->addTest("add distance makes one row per distance, each carrying the speed above", []() {
             std::vector<Segment> v;
             appendStageDistances(v, 0, {1000, 1500, 2300});
@@ -82,19 +97,30 @@ public:
         });
 
         suite->addTest("distances: thousands commas ignored, ; separates, whole metres", []() {
-            auto p = parseStageDistances("1,000;1,500; 2,300", 0);
+            auto p = parseStageDistances("1,000;1,500; 2,300");
             return p.accepted.size() == 3 && p.accepted[0] == 1000 && p.accepted[2] == 2300
                 && p.rest.empty();
         });
 
         suite->addTest("distances: stops at the first bad token and keeps the rest", []() {
-            auto p = parseStageDistances("1000;900;2000", 0);
-            return p.accepted.size() == 1 && p.rest == "900;2000";
+            auto p = parseStageDistances("1000;abc;2000");
+            return p.accepted.size() == 1 && p.rest == "abc;2000";
         });
 
-        suite->addTest("distances must pass the last row's end", []() {
-            auto p = parseStageDistances("500;1200", 800);
-            return p.accepted.empty() && p.rest == "500;1200";
+        // RB-SEG-16: distances may fall anywhere, in any order; only 0 or less is a bad token.
+        suite->addTest("distances may come in any order", []() {
+            auto p = parseStageDistances("1000;900;2000");
+            return p.accepted.size() == 3 && p.accepted[1] == 900 && p.rest.empty();
+        });
+
+        suite->addTest("a distance of 0 or less is a bad token", []() {
+            auto p = parseStageDistances("500;0;700");
+            return p.accepted.size() == 1 && p.rest == "0;700";
+        });
+
+        suite->addTest("km distances: ',' or '.' is the decimal, two decimals, metres out", []() {
+            auto p = parseStageDistances("17,23;17.5", true);
+            return p.accepted.size() == 2 && p.accepted[0] == 17230 && p.accepted[1] == 17500;
         });
 
         suite->addTest("beep distances: every row's end", []() {
@@ -185,6 +211,91 @@ public:
             std::vector<Segment> w;
             appendStageDistances(w, from, {1250, 1500});
             return from == 0.0 && w.size() == 2;
+        });
+
+        // ---- RB-SEG-16: add distance splits a row ----
+        suite->addTest("add 2000 inside 1,000-3,000 splits it; the new half carries the speed with chg off", []() {
+            std::vector<Segment> v;
+            appendStageDistances(v, 1000, {3000});
+            setRowSpeed(v, 0, 50);
+            std::string notice = insertStageDistances(v, 1000, {2000});
+            auto r = buildStageRows(v, 381, 1000);
+            return notice.empty() && r.size() == 2
+                && r[0].from_m == 1000 && r[0].to_m == 2000 && r[0].kph == 50 && r[0].chg
+                && r[1].from_m == 2000 && r[1].to_m == 3000 && r[1].kph == 50 && !r[1].chg
+                && r[1].auto_on && r[1].number == 382;
+        });
+
+        suite->addTest("a distance on an existing point or at 0 is refused with a notice", []() {
+            auto v = sample();
+            const size_t n = v.size();
+            std::string a = insertStageDistances(v, 0, {1500});
+            std::string b = insertStageDistances(v, 0, {0});
+            return !a.empty() && !b.empty() && v.size() == n;
+        });
+
+        suite->addTest("a list can mix inserts and appends in any order", []() {
+            std::vector<Segment> v;
+            appendStageDistances(v, 1000, {3000});
+            std::string notice = insertStageDistances(v, 1000, {5000, 2000});
+            auto r = buildStageRows(v, 1, 1000);
+            return notice.empty() && r.size() == 3 && r[0].to_m == 2000 && r[1].to_m == 3000 && r[2].to_m == 5000;
+        });
+
+        suite->addTest("a distance before the stage's first from m is refused", []() {
+            std::vector<Segment> v;
+            appendStageDistances(v, 1000, {3000});
+            std::string notice = insertStageDistances(v, 1000, {500});
+            return !notice.empty() && v.size() == 1;
+        });
+
+        // ---- RB-SEG-17: box numbers ----
+        suite->addTest("box defaults to the row above + 1; a typed box sticks and carries on", []() {
+            auto v = sample();
+            v[2].box = 250;
+            auto r = buildStageRows(v, 100, 0);
+            return r[0].number == 100 && r[1].number == 101 && r[2].number == 250;
+        });
+
+        suite->addTest("a stage saved before box existed numbers first_number + index", []() {
+            const char* path = "test_stage_box_old.json";
+            RallyState a;
+            a.segments = sample();
+            ConfigFile::save(a, path);
+            RallyState b;
+            ConfigFile::load(b, path);
+            std::remove(path);
+            auto r = buildStageRows(b.segments, 7, 0);
+            return r[0].number == 7 && r[1].number == 8 && r[2].number == 9 && b.segments[1].box == -1;
+        });
+
+        suite->addTest("a typed box survives a save and load", []() {
+            const char* path = "test_stage_box_rt.json";
+            RallyState a;
+            a.segments = sample();
+            a.segments[2].box = 250;
+            ConfigFile::save(a, path);
+            RallyState b;
+            ConfigFile::load(b, path);
+            std::remove(path);
+            return b.segments[2].box == 250 && b.segments[1].box == -1;
+        });
+
+        suite->addTest("typed distances: metres or kilometres", []() {
+            return parseDistance("1,320", false) == 1320 && parseDistance("17,43", true) == 17430
+                && parseDistance("17.5 km", true) == 17500 && parseDistance("x", true) == -1
+                && parseDistance("", false) == -1;
+        });
+
+        suite->addTest("duration and elapsed read h:mm:ss", []() {
+            return formatHMmSs(131) == "0:02:11" && formatHMmSs(35999) == "9:59:59" && formatHMmSs(0) == "0:00:00"
+                && formatHMmSs(3661) == "1:01:01";
+        });
+
+        suite->addTest("distance text: metres grouped, km two decimals", []() {
+            return formatDistance(1320, false) == "1,320" && formatDistance(540, false) == "540"
+                && formatDistance(17430, true) == "17.43" && formatDistance(380, true) == "0.38"
+                && formatDistance(125, true) == "0.13";
         });
 
         suite->addTest("offset reads as minutes and hours from 60 s up", []() {

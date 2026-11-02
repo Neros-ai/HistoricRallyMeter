@@ -11,7 +11,8 @@ std::vector<StageRow> buildStageRows(const std::vector<Segment>& segs,
     double total = 0.0;
     for (size_t i = 0; i < segs.size(); i++) {
         StageRow r;
-        r.number = first_number + static_cast<long>(i);
+        r.number = (i == 0) ? first_number
+                 : (segs[i].box >= 0 ? segs[i].box : rows.back().number + 1);
         r.from_m = from;
         r.dist_m = segs[i].distance_m;
         r.to_m = from + r.dist_m;
@@ -29,29 +30,28 @@ std::vector<StageRow> buildStageRows(const std::vector<Segment>& segs,
     return rows;
 }
 
-DistanceParse parseStageDistances(const std::string& text, double after_m) {
+DistanceParse parseStageDistances(const std::string& text, bool km) {
     DistanceParse out;
     size_t pos = 0;
-    double prev = after_m;
     while (pos <= text.size()) {
         size_t semi = text.find(';', pos);
         size_t end = (semi == std::string::npos) ? text.size() : semi;
         std::string tok;
         for (size_t i = pos; i < end; i++) {
             char c = text[i];
-            if (c == ',' || c == ' ' || c == '\t') continue;
+            if (c == ' ' || c == '\t') continue;
+            if (c == ',') { if (km) tok += '.'; continue; }
             tok += c;
         }
         if (!tok.empty()) {
             char* stop = nullptr;
             double v = std::strtod(tok.c_str(), &stop);
-            bool ok = stop && *stop == '\0' && v > prev;
+            bool ok = stop && *stop == '\0' && v > 0.0;
             if (!ok) {
                 out.rest = text.substr(pos);
                 return out;
             }
-            out.accepted.push_back(std::round(v));   // whole metres
-            prev = out.accepted.back();
+            out.accepted.push_back(std::round(km ? v * 1000.0 : v));   // whole metres
         }
         if (semi == std::string::npos) break;
         pos = semi + 1;
@@ -66,6 +66,12 @@ void carrySpeeds(std::vector<Segment>& segs) {
             segs[i - 1].autoNext = true;
         }
     }
+}
+
+std::vector<Segment> stageForDriving(const std::vector<Segment>& roadbook) {
+    std::vector<Segment> segs = roadbook;
+    carrySpeeds(segs);
+    return segs;
 }
 
 void appendStageDistances(std::vector<Segment>& segs, double first_from_m,
@@ -83,6 +89,42 @@ void appendStageDistances(std::vector<Segment>& segs, double first_from_m,
         segs.push_back(s);
         end = to;
     }
+}
+
+std::string insertStageDistances(std::vector<Segment>& segs, double first_from_m,
+                                 const std::vector<double>& to_m) {
+    std::string refused;
+    auto refuse = [&](double m) {
+        if (!refused.empty()) refused += ", ";
+        refused += formatDistance(m, false);
+    };
+    for (double to : to_m) {
+        double from = first_from_m;
+        bool done = false;
+        if (to <= first_from_m) { refuse(to); continue; }
+        for (size_t i = 0; i < segs.size() && !done; i++) {
+            const double end = from + segs[i].distance_m;
+            if (to == from || to == end) { refuse(to); done = true; }
+            else if (to > from && to < end) {
+                Segment second = segs[i];            // keeps the speed and the row's own auto
+                second.distance_m = end - to;
+                second.changesSpeed = false;
+                second.box = -1;
+                segs[i].distance_m = to - from;
+                segs[i].autoNext = true;             // the new half starts by itself
+                segs.insert(segs.begin() + static_cast<long>(i) + 1, second);
+                done = true;
+            }
+            from = end;
+        }
+        if (!done) {
+            std::vector<double> one = {to};
+            appendStageDistances(segs, first_from_m, one);
+        }
+    }
+    carrySpeeds(segs);
+    if (refused.empty()) return "";
+    return "Not added (already a point, or not past the start): " + refused + " m.";
 }
 
 void setRowSpeed(std::vector<Segment>& segs, size_t row, double kph) {
@@ -159,6 +201,23 @@ std::string formatMmSs(double seconds) {
     return buf;
 }
 
+std::string formatHMmSs(double seconds) {
+    long t = static_cast<long>(std::lround(seconds));
+    if (t < 0) t = 0;
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%ld:%02ld:%02ld", t / 3600, (t / 60) % 60, t % 60);
+    return buf;
+}
+
+std::string formatDistance(double metres, bool km) {
+    char buf[32];
+    if (km) {
+        snprintf(buf, sizeof(buf), "%.2f", std::floor(metres / 10.0 + 0.5) / 100.0);
+        return buf;
+    }
+    return formatDistanceGrouped(static_cast<long>(std::lround(metres)));
+}
+
 long parseTimeOfDay(const std::string& text) {
     int h = 0, m = 0, s = 0, used = 0;
     int n = sscanf(text.c_str(), "%d:%d:%d%n", &h, &m, &s, &used);
@@ -171,6 +230,20 @@ long parseTimeOfDay(const std::string& text) {
     }
     if (h < 0 || h > 23 || m < 0 || m > 59 || s < 0 || s > 59) return -1;
     return h * 3600L + m * 60L + s;
+}
+
+long parseDistance(const std::string& text, bool km) {
+    if (!km) return parseMetres(text);
+    std::string tok;
+    for (char c : text) {
+        if (c == ' ' || c == 'k' || c == 'K' || c == 'm' || c == 'M') continue;
+        tok += (c == ',') ? '.' : c;
+    }
+    if (tok.empty()) return -1;
+    char* stop = nullptr;
+    const double v = std::strtod(tok.c_str(), &stop);
+    if (!stop || *stop != '\0' || v < 0) return -1;
+    return static_cast<long>(std::lround(v * 1000.0));
 }
 
 long parseMetres(const std::string& text) {

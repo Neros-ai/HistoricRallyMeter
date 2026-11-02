@@ -23,6 +23,11 @@ private:
     bool virt_init = false;
     bool reverse_on = false;
     int64_t pending_shift1 = 0, pending_shift2 = 0;  // raw - virtual, applied at the first poll
+    // Freeze: while held, raw advances are ignored, so every distance stands
+    // still and carries on from the same figure when released.
+    bool hold_on = false;
+    bool held_init = false;                           // start on held_v1/2 at the first poll
+    int64_t held_v1 = 0, held_v2 = 0;
     int current_index = 0;
     int64_t last_poll_time_ms = 0;
     static constexpr int MIN_POLL_INTERVAL_MS = 5;
@@ -56,6 +61,16 @@ public:
     // from the virtual (distance) count.
     void setReverse(bool on) { reverse_on = on; }
     bool reverse() const { return reverse_on; }
+    // Freeze: while on, travel is not counted (speed still is, from the raw count).
+    void setHold(bool on) { hold_on = on; }
+    bool hold() const { return hold_on; }
+    // Restart while frozen: the virtual count starts at exactly these values,
+    // whatever the raw reading. Only effective before the first poll.
+    void setHeldVirtual(int64_t v1, int64_t v2) {
+        if (!virt_init) { held_init = true; held_v1 = v1; held_v2 = v2; }
+    }
+    int64_t virtual1() const { return virt_init ? virt1 : (held_init ? held_v1 : 0); }
+    int64_t virtual2() const { return virt_init ? virt2 : (held_init ? held_v2 : 0); }
     // Restore raw - virtual from a saved config. Only effective before the
     // first poll; later calls are ignored.
     void setVirtualShift(int64_t s1, int64_t s2) {

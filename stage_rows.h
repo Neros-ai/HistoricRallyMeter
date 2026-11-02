@@ -13,7 +13,7 @@
 #include "rally_types.h"
 
 struct StageRow {
-    long number = 0;        // roadbook number: first_number + index
+    long number = 0;        // roadbook box: typed (Segment::box), else the row above + 1; row 1 = first_number
     double from_m = 0;      // where the leg starts (first_from_m for row 1)
     double to_m = 0;        // where it ends: the distance typed into "add distance"
     double dist_m = 0;      // leg length
@@ -29,22 +29,32 @@ struct StageRow {
 std::vector<StageRow> buildStageRows(const std::vector<Segment>& segs,
                                      long first_number, double first_from_m);
 
-// "1,000;1,500;2,300" -> metres. ';' separates, ',' is a thousands separator
-// and is ignored, spaces ignored. Tokens must be positive and each greater
-// than the one before (the first greater than `after_m`). Parsing stops at the
-// first bad token; `accepted` holds the good ones before it and `rest` the
-// text from the bad token on (empty when everything was taken).
+// "1,000;1,500;2,300" -> metres. ';' separates, spaces ignored; in metres ','
+// is a thousands separator and ignored. With `km` the figures are kilometres
+// ("17,23" or "17.23"), ',' or '.' the decimal, and come out in metres.
+// Tokens must be positive and may come in any order (RB-SEG-16). Parsing
+// stops at the first bad token; `accepted` holds the good ones before it and
+// `rest` the text from the bad token on (empty when everything was taken).
 struct DistanceParse {
     std::vector<double> accepted;
     std::string rest;
 };
-DistanceParse parseStageDistances(const std::string& text, double after_m);
+DistanceParse parseStageDistances(const std::string& text, bool km = false);
 
 // Append one row per distance (each a "to m" measured from the stage's start
 // frame, i.e. absolute roadbook metres). A new row carries the speed above and
 // is not a speed change. `segs` must already hold the rows the distances follow.
 void appendStageDistances(std::vector<Segment>& segs, double first_from_m,
                           const std::vector<double>& to_m);
+
+// RB-SEG-16: add each distance where it falls. Past the end it appends as
+// appendStageDistances does; inside a row it splits that row there: the first
+// half keeps the row's chg, auto and box, the new second half carries the same
+// speed with chg off and its auto on. A distance at or before the stage's
+// start, or on an existing row boundary, is refused. Returns a notice naming
+// the refused distances ("" when every one was placed).
+std::string insertStageDistances(std::vector<Segment>& segs, double first_from_m,
+                                 const std::vector<double>& to_m);
 
 void setRowSpeed(std::vector<Segment>& segs, size_t row, double kph);
 // Ticks / unticks chg. Row 0 is always a change and ignores this.
@@ -66,6 +76,11 @@ void deleteRow(std::vector<Segment>& segs, double& first_from_m, size_t row);
 // advances by itself. Called by every edit above; exposed for loaders.
 void carrySpeeds(std::vector<Segment>& segs);
 
+// The roadbook as it is driven (greek, owner 2026-10-31): a ditto row is always
+// entered by itself -- auto belongs to speed changes only -- so every row before
+// a ditto row gets autoNext, whatever the stored file says. Speeds carried too.
+std::vector<Segment> stageForDriving(const std::vector<Segment>& roadbook);
+
 // Metres of travel from the stage start at which each row ends, for Beep
 // Assist: every row beeps.
 std::vector<double> deriveWaypoints(const std::vector<Segment>& segs);
@@ -75,10 +90,18 @@ void recomputeSegmentCounts(std::vector<Segment>& segs, long calibration);
 
 // "2:00", "0:58", "62:05" for a number of seconds (rounded).
 std::string formatMmSs(double seconds);
+// Always h:mm:ss: 131 -> "0:02:11", 35999 -> "9:59:59" (duration and elapsed on Segments).
+std::string formatHMmSs(double seconds);
+// A distance in metres as the Distance units setting shows it: grouped metres
+// ("1,320") or kilometres to two decimals ("17.43").
+std::string formatDistance(double metres, bool km);
 
 // "10:45" or "10:45:30" -> seconds after midnight; -1 for anything else.
 long parseTimeOfDay(const std::string& text);
 // "6,200", "6200 m" -> whole metres; -1 for anything else.
 long parseMetres(const std::string& text);
+// A typed distance as whole metres: metres as parseMetres, or with `km` kilometres
+// ("17,43", "17.5 km"); -1 for anything else.
+long parseDistance(const std::string& text, bool km);
 
 #endif // STAGE_ROWS_H

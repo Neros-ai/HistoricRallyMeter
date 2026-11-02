@@ -2,6 +2,7 @@
 #include "sim_counter.h"
 #include "rally_state.h"
 #include "calculations.h"
+#include "sector.h"
 #include "config_file.h"
 #include <sstream>
 #include <cstdlib>
@@ -84,9 +85,11 @@ static void recoverFromSimulatedPowerLoss(AppData* data) {
         data->simCounter2->simulatePowerLoss();
         data->simCounter2->setPaused(false);
     }
-    handleCounterPowerLoss(*data->counter1, *data->counter2, REGISTER,
-        *data->state, getRallyTime_ms(*data->state),
-        [](const RallyState& s) { ConfigFile::save(s); });
+    if (handleCounterPowerLoss(*data->counter1, *data->counter2, REGISTER,
+            *data->state, getRallyTime_ms(*data->state),
+            [](const RallyState& s) { ConfigFile::save(s); })) {
+        zeroOdometer(*data->state, data->state->total_start_cntr1, data->state->total_start_cntr2);
+    }
 }
 
 static void on_control_power_loss_clicked(GtkWidget*, gpointer user_data) {
