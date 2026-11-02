@@ -194,6 +194,18 @@ public:
                 && s.reverse_shift1 == p.virtualShift1();
         });
 
+        suite->addTest("a freeze press before the first counter poll is ignored", [this]() {
+            RallyState s;
+            CounterPoller p;
+            p.setSpuriousCheckEnabled(false);
+            MockI2CCounter a(1, 0x70), b(1, 0x71);
+            applyFreeze(s, p, true);
+            const bool early = !s.freeze_on && !p.hold();
+            feed(p, a, b, 1000);
+            applyFreeze(s, p, true);
+            return early && s.freeze_on && p.hold() && s.freeze_virt1 == 1000;
+        });
+
         suite->addTest("freeze state and held count survive a config save and load", []() {
             const char* path = "test_freeze_cfg.json";
             RallyState s;
@@ -357,6 +369,21 @@ public:
             // Nothing to fold: next row already changes, or no change follows.
             const bool none = foldCarriedRows(v, 0) == 0 && foldCarriedRows(v, 1) == 0;
             return ok && none;
+        });
+
+        suite->addTest("folding carried rows takes the last folded row's auto setting", []() {
+            std::vector<Segment> v(3);
+            v[0].distance_m = 500; v[0].autoNext = true;
+            v[1].distance_m = 300; v[1].changesSpeed = false; v[1].autoNext = false;   // roadbook: wait for next
+            v[2].target_speed_kph = 49; v[2].distance_m = 400;
+            foldCarriedRows(v, 0);
+            const bool manual = v.size() == 2 && !v[0].autoNext;
+            std::vector<Segment> w(3);
+            w[0].distance_m = 500; w[0].autoNext = false;
+            w[1].distance_m = 300; w[1].changesSpeed = false; w[1].autoNext = true;
+            w[2].target_speed_kph = 49; w[2].distance_m = 400;
+            foldCarriedRows(w, 0);
+            return manual && w[0].autoNext;
         });
 
         suite->addTest("countdown metres run to the next speed change, not the end of the row", []() {

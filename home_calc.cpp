@@ -46,6 +46,9 @@ long foldCarriedRows(std::vector<Segment>& segs, long cur) {
         segs[cur].distance_counts += segs[i].distance_counts;
         segs[cur].distance_m += segs[i].distance_m;
     }
+    // The merged row ends where the last folded row did, so it keeps that row's auto setting
+    // (as mergeSegmentBack does): a roadbook that said wait for next must not turn into auto.
+    segs[cur].autoNext = segs[target - 1].autoNext;
     segs.erase(segs.begin() + (cur + 1), segs.begin() + target);
     return target - cur - 1;
 }
