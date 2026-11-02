@@ -346,7 +346,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     }
 
     // Scale chevrons + segment-end tick along the needle.
-    // The number of chevrons encodes the current zone (green=1, amber=2, red=3).
+    // One chevron; it carries the countdown along the needle (RB-DRV-19). The zone is shown by the arc colour only.
     // The topmost chevron starts 20% out from the hub; while within a segment the
     // whole group slides toward the segment-end tick (20% from the tip) in
     // proportion to how much of the segment has been driven. Outside a segment the
