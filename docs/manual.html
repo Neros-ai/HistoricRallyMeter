@@ -926,10 +926,6 @@ clock keeps running.</li>
 <p>Distance in the current substage; zeroes at every new substage when <code>next substage</code>
 is pressed. Press to zero.</p>
 
-<p>Past the end of a substage, the count down km (for example <code>+0.04</code>) and time (for
-example <code>+0:01.4</code>) turn red and count up. Both reset at the next substage. Before a sector
-starts, the preview opens on the sector's first row.</p>
-
 <h4>navi</h4>
 <p>An independent distance counter. Press to change the distance.</p>
 
@@ -980,7 +976,7 @@ buttons display as black on white when active and a whooping sound is emitted.</
       <rect x="8" y="147" width="330" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
       <text x="22" y="175" font-size="24" font-weight="bold">pc1</text><text x="22" y="203" font-size="20">the substage being driven</text>
       <rect x="8" y="226" width="330" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
-      <text x="22" y="254" font-size="24" font-weight="bold">count down</text><text x="22" y="282" font-size="20">km and time to end of substage</text>
+      <text x="22" y="254" font-size="24" font-weight="bold">count down</text><text x="22" y="282" font-size="20">km and seconds to end of substage</text>
       <rect x="8" y="306" width="330" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
       <text x="22" y="334" font-size="24" font-weight="bold">pc2 (faded)</text><text x="22" y="362" font-size="20">the next substage</text>
       <rect x="592" y="430" width="300" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
@@ -1002,6 +998,9 @@ buttons display as black on white when active and a whooping sound is emitted.</
   </svg>
   <figcaption>The substage display, inside pc 1.</figcaption>
 </figure>
+
+<p>Past the end of a substage, the count down km (for example <code>+0.04</code>) and seconds (for
+example <code>+0:01.4</code>) turn red and count up. The seconds show only on pc, pm and co rows.</p>
 
 </section>
 
@@ -1254,7 +1253,7 @@ taken</b> shows under Trip history and on the phone. It freezes at the finish.</
 <b>countdown</b> (metres and minutes to the next speed change or finish) sits at the foot of the
 stage column; between stages Stage arrival shows there. Under the Trip history (last four),
 <b>time taken</b> (shown as ss and the stage number) for the last stage stays until the next one
-finishes. The phone shows navi and time taken. Beeps are measured from navi. <code>check total</code>
+finishes. The phone shows navi and time taken. Beeps follow navi, counted from the start box. <code>check total</code>
 shows in orange where <code>manual</code> normally is.</p>
 
 <h4>When things go wrong</h4>
