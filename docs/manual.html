@@ -309,7 +309,8 @@ section), or by pressing the Start Now <img src="manual-images/key-start-now.png
 black on white, and the word <b>auto</b> (cyan) appears next to the start time. Autostart can be
 quickly toggled on/off using the Autostart button on the navigation display. When Autostart is not
 armed the word <b>manual</b> (orange) appears next to the start time. A start time that has passed,
-with nothing armed or running, is crossed out in red.</p>
+with nothing armed or running, is crossed out in red. After <code>start now</code> the panel reads
+<b>manual</b> and the time of the press; the time shrinks to leave a gap before the word.</p>
 
 <p>What happens with autostart:</p>
 <ul>
@@ -336,6 +337,7 @@ between pressing and the start minute will be included in the stage distance.</l
 <li>Pressing the button overrides any programmed autostart.</li>
 <li>The Total and Trip distances zero immediately.</li>
 <li>The timer resets immediately.</li>
+<li>The Trip history is kept.</li>
 </ul>
 
 <h4>Starting scenarios</h4>
@@ -924,6 +926,10 @@ clock keeps running.</li>
 <p>Distance in the current substage; zeroes at every new substage when <code>next substage</code>
 is pressed. Press to zero.</p>
 
+<p>Past the end of a substage, the count down km (for example <code>+0.04</code>) and time (for
+example <code>+0:01.4</code>) turn red and count up. Both reset at the next substage. Before a sector
+starts, the preview opens on the sector's first row.</p>
+
 <h4>navi</h4>
 <p>An independent distance counter. Press to change the distance.</p>
 
@@ -1005,6 +1011,10 @@ buttons display as black on white when active and a whooping sound is emitted.</
 
 <p>Two pages: one on navi, ct and co rows, and one inside a pc or pm. All figures are in km and
 kph.</p>
+
+<p>A legend to the right of the green box reads <b>countdown</b> inside a pc or pm and
+<b>arrival</b> on navi rows. The gauge scale widens when the time error is bigger than the Gauge
+range.</p>
 
 <h4>Navigation (navi, ct and co rows)</h4>
 
@@ -1170,9 +1180,6 @@ rows there is no needle and no chevron.</p>
 
 <h2 id="surrey">Surrey rally type</h2>
 
-<div class="note"><b>Not built yet:</b> the surrey key in settings is greyed. This section
-describes the agreed design.</div>
-
 <p>For British road-book regularities such as the GoodBrook Surrey Hill Ramble. The roadbook gives
 one <b>running total</b> per section, from 0 at the section start, never reset at a box. A stage
 starts at a loosely given point in a box (&ldquo;about 75&nbsp;m after box 11&rdquo;), runs over
@@ -1236,7 +1243,7 @@ roadbook.</td></tr>
 <tr><td>A speed change at a box</td><td>nothing (<code>auto</code>)</td><td>Changes speed at the box.
 <code>next</code> and <code>prev</code> work as in greek.</td></tr>
 <tr><td>Passing the finish landmark</td><td><code>next</code> on the last row</td><td>The stage ends; <b>time
-taken</b> shows under Trip history and on the phone.</td></tr>
+taken</b> shows under Trip history and on the phone. It freezes at the finish.</td></tr>
 </table>
 
 <h3 id="surrey-navigation">Navigating a Surrey Stage</h3>
@@ -1246,7 +1253,8 @@ taken</b> shows under Trip history and on the phone.</td></tr>
 <code>navi</code> (cyan, the roadbook running total; tap to set or reset). During a stage,
 <b>countdown</b> (metres and minutes to the next speed change or finish) sits at the foot of the
 stage column; between stages Stage arrival shows there. Under the Trip history (last four),
-<b>time taken</b> for the last stage stays until the next one finishes. <code>check total</code>
+<b>time taken</b> (shown as ss and the stage number) for the last stage stays until the next one
+finishes. The phone shows navi and time taken. Beeps are measured from navi. <code>check total</code>
 shows in orange where <code>manual</code> normally is.</p>
 
 <h4>When things go wrong</h4>
@@ -1374,7 +1382,8 @@ double beep (100 recommended).</li>
 <li><b>Beep timing</b> &ndash; off/on. <b>Timing advance</b>: seconds before the box time for the
 single beep (0 recommended).</li>
 </ul>
-<div class="note">Beep Assist is for greek stages and is silent in italian. There, inside a pc, the
+<div class="note">In settings, Beep navigation, Beep timing and their advance figures are greyed
+while the rally type is italian; the choices are kept for greek. Beep Assist is for greek stages and is silent in italian. There, inside a pc, the
 box instead beeps the countdown to the end tube: at 30 s and 15 s, then 5, 4, 3, 2, 1, and a short
 beep on 0.</div>
 
@@ -1476,6 +1485,12 @@ ahead lower and smoother.</li>
 <ul>
 <li><b>Rally type</b> &ndash; greek / surrey / italian. See <a href="#rally-types">Rally
 types</a>. The software version (Nero2.1) is shown above it.</li>
+<li><b>Reaction time offset</b> &ndash; &minus;0.30 to +0.30 s in steps of 0.01 (default 0). A press
+at a point is taken as that much earlier, and the car that much further back. It applies to the
+italian tube <code>next</code>, the greek <code>next</code>, <code>start now</code> when moving at
+5 kph or more, and the surrey start and finish. It does not apply to autostart, <code>&plusmn;10</code>,
+<code>set</code> or <code>prev</code>. Positive means the crew press late. Find your figure by
+comparing the box's pc times with the official results.</li>
 <li><b>Speed units</b> &ndash; kph or mph.</li>
 <li><b>Distance units</b> &ndash; <b>00.00</b> (km) or <b>0,000</b> (metres) for
 <code>add distance</code>.</li>
@@ -1521,11 +1536,7 @@ screen, it runs without browser bars.</li>
 <p>Agreed or planned, but the box does <b>not</b> do these today:</p>
 <ul>
 <li><code>upload stage</code> on the segments page (greyed): loading a stage from a file.</li>
-<li>Italian: the count down <b>km</b> turning red and counting up past the line (the time already
-does).</li>
 <li>Italian driver display in km (it still reads <i>Distance (metres)</i>, Total and Trip).</li>
-<li>Beep Assist settings greyed in italian (it already stays silent there).</li>
-<li><b>Reaction time offset</b> setting (all rally types).</li>
 <li>Italian columns on the phone's Seg tab; keeping phone edits made while disconnected.</li>
 </ul>
 
@@ -1536,21 +1547,8 @@ is it what you want?</p>
 
 <table>
 <tr><th style="width: 5%">#</th><th>What was seen</th><th style="width: 30%">Where</th></tr>
-<tr><td>1</td><td>After <b>start now</b> (a manual flying start) the stage panel read
-<b>auto 18:01:56</b> &ndash; the word <i>auto</i> and the press time &ndash; not <i>manual</i>.</td><td>Greek
-navigation page, stage panel</td></tr>
-<tr><td>2</td><td>The Trip history (101, 368) was empty once the stage had started.</td><td>Greek
-navigation page</td></tr>
-<tr><td>3</td><td>Fixed 31 October: the greek Beep Assist no longer sounds in italian.</td><td>Italian, Beep timing on</td></tr>
-<tr><td>4</td><td>Inside pc 1 the driver's gauge was marked to &plusmn;5 s although Gauge range was
-set to 3.</td><td>Italian driver display</td></tr>
-<tr><td>5</td><td>The count down km stays at 0.00 once the line has gone by (a missed
-<code>next substage</code> does not show).</td><td>Italian navigation page</td></tr>
-<tr><td>6</td><td>After the sector ended, the preview showed pc 1 as the line, not the opening navi
-substage.</td><td>Italian navigation page, idle</td></tr>
-<tr><td>7</td><td>The word <i>manual</i> sits tight against a crossed-out start time.</td><td>Greek stage
-panel</td></tr>
-<tr><td>8</td><td>Nothing in this manual has been tried on the real box, a phone, or in mph.</td><td>Everywhere</td></tr>
+<tr><td>1</td><td>Fixed 31 October: the greek Beep Assist no longer sounds in italian.</td><td>Italian, Beep timing on</td></tr>
+<tr><td>2</td><td>Nothing in this manual has been tried on the real box, a phone, or in mph.</td><td>Everywhere</td></tr>
 </table>
 
 <h3>Suggested run-through</h3>
