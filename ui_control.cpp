@@ -153,7 +153,7 @@ GtkWidget* createControlWindow(AppData* data) {
         gtk_widget_get_style_context(GTK_WIDGET(data->controlStatusLabel)), "control-status");
     gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(data->controlStatusLabel), FALSE, FALSE, 0);
 
-    // Speed buttons: 25,30,35,40,45,50 km/h, 3 columns x 2 rows.
+    // Speed buttons: 20,25,30,35,40,45,50 km/h, 4 columns x 2 rows.
     GtkWidget* grid = gtk_grid_new();
     gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
     gtk_grid_set_column_spacing(GTK_GRID(grid), 8);
@@ -161,15 +161,15 @@ GtkWidget* createControlWindow(AppData* data) {
     gtk_grid_set_row_homogeneous(GTK_GRID(grid), TRUE);
     gtk_box_pack_start(GTK_BOX(vbox), grid, TRUE, TRUE, 0);
 
-    for (int i = 0; i < 6; i++) {
-        int kph = 25 + i * 5;
+    for (int i = 0; i < 7; i++) {
+        int kph = 20 + i * 5;
         GtkWidget* btn = gtk_button_new_with_label(std::to_string(kph).c_str());
         gtk_widget_set_size_request(btn, 100, 70);
         g_object_set_data(G_OBJECT(btn), "kph", GINT_TO_POINTER(kph));
         g_object_set_data(G_OBJECT(btn), "no_click_beep", GINT_TO_POINTER(1));
         g_signal_connect(btn, "clicked", G_CALLBACK(on_control_speed_clicked), data);
         data->controlSpeedButtons[i] = btn;
-        gtk_grid_attach(GTK_GRID(grid), btn, i % 3, i / 3, 1, 1);
+        gtk_grid_attach(GTK_GRID(grid), btn, i % 4, i / 4, 1, 1);
     }
 
     // Start / Stop row.
@@ -262,10 +262,10 @@ void updateControlDisplay(AppData* data) {
     }
     gtk_label_set_text(data->controlStatusLabel, status.str().c_str());
 
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 7; i++) {
         GtkWidget* btn = data->controlSpeedButtons[i];
         if (!btn) continue;
-        int kph = 25 + i * 5;
+        int kph = 20 + i * 5;
         GtkStyleContext* ctx = gtk_widget_get_style_context(btn);
         if (running && kph == static_cast<int>(data->controlSpeedKph)) {
             gtk_style_context_add_class(ctx, "active-speed");

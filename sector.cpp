@@ -157,6 +157,7 @@ void markSectorStart(RallyState& s) {
     s.sector_start_ms = italianStageStartMs(s.total_start_time_ms);
     s.total_start_time_ms = sectorClockZeroMs(s);   // the start time: :00 of the minute
     s.sector_undo = RallyState::SectorUndo();   // nothing from an earlier sector to undo
+    s.last_pc_error = RallyState::PcError();    // the last sector's pc error is not this sector's
     double card_s = 0.0;
     for (const Segment& g : s.stage_segments) card_s += rowSeconds(g);
     s.sector_card_ms = static_cast<int64_t>(std::llround(card_s * 1000.0));

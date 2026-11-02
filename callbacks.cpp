@@ -558,6 +558,9 @@ int64_t autoStartRemaining_ms(const AppData* data) {
 }
 
 bool autoStartHoldActive(const AppData* data) {
+    // Italian, no sector running (never started, or aborted): the elapsed clocks and averages
+    // read zero rather than counting on from the last sector. Distances keep their readings.
+    if (data->state->rally_type == 2 && data->state->stage_complete) return true;
     return autoStartHoldsTimeError(data->state->auto_start_rally_time_s,
                                    data->state->auto_start_early_departure,
                                    data->autoStartTriggered,
@@ -770,6 +773,7 @@ void performAbortStage(AppData* data) {
     // Ends the stage and nothing else: Total and Trip keep their readings,
     // and are reset with their own buttons if the crew want that.
     endStageAsIdle(data);
+    data->state->last_pc_error = RallyState::PcError();   // an aborted sector's pc error is not shown again
     // No stage, nothing to be ahead or behind of: the driver's needle goes
     // back to zero and the tone stops.
     data->aheadBehindSeconds = 0.0;

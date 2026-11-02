@@ -502,6 +502,14 @@ public:
                 && s.trial_start_m < 0.0;
         });
 
+        suite->addTest("a new sector does not show the last sector's pc error", []() {
+            RallyState s = running();
+            s.last_pc_error.valid = true; s.last_pc_error.ref = 5; s.last_pc_error.seconds = -39.62; s.last_pc_error.metres = -310;
+            s.total_start_time_ms = 41451000;
+            markSectorStart(s);
+            return !s.last_pc_error.valid && s.last_pc_error.ref == 0;
+        });
+
         suite->addTest("a sector opening on a pc times the pc from the real press", []() {
             RallyState s = running();
             s.stage_segments.erase(s.stage_segments.begin());            // opens on pc1
