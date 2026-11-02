@@ -159,6 +159,7 @@
       : ((msg.next_m === null || msg.next_m === undefined) ? '---' : formatDist(msg.next_m));
     $('next-m').style.color = (ic && ic.past) ? '#ff2626' : '';
     $('next-s').textContent = (ic && ic.s) ? ic.s : '';
+    $('next-s').style.display = (ic && ic.s) ? '' : 'none';
     $('next-s').style.color = (ic && ic.s_past) ? '#ff2626' : '';
     $('total-el').textContent = mmss(msg.total_s);
     $('trip-el').textContent = mmss(msg.trip_s);
