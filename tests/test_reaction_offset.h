@@ -61,6 +61,12 @@ public:
             return s.trial_start_ms == 41439920;
         });
 
+        suite->addTest("flying start: Trip and Total take the same distance back", []() {
+            RallyState s; s.rally_type = 0; s.reaction_offset_ms = 100;
+            applyStartPressOffset(s, 10.0);
+            return s.total_distance_adjust_cm == 100 && s.trip_distance_adjust_cm == 100;
+        });
+
         suite->addTest("italian tube press: the clock starts 80 ms earlier", []() {
             RallyState s = sector(80);
             applySectorNext(s, 385, 385, pressTimeMs(41440000, 80));

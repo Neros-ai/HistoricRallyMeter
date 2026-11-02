@@ -40,6 +40,7 @@ void applyStartPressOffset(RallyState& s, double speed_mps) {
     s.segment_start_time_ms = pressTimeMs(s.segment_start_time_ms, off);
     const long back = pressBackCm(speed_mps, off);
     s.total_distance_adjust_cm += back;
+    s.trip_distance_adjust_cm += back;   // Trip and Total agree at a flying start
     if (s.rally_type == 1) s.sector_start_odometer_cm -= back;   // surrey: navi total at the real point
 }
 
