@@ -15,7 +15,11 @@ bool greekBeepSettingsLocked(const RallyState& s) {
 }
 
 void applyRallyTypeDefaults(RallyState& s, int type) {
-    if (type == 2) {
+    if (type == 1) {
+        s.rally_type = 1;
+        s.distance_km = false;
+        s.measure_ab_bc = false;
+    } else if (type == 2) {
         s.rally_type = 2;
         s.distance_km = true;
     } else if (type == 0) {

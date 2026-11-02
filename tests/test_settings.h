@@ -92,11 +92,11 @@ public:
             return italian_ok && s.rally_type == 0 && !s.distance_km && !s.measure_ab_bc;
         });
 
-        suite->addTest("surrey is not built: choosing it changes nothing", []() {
+        suite->addTest("choosing surrey lights 0,000 and AB,AC (RB-NAV-43)", []() {
             RallyState s;
             applyRallyTypeDefaults(s, 2);
             applyRallyTypeDefaults(s, 1);
-            return s.rally_type == 2 && s.distance_km;
+            return s.rally_type == 1 && !s.distance_km && !s.measure_ab_bc;
         });
 
         suite->addTest("a fresh state starts with greek defaults", []() {

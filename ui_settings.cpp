@@ -18,7 +18,7 @@ constexpr int COL_W = 423, ROW_H = 38, HEAD_H = 26, KEY_H = 34, GAP = 5;
 enum Setting {
     BEEP_NAV, BEEP_TIMING, TONE_ON, TONE_BEHIND, TONE_AHEAD,
     UNITS, STAGE_LOG, SENSOR_LOG, GAUGE_RANGE,
-    RALLY_TYPE, DISTANCE_UNITS, NONZERO_START, MEASURE_TYPE
+    RALLY_TYPE, DISTANCE_UNITS, MEASURE_TYPE
 };
 
 struct SegCtl {
@@ -60,11 +60,10 @@ void apply(AppData* d, Setting id, int idx) {
     case SENSOR_LOG:  s.debug_logs_enabled = (idx == 1); setDebugLogging(d, s.debug_logs_enabled); break;
     case GAUGE_RANGE: s.gauge_range_s = idx + 1; break;
     case RALLY_TYPE:
-        // Keys are italian / greek / surrey; surrey is not built (its key is greyed).
-        applyRallyTypeDefaults(s, idx == 0 ? 2 : idx == 1 ? 0 : s.rally_type);
+        // Keys are italian / greek / surrey.
+        applyRallyTypeDefaults(s, idx == 0 ? 2 : idx == 1 ? 0 : 1);
         break;
     case DISTANCE_UNITS: s.distance_km = (idx == 0); break;   // keys: 00.00 / 0,000
-    case NONZERO_START:  break;                                // surrey only; not built
     case MEASURE_TYPE:   s.measure_ab_bc = (idx == 0); break;  // keys: AB,BC / AB,AC
     }
     // Beep Assist is on when either mode is: there is no separate master.
@@ -88,7 +87,6 @@ int stateIndex(const RallyState& s, Setting id) {
     case GAUGE_RANGE:  return s.gauge_range_s - 1;
     case RALLY_TYPE:   return s.rally_type == 2 ? 0 : s.rally_type == 1 ? 2 : 1;
     case DISTANCE_UNITS: return s.distance_km ? 0 : 1;
-    case NONZERO_START:  return 0;
     case MEASURE_TYPE:   return s.measure_ab_bc ? 0 : 1;
     }
     return 0;
@@ -205,12 +203,10 @@ GtkWidget* createSettingsScreen(AppData* d) {
     gtk_box_pack_end(GTK_BOX(head), ver, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(right), head, FALSE, FALSE, 0);
 
-    // Rally type: italian / greek / surrey (surrey is not built, greyed).
-    gtk_box_pack_end(GTK_BOX(row(right, "Rally type")), seg(d, RALLY_TYPE, "italian", "greek", stateIndex(s, RALLY_TYPE), "surrey", 1u << 2, 76), FALSE, FALSE, 0);
+    // Rally type: italian / greek / surrey.
+    gtk_box_pack_end(GTK_BOX(row(right, "Rally type")), seg(d, RALLY_TYPE, "italian", "greek", stateIndex(s, RALLY_TYPE), "surrey", 0, 76), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(right, "Speed units")), seg(d, UNITS, "kph", "mph", s.units ? 1 : 0), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(right, "Distance units")), seg(d, DISTANCE_UNITS, "00.00", "0,000", stateIndex(s, DISTANCE_UNITS)), FALSE, FALSE, 0);
-    // Only meaningful for surrey: "on" stays greyed until surrey is built.
-    gtk_box_pack_end(GTK_BOX(row(right, "Non-zero stage start")), seg(d, NONZERO_START, "off", "on", 0, nullptr, 1u << 1), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(right, "Measure type")), seg(d, MEASURE_TYPE, "AB,BC", "AB,AC", stateIndex(s, MEASURE_TYPE)), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(right, "Stage data logging")), seg(d, STAGE_LOG, "off", "on", s.stage_logging ? 1 : 0), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(right, "Sensor logging")), seg(d, SENSOR_LOG, "off", "on", s.debug_logs_enabled ? 1 : 0), FALSE, FALSE, 0);

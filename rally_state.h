@@ -193,8 +193,14 @@ public:
     int gauge_range_s = 3;   // driver gauge full scale: +-1, +-2 or +-3 s (Settings)
 
     // Nero2.1 Settings > System (RB-SET-09).
-    // Rally type: 0 greek (today), 1 surrey (not built; the key is greyed), 2 italian.
+    // Rally type: 0 greek (today), 1 surrey, 2 italian.
     int rally_type = 0;
+    // Surrey (RB-NAV-43): the last stage, start press to finish press (ms); -1 none.
+    int64_t time_taken_ms = -1;
+    // Surrey: rally ms of the finish press, 0 = none. Not persisted.
+    int64_t surrey_finish_at_ms = 0;
+    // Surrey: the roadbook fit failed (navi zeroed by mistake); drives `check total`.
+    bool surrey_fit_failed = false;
     // Distance units: false 0,000 (metres), true 00.00 (km, two decimals).
     bool distance_km = false;
     // Measure type: true AB,BC (the A-B, B-C zero key shows on the greek navi page), false AB,AC.
