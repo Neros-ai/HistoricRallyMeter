@@ -62,7 +62,19 @@ bool surreyFinishAvailable(const RallyState& s) {
 }
 
 bool surreyUndoAvailable(const RallyState& s, double navi_m, double last_to_m) {
-    return isSurrey(s) && s.stage_complete && s.surrey_finish_at_ms != 0 && navi_m < last_to_m;
+    // The finished stage must still be the one on screen: a recalled slot, an edited roadbook or an
+    // abort (segment -1) leaves the old figure behind and must not be reopened.
+    return isSurrey(s) && s.stage_complete && s.surrey_finish_at_ms != 0 && navi_m < last_to_m &&
+           s.segment_current_number >= 0 &&
+           s.segment_current_number == static_cast<long>(s.stage_segments.size()) - 1 &&
+           s.time_taken_stage == s.last_memory_slot;
+}
+
+std::string surreyLogTimeTaken(const RallyState& s) {
+    if (!isSurrey(s) || !s.stage_complete || s.segment_current_number < 0 ||
+        s.time_taken_stage != s.last_memory_slot)
+        return "";
+    return surreyTimeTakenText(s.time_taken_ms);
 }
 
 bool surreyUndoAvailableNow(const RallyState& s, uint64_t cntr1, uint64_t cntr2) {

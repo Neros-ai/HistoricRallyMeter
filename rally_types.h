@@ -160,7 +160,8 @@ struct AppData {
     // that is running, kept so Home goes on showing "auto hh:mm:ss" -- the time
     // the stage actually began -- instead of reverting to "manual" and the
     // memory's own start time the moment the target is spent. A start now
-    // (the flag-and-stopwatch key) records the moment of the press. 0 = none;
+    // (the flag-and-stopwatch key) also records the moment of the press, but
+    // Home no longer labels that one "auto" (startedByAuto is false). 0 = none;
     // the stage ending drops it. Runtime only.
     uint64_t autoFiredTime_s = 0;
     // Which memory (1-5) the armed or just-fired autostart belongs to: Home shows

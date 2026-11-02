@@ -496,7 +496,10 @@ void on_navi_dialog(GtkWidget* widget, gpointer user_data) {
     } else if (response == GTK_RESPONSE_APPLY) {
         resetOdometerKeepingPosition(*data->state, poll.cntr1, poll.cntr2);
     }
-    if (response == GTK_RESPONSE_OK || response == GTK_RESPONSE_APPLY) ConfigFile::save(*data->state);
+    if (response == GTK_RESPONSE_OK || response == GTK_RESPONSE_APPLY) {
+        data->beepCursorsStale = true;   // surrey beeps follow navi, which just moved
+        ConfigFile::save(*data->state);
+    }
 
     data->activeEntry = previous_entry;
     gtk_widget_destroy(dialog);
@@ -616,8 +619,10 @@ void zeroTimeBaselines(AppData* data) {
     // beeps and ahead/behind are both gated on this, so an early departure
     // stays silent on schedule until the appointed minute even though it is
     // already accumulating distance.
-    // The roadbook is fixed here for an ordinary start, and re-fixed
-    // harmlessly for an early departure, which already took it at arming.
+    // The roadbook is fixed here for an ordinary start, and re-fixed for an
+    // early departure, which already took it at arming. Harmless for greek and
+    // italian; surrey's early departure re-fits row 1 afterwards
+    // (surreyStartFromMemory runs after this).
     adoptRoadbookAsStage(data);
 
     data->aheadBehindSeconds = 0.0;
@@ -1254,8 +1259,7 @@ gboolean update_display(gpointer user_data) {
                     data->aheadBehindSeconds);
             }
         } else if (data->stageLog->isRunning()) {
-            data->stageLog->stop(isSurrey(*data->state) && data->state->stage_complete
-                                     ? surreyTimeTakenText(data->state->time_taken_ms) : std::string());   // stage ended, aborted or the switch went off
+            data->stageLog->stop(surreyLogTimeTaken(*data->state));   // stage ended, aborted or the switch went off
         }
     }
 

@@ -233,6 +233,41 @@ public:
             RallyState z = s; z.surrey_finish_at_ms = 0;
             return !none && ok && !surreyUndoAvailable(g, 99.0, 100.0) && !surreyUndoAvailable(z, 99.0, 100.0);
         });
+        suite->addTest("undo refused after the slot changes or the stage is aborted", [runningAt, ss1]() {
+            RallyState s = runningAt(ss1(), 0); s.last_memory_slot = 1;
+            applySurreyFinish(s, 1000);
+            const bool live = surreyUndoAvailable(s, 99.0, 100.0);
+            RallyState recalled = s; recalled.last_memory_slot = 2;
+            RallyState aborted = s; aborted.segment_current_number = -1;
+            RallyState edited = s; edited.stage_segments.push_back(edited.stage_segments[0]);
+            return live && !surreyUndoAvailable(recalled, 99.0, 100.0) && !surreyUndoAvailable(aborted, 99.0, 100.0)
+                && !surreyUndoAvailable(edited, 99.0, 100.0) && !undoSurreyFinish(aborted, 99.0, 100.0)
+                && aborted.time_taken_ms == 1000;
+        });
+        suite->addTest("surreyUndoAvailableNow: counters to navi to the slot's last to", [runningAt, ss1]() {
+            RallyState s = runningAt(ss1(), 0); s.last_memory_slot = 1;
+            s.memory_slots[0].first_from_m = 0.0;
+            Segment g = s.stage_segments[0]; g.distance_m = 100.0;
+            s.memory_slots[0].segments.assign(1, g);
+            applySurreyFinish(s, 1000);
+            setOdometerMetres(s, 0, 0, 0.0);
+            setOdometerMetres(s, 0, 0, 50.0);
+            const bool before = surreyUndoAvailableNow(s, 0, 0);
+            RallyState p = s; setOdometerMetres(p, 0, 0, 150.0);
+            RallyState q = s; q.last_memory_slot = 0;
+            return before && !surreyUndoAvailableNow(p, 0, 0) && !surreyUndoAvailableNow(q, 0, 0);
+        });
+        suite->addTest("stage log time taken only for a stage that really ended", [runningAt, ss1]() {
+            RallyState s = runningAt(ss1(), 0); s.last_memory_slot = 1;
+            applySurreyFinish(s, 560600);
+            const bool ended = surreyLogTimeTaken(s) == "9:20.6";
+            RallyState aborted = s; aborted.segment_current_number = -1;
+            RallyState other = s; other.last_memory_slot = 2;
+            RallyState g = s; g.rally_type = 0;
+            RallyState running = runningAt(ss1(), 0); running.last_memory_slot = 1; running.time_taken_ms = 5; running.time_taken_stage = 1;
+            return ended && surreyLogTimeTaken(aborted) == "" && surreyLogTimeTaken(other) == ""
+                && surreyLogTimeTaken(g) == "" && surreyLogTimeTaken(running) == "";
+        });
         suite->addTest("time taken rounds to tenths", []() {
             return surreyTimeTakenText(59960) == "1:00.0" && surreyTimeTakenText(560640) == "9:20.6"
                 && surreyTimeTakenText(3600000) == "1:00:00.0" && surreyTimeTakenText(-1) == "";

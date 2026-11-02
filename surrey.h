@@ -56,6 +56,10 @@ bool surreyUndoAvailable(const RallyState& s, double navi_m, double last_to_m);
 // As above, finding navi total from the counters and the last "to" from the loaded stage's slot.
 bool surreyUndoAvailableNow(const RallyState& s, uint64_t cntr1, uint64_t cntr2);
 
+// The time-taken text for the stage log when a stage stops: only a stage that really ended (last row,
+// complete, figure belongs to the loaded slot). An abort leaves segment -1 and gives "".
+std::string surreyLogTimeTaken(const RallyState& s);
+
 // The last row's "to" in roadbook metres: the slot's from figure plus its typed row distances.
 double surreyLastToMetres(const RallyState::MemorySlot& slot);
 
