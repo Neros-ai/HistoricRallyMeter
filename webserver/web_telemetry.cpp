@@ -193,6 +193,7 @@ std::string buildTelemetryJson(AppData* data) {
     const double rpm = propRpmFromCounts(raw_poll.cntr1, tenth.cntr1, rpm_ms, st.prop_pulses_per_rev);
     std::ostringstream ex;
     ex << ",\"gauge_range\":" << data->state->gauge_range_s
+       << ",\"reaction_offset_ms\":" << data->state->reaction_offset_ms
        << ",\"reverse\":" << (data->poller->reverse() ? "true" : "false")
        << ",\"navi_m\":" << ((isSurrey(st) || st.rally_type == 2) ? std::to_string(surreyNaviMetres(st, current_poll.cntr1, current_poll.cntr2)) : std::string("null"))
        << ",\"surrey\":" << (isSurrey(st) ? "true" : "false")
@@ -311,7 +312,8 @@ std::string buildStateJson(AppData* data) {
        << ",\"tone_type\":" << data->state->tone_type_behind
        << ",\"tone_type_behind\":" << data->state->tone_type_behind
        << ",\"tone_type_ahead\":" << data->state->tone_type_ahead
-       << ",\"gauge_range\":" << data->state->gauge_range_s;
+       << ",\"gauge_range\":" << data->state->gauge_range_s
+       << ",\"reaction_offset_ms\":" << data->state->reaction_offset_ms;
 
     // Which memory slots hold a stage, so the phone can mark them the way the
     // box does instead of offering five identical buttons.

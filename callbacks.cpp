@@ -1,4 +1,5 @@
 #include "callbacks.h"
+#include "reaction_offset.h"
 #include "stage_store.h"
 #include "webserver/rally_web_server.h"
 #include "rally_types.h"
@@ -640,6 +641,12 @@ static void surreyStartFromMemory(RallyState& s) {
     surreyStart(s, slot);
 }
 
+// RB-SET-12: the speed the display shows at this moment, in m/s, for taking a press back by the
+// reaction offset. (smoothedSpeed is mph when the box is set to mph.)
+static double reactionSpeedNow(const AppData* data) {
+    return reactionSpeedMps(data->smoothedSpeed, data->state->units);
+}
+
 void applyAutoStartArming(AppData* data, const AutoStartArming& arming) {
     if (arming.rally_time_s != 0) data->autoSlot = data->state->last_memory_slot;
     // Assignment, not a set of conditional updates: whatever kind of
@@ -664,6 +671,8 @@ void applyAutoStartArming(AppData* data, const AutoStartArming& arming) {
             const CounterPoll arm_poll = data->poller->getMostRecent();
             markSectorOdometer(*data->state, arm_poll.cntr1, arm_poll.cntr2);
         }
+        // RB-SET-12: the arming press is a press at the start point; distance only (greek, surrey).
+        applyArmPressOffset(*data->state, reactionSpeedNow(data));
         // surrey: the distance is zeroed now, so the fit uses navi total at this moment.
         if (isSurrey(*data->state)) surreyStartFromMemory(*data->state);
         // Paired with the segment counters zeroDistanceBaselines just moved,
@@ -699,12 +708,12 @@ void performAutoStart(AppData* data) {
         return;
     }
     // Ordinary autostart: distance and clock both zero at the appointed time.
-    performStageGo(data);
+    performStageGo(data, false);   // an autostart is the clock, not a press: no reaction offset
     data->autoFiredTime_s = armed_time_s;   // after performStageGo, which drops it
     data->startedByAuto = true;
 }
 
-void performStageGo(AppData* data) {
+void performStageGo(AppData* data, bool press) {
     // The moment of the press is the stage's start time, shown on Home like an
     // autostart's. (performAutoStart overwrites this with the armed moment.)
     data->autoFiredTime_s = autoStartSecondsFromTargetMs(getRallyTime_ms(*data->state),
@@ -722,6 +731,9 @@ void performStageGo(AppData* data) {
         const CounterPoll start_poll = data->poller->getMostRecent();
         markSectorOdometer(*data->state, start_poll.cntr1, start_poll.cntr2);
     }
+    // RB-SET-12: a start now is a press at the start point (flying start); take the clock and the
+    // distance baselines back by the reaction offset. Not for the autostart tick.
+    if (press) applyStartPressOffset(*data->state, reactionSpeedNow(data));
     if (isSurrey(*data->state)) surreyStartFromMemory(*data->state);   // now / autostart
     // Deliberately does NOT clear autoStartTriggered: the driver display sets
     // that flag just before calling this on the autostart tick, and clearing
@@ -1062,7 +1074,8 @@ void applyDriverZero(AppData* data, bool reset) {
 void on_next_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     // Surrey: next on the last row is the finish landmark.
-    if (applySurreyFinish(*data->state, getRallyTime_ms(*data->state))) {
+    // RB-SET-12: the finishing press is at a point; taken back by the reaction offset.
+    if (applySurreyFinish(*data->state, pressTimeMs(getRallyTime_ms(*data->state), data->state->reaction_offset_ms))) {
         ConfigFile::save(*data->state);
         notifyWebState(data);
         return;
@@ -1072,7 +1085,10 @@ void on_next_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     // clock (a press out of a pc records its error). On any other stage this does nothing.
     {
         auto p = data->poller->getMostRecent();
-        if (applySectorNext(*data->state, p.cntr1, p.cntr2, getRallyTime_ms(*data->state))) {
+        const int64_t press_ms = getRallyTime_ms(*data->state);
+        const int64_t trial_before = data->state->trial_start_ms;
+        if (applySectorNext(*data->state, p.cntr1, p.cntr2, press_ms)) {
+            shiftTubeStart(*data->state, trial_before, press_ms);   // RB-SET-12: pc / pm clock from the tube
             ConfigFile::save(*data->state);
             notifyWebState(data);
             return;
@@ -1092,6 +1108,9 @@ void on_next_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     // nav error has often just been knocked off with -10, and this figure is
     // written into the roadbook as the segment's real length.
     int64_t seg_count_diff = segmentCountsCorrected(data, current_poll);
+    // RB-SET-12: the press marks a point the car passed speed x offset ago.
+    seg_count_diff = boundaryCountsAtPress(seg_count_diff, reactionSpeedNow(data),
+                                           data->state->reaction_offset_ms, data->state->calibration);
 
     // The snapshot, not the saved roadbook: this retimes the stage actually
     // being driven, not the roadbook the next stage starts from.
@@ -1103,7 +1122,7 @@ void on_next_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->state->segment_start_cntr1 = current_poll.cntr1;
     data->state->segment_start_cntr2 = current_poll.cntr2;
     data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
-    data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
+    data->state->segment_start_time_ms = pressTimeMs(getRallyTime_ms(*data->state), data->state->reaction_offset_ms);
     rebaseTripToSegment(*data->state, current_poll.cntr1, current_poll.cntr2);
 
     ConfigFile::save(*data->state);

@@ -115,7 +115,8 @@ void on_show_autostart(GtkWidget* widget, gpointer user_data);
 void on_autostart_set(GtkWidget* widget, gpointer user_data);
 void on_autostart_clear(GtkWidget* widget, gpointer user_data);
 void updateAutoStartDisplay(AppData* data);
-void performStageGo(AppData* data);
+// press false = the autostart tick: the reaction time offset (RB-SET-12) applies to presses only.
+void performStageGo(AppData* data, bool press = true);
 
 // Home's two flag keys (Nero2.0), which replace the Stage Go dialog. The
 // next-minute key arms an early departure on the coming whole minute, exactly

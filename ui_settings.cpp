@@ -3,9 +3,11 @@
 #include "calculations.h"
 #include "config_file.h"
 #include "nero_frame.h"
+#include "reaction_offset.h"
 #include "rally_state.h"
 #include "ui_setup.h"
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -126,6 +128,34 @@ GtkWidget* seg(AppData* d, Setting id, const char* a, const char* b, int active,
     return box;
 }
 
+// RB-SET-12: reaction time offset, - / figure / +, 0.01 s a press, -0.30..+0.30 s.
+GtkWidget* g_reactionEntry = nullptr;
+
+std::string reactionText(int ms) {
+    char b[24];
+    snprintf(b, sizeof(b), "%s%d.%02d s", ms < 0 ? "-" : (ms > 0 ? "+" : ""), std::abs(ms) / 1000, (std::abs(ms) % 1000) / 10);
+    return b;
+}
+
+void onReactionStep(GtkWidget* w, gpointer) {
+    AppData* d = static_cast<AppData*>(g_object_get_data(G_OBJECT(w), "data"));
+    const int step = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w), "step"));
+    d->state->reaction_offset_ms = clampReactionOffsetMs(d->state->reaction_offset_ms + step);
+    ConfigFile::save(*d->state);
+    if (g_reactionEntry) gtk_entry_set_text(GTK_ENTRY(g_reactionEntry), reactionText(d->state->reaction_offset_ms).c_str());
+}
+
+GtkWidget* reactionKey(AppData* d, const char* label, int step) {
+    GtkWidget* k = gtk_button_new_with_label(label);
+    gtk_widget_set_size_request(k, 40, KEY_H);
+    addClass(k, "dist-heading");
+    addClass(k, "key-small");
+    g_object_set_data(G_OBJECT(k), "data", d);
+    g_object_set_data(G_OBJECT(k), "step", GINT_TO_POINTER(step));
+    g_signal_connect(k, "clicked", G_CALLBACK(onReactionStep), nullptr);
+    return k;
+}
+
 GtkWidget* row(GtkWidget* col, const char* name) {
     GtkWidget* r = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_widget_set_size_request(r, COL_W, ROW_H);
@@ -207,6 +237,30 @@ GtkWidget* createSettingsScreen(AppData* d) {
     gtk_box_pack_end(GTK_BOX(row(right, "Rally type")), seg(d, RALLY_TYPE, "italian", "greek", stateIndex(s, RALLY_TYPE), "surrey", 0, 76), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(right, "Speed units")), seg(d, UNITS, "kph", "mph", s.units ? 1 : 0), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(right, "Distance units")), seg(d, DISTANCE_UNITS, "00.00", "0,000", stateIndex(s, DISTANCE_UNITS)), FALSE, FALSE, 0);
+    {   // Reaction time offset: name, then - figure + (name 18 px, keys 40, entry 96: 416 <= 423)
+        GtkWidget* r = row(right, "Reaction time offset");
+        GList* kids = gtk_container_get_children(GTK_CONTAINER(r));
+        if (kids) {   // the name label: 18 px so the row fits
+            PangoAttrList* al = pango_attr_list_new();
+            pango_attr_list_insert(al, pango_attr_size_new_absolute(18 * PANGO_SCALE));
+            gtk_label_set_attributes(GTK_LABEL(kids->data), al);
+            pango_attr_list_unref(al);
+            g_list_free(kids);
+        }
+        gtk_box_pack_start(GTK_BOX(r), reactionKey(d, "\u2212", -10), FALSE, FALSE, 0);
+        GtkWidget* e = gtk_entry_new();
+        gtk_editable_set_editable(GTK_EDITABLE(e), FALSE);
+        gtk_widget_set_can_focus(e, FALSE);
+        gtk_entry_set_alignment(GTK_ENTRY(e), 0.5f);
+        gtk_entry_set_width_chars(GTK_ENTRY(e), 1);
+        gtk_entry_set_max_width_chars(GTK_ENTRY(e), 1);
+        gtk_widget_set_size_request(e, 96, KEY_H);
+        addClass(e, "set-entry");
+        gtk_entry_set_text(GTK_ENTRY(e), reactionText(s.reaction_offset_ms).c_str());
+        gtk_box_pack_start(GTK_BOX(r), e, FALSE, FALSE, 0);
+        g_reactionEntry = e;
+        gtk_box_pack_start(GTK_BOX(r), reactionKey(d, "+", 10), FALSE, FALSE, 0);
+    }
     gtk_box_pack_end(GTK_BOX(row(right, "Measure type")), seg(d, MEASURE_TYPE, "AB,BC", "AB,AC", stateIndex(s, MEASURE_TYPE)), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(right, "Stage data logging")), seg(d, STAGE_LOG, "off", "on", s.stage_logging ? 1 : 0), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(right, "Sensor logging")), seg(d, SENSOR_LOG, "off", "on", s.debug_logs_enabled ? 1 : 0), FALSE, FALSE, 0);

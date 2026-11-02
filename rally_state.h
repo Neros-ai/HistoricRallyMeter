@@ -191,6 +191,8 @@ public:
     int tone_type_behind = 1;
     int tone_type_ahead = 1;
     int gauge_range_s = 3;   // driver gauge full scale: +-1, +-2 or +-3 s (Settings)
+    // RB-SET-12: a press at a point is taken as this many ms earlier (-300..300, positive = crew press late).
+    int reaction_offset_ms = 0;
 
     // Nero2.1 Settings > System (RB-SET-09).
     // Rally type: 0 greek (today), 1 surrey, 2 italian.

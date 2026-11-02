@@ -1,4 +1,5 @@
 #include "config_file.h"
+#include "reaction_offset.h"
 #include "rally_state.h"
 #include "calculations.h"
 #include <fstream>
@@ -298,6 +299,8 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.tone_type_behind = state.tone_type_ahead = extractBool(line) ? 2 : 1;
         } else if (line.find("\"tone_type_behind\"") != std::string::npos) {
             state.tone_type_behind = static_cast<int>(extractLong(line)) == 2 ? 2 : 1;
+        } else if (line.find("\"reaction_offset_ms\"") != std::string::npos) {
+            state.reaction_offset_ms = clampReactionOffsetMs(static_cast<long>(extractLong(line)));
         } else if (line.find("\"gauge_range_s\"") != std::string::npos) {
             const long r = extractLong(line);
             state.gauge_range_s = (r >= 1 && r <= 3) ? static_cast<int>(r) : 3;
@@ -533,6 +536,7 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"tone_type_behind\": " << state.tone_type_behind << ",\n";
     file << "  \"tone_type_ahead\": " << state.tone_type_ahead << ",\n";
     file << "  \"gauge_range_s\": " << state.gauge_range_s << ",\n";
+    file << "  \"reaction_offset_ms\": " << state.reaction_offset_ms << ",\n";
     file << "  \"rally_type\": " << state.rally_type << ",\n";
     file << "  \"time_taken_stage\": " << state.time_taken_stage << ",\n";
     file << "  \"time_taken_ms\": " << state.time_taken_ms << ",\n";

@@ -36,6 +36,7 @@
 #include "test_stage_store.h"
 #include "test_sector.h"
 #include "test_surrey.h"
+#include "test_reaction_offset.h"
 #include "test_driver_trial.h"
 
 int main() {
@@ -76,6 +77,7 @@ int main() {
     TestStageStore stageStoreTests;
     TestSector sectorTests;
     TestSurrey surreyTests;
+    TestReactionOffset reactionOffsetTests;
     TestDriverTrial driverTrialTests;
 
     // Add all test suites
@@ -113,6 +115,7 @@ int main() {
     runner.addSuite(stageStoreTests.createSuite());
     runner.addSuite(sectorTests.createSuite());
     runner.addSuite(surreyTests.createSuite());
+    runner.addSuite(reactionOffsetTests.createSuite());
     runner.addSuite(driverTrialTests.createSuite());
 
     // Run all tests

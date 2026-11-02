@@ -236,6 +236,10 @@
     radios('tone-ahead', Number(state.tone_type_ahead) || 1);
     radios('gauge-range', Number(state.gauge_range) || 3);
     radios('units', units);
+    if ($('reaction-offset')) {   // read-only: set on the box
+      const ro = Number(state.reaction_offset_ms) || 0;
+      $('reaction-offset').textContent = (ro < 0 ? '\u2212' : ro > 0 ? '+' : '') + (Math.abs(ro) / 1000).toFixed(2) + ' s';
+    }
     setIf($('set-stage-log'), (el) => { el.checked = !!state.stage_logging; });
     setIf($('set-sensor-log'), (el) => { el.checked = !!state.sensor_logging; });
     setIf($('set-force-single'), (el) => { el.checked = !!state.force_single; });
