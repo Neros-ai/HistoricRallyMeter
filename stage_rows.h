@@ -49,12 +49,13 @@ void appendStageDistances(std::vector<Segment>& segs, double first_from_m,
 
 // RB-SEG-16: add each distance where it falls. Past the end it appends as
 // appendStageDistances does; inside a row it splits that row there: the first
-// half keeps the row's chg, auto and box, the new second half carries the same
-// speed with chg off and its auto on. A distance at or before the stage's
+// half keeps the row's chg and box but has its auto switched on (it hands over to the
+// new half by itself); the new second half carries the same speed with chg off and the
+// row's own auto and no box. A distance at or before the stage's
 // start, or on an existing row boundary, is refused. Returns a notice naming
-// the refused distances ("" when every one was placed).
+// the refused distances ("" when every one was placed), in km when `km` is on.
 std::string insertStageDistances(std::vector<Segment>& segs, double first_from_m,
-                                 const std::vector<double>& to_m);
+                                 const std::vector<double>& to_m, bool km = false);
 
 void setRowSpeed(std::vector<Segment>& segs, size_t row, double kph);
 // Ticks / unticks chg. Row 0 is always a change and ignores this.

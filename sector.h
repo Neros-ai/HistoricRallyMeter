@@ -37,7 +37,7 @@ double rowSeconds(const Segment& s);
 // takes the type of the row above (navi at the top) and, for a timed or controlled
 // row, the next ref of that type. Returns the notice ("" when every distance was placed).
 std::string insertSectorDistances(std::vector<Segment>& segs, double first_from_m,
-                                  const std::vector<double>& to_m);
+                                  const std::vector<double>& to_m, bool km = false);
 
 // A typed duration as whole seconds: "31", "0:31", "2:12", "1:02:03"; -1 for anything else.
 long parseDurationSeconds(const std::string& text);

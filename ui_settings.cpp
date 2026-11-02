@@ -1,4 +1,5 @@
 #include "ui_settings.h"
+#include "stage_edit.h"
 #include "callbacks.h"
 #include "calculations.h"
 #include "config_file.h"
@@ -62,6 +63,7 @@ void apply(AppData* d, Setting id, int idx) {
     case SENSOR_LOG:  s.debug_logs_enabled = (idx == 1); setDebugLogging(d, s.debug_logs_enabled); break;
     case GAUGE_RANGE: s.gauge_range_s = idx + 1; break;
     case RALLY_TYPE:
+        if (stageEditLocked(s)) break;   // never switch rules under a live stage (the keys are greyed too)
         // Keys are italian / greek / surrey.
         applyRallyTypeDefaults(s, idx == 0 ? 2 : idx == 1 ? 0 : 1);
         break;
@@ -142,6 +144,7 @@ void onReactionStep(GtkWidget* w, gpointer) {
     const int step = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w), "step"));
     d->state->reaction_offset_ms = clampReactionOffsetMs(d->state->reaction_offset_ms + step);
     ConfigFile::save(*d->state);
+    notifyWebStateNow(d);   // the phone shows the offset too
     if (g_reactionEntry) gtk_entry_set_text(GTK_ENTRY(g_reactionEntry), reactionText(d->state->reaction_offset_ms).c_str());
 }
 
@@ -310,5 +313,10 @@ void updateSettingsDisplay(AppData* d) {
             for (int i = 0; i < c->n; i++) gtk_widget_set_sensitive(c->btn[i], beepOn);
     if (d->beepAdvanceSecondsEntry) gtk_widget_set_sensitive(GTK_WIDGET(d->beepAdvanceSecondsEntry), beepOn);
     if (d->beepAdvanceMetresEntry) gtk_widget_set_sensitive(GTK_WIDGET(d->beepAdvanceMetresEntry), beepOn);
+    // The rally type cannot change while a stage is live.
+    const bool typeOpen = !stageEditLocked(*d->state);
+    for (SegCtl* c : allCtls())
+        if (c->id == RALLY_TYPE)
+            for (int i = 0; i < c->n; i++) gtk_widget_set_sensitive(c->btn[i], typeOpen);
     updateWebLinkDisplay(d);   // the link itself now lives on the Setup page
 }

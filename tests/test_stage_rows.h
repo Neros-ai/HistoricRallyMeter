@@ -234,6 +234,14 @@ public:
             return !a.empty() && !b.empty() && v.size() == n;
         });
 
+        suite->addTest("the refused-distance notice is in km when distance is in km", []() {
+            auto v = sample();
+            std::string m = insertStageDistances(v, 0, {1500});
+            std::string k = insertStageDistances(v, 0, {1500}, true);
+            return m.find(" m.") != std::string::npos && k.find("1.50") != std::string::npos
+                && k.find(" km.") != std::string::npos && m.find("km") == std::string::npos;
+        });
+
         suite->addTest("a list can mix inserts and appends in any order", []() {
             std::vector<Segment> v;
             appendStageDistances(v, 1000, {3000});

@@ -71,7 +71,7 @@ void applySectorRules(std::vector<Segment>& segs, long sector_duration_s) {
 }
 
 std::string insertSectorDistances(std::vector<Segment>& segs, double first_from_m,
-                                  const std::vector<double>& to_m) {
+                                  const std::vector<double>& to_m, bool km) {
     // A distance inside a pc or pm splits it like any other row (owner, 2026-10-31), so a
     // wrongly entered trial can be corrected. Note which trials are about to be split.
     std::vector<std::pair<int, int>> split;   // (type, ref) of each pc / pm a distance falls inside
@@ -83,7 +83,7 @@ std::string insertSectorDistances(std::vector<Segment>& segs, double first_from_
             from = end;
         }
     }
-    std::string notice = insertStageDistances(segs, first_from_m, to_m);
+    std::string notice = insertStageDistances(segs, first_from_m, to_m, km);
     for (size_t i = 0; i < segs.size(); i++) {
         if (segs[i].type != SEG_LEG) continue;
         segs[i].type = i > 0 ? segs[i - 1].type : SEG_NAVI;
@@ -95,23 +95,36 @@ std::string insertSectorDistances(std::vector<Segment>& segs, double first_from_
     // A split leaves two rows of the same trial side by side. A pm simply continues over both
     // (same ref, same speed). A pc becomes two pcs: the card time is shared by distance so the
     // speed is unchanged, the second half takes the next number and later pcs move up one.
-    for (const auto& t : split) {
-        for (size_t i = 0; i + 1 < segs.size(); i++) {
-            Segment& a = segs[i];
-            Segment& b = segs[i + 1];
-            if (a.type != t.first || b.type != t.first || a.ref != t.second || b.ref != t.second) continue;
-            a.autoNext = b.autoNext = false;
-            b.changesSpeed = true;
-            if (t.first == SEG_PC) {
-                const double total = a.pc_duration_s;
-                const double len = a.distance_m + b.distance_m;
-                a.pc_duration_s = len > 0 ? static_cast<double>(std::lround(total * a.distance_m / len)) : 0.0;
-                b.pc_duration_s = total - a.pc_duration_s;
-                for (size_t k = i + 1; k < segs.size(); k++)
-                    if (segs[k].type == SEG_PC) segs[k].ref++;
-            }
-            break;
+    // Each split trial once, last pc first, so the renumbering of the pcs after it stays simple.
+    std::sort(split.begin(), split.end());
+    split.erase(std::unique(split.begin(), split.end()), split.end());
+    for (auto it = split.rbegin(); it != split.rend(); ++it) {
+        const auto& t = *it;
+        size_t i = 0;
+        while (i < segs.size() && !(segs[i].type == t.first && segs[i].ref == t.second)) i++;
+        size_t j = i;   // the run of pieces: [i, j)
+        while (j < segs.size() && segs[j].type == t.first && segs[j].ref == t.second) j++;
+        if (j - i < 2) continue;
+        for (size_t k = i; k < j; k++) {
+            segs[k].autoNext = false;
+            segs[k].changesSpeed = true;
         }
+        if (t.first != SEG_PC) continue;
+        // Every piece carries a copy of the card time. Share it by distance over all the pieces
+        // (whole seconds, the remainder to the last) so the speed is unchanged.
+        const double total = segs[i].pc_duration_s;
+        double len = 0.0;
+        for (size_t k = i; k < j; k++) len += segs[k].distance_m;
+        double given = 0.0;
+        for (size_t k = i; k + 1 < j; k++) {
+            segs[k].pc_duration_s = len > 0 ? static_cast<double>(std::lround(total * segs[k].distance_m / len)) : 0.0;
+            given += segs[k].pc_duration_s;
+        }
+        segs[j - 1].pc_duration_s = total - given;
+        const int extra = static_cast<int>(j - i) - 1;
+        for (size_t k = j; k < segs.size(); k++)
+            if (segs[k].type == SEG_PC) segs[k].ref += extra;
+        for (size_t k = i + 1; k < j; k++) segs[k].ref = t.second + static_cast<int>(k - i);
     }
     return notice;
 }
@@ -176,7 +189,7 @@ double endOfRowM(const std::vector<Segment>& segs, long i) {
 bool applySectorNext(RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms) {
     const std::vector<Segment>& segs = s.stage_segments;
     const long cur = s.segment_current_number;
-    if (!stageIsSector(segs) || cur < 0 || cur + 1 >= static_cast<long>(segs.size())) return false;
+    if (s.rally_type != 2 || !stageIsSector(segs) || cur < 0 || cur + 1 >= static_cast<long>(segs.size())) return false;
 
     const int64_t raw_counts = calculateDistanceCounts(s, c1, c2, s.total_start_cntr1, s.total_start_cntr2);
     const long raw_cm = countsToCentimeters(raw_counts, s.calibration);
@@ -235,7 +248,7 @@ bool applySectorNext(RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms) {
 
 bool undoSectorTube(RallyState& s) {
     RallyState::SectorUndo& u = s.sector_undo;
-    if (!sectorUndoAvailable(s)) return false;
+    if (s.rally_type != 2 || !sectorUndoAvailable(s)) return false;
     // A -10 or set made after the next is kept: only what the next itself changed goes back.
     const long total_since_cm = s.total_distance_adjust_cm - u.after_total_adjust_cm;
     const long trip_since_cm = s.trip_distance_adjust_cm - u.after_trip_adjust_cm;

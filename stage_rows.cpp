@@ -92,11 +92,11 @@ void appendStageDistances(std::vector<Segment>& segs, double first_from_m,
 }
 
 std::string insertStageDistances(std::vector<Segment>& segs, double first_from_m,
-                                 const std::vector<double>& to_m) {
+                                 const std::vector<double>& to_m, bool km) {
     std::string refused;
     auto refuse = [&](double m) {
         if (!refused.empty()) refused += ", ";
-        refused += formatDistance(m, false);
+        refused += formatDistance(m, km);
     };
     for (double to : to_m) {
         double from = first_from_m;
@@ -124,7 +124,7 @@ std::string insertStageDistances(std::vector<Segment>& segs, double first_from_m
     }
     carrySpeeds(segs);
     if (refused.empty()) return "";
-    return "Not added (already a point, or not past the start): " + refused + " m.";
+    return "Not added (already a point, or not past the start): " + refused + (km ? " km." : " m.");
 }
 
 void setRowSpeed(std::vector<Segment>& segs, size_t row, double kph) {

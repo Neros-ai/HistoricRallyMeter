@@ -72,8 +72,8 @@ int stageEditAddDistances(AppData* d, const std::string& text, std::string* rest
     std::string note;
     if (!pr.accepted.empty()) {
         note = d->state->rally_type == 2
-            ? insertSectorDistances(d->state->segments, slot.first_from_m, pr.accepted)
-            : insertStageDistances(d->state->segments, slot.first_from_m, pr.accepted);
+            ? insertSectorDistances(d->state->segments, slot.first_from_m, pr.accepted, d->state->distance_km)
+            : insertStageDistances(d->state->segments, slot.first_from_m, pr.accepted, d->state->distance_km);
         stageEditCommit(d);
     }
     if (notice) *notice = note;

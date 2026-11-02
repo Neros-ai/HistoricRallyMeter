@@ -128,6 +128,16 @@ public:
                 && s.segment_current_number == 1 && s.trial_start_ms == 70000 && s.trial_start_m == 380.0;
         });
 
+        suite->addTest("the italian next and its undo are gated on the rally type as well as the stage", []() {
+            RallyState g = running(); g.rally_type = 0;
+            const bool refused = !applySectorNext(g, 385, 385, 70000) && g.segment_current_number == 0;
+            RallyState s = running();
+            applySectorNext(s, 385, 385, 70000);
+            RallyState u = s; u.rally_type = 0;
+            const bool undoRefused = !undoSectorTube(u) && u.segment_current_number == 1;
+            return refused && undoRefused && undoSectorTube(s);
+        });
+
         suite->addTest("pc1 is then reckoned from its tube, not from the sector start", []() {
             RallyState s = running();
             applySectorNext(s, 385, 385, 70000);
@@ -400,6 +410,18 @@ public:
                 && v[1].pc_duration_s + v[2].pc_duration_s == 31 && v[1].pc_duration_s == 16
                 && !v[1].autoNext && !v[2].autoNext && v[2].changesSpeed
                 && v[3].ref == 3 && v[4].ref == 4 && v[6].ref == 5 && v[7].ref == 6;
+        });
+
+        suite->addTest("italian add distance: two distances in one pc share its card time over three pcs", []() {
+            auto v = mugello();
+            const size_t n = v.size();
+            insertSectorDistances(v, 0, {440, 500});                                // pc1 is 380-560, 31 s
+            const double d1 = v[1].distance_m, d2 = v[2].distance_m, d3 = v[3].distance_m;
+            return v.size() == n + 2 && v[1].ref == 1 && v[2].ref == 2 && v[3].ref == 3
+                && d1 == 60 && d2 == 60 && d3 == 60
+                && v[1].pc_duration_s + v[2].pc_duration_s + v[3].pc_duration_s == 31
+                && v[1].pc_duration_s == 10 && v[2].pc_duration_s == 10 && v[3].pc_duration_s == 11
+                && v[4].ref == 4 && !v[3].autoNext;
         });
 
         suite->addTest("italian add distance: a pm splits into two rows of the same pm", []() {
