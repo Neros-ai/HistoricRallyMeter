@@ -155,7 +155,7 @@ void markSectorStart(RallyState& s) {
     if (s.rally_type != 2) return;
     if (!stageIsSector(s.segments) && !stageIsSector(s.stage_segments)) return;
     s.sector_start_ms = italianStageStartMs(s.total_start_time_ms);
-    s.total_start_time_ms = sectorClockZeroMs(s);   // the start time: 30 s through the minute
+    s.total_start_time_ms = sectorClockZeroMs(s);   // the start time: :00 of the minute
     s.sector_undo = RallyState::SectorUndo();   // nothing from an earlier sector to undo
     double card_s = 0.0;
     for (const Segment& g : s.stage_segments) card_s += rowSeconds(g);
@@ -169,7 +169,12 @@ void markSectorStart(RallyState& s) {
 }
 
 int64_t sectorClockZeroMs(const RallyState& s) {
-    return s.sector_start_ms + SECTOR_AIM_MS;
+    return s.sector_start_ms;
+}
+
+double sectorScheduleScale(const RallyState& s) {
+    if (s.sector_card_ms <= 0) return 1.0;
+    return (s.sector_card_ms + SECTOR_AIM_MS) / static_cast<double>(s.sector_card_ms);
 }
 
 int64_t coInTimeMs(const RallyState& s) {
@@ -316,7 +321,7 @@ double sectorSecondsToLine(const RallyState& s, int64_t now_ms, bool* valid) {
     const double ideal_s = idealSecondsToReachDistance(s.stage_segments, end_m);
     if (ideal_s < 0.0) return 0.0;
     *valid = true;
-    return ideal_s - (now_ms - sectorClockZeroMs(s)) / 1000.0;
+    return ideal_s * sectorScheduleScale(s) - (now_ms - sectorClockZeroMs(s)) / 1000.0;
 }
 
 double pcCountdownSeconds(const RallyState& s, int64_t now_ms, bool* valid) {
@@ -378,7 +383,7 @@ double sectorAheadSeconds(const RallyState& s, uint64_t c1, uint64_t c2, int64_t
     const double ideal_s = idealSecondsToReachDistance(s.stage_segments, sectorPositionM(s, c1, c2));
     if (ideal_s < 0.0) return 0.0;
     *valid = true;
-    return ideal_s - (now_ms - sectorClockZeroMs(s)) / 1000.0;
+    return ideal_s * sectorScheduleScale(s) - (now_ms - sectorClockZeroMs(s)) / 1000.0;
 }
 
 double trialAheadSeconds(const RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms, bool* valid) {

@@ -51,15 +51,17 @@ void applySectorRules(std::vector<Segment>& segs, long sector_duration_s);
 // The minute a stage start press counts as (11:30:40 -> 11:30:00), as the time card records it.
 int64_t italianStageStartMs(int64_t press_ms);
 
-// Where the sector clock reads zero: the middle of the departure minute. The crew is on
-// time anywhere inside the co's arrival minute, so zero here leaves 30 s either way.
+// The sector clock reads zero at :00 of the departure minute. The box aims for the middle
+// of the co's arrival minute (card + 30 s), so the card's schedule is scaled to that time.
 const int64_t SECTOR_AIM_MS = 30000;
 int64_t sectorClockZeroMs(const RallyState& s);
+// (card + 30 s) / card; 1.0 when the card has no duration.
+double sectorScheduleScale(const RallyState& s);
 // The co's in-time as the card has it: the departure minute plus the card's sector duration.
 int64_t coInTimeMs(const RallyState& s);
 
 // Starts the sector: the departure minute is the minute pressed (as the card records it) and
-// the start time is 30 s through it (sectorClockZeroMs); notes when the sector
+// the start time is its :00 (sectorClockZeroMs); notes when the sector
 // began and the card's duration (for the co's in-time), and starts the pc / pm clock at
 // the real press when the sector opens on one. Only when the rally type is italian and the stage is a sector.
 void markSectorStart(RallyState& s);

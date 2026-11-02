@@ -287,15 +287,42 @@ public:
             return refused && odometerCounts(s, 500, 500) == 0;
         });
 
-        suite->addTest("ahead / behind: from the middle of the minute, 60 s early reads +60, 120 s late -120", []() {
+        suite->addTest("ahead / behind: from :00 of the minute, scaled schedule, 60 s early reads +60, 120 s late -120", []() {
             RallyState s = running();
             s.sector_start_ms = 0;
             bool ok = false;
-            const double ideal = idealSecondsToReachDistance(s.stage_segments, 380.0);
-            const double early = sectorAheadSeconds(s, 380, 380, 30000 + static_cast<int64_t>((ideal - 60.0) * 1000), &ok);
+            const double ideal = idealSecondsToReachDistance(s.stage_segments, 380.0) * sectorScheduleScale(s);
+            const double early = sectorAheadSeconds(s, 380, 380, static_cast<int64_t>((ideal - 60.0) * 1000), &ok);
             const bool a = ok && std::fabs(early - 60.0) < 0.01;
-            const double late = sectorAheadSeconds(s, 380, 380, 30000 + static_cast<int64_t>((ideal + 120.0) * 1000), &ok);
+            const double late = sectorAheadSeconds(s, 380, 380, static_cast<int64_t>((ideal + 120.0) * 1000), &ok);
             return a && ok && std::fabs(late + 120.0) < 0.01;
+        });
+
+        suite->addTest("task 11: 3 h sector gets 3 h 30 s; scale and arrival target", []() {
+            RallyState s = running();
+            s.sector_start_ms = 0;
+            return std::fabs(sectorScheduleScale(s) - 10830000.0 / 10800000.0) < 1e-9
+                && coInTimeMs(s) + SECTOR_AIM_MS == 10830000;
+        });
+
+        suite->addTest("task 11: leaving at :00 is on schedule, leaving at :50 is 50 s behind", []() {
+            RallyState s = running();
+            s.sector_start_ms = 0;
+            bool ok = false;
+            const double a = sectorAheadSeconds(s, 0, 0, 0, &ok);
+            const double b = sectorAheadSeconds(s, 0, 0, 50000, &ok);
+            return ok && std::fabs(a) < 0.001 && std::fabs(b + 50.0) < 0.001;
+        });
+
+        suite->addTest("task 11: halfway at constant speed is on schedule at half of card + 30 s", []() {
+            RallyState s = running();
+            s.sector_start_ms = 0;
+            s.stage_segments = { row(SEG_NAVI, 10000, 0, 0, 36.0) };
+            recomputeSegmentCounts(s.stage_segments, s.calibration);
+            s.sector_card_ms = 1000000;                                    // 10 km at 36 kph
+            bool ok = false;
+            const double a = sectorAheadSeconds(s, 5000, 5000, (1000000 + 30000) / 2, &ok);
+            return ok && std::fabs(a) < 0.05;
         });
 
         suite->addTest("ahead / behind: the position is sector total, navi does not move it", []() {
@@ -456,8 +483,8 @@ public:
             RallyState s = running();
             s.total_start_time_ms = (11 * 3600L + 30 * 60 + 40) * 1000L;
             markSectorStart(s);
-            // The start time is 30 s through the minute pressed; the card's departure minute stays the minute.
-            const bool it = s.total_start_time_ms == (11 * 3600L + 30 * 60 + 30) * 1000L
+            // The start time is :00 of the minute pressed, the card's departure minute.
+            const bool it = s.total_start_time_ms == (11 * 3600L + 30 * 60) * 1000L
                 && s.sector_start_ms == (11 * 3600L + 30 * 60) * 1000L;
             RallyState g = running();
             g.rally_type = 0;
@@ -466,11 +493,11 @@ public:
             return it && g.total_start_time_ms == 40000;
         });
 
-        suite->addTest("sector clock: go at 11:30:51 zeroes at 11:30:30, co in-time from the card", []() {
+        suite->addTest("sector clock: go at 11:30:51 zeroes at 11:30:00, co in-time from the card", []() {
             RallyState s = running();
             s.total_start_time_ms = s.segment_start_time_ms = 41451000;   // 11:30:51
             markSectorStart(s);
-            return s.sector_start_ms == 41400000 && sectorClockZeroMs(s) == 41430000 && s.total_start_time_ms == 41430000
+            return s.sector_start_ms == 41400000 && sectorClockZeroMs(s) == 41400000 && s.total_start_time_ms == 41400000
                 && s.sector_card_ms == 10800000 && coInTimeMs(s) == 41400000 + 10800000
                 && s.trial_start_m < 0.0;
         });
