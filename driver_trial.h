@@ -37,4 +37,10 @@ std::string trialSpeedText(double kph);
 // Sector total on this layout: km to 2 dp ("27.48"), as the italian navi page.
 std::string trialKmText(double metres);
 
+// RB-DRV-20: the small legend right of the green / red box. Page numbers as
+// AppData::DP_* in rally_types.h (ui_driver.cpp static_asserts they match).
+const int DRIVER_PAGE_ITALIAN_TRIAL = 1, DRIVER_PAGE_ITALIAN_NAVI = 2;
+// "countdown" on the italian pc / pm page, "arrival" on the italian navi page, "" otherwise.
+const char* driverRightBoxLegend(int driverPage);
+
 #endif

@@ -57,3 +57,9 @@ DriverTrialView driverTrialView(const RallyState& s, uint64_t c1, uint64_t c2, i
     v.arrowProgress = finalWindowProgress(to_line);
     return v;
 }
+
+const char* driverRightBoxLegend(int driverPage) {
+    if (driverPage == DRIVER_PAGE_ITALIAN_TRIAL) return "countdown";
+    if (driverPage == DRIVER_PAGE_ITALIAN_NAVI) return "arrival";
+    return "";
+}

@@ -697,6 +697,14 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                 cairo_move_to(cr, x0 + (w - te.x_advance) / 2.0, y0 + h / 2.0 + (ascent - descent) / 2.0);
                 cairo_show_text(cr, txt.c_str());
                 smallFace();
+                // RB-DRV-20: legend right of the box, same font and x anchor as "km / Total"
+                static_assert(DRIVER_PAGE_ITALIAN_TRIAL == AppData::DP_ITALIAN_TRIAL
+                              && DRIVER_PAGE_ITALIAN_NAVI == AppData::DP_ITALIAN_NAVI,
+                              "driverRightBoxLegend page numbers");
+                cairo_set_font_size(cr, 18.0 * fs);
+                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+                cairo_move_to(cr, lcx + 272.0 * fs, y0 + h / 2.0 + 6.0 * fs);
+                cairo_show_text(cr, driverRightBoxLegend(page));
             }
         }
 

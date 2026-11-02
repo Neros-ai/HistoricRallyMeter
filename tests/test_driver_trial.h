@@ -126,6 +126,14 @@ public:
             return applied && in_pc && undone && !driverTrialView(s, 400, 400, 72000).active;
         });
 
+        suite->addTest("right box legend: countdown in a pc, arrival on navi, none on greek", []() {
+            return std::string(driverRightBoxLegend(DRIVER_PAGE_ITALIAN_TRIAL)) == "countdown"
+                && std::string(driverRightBoxLegend(DRIVER_PAGE_ITALIAN_NAVI)) == "arrival"
+                && std::string(driverRightBoxLegend(3)).empty()
+                && std::string(driverRightBoxLegend(4)).empty()
+                && std::string(driverRightBoxLegend(0)).empty();
+        });
+
         return suite;
     }
 };
