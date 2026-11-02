@@ -1,6 +1,7 @@
 #include "freeze.h"
 
 void applyFreeze(RallyState& s, CounterPoller& p, bool on) {
+    if (on && !p.hasPolled()) return;   // no reading yet: there is no figure to hold
     p.setHold(on);
     s.freeze_on = on;
     if (on) {

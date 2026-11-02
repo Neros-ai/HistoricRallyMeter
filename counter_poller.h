@@ -64,6 +64,8 @@ public:
     // Freeze: while on, travel is not counted (speed still is, from the raw count).
     void setHold(bool on) { hold_on = on; }
     bool hold() const { return hold_on; }
+    // True once the first poll has arrived (until then the virtual count is only a saved figure).
+    bool hasPolled() const { return virt_init; }
     // Restart while frozen: the virtual count starts at exactly these values,
     // whatever the raw reading. Only effective before the first poll.
     void setHeldVirtual(int64_t v1, int64_t v2) {

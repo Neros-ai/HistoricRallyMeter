@@ -89,6 +89,7 @@ static void recoverFromSimulatedPowerLoss(AppData* data) {
             *data->state, getRallyTime_ms(*data->state),
             [](const RallyState& s) { ConfigFile::save(s); })) {
         zeroOdometer(*data->state, data->state->total_start_cntr1, data->state->total_start_cntr2);
+        ConfigFile::save(*data->state);   // the loss save ran before this zeroing
     }
 }
 

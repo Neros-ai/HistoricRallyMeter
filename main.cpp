@@ -385,6 +385,7 @@ int main(int argc, char* argv[]) {
                 [](const RallyState& s) { ConfigFile::save(s); })) {
             // The chips restarted: navi total starts again with Total (italian).
             zeroOdometer(state, state.total_start_cntr1, state.total_start_cntr2);
+            ConfigFile::save(state);   // the loss save ran before this zeroing
         }
 
         if (state.total_start_cntr1 == 0 && state.total_start_cntr2 == 0) {
@@ -398,6 +399,10 @@ int main(int argc, char* argv[]) {
         if (state.segment_start_cntr1 == 0 && state.segment_start_cntr2 == 0) {
             state.segment_start_cntr1 = counter1->readRegister(REGISTER);
             state.segment_start_cntr2 = counter2->readRegister(REGISTER);
+        }
+        if (state.odometer_start_cntr1 == 0 && state.odometer_start_cntr2 == 0) {   // fresh box: navi starts here too
+            state.odometer_start_cntr1 = counter1->readRegister(REGISTER);
+            state.odometer_start_cntr2 = counter2->readRegister(REGISTER);
         }
         
         // Create application data

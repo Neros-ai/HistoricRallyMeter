@@ -9,7 +9,7 @@
 #include "rally_state.h"
 #include "counter_poller.h"
 
-// Turn freeze on or off, keeping what a restart needs in the state.
+// Turn freeze on or off (a press before the first counter poll is ignored), keeping what a restart needs in the state.
 void applyFreeze(RallyState& s, CounterPoller& p, bool on);
 
 // At startup, after setVirtualShift: a box that was frozen comes back frozen
