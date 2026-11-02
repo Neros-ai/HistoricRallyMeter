@@ -70,6 +70,15 @@ void markSectorStart(RallyState& s);
 // a clock and never changes a row's length. Returns true when it handled the press (the
 // caller then skips today's next); false, nothing changed, on a greek stage.
 bool applySectorNext(RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms);
+// RB-NAV-52: an italian sector ends only when the crew press next on its last row (the co), never
+// on distance: an over-reading box or a wrong turn must not take the co panel away early.
+// True for every stage except a running italian sector (those keep ending on distance as today).
+bool sectorEndsOnDistance(const RallyState& s);
+// next is live on the last row of a running italian sector (it is the finishing press).
+bool sectorFinishAvailable(const RallyState& s);
+// The finishing press: ends the sector (stage_complete) and drops the tube undo, so prev stays
+// greyed after the finish. False, nothing changed, when not available.
+bool applySectorFinish(RallyState& s);
 // "prev" straight after an italian next: puts every field back. False when there is nothing to undo.
 bool undoSectorTube(RallyState& s);
 

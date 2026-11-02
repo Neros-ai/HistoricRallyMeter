@@ -1085,6 +1085,12 @@ void on_next_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         notifyWebState(data);
         return;
     }
+    // Italian sector (RB-NAV-52): next on the last row (the co) is what ends the sector.
+    if (applySectorFinish(*data->state)) {
+        ConfigFile::save(*data->state);
+        notifyWebState(data);
+        return;
+    }
     if (!nextAvailable(*data->state)) return;
     // Italian sector: every line pins sector total to the card and starts or ends the pc / pm
     // clock (a press out of a pc records its error). On any other stage this does nothing.
@@ -1217,7 +1223,8 @@ gboolean update_display(gpointer user_data) {
     if (!data->state->stage_complete) {
         auto poll = data->poller->getMostRecent();
         int64_t stage_counts = stageCountsCorrected(data, poll);
-        if (stageDistanceComplete(data->state->stage_segments, stage_counts)) {
+        if (sectorEndsOnDistance(*data->state) &&
+            stageDistanceComplete(data->state->stage_segments, stage_counts)) {
             data->state->stage_complete = true;
             surreyDistanceEnd(*data->state, getRallyTime_ms(*data->state));   // surrey: time taken
             ConfigFile::save(*data->state);

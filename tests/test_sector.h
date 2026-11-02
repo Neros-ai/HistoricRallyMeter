@@ -696,6 +696,48 @@ public:
             return s.segment_current_number == 3 && s.stage_complete && s.total_start_time_ms == 123;
         });
 
+        suite->addTest("RB-NAV-52: past the card km with no press the italian sector is not ended by distance", []() {
+            RallyState s = running();
+            s.segment_current_number = 6;   // the last row
+            double total = 0; for (const Segment& g : s.stage_segments) total += g.distance_counts;
+            return stageDistanceComplete(s.stage_segments, static_cast<int64_t>(total) + 500)
+                && !sectorEndsOnDistance(s);
+        });
+
+        suite->addTest("RB-NAV-52: next on the last row ends the italian sector", []() {
+            RallyState s = running();
+            s.segment_current_number = 6;
+            bool avail = sectorFinishAvailable(s);
+            bool did = applySectorFinish(s);
+            return avail && did && s.stage_complete && !sectorFinishAvailable(s) && !sectorUndoAvailable(s);
+        });
+
+        suite->addTest("RB-NAV-52: finish is available only on the last row of a running italian sector", []() {
+            RallyState s = running();
+            bool ok = !sectorFinishAvailable(s);              // first row
+            s.segment_current_number = 5; ok = ok && !sectorFinishAvailable(s);
+            s.segment_current_number = 6; ok = ok && sectorFinishAvailable(s);
+            RallyState g = s; g.rally_type = 0; ok = ok && !sectorFinishAvailable(g);
+            RallyState d = s; d.stage_complete = true; ok = ok && !sectorFinishAvailable(d);
+            RallyState i = s; i.segment_current_number = -1; ok = ok && !sectorFinishAvailable(i);
+            return ok && !applySectorFinish(g);
+        });
+
+        suite->addTest("RB-NAV-52: a greek stage still ends on distance", []() {
+            RallyState s = running();
+            s.rally_type = 0;
+            s.segment_current_number = 6;
+            return sectorEndsOnDistance(s);
+        });
+
+        suite->addTest("RB-NAV-52: an italian roadbook that is not a sector still ends on distance", []() {
+            RallyState s;
+            s.rally_type = 2;
+            Segment a; a.distance_m = 1000; a.target_speed_kph = 36;
+            s.stage_segments = {a};
+            return sectorEndsOnDistance(s);
+        });
+
         return suite;
     }
 };

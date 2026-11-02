@@ -527,7 +527,7 @@ void updateCopilotDisplay(AppData* data) {
 
         // Live at any point in the segment: next while one follows, prev
         // while one precedes.
-        gtk_widget_set_sensitive(data->nextPrevBtn, nextAvailable(*data->state) || surreyFinishAvailable(*data->state));
+        gtk_widget_set_sensitive(data->nextPrevBtn, nextAvailable(*data->state) || surreyFinishAvailable(*data->state) || sectorFinishAvailable(*data->state));
         gtk_widget_set_sensitive(data->prevBtn, prevAvailable(*data->state) || sectorUndoAvailable(*data->state) ||
                                  surreyUndoAvailableNow(*data->state, current_poll.cntr1, current_poll.cntr2));
     } else if (data->state->stage_segments.empty()) {

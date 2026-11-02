@@ -246,6 +246,24 @@ bool applySectorNext(RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms) {
     return true;
 }
 
+bool sectorEndsOnDistance(const RallyState& s) {
+    return !(s.rally_type == 2 && stageIsSector(s.stage_segments));
+}
+
+bool sectorFinishAvailable(const RallyState& s) {
+    return s.rally_type == 2 && stageIsSector(s.stage_segments) && !s.stage_complete &&
+           s.segment_current_number >= 0 &&
+           s.segment_current_number == static_cast<long>(s.stage_segments.size()) - 1;
+}
+
+bool applySectorFinish(RallyState& s) {
+    if (!sectorFinishAvailable(s)) return false;
+    s.stage_complete = true;
+    s.sector_undo = RallyState::SectorUndo();
+    s.undo_valid = false;
+    return true;
+}
+
 bool undoSectorTube(RallyState& s) {
     RallyState::SectorUndo& u = s.sector_undo;
     if (s.rally_type != 2 || !sectorUndoAvailable(s)) return false;
