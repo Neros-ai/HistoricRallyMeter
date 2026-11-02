@@ -9,6 +9,13 @@
 #include "ui_home.h"
 #include "ui_datetime.h"
 #include "ui_calibration.h"
+#include "ui_settings.h"
+#include "stage_file.h"
+#include "reaction_offset.h"
+#include "sector.h"
+#include "sector_edit.h"
+#include "ui_setup.h"
+#include "ui_segments.h"
 #include <chrono>
 
 #include <cctype>
@@ -352,6 +359,15 @@ bool webHandleCommand(AppData* data, const char* json) {
         if (!jsonFindString(json, "name", name, sizeof(name)) || !jsonFindBool(json, "on", &on)) return false;
         if (strcmp(name, "units_mph") == 0) {
             if (data->state->units != on && data->unitToggleBtn) gtk_button_clicked(data->unitToggleBtn);
+        } else if (strcmp(name, "distance_km") == 0) {
+            // Same choice as Settings: 00.00 (km) or 0,000 (m). The segments
+            // page reads it on the next tick; light the keys now.
+            data->state->distance_km = on;
+            updateSettingsDisplay(data);
+        } else if (strcmp(name, "measure_ab_bc") == 0) {
+            // Keys on the box: AB,BC (on) / AB,AC (off).
+            data->state->measure_ab_bc = on;
+            updateSettingsDisplay(data);
         } else if (strcmp(name, "stage_logging") == 0) {
             data->state->stage_logging = on;
         } else if (strcmp(name, "sensor_logging") == 0) {
@@ -366,21 +382,48 @@ bool webHandleCommand(AppData* data, const char* json) {
         return true;
     }
 
+    // Rally type keys: italian 2, greek 0, surrey 1. Same refusal as the box
+    // while a stage is live, and the same linked distance / measure defaults.
+    if (strcmp(type, "rally_type") == 0) {
+        int n = -1;
+        if (!jsonFindInt(json, "n", &n) || (n != 0 && n != 1 && n != 2)) return false;
+        if (stageEditLocked(*data->state)) return false;
+        applyRallyTypeDefaults(*data->state, n);
+        updateSettingsDisplay(data);
+        ConfigFile::save(*data->state);
+        return true;
+    }
+
+    // Reaction time offset: 0.01 s a press, clamped to the box's range.
+    if (strcmp(type, "reaction_step") == 0) {
+        int ms = 0;
+        if (!jsonFindInt(json, "ms", &ms) || (ms != 10 && ms != -10)) return false;
+        data->state->reaction_offset_ms = clampReactionOffsetMs(data->state->reaction_offset_ms + ms);
+        updateSettingsDisplay(data);
+        ConfigFile::save(*data->state);
+        return true;
+    }
+
     if (strcmp(type, "beep_set") == 0) {
         // One command for the whole Beep Assist panel: the phone sends only
         // the fields the operator actually changed, so each is optional.
         bool flag = false;
         double value = 0.0;
-        if (jsonFindBool(json, "navigation", &flag)) data->state->beep_navigation_mode = flag;
-        if (jsonFindBool(json, "timing", &flag)) data->state->beep_timing_mode = flag;
+        // Italian greys these on the box; a phone press must not turn them on.
+        if (!greekBeepSettingsLocked(*data->state)) {
+            if (jsonFindBool(json, "navigation", &flag)) data->state->beep_navigation_mode = flag;
+            if (jsonFindBool(json, "timing", &flag)) data->state->beep_timing_mode = flag;
+        }
         // Nero2.0 has no separate master: Beep Assist is on when either mode is.
         data->state->beep_assist_enabled =
             data->state->beep_navigation_mode || data->state->beep_timing_mode;
-        if (jsonFindDouble(json, "advance_m", &value) && value >= 0.0) {
-            data->state->beep_advance_m = value;
-        }
-        if (jsonFindDouble(json, "advance_s", &value) && value >= 0.0) {
-            data->state->beep_advance_s = value;
+        if (!greekBeepSettingsLocked(*data->state)) {
+            if (jsonFindDouble(json, "advance_m", &value) && value >= 0.0) {
+                data->state->beep_advance_m = value;
+            }
+            if (jsonFindDouble(json, "advance_s", &value) && value >= 0.0) {
+                data->state->beep_advance_s = value;
+            }
         }
         // The beep distances come from the Segments rows now (every row's end),
         // so the phone no longer sends a waypoint list.
@@ -415,6 +458,59 @@ bool webHandleCommand(AppData* data, const char* json) {
             data->state->tone_type_ahead = tone_type;
         }
         ConfigFile::save(*data->state);
+        return true;
+    }
+
+    // Phone upload stage. Check shows what the file says; load writes it.
+    if (strcmp(type, "stage_upload_check") == 0) {
+        std::string id, text;
+        if (!jsonFindEscapedString(json, "id", &id) || id.empty()) return false;
+        if (!jsonFindEscapedString(json, "text", &text)) return false;
+        data->uploadCheckId = id;
+        data->uploadCheckText = text;
+        data->uploadLoaded.clear();
+        return true;
+    }
+    if (strcmp(type, "stage_upload_load") == 0) {
+        std::string id;
+        bool replace = false;
+        if (!jsonFindEscapedString(json, "id", &id) || id != data->uploadCheckId || data->uploadCheckId.empty())
+            return false;
+        jsonFindBool(json, "replace", &replace);
+        const StageFile file = parseStageFile(data->uploadCheckText);
+        if (!uploadRefusal(*data->state, file).empty()) return true;
+        if (!uploadOverwrites(*data->state, file).empty() && !replace) return true;
+        data->uploadLoaded = stageUploadCommit(data, file);
+        data->uploadCheckId.clear();
+        data->uploadCheckText.clear();
+        return true;
+    }
+    if (strcmp(type, "sector_duration") == 0) {
+        char text[32];
+        if (!jsonFindString(json, "text", text, sizeof(text))) return false;
+        const long s = parseDurationSeconds(text);
+        if (s > 0 || text[0] == '\0') sectorEditSetSectorDuration(data, s > 0 ? s : -1);
+        updateSegmentsDisplay(data);
+        return true;
+    }
+    if (strcmp(type, "box_setup") == 0) {
+        char name[32];
+        if (!jsonFindString(json, "name", name, sizeof(name))) return false;
+        if (strcmp(name, "reset_layout") == 0) phoneResetLayout(data);
+        else if (strcmp(name, "bt_connect") == 0) phoneBtConnect(data);
+        else if (strcmp(name, "bt_disconnect") == 0) phoneBtDisconnect(data);
+        else if (strcmp(name, "wifi_list") == 0) phoneWifiList(data);
+        else if (strcmp(name, "wifi_use") == 0) {
+            char net[128];
+            if (!jsonFindString(json, "net", net, sizeof(net))) return false;
+            phoneWifiUse(data, net);
+        } else return false;
+        return true;
+    }
+    if (strcmp(type, "stage_upload_cancel") == 0) {
+        data->uploadCheckId.clear();
+        data->uploadCheckText.clear();
+        data->uploadLoaded.clear();
         return true;
     }
     return false;

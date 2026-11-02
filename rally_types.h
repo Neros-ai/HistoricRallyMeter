@@ -214,6 +214,13 @@ struct AppData {
     GtkWidget* setupForceBtn[2] = {nullptr, nullptr};   // Setup page: Force single display off / on
     GtkWidget* webQrArea = nullptr;
     RallyWebServer* webServer = nullptr;
+    // Phone upload stage: the file last checked, and the stages just loaded.
+    std::string uploadCheckId;
+    std::string uploadCheckText;
+    std::vector<int> uploadLoaded;
+    // Phone Setup: last status line, and the saved Wi-Fi list after the phone asks.
+    std::string setupStatus;
+    std::string setupWifiJson;
     
     // Stage setup screen
     GtkWidget* stageSetupScreen;

@@ -298,6 +298,8 @@ GtkWidget* createSettingsScreen(AppData* d) {
 }
 
 void updateSettingsDisplay(AppData* d) {
+    if (g_reactionEntry)
+        gtk_entry_set_text(GTK_ENTRY(g_reactionEntry), reactionText(d->state->reaction_offset_ms).c_str());
     if (!d->settingsInfoLabel) return;
     for (SegCtl* c : allCtls()) {
         const int idx = stateIndex(*d->state, c->id);

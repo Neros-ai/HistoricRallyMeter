@@ -1,4 +1,5 @@
 #include "ui_setup.h"
+#include "stage_file.h"
 #include "callbacks.h"
 #include "config_file.h"
 #include "nero_frame.h"
@@ -414,6 +415,96 @@ GtkWidget* createSpannerKey(AppData* d) {
     gtk_button_set_image(GTK_BUTTON(k), icon);
     g_signal_connect(k, "clicked", G_CALLBACK(onShowSetup), d);
     return k;
+}
+
+namespace {
+void phoneNote(AppData* d, const std::string& t) {
+    d->setupStatus = t;
+    if (d->setupStatusLabel) gtk_label_set_text(d->setupStatusLabel, t.c_str());
+}
+bool speakerAddressOk(const std::string& address) {
+    if (address.size() != 17) return false;
+    for (size_t i = 0; i < address.size(); i++) {
+        const unsigned char c = static_cast<unsigned char>(address[i]);
+        if (i % 3 == 2) { if (address[i] != ':') return false; }
+        else if (!std::isxdigit(c)) return false;
+    }
+    return true;
+}
+void spawnConnect(const std::string& address) {
+    std::string underscored = address;
+    for (char& c : underscored) if (c == ':') c = '_';
+    const std::string script =
+        "bluetoothctl trust '" + address + "' >/dev/null 2>&1; "
+        "bluetoothctl connect '" + address + "' >/dev/null 2>&1; "
+        "sink='bluez_output." + underscored + ".1'; "
+        "for i in 1 2 3 4 5 6 7 8; do "
+        "if pactl list short sinks 2>/dev/null | grep -q \"$sink\"; then "
+        "pactl set-default-sink \"$sink\"; exit 0; fi; sleep 0.5; done";
+    gchar* argv[] = { (gchar*)"bash", (gchar*)"-c", const_cast<gchar*>(script.c_str()), nullptr };
+    g_spawn_async(nullptr, argv, nullptr, G_SPAWN_SEARCH_PATH, nullptr, nullptr, nullptr, nullptr);
+}
+}  // namespace
+
+void phoneResetLayout(AppData* d) {
+    if (!d) return;
+    std::string err;
+    if (!resetPiLayout(err)) phoneNote(d, err);
+    else phoneNote(d, "Layout saved. Restart the app so its windows follow the displays.");
+}
+
+void phoneBtConnect(AppData* d) {
+    if (!d) return;
+    const std::string& address = d->state->bluetooth_audio_address;
+    if (!speakerAddressOk(address)) { phoneNote(d, "No speaker remembered"); return; }
+    d->state->bluetooth_audio_autoconnect = true;
+    ConfigFile::save(*d->state);
+    spawnConnect(address);
+    phoneNote(d, "Connecting remembered speaker");
+}
+
+void phoneBtDisconnect(AppData* d) {
+    if (!d) return;
+    const std::string& address = d->state->bluetooth_audio_address;
+    if (!speakerAddressOk(address)) { phoneNote(d, "No speaker remembered"); return; }
+    d->state->bluetooth_audio_autoconnect = false;
+    ConfigFile::save(*d->state);
+    const std::string script =
+        "bluetoothctl disconnect '" + address + "' >/dev/null 2>&1; "
+        "bluetoothctl untrust '" + address + "' >/dev/null 2>&1; "
+        "sink=$(pactl get-default-sink 2>/dev/null); "
+        "case \"$sink\" in bluez_output.*) "
+        "alt=$(pactl list short sinks 2>/dev/null | awk '!/bluez_output/ {print $2; exit}'); "
+        "[ -n \"$alt\" ] && pactl set-default-sink \"$alt\" ;; esac";
+    gchar* argv[] = { (gchar*)"bash", (gchar*)"-c", const_cast<gchar*>(script.c_str()), nullptr };
+    g_spawn_async(nullptr, argv, nullptr, G_SPAWN_SEARCH_PATH, nullptr, nullptr, nullptr, nullptr);
+    phoneNote(d, "Disconnecting remembered speaker");
+}
+
+void phoneWifiList(AppData* d) {
+    if (!d) return;
+    const std::vector<SavedWifi> nets = savedWifiNetworks();
+    std::string j = "[";
+    for (size_t i = 0; i < nets.size(); i++) {
+        if (i) j += ',';
+        j += std::string("{\"name\":\"") + jsonEscape(nets[i].name) + "\",\"hotspot\":"
+            + (nets[i].hotspot ? "true" : "false") + ",\"active\":"
+            + (nets[i].active ? "true" : "false") + "}";
+    }
+    j += "]";
+    d->setupWifiJson = j;
+    d->setupStatus = wifiStatusLine();
+}
+
+void phoneWifiUse(AppData* d, const std::string& name) {
+    if (!d || name.empty()) return;
+    bool hotspot = false;
+    for (const SavedWifi& n : savedWifiNetworks()) if (n.name == name) hotspot = n.hotspot;
+    std::string detail;
+    if (useSavedWifi(name, detail) && !hotspot)
+        detail += ". The hotspot is off: phones on it lose the box until you switch back.";
+    d->setupStatus = detail;
+    phoneWifiList(d);
 }
 
 void bluetoothAutoconnectOnStartup(AppData* d) {

@@ -303,7 +303,8 @@ public:
         suite->addTest("distance text: metres grouped, km two decimals", []() {
             return formatDistance(1320, false) == "1,320" && formatDistance(540, false) == "540"
                 && formatDistance(17430, true) == "17.43" && formatDistance(380, true) == "0.38"
-                && formatDistance(125, true) == "0.13";
+                && formatDistance(125, true) == "0.13"
+                && formatDistance(127480, false) == "127,480" && formatDistance(127480, true) == "127.48";
         });
 
         suite->addTest("offset reads as minutes and hours from 60 s up", []() {

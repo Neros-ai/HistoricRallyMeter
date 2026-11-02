@@ -320,6 +320,16 @@ public:
                 && !stageArrival(0, 14).valid;
         });
 
+        suite->addTest("Greek driver shows arrival kph whenever the navigator does", []() {
+            const bool valid = stageArrival(6200, 14).valid;
+            return navigatorShowsArrivalKph(0, false, valid)
+                && navigatorShowsArrivalKph(0, true, valid)
+                && navigatorShowsArrivalKph(1, false, valid)
+                && !navigatorShowsArrivalKph(1, true, valid)
+                && !navigatorShowsArrivalKph(2, false, valid)
+                && !navigatorShowsArrivalKph(0, true, false);
+        });
+
         // RB-NAV-46: greek Home, final
         suite->addTest("Home shows the newest four trip readings, newest first", []() {
             RallyState s;

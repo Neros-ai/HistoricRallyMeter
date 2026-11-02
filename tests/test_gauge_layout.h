@@ -78,6 +78,16 @@ public:
                 && std::abs(L.totalBaseline - 314.0) < 0.001;
         });
 
+        suite->addTest("a long average moves the avg caption left and leaves a short one", []() {
+            return avgLegendRight(112.0, 160.0, 6.0) == 112.0
+                && avgLegendRight(112.0, 85.0, 6.0) == 79.0;
+        });
+
+        suite->addTest("a long countdown moves its caption right and leaves a short one", []() {
+            return captionLeftAfter(272.0, 200.0, 6.0) == 272.0
+                && captionLeftAfter(272.0, 300.0, 6.0) == 306.0;
+        });
+
         suite->addTest("curTopSize is the largest text size in the layout", []() {
             // RB-DRV-08: Current/Target moved to curTopSize, the single
             // largest font in the layout -- there is no more separate

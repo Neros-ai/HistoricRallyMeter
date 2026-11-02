@@ -13,7 +13,7 @@ SOURCES = main.cpp i2c_counter.cpp sim_counter.cpp rally_state.cpp config_file.c
           calculations.cpp ui_driver.cpp ui_copilot.cpp ui_control.cpp callbacks.cpp tone_generator.cpp \
           simple_tone.cpp arrow_tone.cpp tone_cadence.cpp debug_log.cpp stage_log.cpp nero_frame.cpp ui_home.cpp ui_home_italian.cpp stage_rows.cpp stage_store.cpp home_calc.cpp freeze.cpp sector.cpp surrey.cpp reaction_offset.cpp driver_trial.cpp sector_edit.cpp stage_edit.cpp ui_segments.cpp ui_datetime.cpp ui_calibration.cpp ui_settings.cpp ui_setup.cpp pi_setup.cpp \
           webserver/rally_web_server.cpp webserver/web_telemetry.cpp webserver/web_commands.cpp \
-          webserver/qr_display.cpp
+          webserver/qr_display.cpp stage_file.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
 OBJECTS_DEBUG = $(SOURCES:.cpp=_debug.o)
 
@@ -25,7 +25,7 @@ TEST_SOURCES = tests/test_main.cpp calculations.cpp rally_state.cpp config_file.
                tone_cadence.cpp stage_rows.cpp stage_store.cpp home_calc.cpp freeze.cpp sector.cpp surrey.cpp reaction_offset.cpp driver_trial.cpp debug_log.cpp stage_log.cpp
 TEST_OBJECTS = tests/test_main.o calculations_test.o rally_state_test.o config_file_test.o \
                sim_counter_test.o counter_poller_test.o simple_tone_test.o arrow_tone_test.o \
-               tone_cadence_test.o stage_rows_test.o stage_store_test.o home_calc_test.o freeze_test.o sector_test.o surrey_test.o reaction_offset_test.o driver_trial_test.o debug_log_test.o stage_log_test.o
+               tone_cadence_test.o stage_rows_test.o stage_store_test.o home_calc_test.o freeze_test.o sector_test.o surrey_test.o reaction_offset_test.o driver_trial_test.o debug_log_test.o stage_log_test.o stage_file_test.o
 
 # Default target
 all: $(TARGET)
@@ -64,6 +64,9 @@ stage_log_test.o: stage_log.cpp stage_log.h debug_log.h
 
 debug_log_test.o: debug_log.cpp debug_log.h
 	$(CXX) $(CXXFLAGS_TEST) -c debug_log.cpp -o debug_log_test.o
+
+stage_file_test.o: stage_file.cpp stage_file.h sector.h stage_rows.h calculations.h rally_state.h rally_types.h
+	$(CXX) $(CXXFLAGS_TEST) -c stage_file.cpp -o stage_file_test.o
 
 stage_rows_test.o: stage_rows.cpp stage_rows.h calculations.h rally_state.h rally_types.h
 	$(CXX) $(CXXFLAGS_TEST) -c stage_rows.cpp -o stage_rows_test.o

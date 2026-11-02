@@ -9,6 +9,7 @@
 #include "../stage_rows.h"
 #include <cmath>
 #include <cstdio>
+#include <string>
 
 // RB-NAV-44: the italian sector, on the Mugello 2024 sector 1 rows (calibration
 // 1,000,000: one count is one metre). Rows: navi 380 m; pc1 180 m in 31 s;
@@ -782,6 +783,20 @@ public:
         suite->addTest("RB-WEB-21: before the line the count down km has no sign", []() {
             SectorPanel p; p.running = true; p.metresToGo = 1240;
             return sectorCountdownKmText(p) == "1.24";
+        });
+
+        suite->addTest("phone sector card is null off italian and shows the idle preview on italian", []() {
+            RallyState g;
+            g.rally_type = 0;
+            const std::string off = sectorCardJson(g, 0, 0, 0, 0);
+            RallyState s = running();
+            s.stage_complete = true;
+            s.segment_current_number = -1;
+            s.segments = s.stage_segments;
+            const std::string card = sectorCardJson(s, 0, 0, 0, 0);
+            return off == "null" && card.find("\"loaded\":true") != std::string::npos
+                && card.find("\"preview\":true") != std::string::npos
+                && card.find("navi") != std::string::npos;
         });
 
         return suite;

@@ -3,6 +3,7 @@
 #include "calculations.h"
 #include "callbacks.h"   // autoStartHoldActive
 #include "rally_types.h"
+#include "stage_file.h"
 #include "counter_poller.h"
 #include "rally_state.h"
 #include "stage_rows.h"
@@ -111,6 +112,7 @@ std::string buildTelemetryJson(AppData* data) {
         "\"next_enabled\":%s,"
         "\"prev_enabled\":%s,"
         "\"units\":\"%s\","
+        "\"rally_type\":%d,"
         // The ahead/behind tone the box is playing right now, so the phone
         // plays the same one (RB-WEB-02).
         "\"tone\":%s,"
@@ -130,6 +132,7 @@ std::string buildTelemetryJson(AppData* data) {
         np.next_enabled ? "true" : "false",
         np.prev_enabled ? "true" : "false",
         data->state->units ? "mph" : "kph",
+        data->state->rally_type,
         toneCadenceJson(data->currentTone).c_str(),
         beepEventJson(data->lastBeep).c_str());
 
@@ -193,6 +196,7 @@ std::string buildTelemetryJson(AppData* data) {
     const double rpm = propRpmFromCounts(raw_poll.cntr1, tenth.cntr1, rpm_ms, st.prop_pulses_per_rev);
     // RB-WEB-21: italian count down as the box prints it (same sectorPanel, same text).
     std::string itCount = "null";
+    std::string sectorJson = "null";
     if (st.rally_type == 2) {
         const long stage_m = countsToCentimeters(stageCountsCorrected(data, current_poll), st.calibration) / 100;
         const SectorPanel sp = sectorPanel(st, current_time_ms, stage_m);
@@ -201,6 +205,7 @@ std::string buildTelemetryJson(AppData* data) {
                       ",\"s\":" + (sp.secondsValid ? "\"" + sectorSecondsText(sp.secondsToLine) + "\"" : std::string("null")) +
                       ",\"s_past\":" + (sp.secondsValid && sp.secondsToLine < 0 ? "true" : "false") + "}";
         }
+        sectorJson = sectorCardJson(st, current_time_ms, stage_m, current_poll.cntr1, current_poll.cntr2);
     }
     std::ostringstream ex;
     ex << ",\"gauge_range\":" << data->state->gauge_range_s
@@ -212,6 +217,7 @@ std::string buildTelemetryJson(AppData* data) {
        << ",\"time_taken_stage\":" << (isSurrey(st) ? st.time_taken_stage : 0)
        << ",\"total_s\":" << total_s << ",\"trip_s\":" << trip_s
        << ",\"it_count\":" << itCount
+       << ",\"sector\":" << sectorJson
        << ",\"next_m\":" << (has_next_m ? std::to_string(next_m) : std::string("null"))
        << ",\"speed_change\":\"" << speed_change << "\""
        << ",\"next_key\":\"" << (st.rally_type == 2 ? "next substage" : "next speed") << "\""
@@ -229,7 +235,9 @@ std::string buildTelemetryJson(AppData* data) {
        << ",\"c1\":" << c1 << ",\"c2\":" << c2 << ",\"avg\":" << cavg
        << ",\"rpm\":" << (rpm < 0 ? -1L : std::lround(rpm)) << "}"
        << ",\"fps\":\"" << gtk_label_get_text(data->updatesPerSecLabel) << "\""
-       << ",\"cpu\":\"" << gtk_label_get_text(data->cpuTempLabel) << "\"}";
+       << ",\"cpu\":\"" << gtk_label_get_text(data->cpuTempLabel) << "\""
+       << ",\"distance_km\":" << (st.distance_km ? "true" : "false")
+       << ",\"measure_ab_bc\":" << (st.measure_ab_bc ? "true" : "false") << "}";
     std::string out = buf;
     out.pop_back();   // the closing brace
     return out + ex.str();
@@ -264,6 +272,7 @@ std::string buildStateJson(AppData* data) {
         ss << "\"edit_slot\":" << slot_no << ",\"first_number\":" << slot.first_number
            << ",\"first_from_m\":" << static_cast<long>(slot.first_from_m)
            << ",\"start_distance_m\":" << slot.start_distance_m
+           << ",\"sector_duration_s\":" << slot.sector_duration_s
            << ",\"start_time\":\"";
         if (slot.start_time_s >= 0) {
             char b[16];
@@ -299,6 +308,9 @@ std::string buildStateJson(AppData* data) {
     ss << "],\"stage_logging\":" << (data->state->stage_logging ? "true" : "false")
        << ",\"sensor_logging\":" << (data->state->debug_logs_enabled ? "true" : "false")
        << ",\"force_single\":" << (data->state->force_single_display ? "true" : "false")
+       << ",\"distance_km\":" << (data->state->distance_km ? "true" : "false")
+       << ",\"rally_type\":" << data->state->rally_type
+       << ",\"measure_ab_bc\":" << (data->state->measure_ab_bc ? "true" : "false")
        << ",\"calibration_pulses\":" << displayPulsesPerKm(data->state->typed_pulses_per_km, data->state->calibration)
        << ",\"sensors_both\":" << (data->state->counters ? "true" : "false")
        << ",\"prop_pulses\":" << data->state->prop_pulses_per_rev
@@ -325,7 +337,16 @@ std::string buildStateJson(AppData* data) {
        << ",\"tone_type_behind\":" << data->state->tone_type_behind
        << ",\"tone_type_ahead\":" << data->state->tone_type_ahead
        << ",\"gauge_range\":" << data->state->gauge_range_s
-       << ",\"reaction_offset_ms\":" << data->state->reaction_offset_ms;
+       << ",\"reaction_offset_ms\":" << data->state->reaction_offset_ms
+       << ",\"bt_name\":\"" << jsonEscape(data->state->bluetooth_audio_name) << "\""
+       << ",\"bt_known\":" << (data->state->bluetooth_audio_address.empty() ? "false" : "true")
+       << ",\"setup_status\":\"" << jsonEscape(data->setupStatus) << "\""
+       << ",\"wifi\":" << (data->setupWifiJson.empty() ? "null" : data->setupWifiJson);
+
+    if (!data->uploadCheckId.empty() || !data->uploadLoaded.empty()) {
+        const StageFile file = data->uploadCheckId.empty() ? StageFile() : parseStageFile(data->uploadCheckText);
+        ss << ",\"upload\":" << uploadStateJson(data->uploadCheckId, *data->state, file, data->uploadLoaded);
+    }
 
     // Which memory slots hold a stage, so the phone can mark them the way the
     // box does instead of offering five identical buttons.

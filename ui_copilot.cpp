@@ -17,6 +17,7 @@
 #include "ui_home.h"
 #include "home_calc.h"
 #include "ui_segments.h"
+#include "stage_rows.h"
 #include "ui_datetime.h"
 #include "ui_calibration.h"
 #include "ui_settings.h"
@@ -433,8 +434,9 @@ void updateCopilotDisplay(AppData* data) {
                                            autoStartHoldActive(data));
     
     std::stringstream ss;
-    const char* total_unit = "m";
-    std::string total_str = formatDistanceAutoUnit(total_m, &total_unit);
+    const bool dist_km = data->state->distance_km;
+    const char* total_unit = dist_km ? "km" : "m";
+    std::string total_str = formatDistance(static_cast<double>(total_m), dist_km);
     gtk_label_set_text(data->totalDistLabel, total_str.c_str());
     gtk_label_set_text(data->totalUnitLabel, total_unit);
 
@@ -451,8 +453,8 @@ void updateCopilotDisplay(AppData* data) {
     int64_t trip_secs = elapsedForDisplay(trip_duration_ms / 1000,
                                           autoStartHoldActive(data));
     
-    const char* trip_unit = "m";
-    std::string trip_str = formatDistanceAutoUnit(trip_m, &trip_unit);
+    const char* trip_unit = dist_km ? "km" : "m";
+    std::string trip_str = formatDistance(static_cast<double>(trip_m), dist_km);
     gtk_label_set_text(data->tripDistLabel, trip_str.c_str());
     gtk_label_set_text(data->tripUnitLabel, trip_unit);
 
@@ -505,8 +507,8 @@ void updateCopilotDisplay(AppData* data) {
         const bool greek_like = data->state->rally_type != 2;
         if (greek_like)
             remaining_m = metresToNextChange(data->state->stage_segments, data->state->segment_current_number, remaining_m);
-        const char* next_unit = "m";
-        std::string next_str = formatDistanceAutoUnit(remaining_m, &next_unit);
+        const char* next_unit = dist_km ? "km" : "m";
+        std::string next_str = formatDistance(static_cast<double>(remaining_m), dist_km);
         gtk_label_set_text(data->nextDistLabel, next_str.c_str());
         gtk_label_set_text(data->nextUnitLabel, next_unit);
         

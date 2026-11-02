@@ -22,6 +22,7 @@ struct HomeUi {
     std::string stageNo = "-";
     bool autoArmed = false;
     bool unitsMph = false;      // speed-table header reads MPH
+    bool distanceKm = false;    // stage table "at km" / "at m" follows Settings
     std::string autoTime;       // hh:mm:ss, or empty
     bool autoTimePast = false;  // the stage start time has already gone by and no stage is armed or running
     struct Row { std::string kph, at; bool now = false; };

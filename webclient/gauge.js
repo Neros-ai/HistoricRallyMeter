@@ -294,18 +294,44 @@
     ctx.font = 'bold ' + L.curTopSize + 'px sans-serif';
     ctx.textBaseline = 'alphabetic';
 
+    // Same inset as the box: the white speed ends a few pixels in from the panel edge.
+    const topRightInk = width - 4 * L.fscale;
     ctx.fillStyle = '#fff';
     ctx.textAlign = 'right';
-    ctx.fillText(cur, L.bandOuterX, L.speedBase);
+    ctx.fillText(cur, topRightInk, L.speedBase);
     ctx.font = L.labelSize + 'px sans-serif';
-    ctx.fillText(msg.units === 'mph' ? 'Mph' : 'Kph', L.bandOuterX, L.speedBase + L.labelSize + 4 + L.legendDrop * 0.2);
+    ctx.fillText(msg.units === 'mph' ? 'Mph' : 'Kph', topRightInk, L.speedBase + L.labelSize + 4 + L.legendDrop * 0.2);
 
+    // Same inset as the box: the arc's top is near the hub, so the yellow
+    // stack sits a few pixels in from the panel edge, not on bandTargetX.
+    const topLeftInk = 4 * L.fscale;
+    const stageOn = Number(msg.segment_number) > 0;
+    const arrival = msg.arrival && msg.arrival.kph != null ? msg.arrival : null;
+    const showArrival = !!(arrival && Number(msg.rally_type) !== 2 && !(msg.surrey && stageOn));
     ctx.fillStyle = '#FFDD00';
     ctx.textAlign = 'left';
-    ctx.font = 'bold ' + L.curTopSize + 'px sans-serif';
-    ctx.fillText(tgt, L.bandTargetX, L.speedBase);
-    ctx.font = L.labelSize + 'px sans-serif';
-    ctx.fillText('Target', L.bandTargetX, L.speedBase + L.labelSize + 4 + L.legendDrop * 0.2);
+    if (showArrival && !stageOn) {
+      const ak = msg.units === 'mph' ? Math.round(arrival.kph * 0.621371) : arrival.kph;
+      ctx.font = 'bold ' + L.curTopSize + 'px sans-serif';
+      ctx.fillText(String(ak), topLeftInk, L.speedBase);
+      ctx.font = L.labelSize + 'px sans-serif';
+      ctx.fillText(msg.units === 'mph' ? 'Arrival (mph)' : 'Arrival (kph)', topLeftInk,
+                   L.speedBase + L.labelSize + 4 + L.legendDrop * 0.2);
+    } else {
+      ctx.font = 'bold ' + L.curTopSize + 'px sans-serif';
+      ctx.fillText(tgt, topLeftInk, L.speedBase);
+      ctx.font = L.labelSize + 'px sans-serif';
+      ctx.fillText('Target', topLeftInk, L.speedBase + L.labelSize + 4 + L.legendDrop * 0.2);
+      if (showArrival && stageOn) {
+        const ak = msg.units === 'mph' ? Math.round(arrival.kph * 0.621371) : arrival.kph;
+        const arrSize = L.curTopSize * 0.64;
+        ctx.font = 'bold ' + arrSize + 'px sans-serif';
+        const y = L.speedBase + L.labelSize + 4 + L.legendDrop * 0.2 + arrSize * 1.05;
+        ctx.fillText(String(ak), topLeftInk, y);
+        ctx.font = L.labelSize + 'px sans-serif';
+        ctx.fillText('arrival', topLeftInk, y + L.labelSize + 4);
+      }
+    }
 
     // The stage number, centred just below the ahead/behind box.
     const stageNo = Number(msg.stage_no) || 0;

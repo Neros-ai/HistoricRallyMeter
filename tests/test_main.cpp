@@ -38,6 +38,7 @@
 #include "test_surrey.h"
 #include "test_reaction_offset.h"
 #include "test_driver_trial.h"
+#include "test_stage_file.h"
 
 int main() {
     TestRunner runner;
@@ -79,6 +80,7 @@ int main() {
     TestSurrey surreyTests;
     TestReactionOffset reactionOffsetTests;
     TestDriverTrial driverTrialTests;
+    TestStageFile stageFileTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -117,6 +119,7 @@ int main() {
     runner.addSuite(surreyTests.createSuite());
     runner.addSuite(reactionOffsetTests.createSuite());
     runner.addSuite(driverTrialTests.createSuite());
+    runner.addSuite(stageFileTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();

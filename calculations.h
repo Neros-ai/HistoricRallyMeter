@@ -468,6 +468,30 @@ struct StageArrival {
 };
 StageArrival stageArrival(double start_distance_m, double minutes_to_start);
 
+// The navigator draws that speed when it is valid: on the Greek page, and on
+// Surrey between stages. A running Surrey stage puts the countdown in the
+// slot, and the Italian page covers the column.
+inline bool navigatorShowsArrivalKph(int rally_type, bool stage_running, bool arrival_valid) {
+    if (!arrival_valid) return false;
+    if (rally_type == 2) return false;
+    if (rally_type == 1 && stage_running) return false;
+    return true;
+}
+
+// Right edge of the driver "avg / kph" caption. The average figures stay
+// put. When a long figure would cross the caption, the caption moves left.
+inline double avgLegendRight(double baseRight, double numberLeft, double gap) {
+    const double need = numberLeft - gap;
+    return need < baseRight ? need : baseRight;
+}
+
+// Left edge of a caption that sits to the right of a number. The number stays.
+// When its right ink would cross the caption, the caption moves right.
+inline double captionLeftAfter(double baseLeft, double numberRight, double gap) {
+    const double need = numberRight + gap;
+    return need > baseLeft ? need : baseLeft;
+}
+
 // Parse an operator-entered Beep Assist waypoint list. Values are kilometres
 // separated by commas, semicolons or whitespace, and are returned as metres
 // in ascending order with duplicates removed. A malformed token is skipped

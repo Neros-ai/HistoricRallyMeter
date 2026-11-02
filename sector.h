@@ -173,4 +173,9 @@ std::string sectorCountdownKmText(const SectorPanel& p);
 // m:ss.t; "+m:ss.t" when negative (the line has gone by).
 std::string sectorSecondsText(double s);
 
+// The italian sector card as the phone draws it. "null" when the box is not italian.
+// Idle with a sector loaded is the same preview the box draws; nothing is written.
+std::string sectorCardJson(const RallyState& live, int64_t now_ms, long stage_m,
+                           uint64_t c1, uint64_t c2);
+
 #endif

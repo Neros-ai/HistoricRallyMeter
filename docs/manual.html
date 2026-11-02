@@ -236,7 +236,10 @@ refused). It can also be switched on/off on the navigation page.</li>
 </ol>
 <p>Entries save automatically under the stage number shown. A running stage cannot be edited.</p>
 
-<p><code>upload stage</code> &ndash; currently only available on phone app.</p>
+<p><code>upload stage</code> on the phone's Seg page opens a window. It shows the CSV columns for
+greek, surrey and italian, and marks the one this box is using. Choose the CSV, or paste it, then
+press <code>check</code> and <code>load</code>. A stage that is already programmed asks before it
+is replaced. The same key on the box opens a file window and loads that file. It is greyed while a stage is running.</p>
 
 <h4>Clearing stages</h4>
 <p><code>clear stage</code> empties the stage shown; <code>clear all</code> empties every stage.
@@ -763,7 +766,10 @@ displayed faintly below should correspond to that given on the TDT sheet.</li>
 <p>Typed figures are white on dark boxes; worked-out figures grey. Entries are saved
 automatically. A running sector cannot be edited.</p>
 
-<p><code>upload stage</code> &ndash; currently only available on phone app.</p>
+<p><code>upload stage</code> on the phone's Seg page opens a window. It shows the CSV columns for
+greek, surrey and italian, and marks the one this box is using. Choose the CSV, or paste it, then
+press <code>check</code> and <code>load</code>. A stage that is already programmed asks before it
+is replaced. The same key on the box opens a file window and loads that file. It is greyed while a stage is running.</p>
 
 <h4>Clearing sectors</h4>
 <p><code>clear stage</code> empties the sector shown; <code>clear all</code> empties every sector.
@@ -1323,10 +1329,23 @@ toggles Sound is on / off.</p>
 
 <p><b>Nero2.1:</b> the phone's stage selectors run 1&ndash;99 like the box; the phone does not yet show the italian columns, and its screenshots below are from 27 October (before Nero2.1).</p>
 
-<p>Six tabs mirror the box: <b>Navi</b> (navigation, with total, trip, freeze, reverse, the three
-flag keys and A-B, B-C zero), <b>Seg</b> (segments), <b>Time</b> (date / time), <b>Cal</b>
+<p>Six tabs mirror the box: <b>Navi</b> (navigation, with total, trip, freeze, reverse, and the flag
+keys the box is showing), <b>Seg</b> (segments), <b>Time</b> (date / time), <b>Cal</b>
 (calibration), <b>Set</b> (settings, plus <code>download logs</code>) and <b>Drv</b> (driver gauge
-with Total and Trip). On Navi and Drv, press Total or Trip to zero it.</p>
+with Total and Trip). On Navi and Drv, press Total or Trip to zero it. Distance figures on Navi,
+Seg and Drv follow <b>Distance units</b> on Set (the same <b>00.00</b> kilometres or <b>0,000</b>
+metres choice as the box). The box's own Total, Trip, countdown and driver distances follow that
+same choice: <b>00.00</b> is kilometres to two decimals, <b>0,000</b> is whole metres, with no change
+at 100 km. Set Total asks for the figure in that unit. Set also has the box's
+rally type (italian, greek, surrey), measure type (AB,BC or AB,AC), and reaction time offset.
+Rally type stays locked while a stage is running, and Beep navigation, Beep timing and their
+advance figures stay greyed on an Italian rally, as on the box. On an Italian rally the
+phone hides the next-minute start and autostart keys, and on Seg it hides Autostart and Distance
+at start and shows the sector Duration instead, matching the box. Navi then shows the sector card
+(the row being driven, the next row, and the count down) in place of the stage table, Trip history
+and Stage arrival. <code>A-B, B-C zero</code> shows only when the box shows it. Set also has the
+box Setup actions: connect or disconnect the remembered Bluetooth speaker, list and join a saved
+Wi-Fi network, and reset the screen layout.</p>
 
 <div style="display: flex; gap: 6mm; align-items: flex-start; justify-content: flex-start">
   <figure class="screen" style="flex: 0 0 43.2%; margin: 0">
@@ -1492,8 +1511,8 @@ italian tube <code>next</code>, the greek <code>next</code>, <code>start now</co
 <code>set</code> or <code>prev</code>. Positive means the crew press late. Find your figure by
 comparing the box's pc times with the official results.</li>
 <li><b>Speed units</b> &ndash; kph or mph.</li>
-<li><b>Distance units</b> &ndash; <b>00.00</b> (km) or <b>0,000</b> (metres) for
-<code>add distance</code>.</li>
+<li><b>Distance units</b> &ndash; <b>00.00</b> (km, two decimals) or <b>0,000</b> (whole metres) for
+the driving figures and <code>add distance</code>. It does not flip to kilometres at 100 km.</li>
 <li><b>Measure type</b> &ndash; <b>AB,BC</b> shows the A-B, B-C zero key on the greek navigation
 page; <b>AB,AC</b> hides it.</li>
 <li><b>Stage data logging</b> &ndash; one file per stage, a row a second (distance, speed,
@@ -1535,9 +1554,7 @@ screen, it runs without browser bars.</li>
 
 <p>Agreed or planned, but the box does <b>not</b> do these today:</p>
 <ul>
-<li><code>upload stage</code> on the segments page (greyed): loading a stage from a file.</li>
-<li>Italian driver display in km (it still reads <i>Distance (metres)</i>, Total and Trip).</li>
-<li>Italian columns on the phone's Seg tab; keeping phone edits made while disconnected.</li>
+<li>Italian type, ref and time columns on the phone's Seg table (Duration is there). Keeping phone edits made while disconnected.</li>
 </ul>
 
 <h2 id="check" style="page-break-before: always">Things to check</h2>

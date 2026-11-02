@@ -10,6 +10,8 @@
 #include "sector.h"
 #include "sector_edit.h"
 #include "stage_rows.h"
+#include "stage_file.h"
+#include <fstream>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -72,6 +74,7 @@ struct SegUi {
     int builtType = -1;              // the rally type the rows were built for
     GtkWidget* modeBadge = nullptr;  // the rally mode's flag with "mode" on it
     int badgeType = -1;              // the rally type the badge was drawn for
+    GtkWidget* uploadBtn = nullptr;
 };
 
 // The mode badge (owner, 2026-10-31): a 96 x 24 key-shaped tile, not pressable,
@@ -662,6 +665,47 @@ void refreshSegmentList(AppData* data) {
     rebuildNow(data);
 }
 
+void onUploadStage(GtkWidget* w, gpointer p) {
+    AppData* d = static_cast<AppData*>(p);
+    if (!d) return;
+    if (stageLive(*d->state)) {
+        flashNotice(w, "a stage is running: upload after it ends");
+        return;
+    }
+    GtkWidget* dialog = gtk_file_chooser_dialog_new(
+        "Upload stage", GTK_WINDOW(gtk_widget_get_toplevel(w)),
+        GTK_FILE_CHOOSER_ACTION_OPEN,
+        "Cancel", GTK_RESPONSE_CANCEL, "Open", GTK_RESPONSE_ACCEPT, nullptr);
+    GtkFileFilter* filter = gtk_file_filter_new();
+    gtk_file_filter_set_name(filter, "Stage file");
+    gtk_file_filter_add_pattern(filter, "*.csv");
+    gtk_file_filter_add_pattern(filter, "*.txt");
+    gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(dialog), filter);
+    const int response = gtk_dialog_run(GTK_DIALOG(dialog));
+    char* path = response == GTK_RESPONSE_ACCEPT
+        ? gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog)) : nullptr;
+    gtk_widget_destroy(dialog);
+    if (!path) return;
+    std::ifstream in(path);
+    g_free(path);
+    if (!in) { flashNotice(w, "could not read that file"); return; }
+    std::string text, line;
+    while (std::getline(in, line)) {
+        if (text.size() + line.size() + 1 > 64 * 1024) {
+            flashNotice(w, "that file is too big");
+            return;
+        }
+        text += line;
+        text.push_back('\n');
+    }
+    const StageFile file = parseStageFile(text);
+    const std::string why = uploadRefusal(*d->state, file);
+    if (!why.empty()) { flashNotice(w, why); return; }
+    const std::vector<int> over = uploadOverwrites(*d->state, file);
+    if (!over.empty() && !confirmYesNo(w, "Upload stage", overwriteQuestion(over))) return;
+    stageUploadCommit(d, file);
+}
+
 void updateSegmentsDisplay(AppData* data) {
     SegUi* u = ui(data);
     if (!u) return;
@@ -672,11 +716,13 @@ void updateSegmentsDisplay(AppData* data) {
         rebuildNow(data);
     }
     applyHeadings(data);
+    updateRowText(data);   // distance units can change on Settings or the phone
     if (u->badgeType != data->state->rally_type) {
         u->badgeType = data->state->rally_type;
         gtk_widget_queue_draw(u->modeBadge);
     }
     markCurrentRow(data, false);
+    if (u->uploadBtn) gtk_widget_set_sensitive(u->uploadBtn, !stageLive(*data->state));
     const bool armed = data->state->auto_start_rally_time_s != 0;
     if (armed != static_cast<bool>(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(u->autoCheck)))) {
         g_signal_handlers_block_by_func(u->autoCheck, (gpointer)onAutostartToggled, data);
@@ -869,12 +915,12 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(screen), kp, FALSE, FALSE, 0);
     data->numericKeypad = createNeroKeypad(data);
     gtk_box_pack_start(GTK_BOX(kp), data->numericKeypad, FALSE, FALSE, 0);
-    // upload stage (no function yet, so greyed) sits to the left of menu, as tall as it.
+    // upload stage: the same file the phone loads. Greyed while a stage is running.
     const int UPL_W = nero::KEYPAD_COL_W - nero::MENU_KEY_W - 8;
-    GtkWidget* upload = key("upload\nstage", UPL_W, nero::MENU_KEY_H, nullptr);
+    GtkWidget* upload = key("upload\nstage", UPL_W, nero::MENU_KEY_H, G_CALLBACK(onUploadStage));
     addClass(upload, "key-small");
     gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(upload))), GTK_JUSTIFY_CENTER);
-    gtk_widget_set_sensitive(upload, FALSE);
+    u->uploadBtn = upload;
     GtkWidget* menu = createMenuKey(data);
     GtkWidget* menuRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_box_pack_start(GTK_BOX(menuRow), upload, FALSE, FALSE, 0);

@@ -1,5 +1,6 @@
 #include "ui_driver.h"
 #include "home_calc.h"
+#include "stage_rows.h"
 #include "calculations.h"
 #include "rally_types.h"
 #include "sector.h"
@@ -459,19 +460,21 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             cairo_show_text(cr, text);
             smallFace();
         };
-        // Top-corner value: right-aligns to `anchor_x` (Current: bandOuterX;
-        // Target: mirrored, left-aligned from bandTargetX), top-aligns with
-        // L.bandTopY using the drawn text's own ink ascent (font-metric
-        // ascent isn't pure geometry, so this can't be precomputed in
-        // CompactGaugeLayout -- RB-DRV-08). Returns the baseline used, so
-        // the caller can place the label directly beneath it.
+        // Top-corner value. Each anchor is an ink edge, not the pen position:
+        // right figures end on it, left figures start on it, so the number
+        // and its legend share one edge. Top-aligns with L.bandTopY using
+        // the drawn text's own ink ascent (font-metric ascent isn't pure
+        // geometry, so this can't be precomputed in CompactGaugeLayout --
+        // RB-DRV-08). Returns the baseline used, so the caller can place
+        // the label beneath it.
         auto drawTopCorner = [&](const char* text, double anchor_x, bool right_align) -> double {
             bigFace();
             cairo_set_font_size(cr, L.curTopSize);
             cairo_text_extents(cr, text, &te);
             double ascent = -te.y_bearing;
             double baseline = L.bandTopY + ascent;
-            double x = right_align ? (anchor_x - te.x_advance) : anchor_x;
+            double x = right_align ? (anchor_x - te.x_bearing - te.width)
+                                   : (anchor_x - te.x_bearing);
             cairo_move_to(cr, x, baseline);
             cairo_show_text(cr, text);
             smallFace();
@@ -483,7 +486,8 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             cairo_set_font_size(cr, L.labelSize);
             cairo_text_extents_t lte;
             cairo_text_extents(cr, text, &lte);
-            double x = right_align ? (anchor_x - lte.x_advance) : anchor_x;
+            double x = right_align ? (anchor_x - lte.x_bearing - lte.width)
+                                   : (anchor_x - lte.x_bearing);
             cairo_move_to(cr, x, value_baseline + L.labelSize + L.labelGap + capDrop);
             cairo_show_text(cr, text);
         };
@@ -499,18 +503,23 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             const bool mph = data->state->units && !italianFig;
             const char* speedUnit = mph ? "Mph" : "Kph";
 
-            // ---- top right: present speed
+            // ---- top right: present speed. The arc's top is near the hub, so this
+            // stack is not tied to bandOuterX (the arc's right end). Ink ends a few pixels in.
             cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
             {
+                const double topRightInk = width - 4.0 * fs;
                 const std::string sp = italianFig ? data->driverTrialSpeedText
                                                   : std::string(gtk_label_get_text(data->currentSpeedLabel));
-                double baseline = drawTopCorner(sp.c_str(), L.bandOuterX, true);
-                drawTopCornerLabel(speedUnit, L.bandOuterX, true, baseline);
+                double baseline = drawTopCorner(sp.c_str(), topRightInk, true);
+                drawTopCornerLabel(speedUnit, topRightInk, true, baseline);
             }
 
-            // ---- top left: target (stages), or the speed to arrive at the next stage (between stages)
+            // ---- top left: target (stages), or the speed to arrive at the next stage (between stages).
+            // The arc's top is near the hub, so this stack is not tied to bandTargetX
+            // (the arc's left end, down by the error box). Ink starts a few pixels in.
             cairo_set_source_rgb(cr, 1.0, 0.867, 0.0);  // #FFDD00
             {
+                const double topLeftInk = 4.0 * fs;
                 std::string big, cap = "Target";
                 if (italianFig) big = data->driverTrialTargetText;
                 else if (page == AppData::DP_GREEK_STAGE) big = gtk_label_get_text(data->targetSpeedLabel);
@@ -524,8 +533,32 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                         big = b;
                     }
                 }
-                double baseline = drawTopCorner(big.c_str(), L.bandTargetX, false);
-                drawTopCornerLabel(cap.c_str(), L.bandTargetX, false, baseline);
+                double baseline = drawTopCorner(big.c_str(), topLeftInk, false);
+                drawTopCornerLabel(cap.c_str(), topLeftInk, false, baseline);
+                // During a Greek stage the target stays, and the arrival speed the
+                // navigator is showing sits under it. Between stages the arrival
+                // speed is the figure above, so this line is the stage page only.
+                if (page == AppData::DP_GREEK_STAGE &&
+                    navigatorShowsArrivalKph(data->state->rally_type, true, data->driverArrivalKph >= 0)) {
+                    char arr[16];
+                    snprintf(arr, sizeof(arr), "%ld",
+                             mph ? std::lround(data->driverArrivalKph * 0.621371)
+                                 : static_cast<long>(data->driverArrivalKph));
+                    bigFace();
+                    const double arrSize = L.curTopSize * 0.64;
+                    cairo_set_font_size(cr, arrSize);
+                    cairo_text_extents(cr, arr, &te);
+                    const double arrBase = baseline + L.labelSize + L.labelGap + capDrop + arrSize * 1.05;
+                    cairo_move_to(cr, topLeftInk - te.x_bearing, arrBase);
+                    cairo_show_text(cr, arr);
+                    smallFace();
+                    const char* acap = "arrival";
+                    cairo_set_font_size(cr, L.labelSize);
+                    cairo_text_extents(cr, acap, &te);
+                    cairo_move_to(cr, topLeftInk - te.x_bearing,
+                                  arrBase + L.labelSize + L.labelGap * 0.4);
+                    cairo_show_text(cr, acap);
+                }
                 if (italianFig) {   // how long this pc / pm / row takes, m:ss, under the target
                     const double dur_s = (page == AppData::DP_ITALIAN_TRIAL) ? v.durationS : data->driverRowS;
                     char dur[24];
@@ -534,7 +567,8 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                     bigFace();
                     const double durSize = L.curTopSize * 0.64;
                     cairo_set_font_size(cr, durSize);
-                    cairo_move_to(cr, L.bandTargetX,
+                    cairo_text_extents(cr, dur, &te);
+                    cairo_move_to(cr, topLeftInk - te.x_bearing,
                                   baseline + L.labelSize + L.labelGap + capDrop + durSize * 1.05);
                     cairo_show_text(cr, dur);
                     smallFace();
@@ -555,9 +589,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                 smallFace();
             };
             auto distText = [&](double metres) {
-                char b[32];
-                snprintf(b, sizeof(b), "%.2f", (mph ? metres * 0.000621371 : metres / 1000.0));
-                return std::string(b);
+                return formatDistance(metres, data->state->distance_km);
             };
             auto avgKphText = [&](const char* label) {   // a Greek average label is in the shown units
                 const double x = atof(label);
@@ -571,35 +603,52 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
             drawAt(totalAvg, avgAnchor, y2);
             drawAt(distText(page == AppData::DP_ITALIAN_TRIAL ? v.sectorTotalM : data->driverTotalM), distAnchor, y2);
+            std::string tripAvg;
+            bool haveTripAvg = false;
             if (page != AppData::DP_ITALIAN_TRIAL) {   // trip row (cyan, as Greek)
                 cairo_set_source_rgb(cr, 0.0, 1.0, 1.0);
                 if (page == AppData::DP_GREEK_STAGE) {   // the substage's own average, to match the time error
                     char sb[24];
                     const double sp = data->state->units ? data->driverSubAvgKph * 0.621371 : data->driverSubAvgKph;
                     if (data->driverSubAvgValid) snprintf(sb, sizeof(sb), "%.1f", sp); else snprintf(sb, sizeof(sb), "--.-");
-                    drawAt(sb, avgAnchor, y1);
+                    tripAvg = sb;
+                    haveTripAvg = true;
+                    drawAt(tripAvg, avgAnchor, y1);
                 } else if (!italianFig) {
-                    drawAt(gtk_label_get_text(data->tripSpeedLabel), avgAnchor, y1);
+                    tripAvg = gtk_label_get_text(data->tripSpeedLabel);
+                    haveTripAvg = true;
+                    drawAt(tripAvg, avgAnchor, y1);
                 }
                 drawAt(distText(data->driverTripM), distAnchor, y1);
             }
+            // Left ink of a figure right-aligned on avgAnchor, in the figure font.
+            auto avgLeftInk = [&](const std::string& text) {
+                bigFace();
+                cairo_set_font_size(cr, L.valSize);
+                cairo_text_extents(cr, text.c_str(), &te);
+                return avgAnchor - te.x_advance + te.x_bearing;
+            };
+            double numberLeft = avgLeftInk(totalAvg);
+            if (haveTripAvg) numberLeft = std::min(numberLeft, avgLeftInk(tripAvg));
 
             // ---- legends: "avg / kph" left of the average, "Trip / km / Total" right of the distances
             {
                 cairo_set_font_size(cr, 18.0 * fs);
                 const char* unitLow = mph ? "mph" : "kph";
-                const char* distUnit = mph ? "mi" : "km";
+                const char* distUnit = data->state->distance_km ? "km" : "m";
                 cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+                // Figures stay on avgAnchor. A long one pushes this caption left.
+                const double legendRight = avgLegendRight(lcx - 288.0 * fs, numberLeft, 6.0 * fs);
                 const char* left[2] = {"avg", unitLow};
                 for (int i = 0; i < 2; ++i) {
                     cairo_text_extents(cr, left[i], &te);
-                    cairo_move_to(cr, lcx - 288.0 * fs - te.x_advance, y2 - (i == 0 ? 24.0 : 4.0) * fs);
+                    cairo_move_to(cr, legendRight - te.x_advance, y2 - (i == 0 ? 24.0 : 4.0) * fs);
                     cairo_show_text(cr, left[i]);
                 }
                 if (page == AppData::DP_GREEK_STAGE) {   // marks the cyan average as the substage's, not Trip's
                     cairo_set_source_rgb(cr, 0.0, 1.0, 1.0);
                     cairo_text_extents(cr, "sub", &te);
-                    cairo_move_to(cr, lcx - 288.0 * fs - te.x_advance, y1 - 4.0 * fs);
+                    cairo_move_to(cr, legendRight - te.x_advance, y1 - 4.0 * fs);
                     cairo_show_text(cr, "sub");
                     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
                 }
@@ -704,7 +753,10 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                               "driverRightBoxLegend page numbers");
                 cairo_set_font_size(cr, 18.0 * fs);
                 cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-                cairo_move_to(cr, lcx + 272.0 * fs, y0 + h / 2.0 + 6.0 * fs);
+                const double textRight = x0 + (w + te.x_advance) / 2.0;
+                const double legendX = captionLeftAfter(lcx + 272.0 * fs,
+                                                        std::max(x0 + w, textRight), 6.0 * fs);
+                cairo_move_to(cr, legendX, y0 + h / 2.0 + 6.0 * fs);
                 cairo_show_text(cr, driverRightBoxLegend(page));
             }
         }
@@ -810,16 +862,17 @@ void updateDriverDisplay(AppData* data) {
     long total_dist_m = adjustedDistanceMeters(
         countsToCentimeters(total_count_diff, data->state->calibration),
         data->state->total_distance_adjust_cm);
-    const char* total_unit = "m";
-    std::string total_dist_str = formatDistanceAutoUnit(total_dist_m, &total_unit);
+    const bool dist_km = data->state->distance_km;
+    const char* total_unit = dist_km ? "km" : "m";
+    std::string total_dist_str = formatDistance(static_cast<double>(total_dist_m), dist_km);
     data->driverTotalDistText = total_dist_str;
     data->driverTotalUnitText = total_unit;
 
     long trip_dist_m = adjustedDistanceMeters(
         countsToCentimeters(trip_count_diff, data->state->calibration),
         data->state->trip_distance_adjust_cm);
-    const char* trip_unit = "m";
-    std::string trip_dist_str = formatDistanceAutoUnit(trip_dist_m, &trip_unit);
+    const char* trip_unit = dist_km ? "km" : "m";
+    std::string trip_dist_str = formatDistance(static_cast<double>(trip_dist_m), dist_km);
     data->driverTripDistText = trip_dist_str;
     data->driverTripUnitText = trip_unit;
     data->driverTotalM = static_cast<double>(total_dist_m);

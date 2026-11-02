@@ -163,6 +163,21 @@ header { justify-content: flex-end; }
   .dist-box { gap: 0.5rem; padding: 0.75rem 0.6rem; }
 }
 .actions { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.upload-box { max-height: 92vh; overflow: auto; }
+.upload-box textarea { width: 100%; min-height: 8rem; margin-top: 0.4rem; background: #000; color: #ddd; border: 1px solid #888; font: 0.85rem ui-monospace, monospace; }
+.file-pick { display: inline-block; margin: 0.4rem 0.6rem 0.4rem 0; }
+.fmt { border: 1px solid #444; padding: 0.45rem 0.6rem; margin: 0 0 0.55rem; }
+.fmt.fit { border-color: #0ff; }
+.fmt h3 { margin: 0 0 0.3rem; font-size: 1rem; color: #0ff; }
+.fmt .fit-mark { display: none; margin-left: 0.4rem; color: #fc0; font-size: 0.8rem; }
+.fmt.fit .fit-mark { display: inline; }
+.fmt pre { margin: 0 0 0.35rem; white-space: pre-wrap; font: 0.78rem ui-monospace, monospace; color: #ddd; }
+.fmt p { margin: 0; color: #aaa; font-size: 0.85rem; }
+.uhd { color: #0ff; text-align: center; }
+.upload-bad { color: #f44; }
+.upload-amb { color: #ffa500; }
+#upload-stages button { display: block; width: 100%; text-align: left; margin-top: 0.35rem; background: #111; color: #fff; border: 1px solid #444; padding: 0.45rem; }
+#upload-stages button.on { border-color: #0ff; }
 .actions button {
   flex: 1;
   min-width: 120px;
@@ -254,6 +269,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
                        border: 1px solid #666; padding: 0.4rem; font-size: 1.1rem; }
 .beep-row { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.5rem; }
 .beep-row label { flex: 0 0 6.5rem; }
+.beep-row label.choice { flex: 0 0 auto; }
 .beep-row input[type="number"] { margin-left: auto; width: 5.5rem; background: #000; color: #fff;
                                  border: 1px solid #666; padding: 0.4rem; font-size: 1.2rem; }
 .beep-row input[type="checkbox"], .beep-row input[type="radio"] { width: 1.4rem; height: 1.4rem; }
@@ -350,6 +366,19 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .arrival { margin: 0.5rem 0; color: #0ff; display: flex; gap: 1rem; align-items: baseline; }
 .arrival b { color: #fff; font-size: 1.6rem; }
 .hist { font-family: monospace; font-size: 1.05rem; margin-bottom: 0.5rem; }
+.sector { font-family: monospace; margin: 0.4rem 0; }
+.sector table { width: 100%; border-collapse: collapse; }
+.sector th, .sector td { text-align: right; padding: 0.15rem 0.3rem; }
+.sector td:first-child, .sector th:first-child { text-align: left; }
+.sector .tag { display: inline-block; min-width: 3.2rem; text-align: center; padding: 0.15rem 0.3rem; color: #fff; background: #666; }
+.sector .t2 { background: #d10f0f; }
+.sector .t3 { background: #1f4fc7; }
+.sector .t4 { background: #f0d100; color: #000; }
+.sector .t5 { background: #0fa030; }
+.sector tr.dim { color: #777; }
+.sector .late { color: #ff2626; }
+#wifi-nets { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.4rem 0; }
+#wifi-nets .key { min-height: 2.4rem; }
 .flags { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; }
 .adjust-row { display: flex; gap: 0.4rem; margin: 0.4rem 0; }
 .adjust-row input { flex: 1; min-width: 0; }
@@ -393,7 +422,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .watch { width: 1rem; height: 1.1rem; color: #ccc; }
 .watch.w { width: 1.5rem; height: 1.6rem; color: #fff; }
 .flag { width: 2rem; height: 1.7rem; }
-.flags .key { display: flex; align-items: center; justify-content: center; gap: 0.3rem; height: 3.2rem; }
+.flags .key { display: flex; align-items: center; justify-content: center; gap: 0.3rem; height: 3.2rem; flex: 1; }
 .stno { flex: 0 0 3rem; height: 3rem; font-size: 1.6rem; text-align: center; background: #111; color: #fff; border: 1px solid #666; appearance: none; -webkit-appearance: none; border-radius: 0; padding: 0; text-align-last: center; }
 .auto { flex: 1; text-align: right; font-size: 1.3rem; font-family: monospace; }
 .auto .cyan, .auto .orange { font-size: 0.9rem; }
@@ -505,6 +534,9 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 /* The big figures use the proportional bold face of the box's driver display (not monospace);
    tabular digits keep them from shifting as they change. */
 .fig-row .big, .driver-footer .dist-box > strong { font-family: sans-serif; font-weight: bold; font-variant-numeric: tabular-nums; }
+.fig-row .big[data-unit]::after, .driver-footer .dist-box > strong[data-unit]::after {
+  content: attr(data-unit); font-size: 0.28em; font-weight: 600; margin-left: 0.12em; color: #9ad; vertical-align: 0.4em;
+}
 /* Drv: the Trip block in cyan, as on the box. */
 #drv-box-trip .dl, #drv-box-trip > strong, .driver-footer #drv-box-trip .avg b { color: #0ff; }
 

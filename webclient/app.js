@@ -4,6 +4,7 @@
   let ws = null;
   let reconnectTimer = null;
   let units = 'kph';
+  let distanceKm = false;   // Settings distance units: 00.00 km, or 0,000 m
   let lastArrival = null;
   function renderArrival() {
     $('arr-unit').textContent = units === 'mph' ? 'mph' : 'kph';
@@ -100,11 +101,60 @@
     }
   }
 
+  // Same figures as the box's segments page. Kilometres are two decimals
+  // (rounded). Metres stay whole, with thousands separators.
   function formatDist(m) {
     m = Number(m) || 0;
-    // From 100,000 m the box shows km with two decimals and no unit.
-    if (Math.abs(m) >= 100000) return (Math.trunc(m / 10) / 100).toFixed(2);   // truncated, as on the box
+    if (distanceKm) return (Math.floor(m / 10 + 0.5) / 100).toFixed(2);
     return Math.round(m).toLocaleString();
+  }
+
+  // What an entry shows, and the metres to send back. Entries stay plain
+  // numbers; the labels carry the thousands separators.
+  function stageInput(m) {
+    m = Number(m) || 0;
+    if (distanceKm) return (Math.floor(m / 10 + 0.5) / 100).toFixed(2);
+    return String(Math.round(m));
+  }
+
+  function stageMetres(text) {
+    let t = String(text == null ? '' : text).trim().replace(/km/ig, '').replace(/m/ig, '').replace(/\s/g, '');
+    if (!t) return null;
+    if (distanceKm) {
+      t = t.replace(',', '.');
+      const v = Number(t);
+      if (!Number.isFinite(v) || v < 0) return null;
+      return Math.round(v * 1000);
+    }
+    t = t.replace(/,/g, '');
+    const v = Number(t);
+    if (!Number.isFinite(v) || v < 0) return null;
+    return Math.round(v);
+  }
+
+  function showDist(el, m) {
+    if (!el) return;
+    el.textContent = formatDist(m);
+    el.dataset.unit = distanceKm ? 'km' : 'm';
+  }
+
+  // True when the unit changed, so the caller can redraw figures that
+  // were painted under the other unit.
+  function useDistanceUnit(km) {
+    const next = !!km;
+    const changed = next !== distanceKm;
+    distanceKm = next;
+    const active = document.activeElement;
+    document.querySelectorAll('input[name="distance-unit"]').forEach((r) => {
+      if (r !== active) r.checked = (r.value === 'km') === distanceKm;
+    });
+    const add = $('seg-add-text');
+    if (add && add !== active) add.placeholder = distanceKm ? '1.00;1.50;2.30' : '1,000;1,500;2,300';
+    if (changed && lastState) {
+      renderSegments(lastState);
+      renderStagePanel(lastState);
+    }
+    return changed;
   }
 
   function mmss(s) {
@@ -138,25 +188,35 @@
     $('rally-clock').textContent = msg.rally_clock || '--:--:--';
     const previousUnits = units;
     units = msg.units || 'kph';
+    if (typeof msg.distance_km === 'boolean') useDistanceUnit(msg.distance_km);
     if (units !== previousUnits && lastState) renderStagePanel(lastState);
     if (units !== previousUnits) renderArrival();
 
     // Freeze stops the box counting distance, so these figures already hold.
-    $('trip-m').textContent = formatDist(msg.trip_m);
-    $('total-m').textContent = formatDist(msg.total_m);
+    showDist($('trip-m'), msg.trip_m);
+    showDist($('total-m'), msg.total_m);
     // Surrey: navi total in its own row, and the last time taken under Trip history.
     const sur = !!msg.surrey;
-    $('row-navi').style.display = sur ? '' : 'none';
+    const italianNow = Number(msg.rally_type) === 2;
+    $('row-navi').style.display = (sur || italianNow) ? '' : 'none';
     $('time-taken-row').style.display = (sur && msg.time_taken) ? '' : 'none';
+    if (sur || italianNow) showDist($('navi-m'), msg.navi_m);
     if (sur) {
-      $('navi-m').textContent = formatDist(msg.navi_m);
       $('time-taken-label').textContent = 'time taken ss' + (Number(msg.time_taken_stage) >= 1 ? msg.time_taken_stage : '-');
       $('time-taken').textContent = msg.time_taken || '';
     }
+    renderSector(msg);
     // Italian: the box's count down text, red past the line (RB-WEB-21).
     const ic = msg.it_count;
-    $('next-m').textContent = ic ? ic.km
-      : ((msg.next_m === null || msg.next_m === undefined) ? '---' : formatDist(msg.next_m));
+    if (ic) {
+      $('next-m').textContent = ic.km;
+      delete $('next-m').dataset.unit;
+    } else if (msg.next_m === null || msg.next_m === undefined) {
+      $('next-m').textContent = '---';
+      delete $('next-m').dataset.unit;
+    } else {
+      showDist($('next-m'), msg.next_m);
+    }
     $('next-m').style.color = (ic && ic.past) ? '#ff2626' : '';
     $('next-s').textContent = (ic && ic.s) ? ic.s : '';
     $('next-s').style.display = (ic && ic.s) ? '' : 'none';
@@ -167,12 +227,29 @@
     if (msg.next_key) $('btn-next').textContent = msg.next_key;
     if (msg.prev_key && $('btn-prev')) $('btn-prev').textContent = msg.prev_key;
     // Driver tab footer (HTML under the gauge — keeps dial clear).
-    $('drv-trip-m').textContent = formatDist(msg.trip_m);
-    $('drv-total-m').textContent = formatDist(msg.total_m);
+    showDist($('drv-trip-m'), msg.trip_m);
+    showDist($('drv-total-m'), msg.total_m);
     const avgF = units === 'mph' ? 0.621371 : 1;
     $('drv-trip-avg').textContent = (Number(msg.trip_avg_kph || 0) * avgF).toFixed(1);
     $('drv-total-avg').textContent = (Number(msg.total_avg_kph || 0) * avgF).toFixed(1);
     document.querySelectorAll('.avg-unit').forEach((e) => { e.textContent = units; });
+
+    // Italian blanks the next-minute and autostart keys, and the stage panel's
+    // auto/manual line. A-B, B-C zero is only the Greek measure-type key.
+    // Seg hides Distance at start and Autostart on Italian, as the box does.
+    {
+      const italian = Number(msg.rally_type) === 2;
+      const show = (el, on) => { if (el) el.style.display = on ? '' : 'none'; };
+      show($('btn-flag-minute'), !italian);
+      show($('btn-flag-auto'), !italian);
+      show($('navi-auto'), !italian);
+      show($('row-zero'), Number(msg.rally_type) === 0 && !!msg.measure_ab_bc);
+      show($('seg-auto-row'), !italian);
+      show($('seg-start-dist-label'), !italian);
+      show($('seg-duration-label'), italian);
+      show($('seg-duration-avg'), italian);
+      syncSystemChoices(msg.rally_type, msg.measure_ab_bc, !!(lastState && lastState.stage_locked));
+    }
 
     $('btn-next').disabled = !msg.next_enabled;
     $('btn-prev').disabled = !msg.prev_enabled;
@@ -228,6 +305,24 @@
   // Reflects the box's own settings back into the controls. Skips whichever
   // field has focus so an incoming update cannot yank a value out from under
   // someone mid-edit on the phone.
+  // Rally type, measure type, and the Italian beep lock. Skips the control
+  // under the finger so a tap is not overwritten by the next frame.
+  function syncSystemChoices(rallyType, measureAb, stageLocked) {
+    const active = document.activeElement;
+    const rallyName = Number(rallyType) === 2 ? 'italian' : Number(rallyType) === 1 ? 'surrey' : 'greek';
+    const pick = (name, val) => document.querySelectorAll('input[name="' + name + '"]').forEach((r) => {
+      if (r !== active) r.checked = String(r.value) === String(val);
+    });
+    if (rallyType !== undefined && rallyType !== null) pick('rally-type', rallyName);
+    if (typeof measureAb === 'boolean') pick('measure-type', measureAb ? 'abbc' : 'abac');
+    document.querySelectorAll('input[name="rally-type"]').forEach((r) => { r.disabled = !!stageLocked; });
+    const beepLocked = Number(rallyType) === 2;
+    ['beep-nav', 'beep-timing', 'beep-advance-m', 'beep-advance-s'].forEach((id) => {
+      const el = $(id);
+      if (el) el.disabled = beepLocked;
+    });
+  }
+
   function applySetState(state) {
     const active = document.activeElement;
     const setIf = (el, apply) => { if (el && el !== active) apply(el); };
@@ -243,6 +338,11 @@
     radios('tone-ahead', Number(state.tone_type_ahead) || 1);
     radios('gauge-range', Number(state.gauge_range) || 3);
     radios('units', units);
+    syncSystemChoices(state.rally_type, state.measure_ab_bc, !!state.stage_locked);
+    if (typeof state.distance_km === 'boolean' && useDistanceUnit(state.distance_km) && lastTelemetry) {
+      lastTelemetry.distance_km = distanceKm;
+      applyTelemetry(lastTelemetry);
+    }
     if ($('reaction-offset')) {   // read-only: set on the box
       const ro = Number(state.reaction_offset_ms) || 0;
       $('reaction-offset').textContent = (ro < 0 ? '\u2212' : ro > 0 ? '+' : '') + (Math.abs(ro) / 1000).toFixed(2) + ' s';
@@ -251,6 +351,9 @@
     setIf($('set-sensor-log'), (el) => { el.checked = !!state.sensor_logging; });
     setIf($('set-force-single'), (el) => { el.checked = !!state.force_single; });
     $('set-url').textContent = state.web_url || '-';
+    if ($('bt-name')) $('bt-name').textContent = state.bt_name || 'no speaker remembered';
+    if ($('setup-status')) $('setup-status').textContent = state.setup_status || '';
+    renderWifi(state.wifi);
     // Calibration
     $('cal-pulses').textContent = state.calibration_pulses;
     $('cal-s1').classList.toggle('lit', !state.sensors_both);
@@ -263,7 +366,7 @@
     $('btn-freeze').classList.toggle('lit', frozen);
     setWhoop(!!(lastTelemetry && lastTelemetry.reverse) || frozen);
     const hist = (state.trip_history || []);
-    $('trip-history').textContent = hist.length ? hist.map((m) => Number(m).toLocaleString()).join(' \u00b7 ') : '-';
+    $('trip-history').textContent = hist.length ? hist.map((m) => formatDist(m) + (distanceKm ? ' km' : ' m')).join(' \u00b7 ') : '-';
     const sa = state.autostart || 'none';
     const armed = sa !== 'none';
     $('auto-word').textContent = armed ? 'auto' : 'manual';
@@ -272,6 +375,54 @@
     $('auto-time').textContent = armed ? sa : (state.start_time || '');
     $('flag-minute-time').textContent = nextMinuteText();
     $('btn-flag-auto').classList.toggle('lit', !!state.autostart_on);
+  }
+
+  function hms(seconds) {
+    const t = Math.max(0, Math.round(Number(seconds) || 0));
+    const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = t % 60;
+    return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+
+  function renderSector(msg) {
+    const card = $('sector-card');
+    const greek = $('greek-cards');
+    const italian = Number(msg.rally_type) === 2;
+    if (greek) greek.style.display = italian ? 'none' : '';
+    if (!card) return;
+    card.style.display = italian ? '' : 'none';
+    if (!italian) return;
+    const s = msg.sector;
+    if (!s || !s.loaded) { card.textContent = 'no sector loaded'; return; }
+    const tag = (name, type) => '<b class="tag t' + Number(type) + '">' + (name || '') + '</b>';
+    let html = '<table><tr><th></th><th>km</th><th>progr</th><th>mm:ss</th><th>km/h</th></tr>';
+    html += '<tr><td>' + tag(s.in_tag, s.in_type) + '</td><td>' + (s.in_km || '') + '</td><td class="cyan">'
+      + (s.in_progr || '') + '</td><td class="cyan">' + (s.in_mmss || '') + '</td><td>' + (s.in_kph || '') + '</td></tr>';
+    html += '<tr><td>count<br>down</td><td class="' + (s.count_past ? 'late' : '') + '">' + (s.count_km || '')
+      + '</td><td></td><td class="' + (s.count_s_past ? 'late' : '') + '">' + (s.count_s || '')
+      + '</td><td>' + (s.avg || '') + '</td></tr>';
+    if (s.next_tag) {
+      html += '<tr class="dim"><td>' + tag(s.next_tag, s.next_type) + '</td><td>' + (s.next_km || '')
+        + '</td><td>' + (s.next_progr || '') + '</td><td>' + (s.next_mmss || '') + '</td><td>' + (s.next_kph || '') + '</td></tr>';
+    }
+    html += '</table>';
+    if (s.pc_ref) html += '<p>error pc' + s.pc_ref + ' ' + s.pc_s + ' s &nbsp; ' + s.pc_m + ' m</p>';
+    if (s.co_hhmm) html += '<p>co' + (s.co_ref || '') + ' arrival ' + s.co_hhmm + ' &nbsp; ' + s.co_kph + ' kph &nbsp; ' + s.co_min + ' min</p>';
+    if (s.ahead_min !== undefined && s.ahead_min !== null) html += '<p>+/&minus; ' + s.ahead_min + '</p>';
+    card.innerHTML = html;
+  }
+
+  function renderWifi(list) {
+    const box = $('wifi-nets');
+    if (!box || !list) return;
+    box.textContent = '';
+    list.forEach((n) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'key' + (n.active ? ' lit' : '');
+      b.dataset.net = n.name;
+      b.textContent = (n.hotspot ? 'hotspot ' : 'join ') + n.name;
+      box.appendChild(b);
+    });
   }
 
   function nextMinuteText() {
@@ -283,6 +434,7 @@
   // The loaded stage's first rows (the running one's current segment lit), as on Home.
   function renderStagePanel(state) {
     $('stage-speed-head').textContent = units === 'mph' ? 'MPH' : 'KPH';
+    if ($('stage-at-head')) $('stage-at-head').textContent = distanceKm ? 'at km' : 'at m';
     const tbody = $('stage-table').querySelector('tbody');
     tbody.innerHTML = '';
     // Speed changes only, as on the box: row 1 and every row that starts a new speed.
@@ -297,7 +449,7 @@
       const tr = document.createElement('tr');
       if (cur >= 0 && first + i === curChange) tr.className = 'now';
       const speed = Number(r.kph || 0) * (units === 'mph' ? 0.621371 : 1);
-      tr.innerHTML = '<td>' + speed.toFixed(1) + '</td><td>' + Number(r.from).toLocaleString() + '</td>';
+      tr.innerHTML = '<td>' + speed.toFixed(1) + '</td><td>' + formatDist(r.from) + '</td>';
       tbody.appendChild(tr);
     });
     if (!rows.length) {
@@ -313,20 +465,23 @@
     const tbody = $('seg-table').querySelector('tbody');
     // A field is being typed in: do not rebuild under it, but bring every other figure up to
     // date in place (a changed "to m" moves the next row's "from m", the distances and times).
+    const unit = distanceKm ? 'km' : 'm';
+    if ($('seg-h-from')) $('seg-h-from').textContent = 'from ' + unit;
+    if ($('seg-h-to')) $('seg-h-to').textContent = 'to ' + unit;
+    if ($('seg-h-dist')) $('seg-h-dist').textContent = 'dist ' + unit;
     if (active && active.closest && active.closest('#seg-table')) {
       const rows = state.rows || [];
       const trs = tbody.children;
       if (trs.length !== rows.length) return;
-      const group = (v) => Number(v).toLocaleString();
       const setText = (td, text) => { if (td && !td.querySelector('input') && td.textContent !== text) td.textContent = text; };
       const setVal = (el, v) => { if (el && el !== active) el.value = v; };
       for (let i = 0; i < rows.length; i++) {
         const r = rows[i], tds = trs[i].children;
         if (!!trs[i].querySelector('.spd') !== !!r.chg) return;   // structure changed: wait for the field to be left
         if (i === 0) setVal(trs[i].querySelector('.first'), r.n); else setText(tds[0], String(r.n));
-        if (i === 0) setVal(trs[i].querySelector('.first-from'), r.from); else setText(tds[1], group(r.from));
-        setVal(trs[i].querySelector('.to'), r.to);
-        setText(tds[3], group(r.dist));
+        if (i === 0) setVal(trs[i].querySelector('.first-from'), stageInput(r.from)); else setText(tds[1], formatDist(r.from));
+        setVal(trs[i].querySelector('.to'), stageInput(r.to));
+        setText(tds[3], formatDist(r.dist));
         setVal(trs[i].querySelector('.spd'), r.kph || '');
         setText(tds[6], r.chg && r.kph > 0 ? String(Math.round(r.kph / 3.6)) : '');
         setText(tds[8], mmss(r.time_s));
@@ -342,10 +497,10 @@
       tr.innerHTML =
         (i === 0 ? '<td><input type="number" step="1" min="0" inputmode="numeric" pattern="[0-9]*" class="first" value="' + r.n + '"></td>'
                  : '<td class="dim">' + r.n + '</td>') +
-        (i === 0 ? '<td><input type="number" step="1" min="0" inputmode="numeric" pattern="[0-9]*" class="first-from" value="' + r.from + '"></td>'
-                 : '<td class="dim">' + Number(r.from).toLocaleString() + '</td>') +
-        '<td><input type="number" step="1" inputmode="numeric" pattern="[0-9]*" class="to" value="' + r.to + '"></td>' +
-        '<td class="dim">' + Number(r.dist).toLocaleString() + '</td>' +
+        (i === 0 ? '<td><input type="number" step="' + (distanceKm ? '0.01' : '1') + '" min="0" inputmode="' + (distanceKm ? 'decimal' : 'numeric') + '" class="first-from" value="' + stageInput(r.from) + '"></td>'
+                 : '<td class="dim">' + formatDist(r.from) + '</td>') +
+        '<td><input type="number" step="' + (distanceKm ? '0.01' : '1') + '" min="0" inputmode="' + (distanceKm ? 'decimal' : 'numeric') + '" class="to" value="' + stageInput(r.to) + '"></td>' +
+        '<td class="dim">' + formatDist(r.dist) + '</td>' +
         '<td><input type="checkbox" class="chg"' + (r.chg ? ' checked' : '') + (i === 0 ? ' disabled' : '') + '></td>' +
         (r.chg ? '<td><input type="number" step="0.1" inputmode="decimal" class="spd" value="' + (r.kph || '') + '"></td>'
                : '<td class="dim">&quot;</td>') +
@@ -363,12 +518,16 @@
       });
       const fromEl = tr.querySelector('.first-from');
       if (fromEl) fromEl.addEventListener('change', () => {
-        send({ type: 'stage_first', number: Number($('seg-first-n').value) || 0, from_m: Number(fromEl.value) || 0 });
+        const metres = stageMetres(fromEl.value);
+        if (metres == null) return;
+        send({ type: 'stage_first', number: Number($('seg-first-n').value) || 0, from_m: metres });
         done(fromEl);
       });
       const toEl = tr.querySelector('.to');
       toEl.addEventListener('change', () => {
-        send({ type: 'row_to', row: i, to_m: Number(toEl.value) || 0 });
+        const metres = stageMetres(toEl.value);
+        if (metres == null) return;
+        send({ type: 'row_to', row: i, to_m: metres });
         done(toEl);
       });
       const spd = tr.querySelector('.spd');
@@ -385,6 +544,14 @@
     setIf($('seg-pick'), String(state.edit_slot || 1));
     setIf($('seg-start-time'), state.start_time || '');
     setIf($('seg-start-dist'), state.start_distance_m || '');
+    const durS = Number(state.sector_duration_s);
+    setIf($('seg-duration'), durS > 0 ? hms(durS) : '');
+    if ($('seg-duration-avg')) {
+      const rows = state.rows || [];
+      const endM = rows.length ? Number(rows[rows.length - 1].to) : 0;
+      $('seg-duration-avg').textContent = (durS > 0 && endM > 0)
+        ? 'Average ' + (endM / 1000 / (durS / 3600)).toFixed(2) : '';
+    }
     setIf($('seg-first-n'), state.first_number);
     setIf($('seg-first-from'), state.first_from_m);
     if ($('seg-autostart') !== active) $('seg-autostart').checked = !!state.autostart_on;
@@ -399,6 +566,7 @@
       renderSegments(msg);
       applySetState(msg);
       renderStagePanel(msg);
+      renderUpload(msg);
     }
   }
 
@@ -435,10 +603,10 @@
   // "set" pins Total to a roadbook figure: it asks for the figure. Cancel or an
   // empty answer is not a request to pin Total to zero -- press total to reset.
   $('btn-dist-set').addEventListener('click', () => {
-    const answer = prompt('Set Total to (metres):', '');
+    const answer = prompt(distanceKm ? 'Set Total to (km):' : 'Set Total to (metres):', '');
     if (answer === null || answer.trim() === '') return;
-    const meters = Number(answer.replace(/,/g, ''));
-    if (!Number.isFinite(meters) || meters < 0 || meters > 999999) return;
+    const meters = stageMetres(answer);
+    if (meters == null || meters > 999999) return;
     send({ type: 'distance_set', meters: meters });
   });
   $('btn-next').addEventListener('click', () => send({ type: 'next' }));
@@ -570,8 +738,111 @@
   $('seg-first-n').addEventListener('change', sendFirst);
   $('seg-first-from').addEventListener('change', sendFirst);
   $('seg-autostart').addEventListener('change', (e) => send({ type: 'autostart_set', on: e.target.checked }));
+  $('seg-duration').addEventListener('change', (e) => send({ type: 'sector_duration', text: e.target.value.trim() }));
   $('btn-clear-stage').addEventListener('click', () => { if (confirm('Clear this stage?')) send({ type: 'clear_stage' }); });
   $('btn-clear-all').addEventListener('click', () => { if (confirm('Clear every stage?')) send({ type: 'clear_all' }); });
+
+  // Upload stage: the phone checks the file with the box, then loads it.
+  // Nothing is written on check. The box key opens the same file window.
+  let uploadId = '';
+  let uploadShown = 0;
+  function markUploadFormat() {
+    const name = lastTelemetry && Number(lastTelemetry.rally_type) === 2 ? 'italian'
+      : lastTelemetry && Number(lastTelemetry.rally_type) === 1 ? 'surrey' : 'greek';
+    document.querySelectorAll('#upload-window .fmt').forEach((el) => {
+      el.classList.toggle('fit', el.dataset.rally === name);
+    });
+  }
+  function openUpload(on) {
+    $('upload-window').classList.toggle('hidden', !on);
+    if (on) markUploadFormat();
+    if (!on) {
+      uploadId = '';
+      $('upload-refusal').textContent = '';
+      $('upload-file-name').textContent = '';
+      $('upload-ask').classList.add('hidden');
+      $('upload-stages').textContent = '';
+      $('upload-table').querySelector('tbody').textContent = '';
+    }
+  }
+  function renderUpload(state) {
+    const up = state.upload;
+    if (!up || $('upload-window').classList.contains('hidden')) return;
+    if (up.loaded && up.loaded.length && (!up.id || up.id === uploadId)) {
+      openUpload(false);
+      showTab('seg');
+      return;
+    }
+    if (up.id && up.id !== uploadId) return;
+    $('upload-refusal').textContent = up.refusal || '';
+    const stages = up.stages || [];
+    const loadable = stages.some((s) => !(s.errors && s.errors.length));
+    $('upload-load').disabled = !loadable || !!up.refusal;
+    $('upload-ask').classList.add('hidden');
+    const box = $('upload-stages');
+    box.textContent = '';
+    stages.forEach((s) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      const problem = (s.errors && s.errors[0]) || (s.warnings && s.warnings[0]) || '';
+      b.textContent = 'stage ' + s.stage + ' ' + (s.mode || '') + '  ' + s.rows + ' rows'
+        + (s.replaces ? '  replaces' : '') + (problem ? '  ' + problem : '');
+      if (s.replaces) b.classList.add('upload-amb');
+      if (s.errors && s.errors.length) b.classList.add('upload-bad');
+      if (s.stage === uploadShown) b.classList.add('on');
+      b.addEventListener('click', () => { uploadShown = s.stage; renderUploadTable(s); box.querySelectorAll('button').forEach((x) => x.classList.remove('on')); b.classList.add('on'); });
+      box.appendChild(b);
+    });
+    const shown = stages.find((s) => s.stage === uploadShown) || stages[0];
+    if (shown) { uploadShown = shown.stage; renderUploadTable(shown); }
+  }
+  function renderUploadTable(stage) {
+    const body = $('upload-table').querySelector('tbody');
+    body.textContent = '';
+    (stage.table || []).forEach((r) => {
+      const tr = document.createElement('tr');
+      const name = r.type ? (r.type + (r.ref ? r.ref : '')) : String(r.box);
+      [name, r.from_m, r.to_m, r.kph, r.dur_s].forEach((v) => {
+        const td = document.createElement('td');
+        td.textContent = v;
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
+  }
+  $('btn-upload-stage').addEventListener('click', () => { showTab('seg'); openUpload(true); });
+  $('upload-file').addEventListener('change', () => {
+    const f = $('upload-file').files && $('upload-file').files[0];
+    if (!f) return;
+    $('upload-file-name').textContent = f.name;
+    const reader = new FileReader();
+    reader.onload = () => { $('upload-text').value = String(reader.result || ''); };
+    reader.readAsText(f);
+  });
+  $('upload-check').addEventListener('click', () => {
+    uploadId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    uploadShown = 0;
+    send({ type: 'stage_upload_check', id: uploadId, text: $('upload-text').value });
+  });
+  const sendLoad = (replace) => {
+    if (!uploadId) return;
+    send({ type: 'stage_upload_load', id: uploadId, replace: replace });
+  };
+  $('upload-load').addEventListener('click', () => {
+    const q = lastState && lastState.upload && lastState.upload.question;
+    if (q) {
+      $('upload-ask-q').textContent = q;
+      $('upload-ask').classList.remove('hidden');
+      return;
+    }
+    sendLoad(true);
+  });
+  $('upload-replace').addEventListener('click', () => sendLoad(true));
+  $('upload-keep').addEventListener('click', () => { $('upload-ask').classList.add('hidden'); sendLoad(false); });
+  $('upload-cancel').addEventListener('click', () => {
+    if (uploadId) send({ type: 'stage_upload_cancel', id: uploadId });
+    openUpload(false);
+  });
 
   // ---- Time ----
   $('trim-minus').addEventListener('click', () => send({ type: 'rally_trim', steps: -1 }));
@@ -613,9 +884,33 @@
     r.addEventListener('change', () => { if (r.checked) send({ type: 'gauge_range', seconds: Number(r.value) }); }));
   document.querySelectorAll('input[name="units"]').forEach((r) =>
     r.addEventListener('change', () => { if (r.checked) send({ type: 'setting', name: 'units_mph', on: r.value === 'mph' }); }));
+  document.querySelectorAll('input[name="distance-unit"]').forEach((r) =>
+    r.addEventListener('change', () => { if (r.checked) send({ type: 'setting', name: 'distance_km', on: r.value === 'km' }); }));
+  document.querySelectorAll('input[name="rally-type"]').forEach((r) =>
+    r.addEventListener('change', () => {
+      if (!r.checked) return;
+      const n = r.value === 'italian' ? 2 : r.value === 'surrey' ? 1 : 0;
+      send({ type: 'rally_type', n: n });
+    }));
+  document.querySelectorAll('input[name="measure-type"]').forEach((r) =>
+    r.addEventListener('change', () => { if (r.checked) send({ type: 'setting', name: 'measure_ab_bc', on: r.value === 'abbc' }); }));
+  $('reaction-minus').addEventListener('click', () => send({ type: 'reaction_step', ms: -10 }));
+  $('reaction-plus').addEventListener('click', () => send({ type: 'reaction_step', ms: 10 }));
   $('set-stage-log').addEventListener('change', (e) => send({ type: 'setting', name: 'stage_logging', on: e.target.checked }));
   $('set-sensor-log').addEventListener('change', (e) => send({ type: 'setting', name: 'sensor_logging', on: e.target.checked }));
   $('set-force-single').addEventListener('change', (e) => send({ type: 'setting', name: 'force_single', on: e.target.checked }));
+  $('bt-connect').addEventListener('click', () => send({ type: 'box_setup', name: 'bt_connect' }));
+  $('bt-disconnect').addEventListener('click', () => send({ type: 'box_setup', name: 'bt_disconnect' }));
+  $('wifi-list').addEventListener('click', () => send({ type: 'box_setup', name: 'wifi_list' }));
+  $('reset-layout').addEventListener('click', () => {
+    if (confirm('Reset the box screen layout?')) send({ type: 'box_setup', name: 'reset_layout' });
+  });
+  $('wifi-nets').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b || !b.dataset.net) return;
+    if (!confirm('Switch the box to ' + b.dataset.net + '? Phones using the hotspot can lose the box.')) return;
+    send({ type: 'box_setup', name: 'wifi_use', net: b.dataset.net });
+  });
   $('btn-download-logs').addEventListener('click', () => {
     $('logs-block').classList.toggle('hidden');
     if (!$('logs-block').classList.contains('hidden')) refreshLogs();

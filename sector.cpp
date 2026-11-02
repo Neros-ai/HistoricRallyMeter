@@ -3,6 +3,9 @@
 #include "stage_rows.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <ctime>
+#include <sstream>
 
 std::string typeLabel(int type) {
     switch (type) {
@@ -486,6 +489,116 @@ SectorPanel sectorPanel(const RallyState& s, int64_t now_ms, long stage_m) {
             p.coKph = static_cast<int>(std::lround((total_m - stage_m) / 1000.0 / (left_ms / 3600000.0)));
     }
     return p;
+}
+
+namespace {
+
+std::string km2(double metres) {
+    char b[24];
+    snprintf(b, sizeof(b), "%.2f", metres / 1000.0);
+    return b;
+}
+
+std::string kph2(double kph) {
+    char b[24];
+    snprintf(b, sizeof(b), "%.2f", kph);
+    return b;
+}
+
+double endSum(const std::vector<Segment>& segs, long i) {
+    double m = 0.0;
+    for (long k = 0; k <= i && k < static_cast<long>(segs.size()); k++) m += segs[k].distance_m;
+    return m;
+}
+
+std::string rowMmSs(const Segment& row) {
+    const double row_s = row.type == SEG_PC ? row.pc_duration_s
+        : (row.target_speed_kph > 0.0 ? row.distance_m / 1000.0 / row.target_speed_kph * 3600.0 : 0.0);
+    return row_s > 0.0 ? formatMmSs(row_s) : std::string();
+}
+
+std::string hhmmRally(int64_t rally_ms) {
+    const time_t secs = static_cast<time_t>(rally_ms / 1000);
+    struct tm tm_local;
+    if (!localtime_r(&secs, &tm_local)) return "";
+    char b[16];
+    snprintf(b, sizeof(b), "%02d:%02d", tm_local.tm_hour, tm_local.tm_min);
+    return b;
+}
+
+void jsonRow(std::ostringstream& o, const char* prefix, const Segment& row, double progr) {
+    o << '"' << prefix << "tag\":\"" << sectorTag(row) << '"'
+      << ",\"" << prefix << "type\":" << row.type
+      << ",\"" << prefix << "km\":\"" << km2(row.distance_m) << '"'
+      << ",\"" << prefix << "progr\":\"" << km2(progr) << '"'
+      << ",\"" << prefix << "mmss\":\"" << rowMmSs(row) << '"'
+      << ",\"" << prefix << "kph\":\"" << kph2(row.target_speed_kph) << '"';
+}
+
+}  // namespace
+
+std::string sectorCardJson(const RallyState& live, int64_t now_ms, long stage_m,
+                           uint64_t c1, uint64_t c2) {
+    if (live.rally_type != 2) return "null";
+    SectorPanel p = sectorPanel(live, now_ms, stage_m);
+    RallyState preview;
+    const RallyState* st = &live;
+    bool previewing = false;
+    if (!p.running && sectorPreviewWanted(live)) {
+        preview = sectorPreviewState(live, now_ms);
+        previewing = true;
+        if (!live.segments.empty() && rowStartsTube(live.segments, 0)) {
+            preview.trial_start_ms = now_ms;
+            preview.trial_start_m = 0;
+        }
+        p = sectorPanel(preview, now_ms, 0);
+        if (p.kind == SectorPanel::PC && !live.segments.empty()) {
+            p.secondsToLine = live.segments[0].pc_duration_s;
+            p.secondsValid = true;
+        }
+        st = &preview;
+    }
+    if (!p.running) return "{\"loaded\":false}";
+    const std::vector<Segment>& segs = st->stage_segments;
+    const long cur = st->segment_current_number;
+    if (cur < 0 || cur >= static_cast<long>(segs.size())) return "{\"loaded\":false}";
+    std::ostringstream o;
+    o << "{\"loaded\":true,\"preview\":" << (previewing ? "true" : "false") << ',';
+    jsonRow(o, "in_", segs[cur], endSum(segs, cur));
+    o << ",\"count_km\":\"" << sectorCountdownKmText(p) << "\""
+      << ",\"count_past\":" << (p.metresPast > 0 ? "true" : "false");
+    if (p.secondsValid) {
+        o << ",\"count_s\":\"" << sectorSecondsText(p.secondsToLine) << "\""
+          << ",\"count_s_past\":" << (p.secondsToLine < 0 ? "true" : "false");
+    } else {
+        o << ",\"count_s\":\"\",\"count_s_past\":false";
+    }
+    o << ",\"avg\":\"" << kph2(p.avgKph) << '"';
+    if (cur + 1 < static_cast<long>(segs.size())) {
+        o << ',';
+        jsonRow(o, "next_", segs[cur + 1], endSum(segs, cur + 1));
+    } else {
+        o << ",\"next_tag\":\"\"";
+    }
+    if (!previewing && live.last_pc_error.valid) {
+        char b[64];
+        snprintf(b, sizeof(b), ",\"pc_ref\":%d,\"pc_s\":\"%+.2f\",\"pc_m\":%ld",
+                 live.last_pc_error.ref, live.last_pc_error.seconds, live.last_pc_error.metres);
+        o << b;
+    }
+    if (p.coValid) {
+        o << ",\"co_ref\":" << p.coRef
+          << ",\"co_hhmm\":\"" << hhmmRally(p.coInTimeMs) << "\""
+          << ",\"co_kph\":" << p.coKph
+          << ",\"co_min\":" << p.coMinutes;
+    }
+    if (!previewing) {
+        bool ahead_ok = false;
+        const double ahead_s = sectorAheadSeconds(live, c1, c2, now_ms, &ahead_ok);
+        if (ahead_ok) o << ",\"ahead_min\":" << minutesInHand(ahead_s);
+    }
+    o << '}';
+    return o.str();
 }
 
 std::string sectorCountdownKmText(const SectorPanel& p) {

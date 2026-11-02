@@ -202,11 +202,20 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
             cairo_stroke(cr);
         }
 
-        // segment table: KPH / at m
+        // segment table: KPH / at m (or at km). A long distance moves the speed caption left.
         const double top = 12 + 36 + 6;
+        double atLeft = 193.0;
+        cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+        cairo_set_font_size(cr, 30);
+        for (int i = 0; i < 3; i++) {
+            if (h->rows[i].at.empty()) continue;
+            cairo_text_extents_t ae;
+            cairo_text_extents(cr, h->rows[i].at.c_str(), &ae);
+            atLeft = std::min(atLeft, 193.0 - ae.x_advance);
+        }
         cyan(cr);
-        drawText(cr, h->unitsMph ? "MPH" : "KPH", 79, top + 18, 20, RIGHT);
-        drawText(cr, "at m", 193, top + 18, 20, RIGHT);
+        drawText(cr, h->unitsMph ? "MPH" : "KPH", avgLegendRight(79.0, atLeft, 6.0), top + 18, 20, RIGHT);
+        drawText(cr, h->distanceKm ? "at km" : "at m", 193, top + 18, 20, RIGHT);
         for (int i = 0; i < 3; i++) {
             if (h->rows[i].kph.empty()) continue;
             if (h->rows[i].now) white(cr); else cyan(cr);   // the current row white, the others blue
@@ -789,7 +798,7 @@ static void updateItalianHome(AppData* data) {
         countsToCentimeters(calculateDistanceCounts(st, poll.cntr1, poll.cntr2, st.trip_start_cntr1, st.trip_start_cntr2), st.calibration),
         st.trip_distance_adjust_cm);
     const long navi_m = adjustedDistanceMeters(countsToCentimeters(odometerCounts(st, poll.cntr1, poll.cntr2), st.calibration), 0);
-    const std::string figs[3] = { formatDistance(sector_m, true), formatDistance(trip_m, true), formatDistance(navi_m, true) };
+    const std::string figs[3] = { formatDistance(sector_m, st.distance_km), formatDistance(trip_m, st.distance_km), formatDistance(navi_m, st.distance_km) };
     for (int i = 0; i < 3; i++) {
         if (h->figure[i] != figs[i]) { h->figure[i] = figs[i]; markDirty(h->figureArea[i]); }
     }
@@ -911,7 +920,7 @@ void updateHomeDisplay(AppData* data) {
             snprintf(b, sizeof(b), "%.1f", changes[c].kph);
             rows[r].kph = b;
             // plain digits: "12,000" with its comma was too wide for the column
-            rows[r].at = std::to_string(static_cast<long>(std::lround(changes[c].at_m)));
+            rows[r].at = formatDistance(changes[c].at_m, data->state->distance_km);
             rows[r].now = (cur >= 0 && c == cur_change);
         }
 
@@ -935,7 +944,8 @@ void updateHomeDisplay(AppData* data) {
             }
         }
 
-        bool changed = (data->state->units != h->unitsMph) || (word_auto != h->autoArmed) || (auto_time != h->autoTime)
+        bool changed = (data->state->units != h->unitsMph) || (data->state->distance_km != h->distanceKm)
+                    || (word_auto != h->autoArmed) || (auto_time != h->autoTime)
                     || (time_past != h->autoTimePast)
                     || (arr.valid != h->arrivalValid) || (arr.speed_kph != h->arrivalKph)
                     || (arr.minutes != h->arrivalMin);
@@ -945,6 +955,7 @@ void updateHomeDisplay(AppData* data) {
             h->rows[r] = rows[r];
         }
         h->unitsMph = data->state->units;
+        h->distanceKm = data->state->distance_km;
         h->autoArmed = word_auto;
         h->autoTimePast = time_past;
         h->autoTime = auto_time;
