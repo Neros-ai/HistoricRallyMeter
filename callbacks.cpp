@@ -685,6 +685,9 @@ void performAutoStart(AppData* data) {
         // toward the stage distance -- and therefore toward its average speed.
         zeroTimeBaselines(data);
         markSectorStart(*data->state);   // italian: the sector starts at the appointed minute
+        // zeroTimeBaselines re-adopted the roadbook, which dropped the fit made at the arm;
+        // sector_start_odometer_cm is still the arm-time navi, so fit again from it (surrey).
+        if (isSurrey(*data->state)) surreyStartFromMemory(*data->state);
         // Spent. Leaving the target armed would let a restart of the app --
         // which forgets autoStartTriggered -- see it as pending again.
         data->state->auto_start_rally_time_s = 0;
