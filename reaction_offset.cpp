@@ -1,4 +1,5 @@
 #include "reaction_offset.h"
+#include "sector.h"
 #include <algorithm>
 #include <cmath>
 
@@ -26,29 +27,27 @@ double reactionSpeedMps(double displayed_speed, bool mph) {
     return displayed_speed * (mph ? 1.609344 : 1.0) / 3.6;
 }
 
-void shiftTubeStart(RallyState& s, int64_t trial_before, int64_t press_ms) {
-    if (s.trial_start_ms == press_ms && trial_before != press_ms)
-        s.trial_start_ms = pressTimeMs(press_ms, s.reaction_offset_ms);
-}
-
 void applyStartPressOffset(RallyState& s, double speed_mps) {
     const int off = s.reaction_offset_ms;
-    if (off == 0) return;
+    if (off == 0 || speed_mps * 3.6 < REACTION_FLYING_MIN_KPH - 1e-9) return;   // standing start: untouched
     if (s.rally_type == 2) {   // distance is pinned to the card; only the tube clock moves
-        if (s.trial_start_m == 0.0) s.trial_start_ms = pressTimeMs(s.trial_start_ms, off);
+        if (stageIsSector(s.stage_segments) && s.trial_start_m == 0.0)
+            s.trial_start_ms = pressTimeMs(s.trial_start_ms, off);
         return;
     }
     s.total_start_time_ms = pressTimeMs(s.total_start_time_ms, off);
     s.trip_start_time_ms = pressTimeMs(s.trip_start_time_ms, off);
     s.segment_start_time_ms = pressTimeMs(s.segment_start_time_ms, off);
-    applyArmPressOffset(s, speed_mps);
-}
-
-void applyArmPressOffset(RallyState& s, double speed_mps) {
-    if (s.reaction_offset_ms == 0 || s.rally_type == 2) return;
-    const long back = pressBackCm(speed_mps, s.reaction_offset_ms);
+    const long back = pressBackCm(speed_mps, off);
     s.total_distance_adjust_cm += back;
     if (s.rally_type == 1) s.sector_start_odometer_cm -= back;   // surrey: navi total at the real point
+}
+
+void applyNextBaselineOffset(RallyState& s, double speed_mps) {
+    if (s.reaction_offset_ms == 0) return;
+    const long back = pressBackCm(speed_mps, s.reaction_offset_ms);
+    s.segment_start_adjust_cm -= back;
+    s.trip_distance_adjust_cm += back;
 }
 
 int64_t boundaryCountsAtPress(int64_t driven_counts, double speed_mps, int offset_ms, long calibration) {

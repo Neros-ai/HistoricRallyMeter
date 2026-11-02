@@ -671,8 +671,6 @@ void applyAutoStartArming(AppData* data, const AutoStartArming& arming) {
             const CounterPoll arm_poll = data->poller->getMostRecent();
             markSectorOdometer(*data->state, arm_poll.cntr1, arm_poll.cntr2);
         }
-        // RB-SET-12: the arming press is a press at the start point; distance only (greek, surrey).
-        applyArmPressOffset(*data->state, reactionSpeedNow(data));
         // surrey: the distance is zeroed now, so the fit uses navi total at this moment.
         if (isSurrey(*data->state)) surreyStartFromMemory(*data->state);
         // Paired with the segment counters zeroDistanceBaselines just moved,
@@ -714,6 +712,8 @@ void performAutoStart(AppData* data) {
 }
 
 void performStageGo(AppData* data, bool press) {
+    // RB-SET-12: read the speed first -- zeroTimeBaselines resets the smoothed speed.
+    const double start_speed_mps = reactionSpeedNow(data);
     // The moment of the press is the stage's start time, shown on Home like an
     // autostart's. (performAutoStart overwrites this with the armed moment.)
     data->autoFiredTime_s = autoStartSecondsFromTargetMs(getRallyTime_ms(*data->state),
@@ -733,7 +733,7 @@ void performStageGo(AppData* data, bool press) {
     }
     // RB-SET-12: a start now is a press at the start point (flying start); take the clock and the
     // distance baselines back by the reaction offset. Not for the autostart tick.
-    if (press) applyStartPressOffset(*data->state, reactionSpeedNow(data));
+    if (press) applyStartPressOffset(*data->state, start_speed_mps);
     if (isSurrey(*data->state)) surreyStartFromMemory(*data->state);   // now / autostart
     // Deliberately does NOT clear autoStartTriggered: the driver display sets
     // that flag just before calling this on the autostart tick, and clearing
@@ -1085,10 +1085,9 @@ void on_next_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     // clock (a press out of a pc records its error). On any other stage this does nothing.
     {
         auto p = data->poller->getMostRecent();
-        const int64_t press_ms = getRallyTime_ms(*data->state);
-        const int64_t trial_before = data->state->trial_start_ms;
+        // RB-SET-12: a tube press is a press at a point: start and end of a pc both taken back.
+        const int64_t press_ms = pressTimeMs(getRallyTime_ms(*data->state), data->state->reaction_offset_ms);
         if (applySectorNext(*data->state, p.cntr1, p.cntr2, press_ms)) {
-            shiftTubeStart(*data->state, trial_before, press_ms);   // RB-SET-12: pc / pm clock from the tube
             ConfigFile::save(*data->state);
             notifyWebState(data);
             return;
@@ -1124,6 +1123,7 @@ void on_next_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
     data->state->segment_start_time_ms = pressTimeMs(getRallyTime_ms(*data->state), data->state->reaction_offset_ms);
     rebaseTripToSegment(*data->state, current_poll.cntr1, current_poll.cntr2);
+    applyNextBaselineOffset(*data->state, reactionSpeedNow(data));   // RB-SET-12
 
     ConfigFile::save(*data->state);
     notifyWebState(data);
