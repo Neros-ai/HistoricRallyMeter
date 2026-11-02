@@ -35,3 +35,22 @@ std::string surreyCountdownTime(double metres, double kph) {
     if (kph <= 0.0) return "";
     return formatClockMmSs((metres > 0.0 ? metres : 0.0) / (kph / 3.6));
 }
+
+bool fitStageToStart(std::vector<Segment>& stage_segs, double first_from_m, double navi_at_press_m, long calibration) {
+    if (stage_segs.empty() || calibration <= 0) return false;
+    Segment& row = stage_segs[0];
+    if (navi_at_press_m < first_from_m - SURREY_START_SLACK_M ||
+        navi_at_press_m >= first_from_m + row.distance_m)
+        return false;
+    row.distance_m = (first_from_m + row.distance_m) - navi_at_press_m;
+    row.distance_counts = (row.distance_m * 1e6) / calibration;
+    return true;
+}
+
+void surreyStart(RallyState& s, const RallyState::MemorySlot& slot) {
+    const double navi_m = s.sector_start_odometer_cm / 100.0;
+    const bool fitted = fitStageToStart(s.stage_segments, slot.first_from_m, navi_m, s.calibration);
+    s.surrey_fit_failed = !fitted;
+    s.time_taken_ms = -1;
+    s.surrey_finish_at_ms = 0;
+}

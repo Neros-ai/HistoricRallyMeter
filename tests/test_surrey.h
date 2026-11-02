@@ -101,6 +101,60 @@ public:
             return surreyCountdownTime(1912.0, 50.0) == "02:18" && surreyCountdownTime(100.0, 0.0) == "";
         });
 
+        // Task 3: fixtures (calibration 1,000,000: one count = one metre).
+        auto seg = [](double m, double kph, bool autoNext) {
+            Segment g; g.distance_m = m; g.distance_counts = m; g.target_speed_kph = kph; g.autoNext = autoNext;
+            return g;
+        };
+        auto ss1 = [seg]() { return std::vector<Segment>{seg(9418, 60, true)}; };
+        auto ss2 = [seg]() { return std::vector<Segment>{seg(1717, 65, true), seg(2728, 50, true)}; };
+
+        suite->addTest("SS1 press 83 m into box 11 fits row 1", [ss1]() {
+            auto st = ss1();
+            const bool ok = fitStageToStart(st, 9148.0, 9231.0, 1000000);
+            // ideal time to the last "to" (18,566) at 60 kph
+            return ok && st[0].distance_m == 9335.0 && st[0].distance_counts == 9335.0
+                && (st[0].distance_m / (60.0 / 3.6) > 560.0) && (st[0].distance_m / (60.0 / 3.6) < 560.2);
+        });
+
+        suite->addTest("SS2 late press keeps the auto change at box 30", [ss2]() {
+            auto st = ss2();
+            const bool ok = fitStageToStart(st, 22307.0, 23000.0, 1000000);
+            return ok && st[0].distance_m == 1024.0 && st[1].distance_m == 2728.0 && st[0].autoNext;
+        });
+
+        suite->addTest("SS2 early press inside the slack", [ss2]() {
+            auto st = ss2();
+            return fitStageToStart(st, 22307.0, 22960.0, 1000000) && st[0].distance_m == 1064.0;
+        });
+
+        suite->addTest("total zeroed at the start: no fit, check total", [ss2]() {
+            RallyState s; s.rally_type = 1; s.calibration = 1000000;
+            s.stage_segments = ss2();
+            s.surrey_fit_failed = false;
+            RallyState::MemorySlot slot; slot.first_from_m = 22307.0; slot.segments = ss2();
+            s.sector_start_odometer_cm = 0;
+            surreyStart(s, slot);
+            return s.surrey_fit_failed && s.stage_segments[0].distance_m == 1717.0;
+        });
+
+        suite->addTest("press beyond row 1: no fit", [ss2]() {
+            auto st = ss2();
+            return !fitStageToStart(st, 22307.0, 24100.0, 1000000) && st[0].distance_m == 1717.0;
+        });
+
+        suite->addTest("memory slot untouched", [ss2]() {
+            RallyState s; s.rally_type = 1; s.calibration = 1000000;
+            s.segments = ss2(); s.stage_segments = ss2();
+            s.time_taken_ms = 5000; s.surrey_finish_at_ms = 7;
+            RallyState::MemorySlot slot; slot.first_from_m = 22307.0; slot.segments = ss2();
+            s.sector_start_odometer_cm = 2300000;
+            surreyStart(s, slot);
+            return !s.surrey_fit_failed && s.stage_segments[0].distance_m == 1024.0
+                && s.segments[0].distance_m == 1717.0 && slot.segments[0].distance_m == 1717.0
+                && s.time_taken_ms == -1 && s.surrey_finish_at_ms == 0;
+        });
+
         return suite;
     }
 };

@@ -6,6 +6,7 @@
 #include "config_file.h"
 #include "calculations.h"
 #include "sector.h"
+#include "surrey.h"
 #include "stage_rows.h"
 #include "home_calc.h"
 #include "ui_driver.h"
@@ -629,6 +630,16 @@ void zeroTimeBaselines(AppData* data) {
     if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
 }
 
+// Surrey (RB-NAV-43 D1): fit row 1 of the running copy to navi total at the press. The slot is
+// the stage's memory (its "from" figure); with none loaded the fit fails and Home says check total.
+static void surreyStartFromMemory(RallyState& s) {
+    static const RallyState::MemorySlot none;
+    const int n = s.last_memory_slot;
+    const RallyState::MemorySlot& slot =
+        (n >= 1 && n <= RallyState::MAX_MEMORY_SLOTS) ? s.memory_slots[n - 1] : none;
+    surreyStart(s, slot);
+}
+
 void applyAutoStartArming(AppData* data, const AutoStartArming& arming) {
     if (arming.rally_time_s != 0) data->autoSlot = data->state->last_memory_slot;
     // Assignment, not a set of conditional updates: whatever kind of
@@ -653,6 +664,8 @@ void applyAutoStartArming(AppData* data, const AutoStartArming& arming) {
             const CounterPoll arm_poll = data->poller->getMostRecent();
             markSectorOdometer(*data->state, arm_poll.cntr1, arm_poll.cntr2);
         }
+        // surrey: the distance is zeroed now, so the fit uses navi total at this moment.
+        if (isSurrey(*data->state)) surreyStartFromMemory(*data->state);
         // Paired with the segment counters zeroDistanceBaselines just moved,
         // so segment 1 measures from the same instant in both quantities.
         // The clock baselines stay put: the stage's time still starts at the
@@ -706,6 +719,7 @@ void performStageGo(AppData* data) {
         const CounterPoll start_poll = data->poller->getMostRecent();
         markSectorOdometer(*data->state, start_poll.cntr1, start_poll.cntr2);
     }
+    if (isSurrey(*data->state)) surreyStartFromMemory(*data->state);   // now / autostart
     // Deliberately does NOT clear autoStartTriggered: the driver display sets
     // that flag just before calling this on the autostart tick, and clearing
     // it here would let the same 2-second trigger window re-enter on every
