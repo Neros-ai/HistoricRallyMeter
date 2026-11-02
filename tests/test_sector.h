@@ -511,6 +511,28 @@ public:
                 && !p.secondsValid && p.metresToGo == 280 && p.nextAtM == 380;
         });
 
+        suite->addTest("panel: 40 m past the line", []() {
+            RallyState s = running();
+            const long at = sectorPanel(s, 1000, 100).nextAtM;
+            SectorPanel p = sectorPanel(s, 1000, at + 40);
+            return p.metresPast == 40 && p.metresToGo == 0;
+        });
+
+        suite->addTest("panel: before the line nothing is past", []() {
+            RallyState s = running();
+            const long at = sectorPanel(s, 1000, 100).nextAtM;
+            SectorPanel p = sectorPanel(s, 1000, at - 10);
+            return p.metresPast == 0 && p.metresToGo == 10;
+        });
+
+        suite->addTest("panel: past the end of the last row", []() {
+            RallyState s = running();
+            s.segment_current_number = static_cast<int>(s.stage_segments.size()) - 1;
+            const long at = sectorPanel(s, 1000, 100).nextAtM;
+            SectorPanel p = sectorPanel(s, 1000, at + 40);
+            return p.metresPast == 40;
+        });
+
         suite->addTest("pc countdown beeps: 30 s, 15 s, 5-4-3-2-1, short beep on 0", []() {
             auto b = pcCountdownBeep;
             return b(30.05, 29.95) == PcBeep::Tick && b(15.01, 14.99) == PcBeep::Tick

@@ -209,7 +209,13 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         colour(cr, 0.85, 0.65, 0.0);
         text(cr, "count", 0, 156, 15, LEFT);
         text(cr, "down", 0, 171, 15, LEFT);
-        text(cr, km2(p.metresToGo), cKm, 174, 32, RIGHT);
+        if (p.metresPast > 0) {   // RB-NAV-49: past the line, red, counting up
+            colour(cr, 1.0, 0.15, 0.15);
+            text(cr, "+" + km2(p.metresPast), cKm, 174, 32, RIGHT);
+            colour(cr, 0.85, 0.65, 0.0);
+        } else {
+            text(cr, km2(p.metresToGo), cKm, 174, 32, RIGHT);
+        }
         if (p.secondsValid) {
             if (p.secondsToLine < 0) colour(cr, 1.0, 0.15, 0.15);
             text(cr, tenths(p.secondsToLine), cTime, 174, 32, RIGHT);

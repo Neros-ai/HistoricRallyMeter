@@ -145,6 +145,7 @@ struct SectorPanel {
     std::string nextTag;           // the row after: "pc6", "navi", "co2"
     long nextAtM = 0;              // sector distance where it starts
     long metresToGo = 0;           // to the end of this row
+    long metresPast = 0;           // beyond the end of this row (display only, 0 before it)
     double secondsToLine = 0.0;    // to the end of the row, by the schedule (pc: the card time)
     bool secondsValid = false;
     double avgKph = 0.0;           // pc: average so far over this pc

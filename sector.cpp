@@ -427,6 +427,7 @@ SectorPanel sectorPanel(const RallyState& s, int64_t now_ms, long stage_m) {
     if (cur + 1 < static_cast<long>(segs.size())) p.nextTag = sectorTag(segs[cur + 1]);
     p.nextAtM = static_cast<long>(std::lround(endOfRowM(segs, cur)));
     p.metresToGo = std::max<long>(0, p.nextAtM - stage_m);
+    p.metresPast = std::max<long>(0, stage_m - p.nextAtM);
     // navi / ct: no schedule time (crews drive them flat out); pc, pm and co keep their countdown.
     if (row.type != SEG_NAVI && row.type != SEG_CT)
         p.secondsToLine = sectorSecondsToLine(s, now_ms, &p.secondsValid);
