@@ -728,7 +728,7 @@ void performStageGo(AppData* data, bool press) {
     // Distance and clock together: this is the ordinary "start now" case.
     zeroDistanceBaselines(data);
     zeroTimeBaselines(data);
-    markSectorStart(*data->state);   // italian: the start time is 30 s through the minute pressed
+    markSectorStart(*data->state);   // italian: the sector clock starts at :00 of the minute pressed
     if (data->state->rally_type == 2 && stageIsSector(data->state->stage_segments))
         data->autoFiredTime_s = autoStartSecondsFromTargetMs(data->state->total_start_time_ms,
                                                              getAutoStartEpochMs());
