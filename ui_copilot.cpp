@@ -8,6 +8,7 @@
 #include "rally_state.h"
 #include "counter_poller.h"
 #include "callbacks.h"
+#include "surrey.h"
 #include "config_file.h"
 #include "webserver/qr_display.h"
 #include "calculations.h"
@@ -525,8 +526,9 @@ void updateCopilotDisplay(AppData* data) {
 
         // Live at any point in the segment: next while one follows, prev
         // while one precedes.
-        gtk_widget_set_sensitive(data->nextPrevBtn, nextAvailable(*data->state));
-        gtk_widget_set_sensitive(data->prevBtn, prevAvailable(*data->state) || sectorUndoAvailable(*data->state));
+        gtk_widget_set_sensitive(data->nextPrevBtn, nextAvailable(*data->state) || surreyFinishAvailable(*data->state));
+        gtk_widget_set_sensitive(data->prevBtn, prevAvailable(*data->state) || sectorUndoAvailable(*data->state) ||
+                                 surreyUndoAvailableNow(*data->state, current_poll.cntr1, current_poll.cntr2));
     } else if (data->state->stage_segments.empty()) {
         gtk_label_set_text(data->nextDistLabel, "---.---");
         gtk_label_set_text(data->nextUnitLabel, "m");

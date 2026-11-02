@@ -35,7 +35,8 @@ const double SURREY_START_SLACK_M = 300.0;
 bool fitStageToStart(std::vector<Segment>& stage_segs, double first_from_m, double navi_at_press_m, long calibration);
 
 // A surrey stage starts (a `now` press, or the arming of an early departure): fit row 1 of the running
-// copy to navi total at sector_start_odometer_cm, flag a failed fit, clear the last time taken.
+// copy to navi total at sector_start_odometer_cm and flag a failed fit. The last time taken is kept
+// until the next stage finishes.
 void surreyStart(RallyState& s, const RallyState::MemorySlot& slot);
 
 // `next` on the last row of a running surrey stage finishes it and freezes time taken (D3).
@@ -47,6 +48,13 @@ bool undoSurreyFinish(RallyState& s, double navi_m, double last_to_m);
 
 // Where greek ends a stage on distance (D4): in surrey, take time taken then unless a press did.
 void surreyDistanceEnd(RallyState& s, int64_t now_ms);
+
+// Key sensitivity (pure): `next` is live as the finish on the last row of a running surrey stage.
+bool surreyFinishAvailable(const RallyState& s);
+// Same conditions as undoSurreyFinish, no mutation: `prev` is live to reopen a pressed finish.
+bool surreyUndoAvailable(const RallyState& s, double navi_m, double last_to_m);
+// As above, finding navi total from the counters and the last "to" from the loaded stage's slot.
+bool surreyUndoAvailableNow(const RallyState& s, uint64_t cntr1, uint64_t cntr2);
 
 // The last row's "to" in roadbook metres: the slot's from figure plus its typed row distances.
 double surreyLastToMetres(const RallyState::MemorySlot& slot);

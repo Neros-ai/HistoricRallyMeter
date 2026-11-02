@@ -10,6 +10,7 @@
 #include "webserver/rally_web_server.h"
 #include "ui_datetime.h"
 #include "home_calc.h"
+#include "surrey.h"
 
 #include <chrono>
 #include <cmath>
@@ -20,8 +21,9 @@
 NextPrevState computeNextPrevState(AppData* data) {
     NextPrevState out;
     if (!data || !data->state) return out;
-    out.next_enabled = nextAvailable(*data->state);
-    out.prev_enabled = prevAvailable(*data->state);
+    out.next_enabled = nextAvailable(*data->state) || surreyFinishAvailable(*data->state);
+    const CounterPoll p = data->poller->getMostRecent();
+    out.prev_enabled = prevAvailable(*data->state) || surreyUndoAvailableNow(*data->state, p.cntr1, p.cntr2);
     return out;
 }
 

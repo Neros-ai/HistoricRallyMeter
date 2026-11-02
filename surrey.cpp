@@ -55,10 +55,25 @@ void surreyStart(RallyState& s, const RallyState::MemorySlot& slot) {
     s.surrey_finish_at_ms = 0;
 }
 
+bool surreyFinishAvailable(const RallyState& s) {
+    return isSurrey(s) && !s.stage_complete && s.surrey_finish_at_ms == 0 &&
+           s.segment_current_number >= 0 &&
+           s.segment_current_number == static_cast<long>(s.stage_segments.size()) - 1;
+}
+
+bool surreyUndoAvailable(const RallyState& s, double navi_m, double last_to_m) {
+    return isSurrey(s) && s.stage_complete && s.surrey_finish_at_ms != 0 && navi_m < last_to_m;
+}
+
+bool surreyUndoAvailableNow(const RallyState& s, uint64_t cntr1, uint64_t cntr2) {
+    const int n = s.last_memory_slot;
+    if (!isSurrey(s) || n < 1 || n > RallyState::MAX_MEMORY_SLOTS) return false;
+    return surreyUndoAvailable(s, static_cast<double>(surreyNaviMetres(s, cntr1, cntr2)),
+                               surreyLastToMetres(s.memory_slots[n - 1]));
+}
+
 bool applySurreyFinish(RallyState& s, int64_t now_ms) {
-    if (!isSurrey(s) || s.stage_complete || s.surrey_finish_at_ms != 0) return false;
-    if (s.segment_current_number < 0 ||
-        s.segment_current_number != static_cast<long>(s.stage_segments.size()) - 1) return false;
+    if (!surreyFinishAvailable(s)) return false;
     s.time_taken_ms = now_ms - s.total_start_time_ms;
     s.time_taken_stage = s.last_memory_slot;
     s.surrey_finish_at_ms = now_ms;
@@ -67,7 +82,7 @@ bool applySurreyFinish(RallyState& s, int64_t now_ms) {
 }
 
 bool undoSurreyFinish(RallyState& s, double navi_m, double last_to_m) {
-    if (!isSurrey(s) || !s.stage_complete || s.surrey_finish_at_ms == 0 || navi_m >= last_to_m) return false;
+    if (!surreyUndoAvailable(s, navi_m, last_to_m)) return false;
     s.stage_complete = false;
     s.time_taken_ms = -1;
     s.time_taken_stage = 0;

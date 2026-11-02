@@ -215,6 +215,24 @@ public:
             surreyDistanceEnd(s, 2000);
             return !a && !undoSurreyFinish(s, 0.0, 100.0) && s.time_taken_ms == -1;
         });
+        suite->addTest("key helpers: finish live on the last row only", [runningAt, ss1, ss2]() {
+            RallyState a = runningAt(ss1(), 0), b = runningAt(ss2(), 0), c = runningAt(ss1(), 0);
+            RallyState g = runningAt(ss1(), 0); g.rally_type = 0;
+            c.stage_complete = true;
+            RallyState d = runningAt(ss1(), 0); d.surrey_finish_at_ms = 5;
+            return surreyFinishAvailable(a) && !surreyFinishAvailable(b) && !surreyFinishAvailable(g)
+                && !surreyFinishAvailable(c) && !surreyFinishAvailable(d);
+        });
+        suite->addTest("key helpers: undo live before the last to only", [runningAt, ss1]() {
+            RallyState s = runningAt(ss1(), 0);
+            const bool none = surreyUndoAvailable(s, 1.0, 100.0);
+            applySurreyFinish(s, 1000);
+            const bool ok = surreyUndoAvailable(s, 99.0, 100.0) && !surreyUndoAvailable(s, 100.0, 100.0)
+                && !surreyUndoAvailable(s, 101.0, 100.0);
+            RallyState g = s; g.rally_type = 0;
+            RallyState z = s; z.surrey_finish_at_ms = 0;
+            return !none && ok && !surreyUndoAvailable(g, 99.0, 100.0) && !surreyUndoAvailable(z, 99.0, 100.0);
+        });
         suite->addTest("time taken rounds to tenths", []() {
             return surreyTimeTakenText(59960) == "1:00.0" && surreyTimeTakenText(560640) == "9:20.6"
                 && surreyTimeTakenText(3600000) == "1:00:00.0" && surreyTimeTakenText(-1) == "";
