@@ -565,8 +565,9 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             };
             const std::string totalAvg = (page == AppData::DP_ITALIAN_TRIAL)
                 ? (v.avgValid ? trialSpeedText(v.avgKph) : std::string("--.--"))
-                : (italianFig ? avgKphText(gtk_label_get_text(data->totalSpeedLabel))
-                              : std::string(gtk_label_get_text(data->totalSpeedLabel)));
+                : (italianFig   // a navi row: the original Trip average (next zeroes Trip), always km/h
+                       ? avgKphText(gtk_label_get_text(data->tripSpeedLabel))
+                       : std::string(gtk_label_get_text(data->totalSpeedLabel)));
             cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
             drawAt(totalAvg, avgAnchor, y2);
             drawAt(distText(page == AppData::DP_ITALIAN_TRIAL ? v.sectorTotalM : data->driverTotalM), distAnchor, y2);
@@ -843,6 +844,7 @@ void updateDriverDisplay(AppData* data) {
         }
     }
 
+    if (data->state->segment_current_number < 0) data->runSegIndex = -2;   // no stage: the next one starts a new run
     // Target speed and ahead/behind
     if (data->state->segment_current_number >= 0 && 
         data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
@@ -921,11 +923,30 @@ void updateDriverDisplay(AppData* data) {
         // and segment-end tick. "In segment" while between the segment start and end.
         {
             int64_t seg_count_diff = segmentCountsCorrected(data, current_poll);
-            {   // average speed over this substage so far (matches the time error, unlike Trip)
-                const double sub_m = countsToMeters(seg_count_diff, data->state->calibration);
-                const double sub_s = (current_time_ms - data->state->segment_start_time_ms) / 1000.0;
-                data->driverSubAvgValid = (sub_s > 0.5 && sub_m > 0.0);
-                data->driverSubAvgKph = data->driverSubAvgValid ? sub_m / sub_s * 3.6 : 0.0;
+            {   // average speed over the run being driven: from the box where the speed last changed.
+                // The run's start is taken when the segment changes: kept through a box that carries
+                // the speed on, restarted at a speed change, the first box, or any step back.
+                const long cur_seg = data->state->segment_current_number;
+                if (cur_seg != data->runSegIndex) {
+                    const bool carried = cur_seg == data->runSegIndex + 1 && cur_seg > 0 &&
+                        !data->state->stage_segments[static_cast<size_t>(cur_seg)].changesSpeed;
+                    if (!carried) {
+                        data->runStartCntr1 = data->state->segment_start_cntr1;
+                        data->runStartCntr2 = data->state->segment_start_cntr2;
+                        data->runStartMs = data->state->segment_start_time_ms;
+                        data->runStartAdjustCm = data->state->segment_start_adjust_cm;
+                    }
+                    data->runSegIndex = cur_seg;
+                }
+                // The original average function, fed the run's own start.
+                const int64_t run_counts = correctedDistanceCounts(
+                    calculateDistanceCounts(*data->state, current_poll.cntr1, current_poll.cntr2,
+                                            data->runStartCntr1, data->runStartCntr2),
+                    data->state->total_distance_adjust_cm - data->runStartAdjustCm, data->state->calibration);
+                const double avg = calculateAverageSpeed(*data->state, data->runStartMs, current_time_ms,
+                                                         run_counts, 0);
+                data->driverSubAvgValid = (current_time_ms - data->runStartMs > 500 && avg > 0.0);
+                data->driverSubAvgKph = data->driverSubAvgValid ? (data->state->units ? avg / 0.621371 : avg) : 0.0;
             }
             double seg_total = seg.distance_counts;
             if (seg_total > 0.0) {

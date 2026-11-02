@@ -102,8 +102,13 @@ struct AppData {
     double driverTotalM = 0.0, driverTripM = 0.0;   // distances with their corrections, metres
     int driverArrivalKph = -1;      // speed to reach the next stage with a minute spare (kph), -1 = none
     long driverStageNo = 0;         // the loaded stage, 1-99
-    // Greek stage page: the average speed over the substage being driven (since it began), the
-    // figure that matches the time error -- not the trip average. kph, valid once 0.5 s and > 0 m in.
+    // Greek stage page: the average speed over the run being driven -- from the box where the
+    // speed last changed, through any boxes that carry it on. kph, valid once 0.5 s and > 0 m in.
+    // runSegIndex / runStart*: where that run began (set by the display tick; runtime only).
+    long runSegIndex = -2;
+    uint64_t runStartCntr1 = 0, runStartCntr2 = 0;
+    int64_t runStartMs = 0;
+    long runStartAdjustCm = 0;
     double driverSubAvgKph = 0.0;
     bool driverSubAvgValid = false;
     double driverRowS = 0.0;        // italian navi row: its duration at its target speed
