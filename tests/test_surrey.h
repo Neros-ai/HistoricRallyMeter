@@ -41,11 +41,15 @@ public:
             RallyState b;
             ConfigFile::load(b, path);
             const bool ok = b.time_taken_ms == 560600 && b.surrey_fit_failed;
+            RallyState a2; a2.time_taken_ms = 560600; a2.time_taken_stage = 3;
+            ConfigFile::save(a2, path);
+            RallyState b2; ConfigFile::load(b2, path);
+            if (b2.time_taken_stage != 3) { std::remove(path); return false; }
             { std::ofstream f(path); f << "{\n  \"rally_type\": 1\n}\n"; }
             RallyState c;
             ConfigFile::load(c, path);
             std::remove(path);
-            return ok && c.time_taken_ms == -1 && !c.surrey_fit_failed && c.surrey_finish_at_ms == 0;
+            return ok && c.time_taken_stage == 0 && c.time_taken_ms == -1 && !c.surrey_fit_failed && c.surrey_finish_at_ms == 0;
         });
 
         suite->addTest("stage start leaves navi total", []() {
@@ -146,13 +150,80 @@ public:
         suite->addTest("memory slot untouched", [ss2]() {
             RallyState s; s.rally_type = 1; s.calibration = 1000000;
             s.segments = ss2(); s.stage_segments = ss2();
-            s.time_taken_ms = 5000; s.surrey_finish_at_ms = 7;
+            s.time_taken_ms = 5000; s.time_taken_stage = 2; s.surrey_finish_at_ms = 7;
             RallyState::MemorySlot slot; slot.first_from_m = 22307.0; slot.segments = ss2();
             s.sector_start_odometer_cm = 2300000;
             surreyStart(s, slot);
             return !s.surrey_fit_failed && s.stage_segments[0].distance_m == 1024.0
                 && s.segments[0].distance_m == 1717.0 && slot.segments[0].distance_m == 1717.0
-                && s.time_taken_ms == -1 && s.surrey_finish_at_ms == 0;
+                && s.time_taken_ms == 5000 && s.time_taken_stage == 2 && s.surrey_finish_at_ms == 0;
+        });
+
+        // Task 4: next at the finish landmark, prev to undo (D3, D4).
+        auto runningAt = [seg](std::vector<Segment> st, long cur) {
+            RallyState s; s.rally_type = 1; s.calibration = 1000000;
+            s.stage_segments = st; s.segment_current_number = cur; s.stage_complete = false;
+            s.total_start_time_ms = 0;
+            return s;
+        };
+        suite->addTest("next on the last row freezes time taken", [runningAt, ss1]() {
+            RallyState s = runningAt(ss1(), 0); s.last_memory_slot = 1;
+            const bool r = applySurreyFinish(s, 560600);
+            return r && s.time_taken_ms == 560600 && s.time_taken_stage == 1 && s.stage_complete
+                && s.surrey_finish_at_ms == 560600;
+        });
+        suite->addTest("next on a middle row is today's next", [runningAt, ss2]() {
+            RallyState s = runningAt(ss2(), 0);
+            return !applySurreyFinish(s, 100000) && s.time_taken_ms == -1 && !s.stage_complete
+                && s.surrey_finish_at_ms == 0;
+        });
+        suite->addTest("second next at the finish does nothing", [runningAt, ss1]() {
+            RallyState s = runningAt(ss1(), 0);
+            applySurreyFinish(s, 560600);
+            return !applySurreyFinish(s, 565000) && s.time_taken_ms == 560600;
+        });
+        suite->addTest("prev before the last to reopens", [runningAt, ss1]() {
+            RallyState s = runningAt(ss1(), 0); s.last_memory_slot = 3;
+            applySurreyFinish(s, 254600);
+            const int64_t base = s.total_start_time_ms;
+            const bool r = undoSurreyFinish(s, 53890.0, 53897.0);
+            return r && s.time_taken_ms == -1 && s.time_taken_stage == 0 && !s.stage_complete
+                && s.surrey_finish_at_ms == 0 && s.total_start_time_ms == base;
+        });
+        suite->addTest("prev past the last to does not", [runningAt, ss1]() {
+            RallyState s = runningAt(ss1(), 0);
+            applySurreyFinish(s, 254600);
+            return !undoSurreyFinish(s, 53897.0, 53897.0) && s.stage_complete && s.time_taken_ms == 254600;
+        });
+        suite->addTest("prev with no press finish does nothing", [runningAt, ss1]() {
+            RallyState s = runningAt(ss1(), 0);
+            return !undoSurreyFinish(s, 100.0, 53897.0);
+        });
+        suite->addTest("no press: ends on distance as greek", [runningAt, ss1]() {
+            RallyState s = runningAt(ss1(), 0); s.last_memory_slot = 1;
+            surreyDistanceEnd(s, 561000);
+            const bool a = s.time_taken_ms == 561000 && s.time_taken_stage == 1;
+            RallyState t = runningAt(ss1(), 0);
+            applySurreyFinish(t, 560600);
+            surreyDistanceEnd(t, 561000);
+            return a && t.time_taken_ms == 560600;
+        });
+        suite->addTest("greek ignores the surrey finish", [runningAt, ss1]() {
+            RallyState s = runningAt(ss1(), 0); s.rally_type = 0;
+            const bool a = applySurreyFinish(s, 1000);
+            s.stage_complete = true; s.surrey_finish_at_ms = 5;
+            surreyDistanceEnd(s, 2000);
+            return !a && !undoSurreyFinish(s, 0.0, 100.0) && s.time_taken_ms == -1;
+        });
+        suite->addTest("time taken rounds to tenths", []() {
+            return surreyTimeTakenText(59960) == "1:00.0" && surreyTimeTakenText(560640) == "9:20.6"
+                && surreyTimeTakenText(3600000) == "1:00:00.0" && surreyTimeTakenText(-1) == "";
+        });
+        suite->addTest("time taken survives a power loss", [runningAt, ss1]() {
+            RallyState s = runningAt(ss1(), 0);
+            applySurreyFinish(s, 560600);
+            restartDistancesAfterPowerLoss(s, 7, 7, 50);
+            return s.time_taken_ms == 560600;
         });
 
         return suite;

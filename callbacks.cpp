@@ -1061,6 +1061,12 @@ void applyDriverZero(AppData* data, bool reset) {
 // from the stage start.
 void on_next_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    // Surrey: next on the last row is the finish landmark.
+    if (applySurreyFinish(*data->state, getRallyTime_ms(*data->state))) {
+        ConfigFile::save(*data->state);
+        notifyWebState(data);
+        return;
+    }
     if (!nextAvailable(*data->state)) return;
     // Italian sector: every line pins sector total to the card and starts or ends the pc / pm
     // clock (a press out of a pc records its error). On any other stage this does nothing.
@@ -1106,8 +1112,22 @@ void on_next_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 
 // "prev": undo the last speed change -- a "next" pressed by mistake, or an
 // auto-advance before the real change point. See undoSegmentChange.
+static bool undoSurreyFinishFromMemory(AppData* data) {
+    RallyState& s = *data->state;
+    const int n = s.last_memory_slot;
+    if (!isSurrey(s) || n < 1 || n > RallyState::MAX_MEMORY_SLOTS) return false;
+    const auto p = data->poller->getMostRecent();
+    return undoSurreyFinish(s, static_cast<double>(surreyNaviMetres(s, p.cntr1, p.cntr2)),
+                            surreyLastToMetres(s.memory_slots[n - 1]));
+}
+
 void on_prev_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    if (undoSurreyFinishFromMemory(data)) {   // surrey: prev reopens a pressed finish
+        ConfigFile::save(*data->state);
+        notifyWebState(data);
+        return;
+    }
     if (undoSectorTube(*data->state)) {   // prev straight after an italian next
         ConfigFile::save(*data->state);
         notifyWebState(data);
@@ -1175,6 +1195,7 @@ gboolean update_display(gpointer user_data) {
         int64_t stage_counts = stageCountsCorrected(data, poll);
         if (stageDistanceComplete(data->state->stage_segments, stage_counts)) {
             data->state->stage_complete = true;
+            surreyDistanceEnd(*data->state, getRallyTime_ms(*data->state));   // surrey: time taken
             ConfigFile::save(*data->state);
             // The phone decides from the state message whether its Reset
             // Total asks about a running stage, so it must hear this end too.

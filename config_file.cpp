@@ -321,6 +321,8 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
         } else if (line.find("\"rally_type\"") != std::string::npos) {
             const long r = extractLong(line);
             state.rally_type = (r == 2 || r == 1) ? static_cast<int>(r) : 0;
+        } else if (line.find("\"time_taken_stage\"") != std::string::npos) {
+            state.time_taken_stage = static_cast<int>(extractLong(line));
         } else if (line.find("\"time_taken_ms\"") != std::string::npos) {
             state.time_taken_ms = extractLong(line);
         } else if (line.find("\"surrey_fit_failed\"") != std::string::npos) {
@@ -532,6 +534,7 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"tone_type_ahead\": " << state.tone_type_ahead << ",\n";
     file << "  \"gauge_range_s\": " << state.gauge_range_s << ",\n";
     file << "  \"rally_type\": " << state.rally_type << ",\n";
+    file << "  \"time_taken_stage\": " << state.time_taken_stage << ",\n";
     file << "  \"time_taken_ms\": " << state.time_taken_ms << ",\n";
     file << "  \"surrey_fit_failed\": " << (state.surrey_fit_failed ? "true" : "false") << ",\n";
     file << "  \"odometer_start_cntr1\": " << static_cast<int64_t>(state.odometer_start_cntr1) << ",\n";

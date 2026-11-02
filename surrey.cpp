@@ -17,7 +17,7 @@ int tripHistoryRows(const RallyState&) {
 }
 
 std::string surreyTimeTakenText(int64_t ms) {
-    if (ms < 0) ms = 0;
+    if (ms < 0) return "";
     const int64_t tenths = (ms + 50) / 100;
     const int64_t secs = tenths / 10;
     char buf[32];
@@ -51,6 +51,39 @@ void surreyStart(RallyState& s, const RallyState::MemorySlot& slot) {
     const double navi_m = s.sector_start_odometer_cm / 100.0;
     const bool fitted = fitStageToStart(s.stage_segments, slot.first_from_m, navi_m, s.calibration);
     s.surrey_fit_failed = !fitted;
-    s.time_taken_ms = -1;
+    // The previous stage's time taken stays on Home until the next stage finishes (mockup S1).
     s.surrey_finish_at_ms = 0;
+}
+
+bool applySurreyFinish(RallyState& s, int64_t now_ms) {
+    if (!isSurrey(s) || s.stage_complete || s.surrey_finish_at_ms != 0) return false;
+    if (s.segment_current_number < 0 ||
+        s.segment_current_number != static_cast<long>(s.stage_segments.size()) - 1) return false;
+    s.time_taken_ms = now_ms - s.total_start_time_ms;
+    s.time_taken_stage = s.last_memory_slot;
+    s.surrey_finish_at_ms = now_ms;
+    s.stage_complete = true;
+    return true;
+}
+
+bool undoSurreyFinish(RallyState& s, double navi_m, double last_to_m) {
+    if (!isSurrey(s) || !s.stage_complete || s.surrey_finish_at_ms == 0 || navi_m >= last_to_m) return false;
+    s.stage_complete = false;
+    s.time_taken_ms = -1;
+    s.time_taken_stage = 0;
+    s.surrey_finish_at_ms = 0;
+    return true;
+}
+
+void surreyDistanceEnd(RallyState& s, int64_t now_ms) {
+    // surrey_finish_at_ms != 0: a next press already froze the figure.
+    if (!isSurrey(s) || s.surrey_finish_at_ms != 0) return;
+    s.time_taken_ms = now_ms - s.total_start_time_ms;
+    s.time_taken_stage = s.last_memory_slot;
+}
+
+double surreyLastToMetres(const RallyState::MemorySlot& slot) {
+    double to = slot.first_from_m;
+    for (const Segment& g : slot.segments) to += g.distance_m;
+    return to;
 }

@@ -1017,7 +1017,7 @@ void updateHomeDisplay(AppData* data) {
         const bool check = sur && st.surrey_fit_failed && !st.stage_complete;
         std::string tt_label, tt;
         if (sur && st.time_taken_ms >= 0) {
-            tt_label = "time taken ss" + (st.last_memory_slot >= 1 ? std::to_string(st.last_memory_slot) : std::string("-"));
+            tt_label = "time taken ss" + (st.time_taken_stage >= 1 ? std::to_string(st.time_taken_stage) : std::string("-"));
             tt = surreyTimeTakenText(st.time_taken_ms);
         }
         if (running != h->surreyRunning || cdM != h->cdMetres || cdT != h->cdTime || check != h->surreyCheck) stage_dirty = true;

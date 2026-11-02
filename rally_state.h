@@ -197,6 +197,8 @@ public:
     int rally_type = 0;
     // Surrey (RB-NAV-43): the last stage, start press to finish press (ms); -1 none.
     int64_t time_taken_ms = -1;
+    // Surrey: the stage number that result belongs to (0 none), so loading another stage keeps the name.
+    int time_taken_stage = 0;
     // Surrey: rally ms of the finish press, 0 = none. Not persisted.
     int64_t surrey_finish_at_ms = 0;
     // Surrey: the roadbook fit failed (navi zeroed by mistake); drives `check total`.
