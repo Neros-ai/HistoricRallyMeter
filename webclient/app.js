@@ -186,6 +186,7 @@
     lastTelemetryAt = Date.now();
     tzMin = Number(msg.tz_min) || 0;
     $('rally-clock').textContent = msg.rally_clock || '--:--:--';
+    if ($('hdr-clock')) $('hdr-clock').textContent = msg.rally_clock || '--:--:--';
     const previousUnits = units;
     units = msg.units || 'kph';
     if (typeof msg.distance_km === 'boolean') useDistanceUnit(msg.distance_km);
@@ -198,7 +199,10 @@
     // Surrey: navi total in its own row, and the last time taken under Trip history.
     const sur = !!msg.surrey;
     const italianNow = Number(msg.rally_type) === 2;
-    $('row-navi').style.display = (sur || italianNow) ? '' : 'none';
+    const naviView = $('view-navi');
+    naviView.classList.toggle('rally-greek', !sur && !italianNow);
+    naviView.classList.toggle('rally-italian', italianNow);
+    naviView.classList.toggle('rally-surrey', sur);
     $('time-taken-row').style.display = (sur && msg.time_taken) ? '' : 'none';
     if (sur || italianNow) showDist($('navi-m'), msg.navi_m);
     if (sur) {
@@ -217,22 +221,46 @@
     } else {
       showDist($('next-m'), msg.next_m);
     }
-    $('next-m').style.color = (ic && ic.past) ? '#ff2626' : '';
+    // Italian count down: the figure is orange, red once the line has gone by.
+    // The next substage key stays as it is.
+    $('next-m').style.color = (ic && ic.past) ? '#ff2626' : (ic ? '#ffa500' : '');
     $('next-s').textContent = (ic && ic.s) ? ic.s : '';
     $('next-s').style.display = (ic && ic.s) ? '' : 'none';
-    $('next-s').style.color = (ic && ic.s_past) ? '#ff2626' : '';
+    $('next-s').style.color = (ic && ic.s_past) ? '#ff2626' : (ic && ic.s ? '#ffa500' : '');
     $('total-el').textContent = mmss(msg.total_s);
     $('trip-el').textContent = mmss(msg.trip_s);
     $('speed-change').textContent = msg.speed_change || '';
-    if (msg.next_key) $('btn-next').textContent = msg.next_key;
-    if (msg.prev_key && $('btn-prev')) $('btn-prev').textContent = msg.prev_key;
-    // Driver tab footer (HTML under the gauge — keeps dial clear).
-    showDist($('drv-trip-m'), msg.trip_m);
-    showDist($('drv-total-m'), msg.total_m);
-    const avgF = units === 'mph' ? 0.621371 : 1;
-    $('drv-trip-avg').textContent = (Number(msg.trip_avg_kph || 0) * avgF).toFixed(1);
-    $('drv-total-avg').textContent = (Number(msg.total_avg_kph || 0) * avgF).toFixed(1);
-    document.querySelectorAll('.avg-unit').forEach((e) => { e.textContent = units; });
+    // The same words as the box keys (readoutKeyName), including the line break.
+    const keyLabel = (id, text) => { if ($(id) && text) $(id).textContent = text; };
+    keyLabel('btn-total', msg.key_total);
+    keyLabel('btn-trip', msg.key_trip);
+    keyLabel('key-navi', msg.key_navi);
+    keyLabel('btn-next', msg.next_key);
+    keyLabel('btn-prev', msg.prev_key);
+    // Driver footer: the distances and averages stay here. The dial above follows
+    // the box page (greek stage, between stages, italian navi, italian pc / pm).
+    const drv = msg.drv || {};
+    const page = Number(drv.page) || 4;
+    const italianFig = page === 1 || page === 2;
+    $('drv-box-trip').style.display = page === 1 ? 'none' : '';
+    const tripAvgWrap = $('drv-box-trip').querySelector('.rt');
+    if (tripAvgWrap) tripAvgWrap.style.display = '';
+    if ($('drv-trip-cap')) $('drv-trip-cap').textContent = page === 3 ? 'sub' : 'avg';
+    if (page === 1) showDist($('drv-total-m'), drv.sector_m);
+    else {
+      showDist($('drv-trip-m'), msg.trip_m);
+      showDist($('drv-total-m'), msg.total_m);
+    }
+    // Telemetry averages are already in the box's speed units. Italian navi
+    // shows the live Total and Trip averages in km/h. A pc / pm keeps drv.avg.
+    const avgShown = (v, asKph) => {
+      const n = Number(v || 0);
+      if (asKph) return (units === 'mph' ? n / 0.621371 : n).toFixed(2);
+      return (n * (units === 'mph' ? 0.621371 : 1)).toFixed(1);
+    };
+    $('drv-trip-avg').textContent = page === 3 && drv.sub ? drv.sub : avgShown(msg.trip_avg_kph, page === 2);
+    $('drv-total-avg').textContent = (page === 1 && drv.avg) ? drv.avg : avgShown(msg.total_avg_kph, page === 2);
+    document.querySelectorAll('.avg-unit').forEach((e) => { e.textContent = italianFig ? 'kph' : units; });
 
     // Italian blanks the next-minute and autostart keys, and the stage panel's
     // auto/manual line. A-B, B-C zero is only the Greek measure-type key.
@@ -256,7 +284,8 @@
     $('btn-reverse').classList.toggle('lit', !!msg.reverse);
     setWhoop(!!msg.reverse || frozen);
     $('btn-flag-late').innerHTML = (lastState && (lastState.total_reset_asks || lastState.stage_abortable))
-      ? 'stage<br>abort' : '<svg class="flag" viewBox="0 0 40 34"><use href="#flag"/></svg> now';
+      ? 'stage<br>abort'
+      : '<svg class="flag" viewBox="0 0 40 34"><use href="#flag"/></svg><svg class="watch" viewBox="0 0 32 36"><use href="#watch"/></svg>';
     $('btn-freeze').classList.toggle('lit', frozen);
     setWhoop(!!(lastTelemetry && lastTelemetry.reverse) || frozen);
 
@@ -353,6 +382,11 @@
     $('set-url').textContent = state.web_url || '-';
     if ($('bt-name')) $('bt-name').textContent = state.bt_name || 'no speaker remembered';
     if ($('setup-status')) $('setup-status').textContent = state.setup_status || '';
+    document.querySelectorAll('.onoff').forEach((box) => {
+      const input = $(box.dataset.for);
+      const on = !!(input && input.checked);
+      box.querySelectorAll('button').forEach((b) => b.classList.toggle('lit', (b.dataset.on === '1') === on));
+    });
     renderWifi(state.wifi);
     // Calibration
     $('cal-pulses').textContent = state.calibration_pulses;
@@ -393,21 +427,42 @@
     if (!italian) return;
     const s = msg.sector;
     if (!s || !s.loaded) { card.textContent = 'no sector loaded'; return; }
-    const tag = (name, type) => '<b class="tag t' + Number(type) + '">' + (name || '') + '</b>';
+    const watch = '<svg class="watch" viewBox="0 0 12 14" aria-hidden="true"><rect x="4" y="0.4" width="4" height="1.6" fill="currentColor"/><circle cx="6" cy="8" r="4.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6 8 V5.2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>';
+    const tag = (name, type) => {
+      const pc = Number(type) === 2;
+      return '<b class="tag t' + Number(type) + (pc ? ' pc' : '') + '">' + (name || '') + (pc ? watch : '') + '</b>';
+    };
     let html = '<table><tr><th></th><th>km</th><th>progr</th><th>mm:ss</th><th>km/h</th></tr>';
-    html += '<tr><td>' + tag(s.in_tag, s.in_type) + '</td><td>' + (s.in_km || '') + '</td><td class="cyan">'
+    html += '<tr class="now"><td>' + tag(s.in_tag, s.in_type) + '</td><td>' + (s.in_km || '') + '</td><td class="cyan">'
       + (s.in_progr || '') + '</td><td class="cyan">' + (s.in_mmss || '') + '</td><td>' + (s.in_kph || '') + '</td></tr>';
-    html += '<tr><td>count<br>down</td><td class="' + (s.count_past ? 'late' : '') + '">' + (s.count_km || '')
-      + '</td><td></td><td class="' + (s.count_s_past ? 'late' : '') + '">' + (s.count_s || '')
-      + '</td><td>' + (s.avg || '') + '</td></tr>';
+    html += '<tr class="cdrow"><td class="cd"><span>count</span><span>down</span></td><td class="' + (s.count_past ? 'late' : 'orange') + '">' + (s.count_km || '')
+      + '</td><td></td><td class="cdtime ' + (s.count_s_past ? 'late' : 'orange') + '"><span>' + (s.count_s || '') + '</span>'
+      + '</td><td class="orange">' + (s.avg || '') + '</td></tr>';
     if (s.next_tag) {
       html += '<tr class="dim"><td>' + tag(s.next_tag, s.next_type) + '</td><td>' + (s.next_km || '')
         + '</td><td>' + (s.next_progr || '') + '</td><td>' + (s.next_mmss || '') + '</td><td>' + (s.next_kph || '') + '</td></tr>';
     }
-    html += '</table>';
-    if (s.pc_ref) html += '<p>error pc' + s.pc_ref + ' ' + s.pc_s + ' s &nbsp; ' + s.pc_m + ' m</p>';
-    if (s.co_hhmm) html += '<p>co' + (s.co_ref || '') + ' arrival ' + s.co_hhmm + ' &nbsp; ' + s.co_kph + ' kph &nbsp; ' + s.co_min + ' min</p>';
-    if (s.ahead_min !== undefined && s.ahead_min !== null) html += '<p>+/&minus; ' + s.ahead_min + '</p>';
+    html += '</table><div class="it-foot">';
+    if (s.pc_ref) {
+      const metres = Number(s.pc_m);
+      const mtxt = (metres > 0 ? '+' : '') + metres + ' m';
+      html += '<div class="it-err"><span class="cyan">error pc' + s.pc_ref + '</span><b>'
+        + s.pc_s + ' s</b><b>' + mtxt + '</b></div>';
+    }
+    if (s.co_hhmm) {
+      html += '<div class="it-co"><span class="cyan">co' + (s.co_ref || '') + ' arrival</span><b class="when">'
+        + s.co_hhmm + '</b></div>';
+      html += '<div class="it-kph"><span class="cap">kph</span><b class="cyan">' + s.co_kph + '</b></div>';
+      html += '<div class="it-min"><span class="cap">min</span><b>' + s.co_min + '</b></div>';
+    }
+    if (s.ahead_min !== undefined && s.ahead_min !== null) {
+      const hand = Number(s.ahead_min);
+      // behind stays true when the minutes have rounded to 0, matching the box.
+      const behind = s.behind === true || hand < 0;
+      html += '<div class="it-pm"><span class="cap">+/&minus;</span><b class="'
+        + (behind ? 'behind' : 'ahead') + '">' + Math.abs(hand) + '</b></div>';
+    }
+    html += '</div>';
     card.innerHTML = html;
   }
 
@@ -465,50 +520,91 @@
     const tbody = $('seg-table').querySelector('tbody');
     // A field is being typed in: do not rebuild under it, but bring every other figure up to
     // date in place (a changed "to m" moves the next row's "from m", the distances and times).
+    const italian = Number(state.rally_type) === 2;
     const unit = distanceKm ? 'km' : 'm';
-    if ($('seg-h-from')) $('seg-h-from').textContent = 'from ' + unit;
-    if ($('seg-h-to')) $('seg-h-to').textContent = 'to ' + unit;
-    if ($('seg-h-dist')) $('seg-h-dist').textContent = 'dist ' + unit;
-    if (active && active.closest && active.closest('#seg-table')) {
-      const rows = state.rows || [];
-      const trs = tbody.children;
-      if (trs.length !== rows.length) return;
+    const head = $('seg-table').querySelector('thead tr');
+    const step = distanceKm ? '0.01' : '1';
+    const mode = distanceKm ? 'decimal' : 'numeric';
+    if (italian) {
+      head.innerHTML = '<th>sub</th><th>type</th><th>ref</th><th>from ' + unit + '</th><th>to ' + unit
+        + '</th><th>dist ' + unit + '</th><th>' + (units === 'mph' ? 'MPH' : 'KPH')
+        + '</th><th>dur</th><th>elapsed</th><th></th>';
+    } else if (!head.querySelector('.chg') && head.children.length < 11) {
+      head.innerHTML = '<th>#</th><th>from ' + unit + '</th><th>to ' + unit + '</th><th>dist ' + unit
+        + '</th><th>chg</th><th>KPH</th><th>m/s</th><th>auto</th><th>time</th><th>total</th><th></th>';
+    } else {
+      if (head.children[1]) head.children[1].textContent = 'from ' + unit;
+      if (head.children[2]) head.children[2].textContent = 'to ' + unit;
+      if (head.children[3]) head.children[3].textContent = 'dist ' + unit;
+      if (head.children[5]) head.children[5].textContent = units === 'mph' ? 'MPH' : 'KPH';
+    }
+    const tags = ['-', 'navi', 'pc', 'ct', 'pm', 'co'];
+    const rows = state.rows || [];
+    const shaped = tbody.children.length && (italian
+      ? tbody.children[0].querySelector('.tag')
+      : tbody.children[0].querySelector('.chg'));
+    if (active && active.closest && active.closest('#seg-table') && shaped && tbody.children.length === rows.length) {
       const setText = (td, text) => { if (td && !td.querySelector('input') && td.textContent !== text) td.textContent = text; };
       const setVal = (el, v) => { if (el && el !== active) el.value = v; };
       for (let i = 0; i < rows.length; i++) {
-        const r = rows[i], tds = trs[i].children;
-        if (!!trs[i].querySelector('.spd') !== !!r.chg) return;   // structure changed: wait for the field to be left
-        if (i === 0) setVal(trs[i].querySelector('.first'), r.n); else setText(tds[0], String(r.n));
-        if (i === 0) setVal(trs[i].querySelector('.first-from'), stageInput(r.from)); else setText(tds[1], formatDist(r.from));
-        setVal(trs[i].querySelector('.to'), stageInput(r.to));
-        setText(tds[3], formatDist(r.dist));
-        setVal(trs[i].querySelector('.spd'), r.kph || '');
-        setText(tds[6], r.chg && r.kph > 0 ? String(Math.round(r.kph / 3.6)) : '');
-        setText(tds[8], mmss(r.time_s));
-        setText(tds[9], mmss(r.total_s));
+        const r = rows[i], tr = tbody.children[i];
+        const ty = Number(r.ty);
+        if (i === 0) setVal(tr.querySelector('.first'), r.n);
+        if (i === 0) setVal(tr.querySelector('.first-from'), stageInput(r.from));
+        else setText(tr.querySelector('.from'), formatDist(r.from));
+        setVal(tr.querySelector('.to'), stageInput(r.to));
+        setText(tr.querySelector('.dist'), formatDist(r.dist));
+        setVal(tr.querySelector('.spd'), r.kph || '');
+        setText(tr.querySelector('.klab'), italian
+          ? (Number(r.kph) > 0 ? Number(r.kph).toFixed(2) : '')
+          : (r.chg ? '' : '"'));
+        setText(tr.querySelector('.ms'), r.chg && r.kph > 0 ? String(Math.round(r.kph / 3.6)) : '');
+        setVal(tr.querySelector('.ref'), r.ref);
+        setVal(tr.querySelector('.pc'), mmss(r.pc_s));
+        setText(tr.querySelector('.tim'), ty === 2 ? '' : mmss(r.time_s));
+        setText(tr.querySelector('.tot'), mmss(r.total_s));
       }
       return;
     }
     tbody.innerHTML = '';
     // A committed edit lets go of its field, so the next state redraws the table.
     const done = (el) => { setTimeout(() => el.blur(), 0); };
-    (state.rows || []).forEach((r, i) => {
+    rows.forEach((r, i) => {
       const tr = document.createElement('tr');
-      tr.innerHTML =
-        (i === 0 ? '<td><input type="number" step="1" min="0" inputmode="numeric" pattern="[0-9]*" class="first" value="' + r.n + '"></td>'
-                 : '<td class="dim">' + r.n + '</td>') +
-        (i === 0 ? '<td><input type="number" step="' + (distanceKm ? '0.01' : '1') + '" min="0" inputmode="' + (distanceKm ? 'decimal' : 'numeric') + '" class="first-from" value="' + stageInput(r.from) + '"></td>'
-                 : '<td class="dim">' + formatDist(r.from) + '</td>') +
-        '<td><input type="number" step="' + (distanceKm ? '0.01' : '1') + '" min="0" inputmode="' + (distanceKm ? 'decimal' : 'numeric') + '" class="to" value="' + stageInput(r.to) + '"></td>' +
-        '<td class="dim">' + formatDist(r.dist) + '</td>' +
-        '<td><input type="checkbox" class="chg"' + (r.chg ? ' checked' : '') + (i === 0 ? ' disabled' : '') + '></td>' +
-        (r.chg ? '<td><input type="number" step="0.1" inputmode="decimal" class="spd" value="' + (r.kph || '') + '"></td>'
-               : '<td class="dim">&quot;</td>') +
-        '<td class="dim">' + (r.chg && r.kph > 0 ? Math.round(r.kph / 3.6) : '') + '</td>' +
-        '<td>' + (i >= 1 ? '<input type="checkbox" class="auto"' + (r.auto_on ? ' checked' : '') +
-                  (r.auto_av ? '' : ' disabled') + '>' : '') + '</td>' +
-        '<td class="dim">' + mmss(r.time_s) + '</td><td class="dim">' + mmss(r.total_s) + '</td>' +
-        '<td><button type="button" class="del">&times;</button></td>';
+      const ty = Number(r.ty);
+      const fromCell = i === 0
+        ? '<td><input type="number" step="' + step + '" min="0" inputmode="' + mode + '" class="first-from" value="' + stageInput(r.from) + '"></td>'
+        : '<td class="dim from">' + formatDist(r.from) + '</td>';
+      const toCell = '<td><input type="number" step="' + step + '" min="0" inputmode="' + mode + '" class="to" value="' + stageInput(r.to) + '"></td>';
+      const distCell = '<td class="dim dist">' + formatDist(r.dist) + '</td>';
+      const del = '<td><button type="button" class="del">X</button></td>';
+      if (italian) {
+        const tag = tags[ty] || '-';
+        const refCell = (ty === 0 || ty === 1) ? '<td></td>'
+          : '<td><input type="number" step="1" min="0" inputmode="numeric" class="ref" value="' + (r.ref || 0) + '"></td>';
+        const kphCell = ty === 4
+          ? '<td><input type="number" step="0.1" inputmode="decimal" class="spd" value="' + (r.kph || '') + '"></td>'
+          : '<td class="dim klab">' + (Number(r.kph) > 0 ? Number(r.kph).toFixed(2) : '') + '</td>';
+        const durCell = ty === 2
+          ? '<td><input type="text" inputmode="numeric" class="pc" value="' + mmss(r.pc_s) + '"></td>'
+          : '<td class="dim tim">' + mmss(r.time_s) + '</td>';
+        tr.innerHTML = '<td class="dim">' + (i + 1) + '</td>'
+          + '<td><button type="button" class="tag t' + ty + '">' + tag + '</button></td>'
+          + refCell + fromCell + toCell + distCell + kphCell + durCell
+          + '<td class="dim tot">' + mmss(r.total_s) + '</td>' + del;
+      } else {
+        tr.innerHTML =
+          (i === 0 ? '<td><input type="number" step="1" min="0" inputmode="numeric" pattern="[0-9]*" class="first" value="' + r.n + '"></td>'
+                   : '<td class="dim">' + r.n + '</td>') +
+          fromCell + toCell + distCell +
+          '<td><input type="checkbox" class="chg"' + (r.chg ? ' checked' : '') + (i === 0 ? ' disabled' : '') + '></td>' +
+          (r.chg ? '<td><input type="number" step="0.1" inputmode="decimal" class="spd" value="' + (r.kph || '') + '"></td>'
+                 : '<td class="dim klab">&quot;</td>') +
+          '<td class="dim ms">' + (r.chg && r.kph > 0 ? Math.round(r.kph / 3.6) : '') + '</td>' +
+          '<td>' + (i >= 1 ? '<input type="checkbox" class="auto"' + (r.auto_on ? ' checked' : '') +
+                    (r.auto_av ? '' : ' disabled') + '>' : '') + '</td>' +
+          '<td class="dim tim">' + mmss(r.time_s) + '</td><td class="dim tot">' + mmss(r.total_s) + '</td>' + del;
+      }
       const chg = tr.querySelector('.chg');
       if (chg) chg.addEventListener('change', () => send({ type: 'row_chg', row: i, on: chg.checked }));
       const firstEl = tr.querySelector('.first');
@@ -537,6 +633,18 @@
       });
       const au = tr.querySelector('.auto');
       if (au) au.addEventListener('change', () => send({ type: 'row_auto', row: i, on: au.checked }));
+      const tagBtn = tr.querySelector('.tag');
+      if (tagBtn) tagBtn.addEventListener('click', () => send({ type: 'sector_type', row: i }));
+      const refEl = tr.querySelector('.ref');
+      if (refEl) refEl.addEventListener('change', () => {
+        send({ type: 'sector_ref', row: i, ref: Number(refEl.value) || 0 });
+        done(refEl);
+      });
+      const pcEl = tr.querySelector('.pc');
+      if (pcEl) pcEl.addEventListener('change', () => {
+        send({ type: 'sector_pc', row: i, text: pcEl.value.trim() });
+        done(pcEl);
+      });
       tr.querySelector('.del').addEventListener('click', () => send({ type: 'row_delete', row: i }));
       tbody.appendChild(tr);
     });
@@ -570,19 +678,21 @@
     }
   }
 
+  function setConn(text, ok) {
+    const el = $('conn');
+    const lab = el.querySelector('.conn-label');
+    if (lab) lab.textContent = text; else el.textContent = text;
+    el.classList.toggle('ok', !!ok);
+  }
+
   function connect() {
     if (ws) { ws.onclose = null; ws.close(); }
     ws = new WebSocket(wsUrl());
-    $('conn').textContent = 'connecting…';
-    $('conn').classList.remove('ok');
-    ws.onopen = () => {
-      $('conn').textContent = 'connected';
-      $('conn').classList.add('ok');
-    };
+    setConn('connecting…', false);
+    ws.onopen = () => { setConn('connected', true); };
     ws.onclose = () => {
       stopTone();
-      $('conn').textContent = 'disconnected';
-      $('conn').classList.remove('ok');
+      setConn('disconnected', false);
       clearTimeout(reconnectTimer);
       reconnectTimer = setTimeout(connect, 2000);
     };
@@ -609,6 +719,24 @@
     if (meters == null || meters > 999999) return;
     send({ type: 'distance_set', meters: meters });
   });
+  $('key-navi').addEventListener('click', () => {
+    if ($('view-navi').classList.contains('rally-greek')) return;
+    const now = lastTelemetry && Number(lastTelemetry.navi_m);
+    $('navi-metres').value = Number.isFinite(now) ? String(Math.round(now)) : '';
+    $('navi-menu').classList.remove('hidden');
+    $('navi-metres').focus();
+  });
+  $('navi-cancel').addEventListener('click', () => $('navi-menu').classList.add('hidden'));
+  $('navi-set').addEventListener('click', () => {
+    const meters = Number(String($('navi-metres').value).trim().replace(',', '.'));
+    if (!Number.isFinite(meters) || meters < 0 || meters > 999999) return;
+    send({ type: 'navi_set', meters: meters });
+    $('navi-menu').classList.add('hidden');
+  });
+  $('navi-reset').addEventListener('click', () => {
+    send({ type: 'navi_set', reset: true });
+    $('navi-menu').classList.add('hidden');
+  });
   $('btn-next').addEventListener('click', () => send({ type: 'next' }));
   $('btn-prev').addEventListener('click', () => send({ type: 'prev' }));
   $('btn-freeze').addEventListener('click', () => send({ type: 'freeze_toggle' }));
@@ -631,8 +759,13 @@
   // Scheduled start: arm or cancel the autostart at the loaded stage's start time.
   $('btn-flag-auto').addEventListener('click', () => send({ type: 'autostart_set', on: !(lastState && lastState.autostart_on) }));
   $('btn-zero').addEventListener('click', () => {
-    if (confirm('Zero the needle here?\nOK = zero now, Cancel = leave it')) send({ type: 'driver_zero', reset: false });
+    const ab = lastTelemetry ? Number(lastTelemetry.ahead_behind_s) : 0;
+    $('zero-note').textContent = 'Adjust the ahead/behind value by ' + (Number.isFinite(ab) ? ab.toFixed(2) : '0.00') + ' seconds';
+    $('zero-menu').classList.remove('hidden');
   });
+  $('zero-no').addEventListener('click', () => $('zero-menu').classList.add('hidden'));
+  $('zero-yes').addEventListener('click', () => { $('zero-menu').classList.add('hidden'); send({ type: 'driver_zero', reset: false }); });
+  $('zero-reset').addEventListener('click', () => { $('zero-menu').classList.add('hidden'); send({ type: 'driver_zero', reset: true }); });
   // No new stage can be loaded while one is live, as on the box.
   const okToChangeStage = () => {
     if (!(lastState && lastState.stage_locked)) return true;
@@ -911,6 +1044,22 @@
     if (!confirm('Switch the box to ' + b.dataset.net + '? Phones using the hotspot can lose the box.')) return;
     send({ type: 'box_setup', name: 'wifi_use', net: b.dataset.net });
   });
+  document.querySelectorAll('.onoff button').forEach((b) => b.addEventListener('click', () => {
+    const input = $(b.parentElement.dataset.for);
+    if (!input) return;
+    input.checked = b.dataset.on === '1';
+    input.dispatchEvent(new Event('change'));
+  }));
+  $('land-menu').addEventListener('click', () => $('page-menu').classList.remove('hidden'));
+  $('port-menu').addEventListener('click', () => $('page-menu').classList.remove('hidden'));
+  $('page-menu').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) { $('page-menu').classList.add('hidden'); return; }
+    showTab(b.dataset.tab);
+    $('page-menu').classList.add('hidden');
+  });
+  $('btn-spanner').addEventListener('click', () => $('view-set').classList.add('show-setup'));
+  $('setup-back').addEventListener('click', () => $('view-set').classList.remove('show-setup'));
   $('btn-download-logs').addEventListener('click', () => {
     $('logs-block').classList.toggle('hidden');
     if (!$('logs-block').classList.contains('hidden')) refreshLogs();
@@ -1263,7 +1412,8 @@
     if (shownSound === label + '|' + why) return;
     shownSound = label + '|' + why;
     const btn = $('sound-toggle');
-    btn.textContent = label;
+    const lab = btn.querySelector('.snd-label');
+    if (lab) lab.textContent = label; else btn.textContent = label;
     btn.title = why ? 'audio engine: ' + why : '';
     btn.classList.toggle('off', !soundOn);
     btn.classList.toggle('blocked', blocked);

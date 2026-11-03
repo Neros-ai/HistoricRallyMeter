@@ -147,6 +147,29 @@ public:
             return ok && std::fabs(ab) < 0.05;
         });
 
+        suite->addTest("a pc sat still after next is behind by the time waited", []() {
+            RallyState s = running();
+            applySectorNext(s, 385, 385, 70000);
+            bool ok = false;
+            const double ab = trialAheadSeconds(s, 385, 385, 70000 + 10000, &ok);
+            const double gauge = gaugeAheadSeconds(s, 385, 385, 70000 + 10000, 0);
+            return ok && std::fabs(ab + 10.0) < 0.05 && std::fabs(gauge - ab) < 0.001;
+        });
+
+        suite->addTest("a pc a centimetre short of its tube is still behind, not zero", []() {
+            // Calibration that does not divide the centimetre pin evenly: Total reads the
+            // card but the measured point stays short of trial_start_m until the car rolls.
+            RallyState s = running();
+            s.calibration = 88277;
+            recomputeSegmentCounts(s.segments, s.calibration);
+            s.stage_segments = s.segments;
+            applySectorNext(s, 0, 0, 70000);
+            bool ok = false;
+            const double ab = trialAheadSeconds(s, 0, 0, 70000 + 10000, &ok);
+            const double pos = sectorPositionM(s, 0, 0);
+            return ok && pos < s.trial_start_m && ab < -9.5 && ab > -11.0;
+        });
+
         suite->addTest("tube pressed 5 m early or late leaves later rows' starts where the card has them", []() {
             RallyState s = running();
             applySectorNext(s, 375, 375, 60000);                       // 5 m early
@@ -562,11 +585,19 @@ public:
                 && p.coValid && p.coInTimeMs == 10800000 && std::fabs(p.avgKph - 58.0 / 10.0 * 3.6) < 0.01;
         });
 
-        suite->addTest("panel on a navi sub: metres to the line, no schedule time", []() {
+        suite->addTest("panel on a navi or ct sub: metres and mm:ss to the line", []() {
             RallyState s = running();
             SectorPanel p = sectorPanel(s, 1000, 100);
-            return p.kind == SectorPanel::NAVI && p.inTag == "navi" && p.nextTag == "pc1"
-                && !p.secondsValid && p.metresToGo == 280 && p.nextAtM == 380;
+            bool ok = false;
+            const double line = sectorSecondsToLine(s, 1000, &ok);
+            const bool navi = p.kind == SectorPanel::NAVI && p.inTag == "navi" && p.nextTag == "pc1"
+                && p.secondsValid && ok && std::fabs(p.secondsToLine - line) < 0.01
+                && p.metresToGo == 280 && p.nextAtM == 380;
+            s.stage_segments[0].type = SEG_CT;
+            SectorPanel c = sectorPanel(s, 1000, 100);
+            bool cok = false;
+            const double cline = sectorSecondsToLine(s, 1000, &cok);
+            return navi && c.secondsValid && cok && std::fabs(c.secondsToLine - cline) < 0.01;
         });
 
         suite->addTest("panel: 40 m past the line", []() {
@@ -591,35 +622,68 @@ public:
             return p.metresPast == 40;
         });
 
-        suite->addTest("pc countdown beeps: 30 s, 15 s, 5-4-3-2-1, short beep on 0", []() {
+        suite->addTest("pc countdown beeps: 30 and 15 single, double at 5, single 4-1, short on 0", []() {
             auto b = pcCountdownBeep;
             return b(30.05, 29.95) == PcBeep::Tick && b(15.01, 14.99) == PcBeep::Tick
-                && b(5.02, 4.98) == PcBeep::Tick && b(1.01, 0.99) == PcBeep::Tick
+                && b(5.02, 4.98) == PcBeep::Five && b(4.02, 3.98) == PcBeep::Tick
+                && b(1.01, 0.99) == PcBeep::Tick
                 && b(0.01, -0.01) == PcBeep::Zero
+                && b(5.2, 3.8) == PcBeep::Five                   // 5 and 4 crossed together: the double wins
                 && b(29.9, 29.8) == PcBeep::None && b(10.0, 6.0) == PcBeep::None
                 && b(-0.5, -0.6) == PcBeep::None                 // past the line: silent
                 && b(1.01, -0.01) == PcBeep::Zero;               // two crossed in one step: the 0 wins
         });
 
-        suite->addTest("pc countdown seconds: only inside a pc, from its own tube", []() {
+        suite->addTest("pc countdown seconds: a pc from its tube, a navi from the sector clock", []() {
             RallyState s = running();
-            // Find a pc row, start its clock at the tube.
             long pc = -1;
             for (size_t i = 0; i < s.stage_segments.size(); i++)
                 if (s.stage_segments[i].type == SEG_PC) { pc = static_cast<long>(i); break; }
             if (pc < 0) return false;
             s.segment_current_number = pc;
             s.trial_start_ms = 1000000;
-            double tube_m = 0.0;                                // the pc's start tube
+            double tube_m = 0.0;
             for (long i = 0; i < pc; i++) tube_m += s.stage_segments[static_cast<size_t>(i)].distance_m;
             s.trial_start_m = tube_m;
             bool ok = false;
             const double t = pcCountdownSeconds(s, 1000000 + 5000, &ok);
             const double card = s.stage_segments[static_cast<size_t>(pc)].pc_duration_s;
             const bool in_pc = ok && std::fabs(t - (card - 5.0)) < 0.01;
-            s.segment_current_number = 0;                      // the navi before it: none
-            pcCountdownSeconds(s, 1005000, &ok);
-            return in_pc && !ok;
+            s.segment_current_number = 0;                      // opening navi
+            s.trial_start_m = -1.0;
+            bool navi_ok = false;
+            const double navi = pcCountdownSeconds(s, 1000, &navi_ok);
+            bool line_ok = false;
+            const double line = sectorSecondsToLine(s, 1000, &line_ok);
+            s.stage_segments[0].type = SEG_CT;                 // a stamp check has no countdown
+            bool ct_ok = true;
+            pcCountdownSeconds(s, 1000, &ct_ok);
+            s.rally_type = 0;
+            bool greek = true;
+            pcCountdownSeconds(s, 1000, &greek);
+            return in_pc && navi_ok && line_ok && std::fabs(navi - line) < 0.01 && !ct_ok && !greek;
+        });
+
+        suite->addTest("100 m beep: non-pc rows only, once as 100 m is crossed", []() {
+            RallyState s = running();
+            bool ok = false;
+            const double navi = rowMetresToLine(s, 280.0, &ok);          // 380 m row, 100 m left
+            s.segment_current_number = 1;                                 // pc1
+            bool pc = true;
+            rowMetresToLine(s, 400.0, &pc);
+            s.stage_segments[4].type = SEG_CT;
+            s.segment_current_number = 4;
+            bool ct = false;
+            rowMetresToLine(s, 0.0, &ct);
+            s.stage_segments[4].type = SEG_PM;
+            bool pm = false;
+            rowMetresToLine(s, 0.0, &pm);
+            s.rally_type = 0;
+            bool greek = true;
+            rowMetresToLine(s, 0.0, &greek);
+            return ok && std::fabs(navi - 100.0) < 0.01 && !pc && ct && pm && !greek
+                && hundredMetreBeep(100.4, 99.8) && hundredMetreBeep(140.0, 60.0)
+                && !hundredMetreBeep(90.0, 70.0) && !hundredMetreBeep(50.0, -10.0);
         });
 
         suite->addTest("readout keys: italian reads sector total / sub / navi, greek unchanged", []() {
@@ -783,6 +847,16 @@ public:
         suite->addTest("RB-WEB-21: before the line the count down km has no sign", []() {
             SectorPanel p; p.running = true; p.metresToGo = 1240;
             return sectorCountdownKmText(p) == "1.24";
+        });
+
+        suite->addTest("phone +/- box is red for a fraction of a minute behind", []() {
+            RallyState s = running();
+            s.sector_start_ms = 0;
+            const std::string late = sectorCardJson(s, 20000, 0, 0, 0);
+            const std::string level = sectorCardJson(s, 0, 0, 0, 0);
+            return late.find("\"ahead_min\":0") != std::string::npos
+                && late.find("\"behind\":true") != std::string::npos
+                && level.find("\"behind\":false") != std::string::npos;
         });
 
         suite->addTest("phone sector card is null off italian and shows the idle preview on italian", []() {

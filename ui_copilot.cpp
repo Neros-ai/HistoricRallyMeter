@@ -183,8 +183,9 @@ static constexpr int BEEP_ASSIST_NAV_GAP_MS = 150;
 // on the box louder too, since the global click hook shares playBeep().
 static constexpr double BEEP_ASSIST_AMP = 0.45;
 
-// pc countdown beeps: a tick at each mark, and a short beep on 0 -- short so
-// its start marks the instant to be on the tube.
+// pc countdown beeps: the same single tick at 30, 15 and 4..1. At 5 s the
+// navigation double beep (same pitch, length and gap). On 0 a shorter beep,
+// so its start marks the instant to be on the tube and it is not the 4..1 tick.
 static constexpr double PC_BEEP_FREQ_HZ = 3200.0;
 static constexpr int PC_BEEP_TICK_MS = 150;
 static constexpr int PC_BEEP_ZERO_MS = 60;
@@ -326,33 +327,67 @@ void updateCopilotDisplay(AppData* data) {
         }
     }
 
-    // pc countdown beeps (italian): 30 s, 15 s, 5-4-3-2-1 and a short beep on 0,
-    // by the pc's own clock. A new pc (a new tube press) starts from its present
-    // reading, so marks already gone are skipped (an 8 s pc gets 5...0).
+    // Press warning (italian). A pc uses its own tube clock; a navi row uses the
+    // sector clock, to warn that next is due. 30 s, 15 s, the navigation double
+    // beep at 5 s, a single beep at 4, 3, 2 and 1, and a shorter beep on 0.
+    // A new row starts from its present reading, so marks already gone are skipped.
+    auto playMark = [data](PcBeep beep) {
+        const bool five = beep == PcBeep::Five;
+        const int duration_ms = five ? BEEP_ASSIST_NAV_DURATION_MS
+            : beep == PcBeep::Zero ? PC_BEEP_ZERO_MS : PC_BEEP_TICK_MS;
+        const double freq_hz = five ? BEEP_ASSIST_NAV_FREQ_HZ : PC_BEEP_FREQ_HZ;
+        data->lastBeep.seq++;          // the phone sounds it too
+        data->lastBeep.freq_hz = freq_hz;
+        data->lastBeep.duration_ms = duration_ms;
+        data->lastBeep.amplitude = BEEP_ASSIST_AMP;
+        data->lastBeep.triangle = false;
+        data->lastBeep.twice = five;
+        data->lastBeep.gap_ms = five ? BEEP_ASSIST_NAV_GAP_MS : 0;
+        if (!data->toneGen) return;
+        const ToneWaveform wave = five ? BEEP_ASSIST_NAV_WAVE : ToneWaveform::Sine;
+        data->toneGen->playBeep(freq_hz, wave, duration_ms, BEEP_ASSIST_AMP);
+        if (five) {
+            // Same second beep as navigation mode. A timer, not a sleep:
+            // this runs on the GTK thread.
+            g_timeout_add(BEEP_ASSIST_NAV_GAP_MS, [](gpointer d) -> gboolean {
+                static_cast<AppData*>(d)->toneGen->playBeep(
+                    BEEP_ASSIST_NAV_FREQ_HZ, BEEP_ASSIST_NAV_WAVE,
+                    BEEP_ASSIST_NAV_DURATION_MS, BEEP_ASSIST_AMP);
+                return G_SOURCE_REMOVE;
+            }, data);
+        }
+    };
     {
         bool pc_ok = false;
         const double pc_s = data->state->rally_type == 2
             ? pcCountdownSeconds(*data->state, current_time_ms, &pc_ok) : 0.0;
+        const long row = data->state->segment_current_number;
         if (!pc_ok) {
-            data->pcBeepTrialMs = -1;
-        } else if (data->pcBeepTrialMs != data->state->trial_start_ms) {
+            data->pcBeepRow = -1;
+        } else if (data->pcBeepRow != row || data->pcBeepTrialMs != data->state->trial_start_ms) {
+            data->pcBeepRow = row;
             data->pcBeepTrialMs = data->state->trial_start_ms;
-            data->pcBeepPrevS = pc_s + 1e-6;   // a pc starting exactly on a mark still hears it
+            data->pcBeepPrevS = pc_s + 1e-6;   // a row starting exactly on a mark still hears it
         } else {
             const PcBeep beep = pcCountdownBeep(data->pcBeepPrevS, pc_s);
             data->pcBeepPrevS = pc_s;
-            if (beep != PcBeep::None) {
-                const int duration_ms = beep == PcBeep::Zero ? PC_BEEP_ZERO_MS : PC_BEEP_TICK_MS;
-                data->lastBeep.seq++;          // the phone sounds it too
-                data->lastBeep.freq_hz = PC_BEEP_FREQ_HZ;
-                data->lastBeep.duration_ms = duration_ms;
-                data->lastBeep.amplitude = BEEP_ASSIST_AMP;
-                data->lastBeep.triangle = false;
-                data->lastBeep.twice = false;
-                data->lastBeep.gap_ms = 0;
-                if (data->toneGen)
-                    data->toneGen->playBeep(PC_BEEP_FREQ_HZ, ToneWaveform::Sine, duration_ms, BEEP_ASSIST_AMP);
-            }
+            if (beep != PcBeep::None) playMark(beep);
+        }
+
+        // 100 m before the end of every row that is not a pc: one single beep.
+        bool dist_ok = false;
+        const double left_m = rowMetresToLine(
+            *data->state,
+            sectorPositionM(*data->state, current_poll.cntr1, current_poll.cntr2),
+            &dist_ok);
+        if (!dist_ok) {
+            data->distBeepRow = -1;
+        } else if (data->distBeepRow != row) {
+            data->distBeepRow = row;
+            data->distBeepPrevM = left_m + 1e-3;   // already inside 100 m: stay silent
+        } else {
+            if (hundredMetreBeep(data->distBeepPrevM, left_m)) playMark(PcBeep::Tick);
+            data->distBeepPrevM = left_m;
         }
     }
 

@@ -272,6 +272,10 @@ void rebaseTripDistance(RallyState& state, uint64_t c1, uint64_t c2);
 // Put trip_m at the front of a comma-separated history, keeping at most
 // max_entries (the Home page shows six).
 std::string pushTripHistory(const std::string& history, long trip_m, size_t max_entries = 6);
+// A new Greek stage starts with an empty Trip history. Italian and Surrey keep theirs.
+inline void clearGreekTripHistoryOnStageStart(RallyState& s) {
+    if (s.rally_type == 0) s.trip_history_m.clear();
+}
 // Split a comma-separated history into metres, most recent first. Junk skipped.
 std::vector<long> parseTripHistory(const std::string& history);
 void resetTrip(RallyState& state, uint64_t c1, uint64_t c2, int64_t now_ms);

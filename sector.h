@@ -89,15 +89,23 @@ bool undoSectorTube(RallyState& s);
 // no row is being driven.
 double sectorSecondsToLine(const RallyState& s, int64_t now_ms, bool* valid);
 
-// pc countdown beeps (owner 2026-10-30, built 2026-10-31): inside a pc only, by the
-// pc's own clock from its start tube. Seconds to its end line; *valid false elsewhere.
+// Press-warning countdown: inside a pc, by the pc's own clock from its start tube;
+// on a navi row, by the sector clock, so the crew hears that next is due.
+// Seconds to the end line; *valid false elsewhere (ct, pm, co, greek).
 double pcCountdownSeconds(const RallyState& s, int64_t now_ms, bool* valid);
 
-// One beep at 30 s and 15 s to the line, then 5, 4, 3, 2, 1, and a short beep on 0.
+// One beep at 30 s and 15 s to the line, then the navigation double beep at 5,
+// a single beep at 4, 3, 2 and 1, and a shorter beep on 0.
 // `prev_s` and `now_s` are successive pcCountdownSeconds readings; a beep is due when
-// a mark is crossed between them. Marks already gone when the pc starts are never heard.
-enum class PcBeep { None, Tick, Zero };
+// a mark is crossed between them. Marks already gone when the row starts are never heard.
+enum class PcBeep { None, Tick, Five, Zero };
 PcBeep pcCountdownBeep(double prev_s, double now_s);
+
+// Metres left to the end of the row being driven. Valid on a running italian row that
+// is not a pc (navi, ct, pm, co). Negative once the line is passed.
+double rowMetresToLine(const RallyState& s, double stage_m, bool* valid);
+// One beep as the car crosses 100 m still to go. A row that starts inside 100 m stays silent.
+bool hundredMetreBeep(double prev_m, double now_m);
 
 // Navi total: the running count a stage start does not zero.
 int64_t odometerCounts(const RallyState& s, uint64_t c1, uint64_t c2);
@@ -120,7 +128,8 @@ double sectorPositionM(const RallyState& s, uint64_t c1, uint64_t c2);
 // position minus the real time since the sector clock's zero (sectorClockZeroMs), which nothing
 // after the start moves. Invalid when no sector is being driven or the roadbook has a hole.
 double sectorAheadSeconds(const RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms, bool* valid);
-// The same inside a pc / pm, from its start tube (trial_start_ms / trial_start_m); invalid outside one.
+// The same inside a pc / pm, from its start tube (trial_start_ms / trial_start_m).
+// Invalid outside one. A point still short of the tube is behind, including a car sat at the press.
 double trialAheadSeconds(const RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms, bool* valid);
 // The trial figure inside a pc / pm, the sector figure everywhere else (the driver needle).
 double italianAheadSeconds(const RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms, bool* valid);

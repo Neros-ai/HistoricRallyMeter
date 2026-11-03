@@ -10,7 +10,8 @@ double finalWindowProgress(double to_line_s) {
 }
 
 std::string countdownBoxText(double to_line_s) {
-    const double v = std::clamp(to_line_s, 0.0, DRIVER_FINAL_S);
+    if (to_line_s > DRIVER_FINAL_S) return "-.-";
+    const double v = std::max(to_line_s, 0.0);
     char buf[16];
     snprintf(buf, sizeof(buf), "%.1f", v);
     return buf;

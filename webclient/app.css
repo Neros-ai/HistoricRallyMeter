@@ -17,10 +17,13 @@ header {
    the header: keep them where they were rather than letting space-between
    drop them to the left. */
 header { justify-content: flex-end; }
-.conn { font-size: 0.8rem; color: #aaa; }
+.conn { font-size: 0.8rem; color: #aaa; display: flex; align-items: center; gap: 0.35rem; }
 /* This phone's own mute for the box's tone and clicks (RB-WEB-02). */
 .header-right { display: flex; align-items: center; gap: 0.6rem; }
+.hdr-clock, #port-menu, .sound-toggle .ico, .conn .ico { display: none; }
+.sound-toggle .slash { opacity: 0; }
 .sound-toggle {
+  display: inline-flex; align-items: center; gap: 0.35rem;
   padding: 0.35rem 0.6rem;
   font-size: 0.8rem;
   font-weight: bold;
@@ -95,6 +98,8 @@ header { justify-content: flex-end; }
 }
 .driver-footer .adjust-row { margin-bottom: 0; }
 .hidden { display: none; }
+/* A page rule such as #view-navi { display: grid } must not bring a hidden page back. */
+.view.hidden { display: none !important; }
 .clock-row, .segment-row {
   display: flex;
   justify-content: space-between;
@@ -370,13 +375,32 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .sector table { width: 100%; border-collapse: collapse; }
 .sector th, .sector td { text-align: right; padding: 0.15rem 0.3rem; }
 .sector td:first-child, .sector th:first-child { text-align: left; }
-.sector .tag { display: inline-block; min-width: 3.2rem; text-align: center; padding: 0.15rem 0.3rem; color: #fff; background: #666; }
+.sector .tag { display: inline-flex; align-items: center; justify-content: center; gap: 0.18rem; min-width: 3.2rem; text-align: center; padding: 0.15rem 0.3rem; color: #fff; background: #666; }
+.sector .tag .watch { width: 0.85em; height: 1em; flex: none; color: inherit; }
+.sector tr.now td { font-size: 1.125em; }
 .sector .t2 { background: #d10f0f; }
 .sector .t3 { background: #1f4fc7; }
 .sector .t4 { background: #f0d100; color: #000; }
 .sector .t5 { background: #0fa030; }
-.sector tr.dim { color: #777; }
+.sector tr.dim { color: #737373; }
+.sector tr.dim .cyan { color: #008080; }
+.sector tr.dim .tag { background: #2e2e2e; color: #737373; }
+.sector tr.dim .t2 { background: #5e0707; }
+.sector tr.dim .t3 { background: #0e245a; }
+.sector tr.dim .t4 { background: #6c5e00; color: #000; }
+.sector tr.dim .t5 { background: #074816; }
 .sector .late { color: #ff2626; }
+.sector .cd { color: #ffa500; }
+.sector .cd span { display: block; line-height: 1.05; }
+.it-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 0.4rem; margin-top: 0.25rem; }
+.it-err { display: flex; flex-direction: column; line-height: 1.05; }
+.it-err b { font-weight: bold; }
+.it-co, .it-kph, .it-min, .it-pm { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+.it-foot .cap { color: #ccc; font-size: 0.75rem; }
+.it-co .when, .it-kph b, .it-min b, .it-pm b { font-size: 1.55rem; font-weight: bold; }
+.it-pm b { color: #fff; min-width: 2.2rem; text-align: center; padding: 0.12rem 0.35rem; }
+.it-pm b.ahead { background: #1a9933; }
+.it-pm b.behind { background: #cc1a1a; }
 #wifi-nets { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.4rem 0; }
 #wifi-nets .key { min-height: 2.4rem; }
 .flags { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; }
@@ -456,6 +480,8 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 #seg-table input.first { width: 3.2rem; background: #111; color: #fff; border: 1px solid #666; text-align: right; }
 #seg-table input[type=checkbox] { width: 1.6rem; height: 1.6rem; }
 #seg-table button.del { font-size: 1.4rem; }
+#seg-table button.tag { min-height: 2.2rem; padding: 0.15rem 0.35rem; font-size: 1rem; }
+#seg-table input.ref, #seg-table input.pc { width: 4.2rem; background: #111; color: #fff; border: 1px solid #666; text-align: right; height: 3.4rem; font-size: 1.4rem; }
 .stage-sel select, #seg-pick { -webkit-appearance: none; appearance: none; border-radius: 4px; min-width: 4rem; text-align: center; text-align-last: center; }
 .stage-sel .key { border-radius: 4px; }
 #seg-table th { font-size: 1.4rem; }
@@ -482,6 +508,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 #view-cal .crow input.tiny { width: 4.2rem; }
 #view-cal .crow .key { font-size: 1.3rem; min-height: 3.2rem; }
 #view-cal #cal-dist, #view-cal #cal-actual { font-size: 2.2rem; }
+#view-cal #cal-rpm { font-size: 2.8rem; color: #fff; font-weight: 700; line-height: 1; margin: 0 0.25rem; }
 #view-cal #cal-actual { width: 10rem; }
 #view-cal .ins { font-size: 1.1rem; line-height: 1.4; }
 .crow .brk { flex-basis: 100%; height: 0; }
@@ -489,8 +516,9 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 /* Navi: the elapsed times sit under their keys, as on the box, which leaves the
    total / trip / next figures the full width to be large. */
 .navi .fig-row { height: 4.7rem; }
-.kcol { flex: 0 0 4.5rem; display: flex; flex-direction: column; align-items: center; gap: 0.15rem; }
-.kcol .key.k { flex: none; width: 100%; }
+.kcol { flex: 0 0 5.2rem; display: flex; flex-direction: column; align-items: center; gap: 0.15rem; }
+.kcol .key.k { flex: none; width: 100%; display: flex; align-items: center; justify-content: center; text-align: center; white-space: pre-line; line-height: 1.05; font-size: 0.78rem; }
+.nr > .key { white-space: pre-line; line-height: 1.05; }
 .kcol .el { flex: none; font-size: 0.85rem; justify-content: center; min-height: 1.1rem; }
 .fig-row .big { font-size: 4.4rem; }
 .fig-row .big.sm { font-size: 3.6rem; }
@@ -531,9 +559,11 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .driver-footer .dist-box .dl { align-self: end; justify-self: start; }
 .driver-footer .dist-box .rt { align-self: start; }
 .driver-footer .dist-box > strong { align-self: end; }
-/* The big figures use the proportional bold face of the box's driver display (not monospace);
-   tabular digits keep them from shifting as they change. */
-.fig-row .big, .driver-footer .dist-box > strong { font-family: sans-serif; font-weight: bold; font-variant-numeric: tabular-nums; }
+/* Navi figures stay proportional with tabular digits. The driver footer matches
+   the box: monospace, so a narrow digit does not shift the column. */
+.fig-row .big { font-family: sans-serif; font-weight: bold; font-variant-numeric: tabular-nums; }
+.driver-footer .dist-box > strong,
+.driver-footer .avg b { font-family: monospace; font-weight: bold; }
 .fig-row .big[data-unit]::after, .driver-footer .dist-box > strong[data-unit]::after {
   content: attr(data-unit); font-size: 0.28em; font-weight: 600; margin-left: 0.12em; color: #9ad; vertical-align: 0.4em;
 }
@@ -542,3 +572,245 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 
 /* Drv tab: Total and Trip reset when tapped. */
 #drv-box-total, #drv-box-trip { cursor: pointer; }
+
+/* Portrait keeps the stacked pages. These controls are for the wide layout only. */
+.land-only, .onoff { display: none; }
+#view-navi.rally-greek #row-navi { display: none; }
+.menu-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.6rem; width: min(96vw, 64rem); }
+.menu-grid button { min-height: 4.6rem; background: #111; color: #fff; border: 2px solid #fff; font-size: 1.2rem; font-weight: bold; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem; }
+.menu-grid small { font-weight: normal; color: #aaa; font-size: 0.8rem; }
+.navi-ask { display: flex; gap: 0.5rem; align-items: center; justify-content: center; margin-bottom: 0.8rem; color: #0ff; }
+.navi-ask input { width: 8rem; font-size: 1.4rem; background: #111; color: #fff; border: 1px solid #888; text-align: right; padding: 0.2rem 0.4rem; }
+
+/* Portrait Italian Navi: the sector table takes the old next-substage row.
+   Next sits where prev was. Prev sits on the stage-selector row, in front of it.
+   The large countdown, the xx<>xx kph line and the seconds under next are gone. */
+@media not ((orientation: landscape) and (min-width: 700px)) {
+  #view-navi.rally-italian {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr 1fr;
+    column-gap: 0.4rem;
+    row-gap: 0.6rem;
+  }
+  #view-navi.rally-italian > .nclk,
+  #view-navi.rally-italian > #adj-row,
+  #view-navi.rally-italian > .fig-row,
+  #view-navi.rally-italian > #sector-card,
+  #view-navi.rally-italian > .flags,
+  #view-navi.rally-italian > #row-zero,
+  #view-navi.rally-italian > #greek-cards,
+  #view-navi.rally-italian > #time-taken-row { margin-bottom: 0; }
+  #view-navi.rally-italian > #adj-row { grid-column: 1 / -1; grid-row: 1; }
+  #view-navi.rally-italian > .fig-row:has(#btn-total) { grid-column: 1 / -1; grid-row: 2; }
+  #view-navi.rally-italian > .fig-row:has(#btn-trip) { grid-column: 1 / -1; grid-row: 3; }
+  #view-navi.rally-italian > #row-navi { grid-column: 1 / -1; grid-row: 4; }
+  #view-navi.rally-italian > #sector-card { grid-column: 1 / -1; grid-row: 5; }
+  #view-navi.rally-italian > .fig-row:has(#btn-next),
+  #view-navi.rally-italian > .fig-row:has(#btn-next) .kcol,
+  #view-navi.rally-italian > #bottom-keys { display: contents; }
+  #view-navi.rally-italian #next-m,
+  #view-navi.rally-italian #speed-change,
+  #view-navi.rally-italian #next-s { display: none !important; }
+  #view-navi.rally-italian #btn-next { grid-column: 1; grid-row: 6; width: 100%; }
+  #view-navi.rally-italian #btn-freeze { grid-column: 2; grid-row: 6; width: 100%; }
+  #view-navi.rally-italian #btn-reverse { grid-column: 3; grid-row: 6; width: 100%; }
+  #view-navi.rally-italian #btn-prev { grid-column: 1; grid-row: 7; width: 100%; }
+  #view-navi.rally-italian > #stage-row { grid-column: 2 / -1; grid-row: 7; margin: 0; }
+  #view-navi.rally-italian > .flags { grid-column: 1 / -1; grid-row: 8; }
+  #view-navi.rally-italian > #row-zero { grid-column: 1 / -1; grid-row: 9; }
+  /* The status line is the rally clock, sound, link and menu. Tabs go.
+     Navi's own clock line goes too; the other pages never had one. */
+  header { justify-content: stretch; padding: 0.2rem 0.45rem; border-bottom: 0; }
+  .header-right { width: 100%; gap: 0.65rem; }
+  #hdr-clock { display: block; font-weight: bold; font-size: 1.9rem; font-family: monospace; line-height: 1; }
+  #port-menu {
+    display: inline-flex; margin-left: auto; min-height: 0; height: 2.2rem;
+    padding: 0 0.7rem; font-size: 1rem;
+  }
+  .sound-toggle .ico, .conn .ico { display: block; width: 1.7rem; height: 1.7rem; }
+  .snd-label, #audio-state, .conn-label { display: none; }
+  .tabs, #view-navi > .nclk { display: none; }
+  .sound-toggle { background: none; border: 0; padding: 0; min-height: 0; color: #1a9933; }
+  .sound-toggle.off { color: #e02020; border: 0; }
+  .sound-toggle.off .slash { opacity: 1; }
+  .sound-toggle.blocked { color: #fc0; }
+  .conn { color: #e02020; font-size: 0; }
+  .conn .tick { display: none; }
+  .conn.ok { color: #1a9933; }
+  .conn.ok .cross { display: none; }
+  .conn.ok .tick { display: inline; }
+  #view-navi .big[data-unit]::after { content: none; }
+  #view-navi.rally-italian #sector-card {
+    border: 0; background: transparent; padding: 0;
+  }
+  #view-navi.rally-italian #sector-card th,
+  #view-navi.rally-italian #sector-card td { border: 0; }
+  #view-navi.rally-italian #sector-card tr:first-child th,
+  #view-navi.rally-italian #sector-card tr.cdrow td { border-bottom: 2px solid #9a9a9a; }
+}
+
+/* Wide window: the co-pilot pages use the box's columns. Portrait is unchanged. */
+@media (orientation: landscape) and (min-width: 700px) {
+  .view.hidden { display: none !important; }
+  header { padding: 0.15rem 0.4rem; }
+  .tabs { display: none; }
+  #land-menu.land-only {
+    display: flex; position: fixed; right: 0.35rem; bottom: 0.3rem; z-index: 25;
+    width: 7.2rem; height: 2.8rem; align-items: center; justify-content: center;
+    font-size: 1.15rem;
+  }
+  /* Driver landscape is the box's 800×480 page, centred. Total and Trip are
+     drawn on the dial. The menu key stays. */
+  #view-drv.view-driver {
+    height: calc(100dvh - 2.4rem);
+    padding: 0;
+    justify-content: center;
+    overflow: hidden;
+  }
+  #view-drv .driver-footer { display: none; }
+  #view-drv #driver-gauge { max-width: none; }
+  .view { padding: 0.25rem 0.35rem 2.8rem; }
+  #btn-spanner.land-only, #setup-back.land-only { display: inline-block; min-height: 2.4rem; margin: 0.3rem 0; }
+
+  #view-navi.navi {
+    display: grid;
+    height: calc(100dvh - 1.7rem);
+    padding: 0.2rem 0.3rem 0.2rem;
+    overflow: hidden;
+    grid-template-columns: 10.25% 28.1% 3.08% 7.1% 3.08% 16% 3.08% 15.8% 3.08% 10.25%;
+    grid-template-rows: 70fr 36fr 70fr 36fr 70fr 36fr 70fr;
+  }
+  #view-navi > svg { display: none; }
+  #adj-row, #view-navi .fig-row, #bottom-keys, #greek-cards, #greek-cards .cards, #view-navi .kcol { display: contents; }
+  #view-navi.rally-greek #row-navi { display: contents; }
+  #view-navi.rally-greek #navi-m { display: none; }
+  #view-navi .nr { height: auto; margin: 0; }
+  #view-navi .fig-row { height: auto; }
+  #view-navi .key { width: 100%; height: 100%; min-height: 0; font-size: clamp(0.95rem, 3.8vh, 1.2rem); padding: 0 0.15rem; line-height: 1.05; }
+  #view-navi .el { font-size: clamp(0.85rem, 3.1vh, 1.05rem); }
+  #view-navi .flags .key { flex: 0 0 22%; height: auto; }
+  #view-navi .big { font-size: clamp(3.46rem, 15.84vh, 6.34rem); line-height: 0.9; }
+  #view-navi .big[data-unit]::after { content: none; }
+  .nclk { grid-column: 6; grid-row: 1; align-self: center; justify-self: center; margin: 0; font-size: clamp(1.5rem, 6vh, 2.28rem); }
+  #btn-total { grid-column: 1; grid-row: 1; }
+  #total-m { grid-column: 2; grid-row: 1; justify-self: end; align-self: end; }
+  #btn-total + .el { grid-column: 1; grid-row: 2; justify-self: end; align-self: center; }
+  #btn-trip { grid-column: 1; grid-row: 3; }
+  #trip-m { grid-column: 2; grid-row: 3; justify-self: end; align-self: end; }
+  #btn-trip + .el { grid-column: 1; grid-row: 4; justify-self: end; align-self: center; }
+  #key-navi { grid-column: 1; grid-row: 5; }
+  #navi-m { grid-column: 2; grid-row: 5; justify-self: end; align-self: end; }
+  #speed-change, #next-s { grid-column: 1; grid-row: 6; justify-self: end; align-self: center; }
+  #view-navi.rally-greek #next-m { grid-column: 2; grid-row: 5; justify-self: end; align-self: end; display: block; }
+  #view-navi.rally-italian #next-m, #view-navi.rally-surrey #next-m,
+  #view-navi.rally-italian #next-s, #view-navi.rally-italian #speed-change { display: none; }
+  #btn-next { grid-column: 1; grid-row: 7; }
+  #view-navi #btn-prev { grid-column: 2; grid-row: 7; justify-self: start; width: 36.5%; margin-left: 9%; height: 100%; }
+  #view-navi #btn-freeze { grid-column: 2; grid-row: 7; justify-self: start; width: 36.5%; margin-left: 54.5%; height: 100%; }
+  #view-navi #btn-reverse { grid-column: 4; grid-row: 7; justify-self: end; width: 144%; height: 100%; }
+  #btn-dist-set { grid-column: 4; grid-row: 1; }
+  #btn-dist-plus { grid-column: 4; grid-row: 3; }
+  #btn-dist-minus { grid-column: 4; grid-row: 5; }
+  #stage-row { grid-column: 8; grid-row: 1; display: grid; grid-template-columns: 1fr 1.15fr 1fr; align-items: stretch; gap: 0.28rem; height: 100%; margin: 0; align-self: stretch; }
+  #stage-row .key, #stage-row .stno { height: 100%; min-height: 0; width: 100%; margin: 0; font-size: clamp(1.25rem, 5.2vh, 1.9rem); line-height: 1; box-sizing: border-box; }
+  #stage-row .auto { grid-column: 1 / -1; text-align: center; font-size: clamp(0.85rem, 3vh, 1.05rem); }
+  #greek-cards > .card.hist { grid-column: 6; grid-row: 2 / 8; overflow: hidden; }
+  #greek-cards .cards > .card:not(.arr) { grid-column: 8; grid-row: 3 / 6; overflow: hidden; }
+  #greek-cards .card.arr { grid-column: 8; grid-row: 6 / 8; }
+  .flags { grid-column: 10; grid-row: 1 / 7; display: flex; flex-direction: column; justify-content: space-between; gap: 0.3rem; height: auto; }
+  #view-navi.rally-italian .flags { justify-content: flex-start; }
+  #row-zero { grid-column: 6; grid-row: 7; align-self: end; }
+  #sector-card { grid-column: 6 / 11; grid-row: 2 / 7; overflow: hidden; margin: 14px 0 0; align-self: stretch; font-size: clamp(1.05rem, 3.8vh, 1.35rem); padding: 0; border: 0; background: transparent; display: flex; flex-direction: column; justify-content: space-between; }
+  #view-navi #sector-card table { font-size: 1.12em; margin-top: 0.35rem; width: 100%; table-layout: fixed; }
+  #view-navi #sector-card th, #view-navi #sector-card td { border: 0; padding: 0.1rem 0.4rem; white-space: nowrap; overflow: visible; }
+  #view-navi #sector-card tr:first-child th { border-bottom: 2px solid #9a9a9a; }
+  #view-navi #sector-card tr.cdrow td { border-bottom: 2px solid #9a9a9a; }
+  #view-navi #sector-card th:nth-child(4), #view-navi #sector-card td:nth-child(4) { width: 17%; padding-left: 0.12rem; padding-right: 0.12rem; }
+  #view-navi #sector-card td:first-child, #view-navi #sector-card th:first-child { width: 4rem; padding-left: 0; text-align: left; }
+  #view-navi #sector-card .tag { min-width: 2.5rem; font-size: 1em; padding: 0.12rem 0.3rem; text-align: center; }
+  #view-navi #sector-card td.cdtime { position: relative; text-align: right; }
+  #view-navi #sector-card td.cdtime span {
+    position: absolute; right: 0.15rem; top: 50%; transform: translateY(-50%); white-space: nowrap;
+  }
+  #view-navi #sector-card .cd span { line-height: 1; }
+  #view-navi #sector-card .it-foot { margin-top: 0.15rem; }
+  #view-navi #sector-card .it-co .when,
+  #view-navi #sector-card .it-kph b,
+  #view-navi #sector-card .it-min b,
+  #view-navi #sector-card .it-pm b { font-size: clamp(1.35rem, 6.4vh, 2.1rem); }
+  #time-taken-row { grid-column: 6; grid-row: 7; }
+
+  #view-seg {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 8.4rem;
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    height: calc(100dvh - 1.6rem);
+    padding: 0.15rem 0.3rem 4.3rem;
+    overflow: hidden;
+    gap: 0.28rem 0.4rem;
+  }
+  #view-seg .table-wrap { grid-column: 1; grid-row: 1 / 5; overflow: auto; min-width: 0; }
+  #view-seg .add-row { grid-column: 1; grid-row: 5; flex-direction: row; align-items: center; margin: 0; min-width: 0; overflow: hidden; }
+  #view-seg .add-row input { width: auto; flex: 1 1 auto; min-width: 0; height: 2.2rem; font-size: 1rem; }
+  #view-seg .add-row .key { width: auto; flex: 0 0 auto; height: 2.2rem; min-height: 0; font-size: 1rem; padding: 0 0.6rem; }
+  #view-seg .stage-sel {
+    grid-column: 2; grid-row: 1; margin: 0; min-width: 0; max-width: 100%;
+    display: grid; grid-template-columns: 1.9rem minmax(0, 1fr) 1.9rem; gap: 0.2rem; height: 2.3rem;
+  }
+  #view-seg .stage-sel .key, #view-seg .stage-sel select {
+    height: 100%; min-height: 0; width: 100%; margin: 0; font-size: 1.15rem; padding: 0;
+  }
+  #view-seg .start-block { grid-column: 2; grid-row: 2; margin: 0; align-self: start; gap: 0.2rem; min-width: 0; max-width: 100%; }
+  #view-seg .start-block label {
+    flex-direction: column; align-items: stretch; justify-content: flex-start;
+    gap: 0.08rem; white-space: normal; font-size: 0.85rem;
+  }
+  #view-seg .start-block input[type=text], #view-seg .start-block input[type=number] {
+    width: 100%; height: 1.85rem; font-size: 1.05rem; padding: 0.1rem 0.3rem;
+  }
+  #view-seg #seg-duration-avg { font-size: 0.85rem; margin: 0; text-align: right; }
+  #view-seg .actions:has(#btn-clear-stage) { grid-column: 2; grid-row: 4; align-self: end; }
+  #view-seg .actions:has(#btn-upload-stage) { grid-column: 2; grid-row: 5; align-self: end; }
+  #view-seg .actions {
+    flex-direction: column; flex-wrap: nowrap; gap: 0.25rem; margin: 0; min-width: 0; max-width: 100%;
+  }
+  #view-seg .actions .key {
+    flex: none; min-width: 0; width: 100%; min-height: 0; height: 2.15rem;
+    padding: 0.1rem 0.25rem; font-size: 0.95rem;
+  }
+  #view-seg #seg-table th, #view-seg #seg-table td { font-size: 0.95rem; height: 2rem; }
+  #view-seg #seg-table input.to, #view-seg #seg-table input.spd,
+  #view-seg #seg-table input.first, #view-seg #seg-table input.first-from,
+  #view-seg #seg-table input.ref, #view-seg #seg-table input.pc {
+    height: 2rem; font-size: 0.95rem;
+  }
+  #view-seg #seg-table input.to, #view-seg #seg-table input.first-from { width: 4.1rem; }
+  #view-seg #seg-table input.ref, #view-seg #seg-table input.pc, #view-seg #seg-table input.spd { width: 3.2rem; }
+  #view-seg #seg-table input.first { width: 2.6rem; }
+  #view-seg #seg-table button.del { font-size: 1rem; padding: 0 0.15rem; }
+
+  #view-time { height: calc(100dvh - 1.7rem); overflow: auto; }
+  #view-time .trow { grid-template-columns: 14rem minmax(8rem, 1fr) 18rem; align-items: center; border: 0; padding: 0.15rem 0; }
+  #view-time .trow > .tl,
+  #view-time .trow > :nth-child(2),
+  #view-time .trow > :nth-child(n+3) { grid-column: auto; grid-row: auto; justify-self: stretch; }
+
+  #view-cal { height: calc(100dvh - 1.7rem); overflow: auto; }
+  #view-cal .crow { flex-wrap: nowrap; margin: 0.35rem 0; }
+  #view-cal .brk { display: none; }
+  #view-cal .crow > .key, #view-cal .crow > .pair { margin-left: auto; }
+
+  #view-set {
+    display: grid; grid-template-columns: 1fr 1fr; column-gap: 1.5rem; align-content: start;
+    height: calc(100dvh - 1.7rem); overflow: auto;
+  }
+  #view-set .logs-panel { grid-column: 1 / -1; }
+  #view-set .beep-row .onoff { display: inline-flex; gap: 0; margin-left: auto; }
+  #view-set .beep-row .onoff .key { min-height: 1.8rem; padding: 0.15rem 0.7rem; }
+  #view-set .beep-row input[type="checkbox"] { display: none; }
+  #setup-sheet { display: none; }
+  #view-set.show-setup #setup-sheet {
+    display: block; position: fixed; z-index: 30; left: 8vw; right: 8vw; top: 8vh; bottom: 8vh;
+    background: #000; border: 2px solid #fff; padding: 1rem; overflow: auto;
+  }
+}

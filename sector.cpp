@@ -302,11 +302,14 @@ bool inTrial(const RallyState& s) {
     return s.trial_start_m >= 0.0;
 }
 
-// Schedule seconds from the trial's start tube to `m`; < 0 when the roadbook has a hole.
-double trialIdealSeconds(const RallyState& s, double m) {
+// Schedule seconds from the trial's start tube to `m`. Negative when `m` is still
+// short of the tube. False when the roadbook cannot time that point.
+bool trialIdealSeconds(const RallyState& s, double m, double* seconds) {
     const double to = idealSecondsToReachDistance(s.stage_segments, m);
     const double from = s.trial_start_m > 0.0 ? idealSecondsToReachDistance(s.stage_segments, s.trial_start_m) : 0.0;
-    return (to < 0.0 || from < 0.0) ? -1.0 : to - from;
+    if (to < 0.0 || from < 0.0 || seconds == nullptr) return false;
+    *seconds = to - from;
+    return true;
 }
 
 }  // namespace
@@ -317,8 +320,8 @@ double sectorSecondsToLine(const RallyState& s, int64_t now_ms, bool* valid) {
     if (cur < 0 || cur >= static_cast<long>(s.stage_segments.size())) return 0.0;
     const double end_m = endOfRowM(s.stage_segments, cur);
     if (inTrial(s)) {
-        const double ideal_s = trialIdealSeconds(s, end_m);
-        if (ideal_s < 0.0) return 0.0;
+        double ideal_s = 0.0;
+        if (!trialIdealSeconds(s, end_m, &ideal_s) || ideal_s < 0.0) return 0.0;
         *valid = true;
         return ideal_s - (now_ms - s.trial_start_ms) / 1000.0;
     }
@@ -331,16 +334,39 @@ double sectorSecondsToLine(const RallyState& s, int64_t now_ms, bool* valid) {
 double pcCountdownSeconds(const RallyState& s, int64_t now_ms, bool* valid) {
     *valid = false;
     const long cur = s.segment_current_number;
-    if (s.stage_complete || cur < 0 || cur >= static_cast<long>(s.stage_segments.size())) return 0.0;
-    if (s.stage_segments[static_cast<size_t>(cur)].type != SEG_PC || !inTrial(s)) return 0.0;
+    if (s.rally_type != 2 || s.stage_complete
+        || cur < 0 || cur >= static_cast<long>(s.stage_segments.size())) return 0.0;
+    const int type = s.stage_segments[static_cast<size_t>(cur)].type;
+    if (type == SEG_PC) {
+        if (!inTrial(s)) return 0.0;
+        return sectorSecondsToLine(s, now_ms, valid);
+    }
+    if (type != SEG_NAVI) return 0.0;
     return sectorSecondsToLine(s, now_ms, valid);
+}
+
+double rowMetresToLine(const RallyState& s, double stage_m, bool* valid) {
+    *valid = false;
+    const long cur = s.segment_current_number;
+    if (s.rally_type != 2 || s.stage_complete
+        || cur < 0 || cur >= static_cast<long>(s.stage_segments.size())) return 0.0;
+    const int type = s.stage_segments[static_cast<size_t>(cur)].type;
+    if (type == SEG_PC || type == SEG_LEG) return 0.0;
+    *valid = true;
+    return endOfRowM(s.stage_segments, cur) - stage_m;
+}
+
+bool hundredMetreBeep(double prev_m, double now_m) {
+    return prev_m > 100.0 && now_m <= 100.0;
 }
 
 PcBeep pcCountdownBeep(double prev_s, double now_s) {
     if (prev_s > 0.0 && now_s <= 0.0) return PcBeep::Zero;
     static const double marks[] = { 30, 15, 5, 4, 3, 2, 1 };
-    for (double m : marks)
-        if (prev_s > m && now_s <= m) return PcBeep::Tick;
+    for (double m : marks) {
+        if (prev_s > m && now_s <= m)
+            return m == 5.0 ? PcBeep::Five : PcBeep::Tick;
+    }
     return PcBeep::None;
 }
 
@@ -394,8 +420,12 @@ double trialAheadSeconds(const RallyState& s, uint64_t c1, uint64_t c2, int64_t 
     *valid = false;
     if (!stageIsSector(s.stage_segments) || s.stage_complete || s.segment_current_number < 0 || !inTrial(s))
         return 0.0;
-    const double ideal_s = trialIdealSeconds(s, sectorPositionM(s, c1, c2));
-    if (ideal_s < 0.0) return 0.0;
+    // The next press pins Total to the card in whole centimetres, so the car can
+    // sit a centimetre short of trial_start_m while the countdown is already
+    // running. That shortfall is behind, not a hole in the roadbook: a stationary
+    // start is behind by the time since the press.
+    double ideal_s = 0.0;
+    if (!trialIdealSeconds(s, sectorPositionM(s, c1, c2), &ideal_s)) return 0.0;
     *valid = true;
     return ideal_s - (now_ms - s.trial_start_ms) / 1000.0;
 }
@@ -468,9 +498,8 @@ SectorPanel sectorPanel(const RallyState& s, int64_t now_ms, long stage_m) {
     p.nextAtM = static_cast<long>(std::lround(endOfRowM(segs, cur)));
     p.metresToGo = std::max<long>(0, p.nextAtM - stage_m);
     p.metresPast = std::max<long>(0, stage_m - p.nextAtM);
-    // navi / ct: no schedule time (crews drive them flat out); pc, pm and co keep their countdown.
-    if (row.type != SEG_NAVI && row.type != SEG_CT)
-        p.secondsToLine = sectorSecondsToLine(s, now_ms, &p.secondsValid);
+    // Every row, including navi and ct, counts mm:ss to its line on the sector clock.
+    p.secondsToLine = sectorSecondsToLine(s, now_ms, &p.secondsValid);
     if (p.kind == SectorPanel::PC && s.trial_start_m >= 0.0) {
         const double into_m = stage_m - s.trial_start_m;
         const double secs = (now_ms - s.trial_start_ms) / 1000.0;
@@ -595,7 +624,13 @@ std::string sectorCardJson(const RallyState& live, int64_t now_ms, long stage_m,
     if (!previewing) {
         bool ahead_ok = false;
         const double ahead_s = sectorAheadSeconds(live, c1, c2, now_ms, &ahead_ok);
-        if (ahead_ok) o << ",\"ahead_min\":" << minutesInHand(ahead_s);
+        if (ahead_ok) {
+            const long mins = minutesInHand(ahead_s);
+            // A fraction of a minute still rounds to 0. The sign has to travel
+            // separately, or the phone paints that 0 green while the box is red.
+            o << ",\"ahead_min\":" << (ahead_s >= 0 ? mins : -mins)
+              << ",\"behind\":" << (ahead_s < 0.0 ? "true" : "false");
+        }
     }
     o << '}';
     return o.str();

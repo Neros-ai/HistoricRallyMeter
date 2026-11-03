@@ -257,10 +257,14 @@ struct AppData {
     // unpolled counter yields a negative travelled distance, a cursor of 0,
     // and a replay of every waypoint already behind the car.
     bool beepCursorsStale = true;
-    // pc countdown beeps (italian): the pc being counted (its tube press time) and
-    // the last seconds-to-line reading, so each mark is heard once as it is crossed.
+    // Press-warning beeps (italian): the row being counted, the pc's tube time when
+    // it has one, and the last seconds-to-line reading, so each mark is heard once.
+    long pcBeepRow = -1;
     int64_t pcBeepTrialMs = -1;
     double pcBeepPrevS = 0.0;
+    // 100 m beep on a non-pc row: the row, and the last metres-to-go reading.
+    long distBeepRow = -1;
+    double distBeepPrevM = 0.0;
     // Debounce for waypoint-list edits: the buffer's "changed" signal fires
     // per keystroke, and committing on each one both saved the whole config
     // to the SD card per character and could beep on a half-typed number.

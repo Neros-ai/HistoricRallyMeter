@@ -540,6 +540,9 @@ void zeroDistanceBaselines(AppData* data) {
     // the clear -- so the only behavioural change is the alarm.
     rebaseTotalDistance(*data->state, current_poll.cntr1, current_poll.cntr2);
     rebaseTripDistance(*data->state, current_poll.cntr1, current_poll.cntr2);
+    // The zero above records the trip that was showing. A new Greek stage
+    // does not keep that column: it starts empty. Italian and Surrey keep it.
+    clearGreekTripHistoryOnStageStart(*data->state);
 
     // Waypoints are measured from the Total counter's zero, so re-zeroing it
     // puts every distance waypoint back in front of the car. Navigation beeps

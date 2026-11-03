@@ -12,10 +12,12 @@
 #include "ui_datetime.h"
 #include "home_calc.h"
 #include "surrey.h"
+#include "driver_trial.h"
 
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <sstream>
 #include <iomanip>
 
@@ -35,9 +37,87 @@ NextPrevState computeNextPrevState(AppData* data) {
 // phone showed current speed and both averages 38% low beside a correct
 // target. The box's own panels never had the fault; they use those functions
 // directly.
+// A button label for JSON. The box keys use a newline; a raw newline would
+// break the object.
+static std::string jsonOneLine(const char* s) {
+    std::string o;
+    if (!s) return o;
+    for (; *s; ++s) {
+        if (*s == '\n') o += "\\n";
+        else if (*s == '\\' || *s == '"') { o += '\\'; o += *s; }
+        else o += *s;
+    }
+    return o;
+}
+
 static double displayKph(AppData* data, double kph) {
     if (data->state->units) return kph * 0.621371;
     return kph;
+}
+
+// The compact driver page the box is drawing, so the phone gauge can follow it.
+// Distances and averages stay out of the dial; the phone footer draws those.
+std::string driverGaugeJson(AppData* data) {
+    const int page = data->driverPage;
+    const DriverTrialView& v = data->driverTrial;
+    std::string tag = "navi";
+    int icon = 0;
+    if (page == AppData::DP_ITALIAN_TRIAL) {
+        tag = v.tag;
+        icon = v.isPc ? 1 : 2;
+    } else if (page == AppData::DP_GREEK_STAGE) {
+        tag = "S" + std::to_string(data->driverStageNo);
+        icon = 1;
+    }
+    const bool needle = page != AppData::DP_ITALIAN_NAVI && page != AppData::DP_GREEK_IDLE;
+    std::ostringstream o;
+    o << "{\"page\":" << page << ",\"tag\":\"" << tag << "\",\"icon\":" << icon
+      << ",\"needle\":" << (needle ? "true" : "false");
+    if (page == AppData::DP_ITALIAN_TRIAL || page == AppData::DP_ITALIAN_NAVI) {
+        const double dur = page == AppData::DP_ITALIAN_TRIAL ? v.durationS : data->driverRowS;
+        o << ",\"target\":\"" << data->driverTrialTargetText << "\""
+          << ",\"speed\":\"" << data->driverTrialSpeedText << "\""
+          << ",\"dur_s\":" << std::lround(std::max(0.0, dur));
+    }
+    if (page == AppData::DP_ITALIAN_TRIAL) {
+        o << ",\"box\":\"" << countdownBoxText(v.toLineS) << "\""
+          << ",\"sector_m\":" << std::lround(v.sectorTotalM)
+          << ",\"avg\":\"" << (v.avgValid ? trialSpeedText(v.avgKph) : std::string("--.--")) << "\"";
+    } else if (page == AppData::DP_ITALIAN_NAVI) {
+        if (data->driverMinutesValid) o << ",\"min\":" << data->driverMinutes;
+        const double shown = data->tripSpeedLabel
+            ? std::atof(gtk_label_get_text(data->tripSpeedLabel)) : 0.0;
+        o << ",\"avg\":\"" << trialSpeedText(data->state->units ? shown / 0.621371 : shown) << "\"";
+    } else if (page == AppData::DP_GREEK_STAGE) {
+        char sb[24];
+        if (data->driverSubAvgValid) {
+            const double sp = data->state->units ? data->driverSubAvgKph * 0.621371 : data->driverSubAvgKph;
+            snprintf(sb, sizeof(sb), "%.1f", sp);
+        } else {
+            snprintf(sb, sizeof(sb), "--.-");
+        }
+        o << ",\"sub\":\"" << sb << "\"";
+    }
+    // The needle's one chevron. Italian pc / pm: it waits, then covers the last
+    // 5 s. Greek and Surrey: it walks the row. The tick is the line it arrives at.
+    if (needle) {
+        double prog = 0.0;
+        bool tick = false;
+        if (page == AppData::DP_ITALIAN_TRIAL) {
+            prog = v.arrowProgress;
+            tick = true;
+        } else if (data->inSegment) {
+            prog = data->segmentProgress;
+            tick = true;
+        }
+        if (prog < 0.0) prog = 0.0;
+        if (prog > 1.0) prog = 1.0;
+        char cb[48];
+        snprintf(cb, sizeof(cb), ",\"chev\":%.3f,\"tick\":%s", prog, tick ? "true" : "false");
+        o << cb;
+    }
+    o << ",\"legend\":\"" << driverRightBoxLegend(page) << "\"}";
+    return o.str();
 }
 
 std::string buildTelemetryJson(AppData* data) {
@@ -96,6 +176,8 @@ std::string buildTelemetryJson(AppData* data) {
 
     // Sized for every field below plus the tone and beep objects; snprintf
     // would truncate silently and hand the phone unparseable JSON.
+    // ahead_behind_s stays at 0.001 s. The digits still show tenths; rounding
+    // the value here made the phone needle step on a ±1 s scale.
     char buf[2048];
     snprintf(buf, sizeof(buf),
         "{\"type\":\"telemetry\","
@@ -106,7 +188,7 @@ std::string buildTelemetryJson(AppData* data) {
         "\"trip_avg_kph\":%.1f,"
         "\"total_avg_kph\":%.1f,"
         "\"target_kph\":%.1f,"
-        "\"ahead_behind_s\":%.1f,"
+        "\"ahead_behind_s\":%.3f,"
         "\"segment_number\":%ld,"
         "\"segment_count\":%zu,"
         "\"next_enabled\":%s,"
@@ -220,8 +302,11 @@ std::string buildTelemetryJson(AppData* data) {
        << ",\"sector\":" << sectorJson
        << ",\"next_m\":" << (has_next_m ? std::to_string(next_m) : std::string("null"))
        << ",\"speed_change\":\"" << speed_change << "\""
-       << ",\"next_key\":\"" << (st.rally_type == 2 ? "next substage" : "next speed") << "\""
-       << ",\"prev_key\":\"" << (st.rally_type == 2 ? "prev substage" : "prev speed") << "\""
+       << ",\"key_total\":\"" << jsonOneLine(readoutKeyName(st.rally_type, 0)) << "\""
+       << ",\"key_trip\":\"" << jsonOneLine(readoutKeyName(st.rally_type, 1)) << "\""
+       << ",\"key_navi\":\"" << jsonOneLine(readoutKeyName(st.rally_type, 2)) << "\""
+       << ",\"next_key\":\"" << jsonOneLine(readoutKeyName(st.rally_type, 3)) << "\""
+       << ",\"prev_key\":\"" << jsonOneLine(readoutKeyName(st.rally_type, 4)) << "\""
        << ",\"stage_no\":" << st.last_memory_slot
        << ",\"arrival\":" << (arr.valid
             ? "{\"kph\":" + std::to_string(arr.speed_kph) + ",\"min\":" + std::to_string(arr.minutes) + "}"
@@ -237,7 +322,8 @@ std::string buildTelemetryJson(AppData* data) {
        << ",\"fps\":\"" << gtk_label_get_text(data->updatesPerSecLabel) << "\""
        << ",\"cpu\":\"" << gtk_label_get_text(data->cpuTempLabel) << "\""
        << ",\"distance_km\":" << (st.distance_km ? "true" : "false")
-       << ",\"measure_ab_bc\":" << (st.measure_ab_bc ? "true" : "false") << "}";
+       << ",\"measure_ab_bc\":" << (st.measure_ab_bc ? "true" : "false")
+       << ",\"drv\":" << driverGaugeJson(data) << "}";
     std::string out = buf;
     out.pop_back();   // the closing brace
     return out + ex.str();
@@ -296,7 +382,13 @@ std::string buildStateJson(AppData* data) {
                << ",\"chg\":" << (r.chg ? "true" : "false") << ",\"kph\":" << r.kph
                << ",\"ms\":" << r.ms << ",\"auto_av\":" << (r.auto_available ? "true" : "false")
                << ",\"auto_on\":" << (r.auto_on ? "true" : "false")
-               << ",\"time_s\":" << std::lround(r.time_s) << ",\"total_s\":" << std::lround(r.total_s) << "}";
+               << ",\"time_s\":" << std::lround(r.time_s) << ",\"total_s\":" << std::lround(r.total_s);
+            if (i < data->state->segments.size()) {
+                const Segment& sg = data->state->segments[i];
+                ss << ",\"ty\":" << sg.type << ",\"ref\":" << sg.ref
+                   << ",\"pc_s\":" << std::lround(sg.pc_duration_s);
+            }
+            ss << "}";
         }
         ss << "],";
     }

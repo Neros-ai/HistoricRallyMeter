@@ -57,8 +57,9 @@ public:
                 && finalWindowProgress(-3.0) == 1.0;
         });
 
-        suite->addTest("countdown box: holds 5.00, hundredths, never negative", []() {
-            return countdownBoxText(8.4) == "5.0" && countdownBoxText(4.37) == "4.4"
+        suite->addTest("countdown box: -.- until 5 s, then tenths, never negative", []() {
+            return countdownBoxText(8.4) == "-.-" && countdownBoxText(5.04) == "-.-"
+                && countdownBoxText(5.0) == "5.0" && countdownBoxText(4.37) == "4.4"
                 && countdownBoxText(0.004) == "0.0" && countdownBoxText(-1.2) == "0.0";
         });
 

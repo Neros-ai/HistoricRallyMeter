@@ -30,7 +30,7 @@ struct DriverTrialView {
 DriverTrialView driverTrialView(const RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms);
 // 0 at >= 5 s to the line, 1 at <= 0 s, linear between.
 double finalWindowProgress(double to_line_s);
-// The countdown box: "5.0" .. "0.0" (1 dp), never negative, never above 5.0.
+// The countdown box: "-.-" until the last 5 s, then "5.0" .. "0.0" (1 dp), never negative.
 std::string countdownBoxText(double to_line_s);
 // Speeds on this layout: km/h to 2 dp ("72.30").
 std::string trialSpeedText(double kph);

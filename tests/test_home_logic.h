@@ -43,6 +43,24 @@ public:
                 && parseTripHistory("-15,7")[0] == -15;
         });
 
+        suite->addTest("a new Greek stage clears trip history; Italian and Surrey keep it", []() {
+            RallyState g;
+            g.rally_type = 0;
+            g.trip_history_m = "299,254";
+            clearGreekTripHistoryOnStageStart(g);
+            RallyState it;
+            it.rally_type = 2;
+            it.trip_history_m = "299,254";
+            clearGreekTripHistoryOnStageStart(it);
+            RallyState sy;
+            sy.rally_type = 1;
+            sy.trip_history_m = "299,254";
+            clearGreekTripHistoryOnStageStart(sy);
+            return g.trip_history_m.empty()
+                && it.trip_history_m == "299,254"
+                && sy.trip_history_m == "299,254";
+        });
+
         suite->addTest("trip reset records the trip as it read, then zeroes it", []() {
             RallyState s;
             s.counters = false;
@@ -320,7 +338,7 @@ public:
                 && !stageArrival(0, 14).valid;
         });
 
-        suite->addTest("Greek driver shows arrival kph whenever the navigator does", []() {
+        suite->addTest("navigator shows Greek arrival kph even in a stage; the driver gauge does not", []() {
             const bool valid = stageArrival(6200, 14).valid;
             return navigatorShowsArrivalKph(0, false, valid)
                 && navigatorShowsArrivalKph(0, true, valid)

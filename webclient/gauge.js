@@ -58,32 +58,111 @@
     };
   }
 
-  function computeCompactGaugeLayout(width, height) {
+  function computeCompactGaugeLayout(width, height, boxMode) {
     const L = {};
     L.radius = Math.min(width / 2 - 25, height - 95);
     L.centerX = width / 2;
-    L.centerY = height - 75;
     L.fscale = Math.min(1.0, L.radius / REF_RADIUS);
-    // Nero2.0 sizes (the box's driver display, RB-DRV-12)
-    L.valSize = 50 * L.fscale;      // ahead/behind digits
-    L.curTopSize = 60;   // fixed, not scaled with the dial
+    L.boxHeight = 64.0 * L.fscale;
+    if (boxMode) {
+      // The dedicated driver window (800×480). Fonts are the box's, and the
+      // readout sits over the hub. No embedded-hub drop.
+      L.centerY = height - 75;
+      L.valSize = 60 * L.fscale;
+      L.curTopSize = 62 * L.fscale;
+      L.boxFontSize = 50 * L.fscale;
+      L.labelGap = 8 * L.fscale;
+      L.boxY = L.centerY - 8 * L.fscale;
+    } else {
+      // Distances are the footer. The readout row sits just under the hub.
+      L.centerY = height - (L.boxHeight + 20);
+      L.valSize = 50 * L.fscale;
+      L.curTopSize = 60;   // fixed, not scaled with the dial
+      L.boxFontSize = L.valSize;
+      L.labelGap = 4;
+      L.boxY = L.centerY + 12;
+    }
     L.legendDrop = 20 * L.fscale;
     L.labelSize = Math.max(12, 16 * L.fscale);
     L.rowGap = 48 * L.fscale;
-    L.rightAnchor = L.centerX + L.radius * 0.72;
-    L.distanceAnchor = L.radius * 0.72 + 10.0;
-    L.bandOuterX = L.centerX + (L.radius + 6.0);
-    L.bandTargetX = L.centerX - (L.radius + 6.0);
     L.bandTopY = L.centerY - (L.radius + 6.0);
-    L.speedBase = L.bandTopY - 14;   // the two speeds' baseline: clear above the arc, not against it
-    L.boxHeight = 64.0 * L.fscale;
-    L.boxY = L.centerY - 8 * L.fscale;
-    const lineGap = L.rowGap + 10 * L.fscale;
-    L.tripBaseline = L.boxY - (0.22 * L.curTopSize + 6 * L.fscale);
-    L.totalBaseline = L.tripBaseline - lineGap;
+    L.speedBase = L.bandTopY - 14;
     L.footSize = Math.max(11, 14 * L.fscale);
     L.footBaseline = L.boxY + L.boxHeight;
     return L;
+  }
+
+  function avgLegendRight(baseRight, numberLeft, gap) {
+    const need = numberLeft - gap;
+    return need < baseRight ? need : baseRight;
+  }
+
+  function captionLeftAfter(baseLeft, numberRight, gap) {
+    const need = numberRight + gap;
+    return need > baseLeft ? need : baseLeft;
+  }
+
+  function domText(id) {
+    const el = document.getElementById(id);
+    return el ? el.textContent : '';
+  }
+
+  // Landscape only. The same anchors as ui_driver.cpp: averages on the left of
+  // the strip, distances on the right, captions beside them. Reads the footer
+  // strings, which applyTelemetry has already formatted for this frame.
+  function drawBoxReadouts(ctx, L, drv, msg, abBoxX, abBoxY, abBoxW, fs, italianFig) {
+    const page = drv ? Number(drv.page) : 4;
+    const lcx = abBoxX + abBoxW / 2;
+    const avgAnchor = abBoxX + 8 * fs;
+    const distAnchor = lcx + 260 * fs;
+    const y1 = abBoxY - 93 * fs;
+    const y2 = abBoxY - 27 * fs;
+    const totalAvg = domText('drv-total-avg');
+    const tripAvg = domText('drv-trip-avg');
+    const totalM = domText('drv-total-m');
+    const tripM = domText('drv-trip-m');
+    const unitEl = document.getElementById('drv-total-m');
+    const distUnit = (unitEl && unitEl.dataset.unit) || 'km';
+    const showTrip = page !== 1;
+    const unitLow = (!italianFig && msg.units === 'mph') ? 'mph' : 'kph';
+    const drawAt = (text, anchor, baseline, color) => {
+      ctx.fillStyle = color;
+      ctx.font = 'bold ' + L.valSize + 'px monospace';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(text || '', anchor, baseline);
+    };
+    drawAt(totalAvg, avgAnchor, y2, '#fff');
+    drawAt(totalM, distAnchor, y2, '#fff');
+    if (showTrip) {
+      drawAt(tripAvg, avgAnchor, y1, '#0ff');
+      drawAt(tripM, distAnchor, y1, '#0ff');
+    }
+    ctx.font = 'bold ' + L.valSize + 'px monospace';
+    let numberLeft = avgAnchor - ctx.measureText(totalAvg || '').width;
+    if (showTrip) numberLeft = Math.min(numberLeft, avgAnchor - ctx.measureText(tripAvg || '').width);
+    const legendRight = avgLegendRight(lcx - 288 * fs, numberLeft, 6 * fs);
+    ctx.font = (18 * fs) + 'px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#fff';
+    ctx.fillText('avg', legendRight, y2 - 24 * fs);
+    ctx.fillText(unitLow, legendRight, y2 - 4 * fs);
+    if (page === 3) {
+      ctx.fillStyle = '#0ff';
+      ctx.fillText('sub', legendRight, y1 - 4 * fs);
+    }
+    const rx = lcx + 272 * fs;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#fff';
+    ctx.fillText('Total', rx, y2 - 4 * fs);
+    if (!showTrip) {
+      ctx.fillText(distUnit, rx, y2 - 24 * fs);
+    } else {
+      ctx.fillStyle = '#0ff';
+      ctx.fillText('Trip', rx, y1 - 4 * fs);
+      ctx.fillStyle = '#ccc';
+      ctx.fillText(distUnit, rx, (y1 + y2) / 2 + 2 * fs);
+    }
   }
 
   function formatGaugeDigital(seconds, zone) {
@@ -123,25 +202,56 @@
     };
   }
 
-  // Room under the +0.0 box for the stage number (the layout already leaves a gap under that
-  // box), and a little space above the dial so it sits clear of the rally clock.
-  const STAGE_STRIP = 30;
-  const TOP_PAD = 34;
-  const DIAL_DROP = 48;   // room for the large speeds between the clock and the dial
+  // Total and Trip are the HTML footer in portrait. Landscape draws them on the
+  // canvas, in the box's places, inside an 800×480 stage.
+  const STAGE_STRIP = 0;
+  const DIAL_DROP = 48;
+  // Extra canvas under the speed and target lines. The dial stays bottom-anchored,
+  // so this lowers the arc and the three boxes. The speed and target are drawn
+  // back up by the same amount.
+  const PORTRAIT_DROP = 64;
+
+  function wideLayout() {
+    return window.matchMedia('(orientation: landscape) and (min-width: 700px)').matches;
+  }
 
   DriverGauge.prototype.resize = function () {
     const parent = this.canvas.parentElement;
-    const cssW = Math.max(280, parent.clientWidth || window.innerWidth);
-    // Dial only — Total/Trip sit in the HTML footer below, so leave them room.
-    const cssH = Math.max(280, Math.min(window.innerHeight * 0.48, cssW * 0.78)) + STAGE_STRIP + TOP_PAD + DIAL_DROP;
     const dpr = window.devicePixelRatio || 1;
-    this.canvas.style.width = cssW + 'px';
-    this.canvas.style.height = cssH + 'px';
-    this.canvas.width = Math.round(cssW * dpr);
-    this.canvas.height = Math.round(cssH * dpr);
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.cssW = cssW;
-    this.cssH = cssH;
+    if (wideLayout()) {
+      const availW = parent.clientWidth || window.innerWidth;
+      const availH = parent.clientHeight || window.innerHeight;
+      const aspect = 800 / 480;
+      let cssW;
+      let cssH;
+      if (availH > 0 && availW / availH > aspect) {
+        cssH = availH;
+        cssW = availH * aspect;
+      } else {
+        cssW = availW;
+        cssH = availW / aspect;
+      }
+      this.canvas.style.width = cssW + 'px';
+      this.canvas.style.height = cssH + 'px';
+      this.canvas.width = Math.round(cssW * dpr);
+      this.canvas.height = Math.round(cssH * dpr);
+      this.ctx.setTransform((cssW * dpr) / 800, 0, 0, (cssH * dpr) / 480, 0, 0);
+      this.cssW = 800;
+      this.cssH = 480;
+      this.boxSpace = true;
+    } else {
+      const cssW = Math.max(280, parent.clientWidth || window.innerWidth);
+      const cssH = Math.max(280, Math.min(window.innerHeight * 0.48, cssW * 0.78))
+        + STAGE_STRIP + DIAL_DROP + PORTRAIT_DROP;
+      this.canvas.style.width = cssW + 'px';
+      this.canvas.style.height = cssH + 'px';
+      this.canvas.width = Math.round(cssW * dpr);
+      this.canvas.height = Math.round(cssH * dpr);
+      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this.cssW = cssW;
+      this.cssH = cssH;
+      this.boxSpace = false;
+    }
     this.draw();
   };
 
@@ -162,7 +272,8 @@
     this.zoneShown = gaugeZoneHysteretic(seconds, this.zoneShown);
     const zone = this.zoneShown;
     const arc = gaugeArcColor(zone);
-    const L = computeCompactGaugeLayout(width, height - STAGE_STRIP);   // bottom-anchored: the pad above is free space
+    const boxMode = !!this.boxSpace;
+    const L = computeCompactGaugeLayout(width, height - (boxMode ? 0 : STAGE_STRIP), boxMode);
     const centerX = L.centerX;
     const centerY = L.centerY;
     const radius = L.radius;
@@ -250,6 +361,10 @@
     ctx.closePath();
     ctx.fill();
 
+    // The box page: 1 italian pc/pm, 2 italian navi, 3 greek stage, 4 between stages.
+    const drv = msg.drv || null;
+    const hideNeedle = drv && drv.needle === false;
+
     // Needle
     const needle = computeNeedleGeometry(seconds, maxVal, radius);
     const dirX = Math.cos(needle.angle);
@@ -258,98 +373,301 @@
     const perpY = Math.cos(needle.angle);
     const tipX = centerX + needle.length * dirX;
     const tipY = centerY + needle.length * dirY;
-    ctx.fillStyle = 'rgb(230,230,230)';
-    ctx.beginPath();
-    ctx.moveTo(tipX + needle.halfWidth * perpX, tipY + needle.halfWidth * perpY);
-    ctx.lineTo(tipX - needle.halfWidth * perpX, tipY - needle.halfWidth * perpY);
-    ctx.lineTo(centerX - needle.halfWidth * perpX, centerY - needle.halfWidth * perpY);
-    ctx.lineTo(centerX + needle.halfWidth * perpX, centerY + needle.halfWidth * perpY);
-    ctx.closePath();
-    ctx.fill();
+    // Under the readout while the needle sweeps. Pegged at either end, it is
+    // drawn again after the tag and the error box so those boxes do not hide it.
+    const drawNeedleBar = () => {
+      ctx.fillStyle = 'rgb(230,230,230)';
+      ctx.beginPath();
+      ctx.moveTo(tipX + needle.halfWidth * perpX, tipY + needle.halfWidth * perpY);
+      ctx.lineTo(tipX - needle.halfWidth * perpX, tipY - needle.halfWidth * perpY);
+      ctx.lineTo(centerX - needle.halfWidth * perpX, centerY - needle.halfWidth * perpY);
+      ctx.lineTo(centerX + needle.halfWidth * perpX, centerY + needle.halfWidth * perpY);
+      ctx.closePath();
+      ctx.fill();
+    };
+    if (!hideNeedle) drawNeedleBar();
+    const needlePinned = !hideNeedle && maxVal > 0 && Math.abs(seconds) >= maxVal;
     // (no hub disc: the box below covers it, and the needle appears to start
     // at the box's top edge)
 
-    // Digital ahead/behind box
-    const digital = formatGaugeDigital(seconds, zone);
-    ctx.font = 'bold ' + L.valSize + 'px monospace';
+    // Digital ahead/behind box. Empty when the box hides the needle.
+    const digital = hideNeedle ? '' : formatGaugeDigital(seconds, zone);
+    let rightText = '';
+    let ahead = true;
+    if (drv && drv.page === 1 && drv.box) rightText = String(drv.box);
+    else if (drv && drv.page === 2 && drv.min !== undefined && drv.min !== null) {
+      ahead = Number(drv.min) >= 0;
+      rightText = (Number(drv.min) > 0 ? '+' : '') + drv.min;
+    }
+    ctx.font = 'bold ' + (boxMode ? L.boxFontSize : L.valSize) + 'px monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const textW = ctx.measureText(digital).width;
-    const boxW = Math.max(180, textW + 24) * 1.1;
-    const boxH = L.boxHeight;
-    const boxCenterY = L.boxY + L.boxHeight / 2;
-    const boxY = boxCenterY - boxH / 2;
+    // Portrait with the three-box row: equal widths, edges touching, across the
+    // screen. Landscape uses the box's own widths. Otherwise the error box keeps
+    // a scaled floor so an empty readout is not a small square.
+    const thirds = !boxMode && !!rightText;
+    let boxW;
+    let boxH;
+    let boxY;
+    if (boxMode) {
+      boxW = Math.max(180, textW + 24) * 1.1 + 16 * fscale;
+      boxH = 80 * fscale;
+      boxY = L.boxY;
+      const needleTop = centerY - NEEDLE_BAR_HALF_WIDTH;
+      if (boxY < needleTop) {
+        boxH -= needleTop - boxY;
+        boxY = needleTop;
+      }
+    } else if (thirds) {
+      boxW = (width - 16) / 3;
+      boxH = L.boxHeight;
+      boxY = L.boxY;
+    } else {
+      boxW = Math.max(170 * fscale, textW + 20);
+      boxH = L.boxHeight;
+      boxY = L.boxY;
+    }
+    const boxCenterY = boxY + boxH / 2;
     const boxX = centerX - boxW / 2;
     ctx.fillStyle = '#000';
     ctx.fillRect(boxX, boxY, boxW, boxH);
+    // The stroke is centred on the path, so a line on the rectangle edge hangs
+    // half its width outside and the box looks taller than the S1 tag. Draw it
+    // inside, as the box does, so the outer edge is the same height.
+    const border = 3;
+    const inset = border / 2;
     ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(boxX, boxY, boxW, boxH);
+    ctx.lineWidth = border;
+    ctx.strokeRect(boxX + inset, boxY + inset, boxW - border, boxH - border);
     ctx.fillStyle = '#fff';
-    ctx.fillText(digital, centerX, boxCenterY);
+    // The decimal stays on the box centre, as on the box, so the columns
+    // do not step when the number gains a digit.
+    if (digital) {
+      ctx.textAlign = 'left';
+      const dot = digital.indexOf('.');
+      let x = centerX - ctx.measureText(digital).width / 2;
+      if (dot >= 0) {
+        x = centerX - ctx.measureText(digital.slice(0, dot)).width
+            - ctx.measureText('.').width / 2;
+      }
+      ctx.fillText(digital, x, boxCenterY);
+    }
 
-    // Current (right) / Target (left)
-    const cur = Number(msg.cur_kph || 0).toFixed(1);
-    const tgt = Number(msg.target_kph || 0).toFixed(1);
-    ctx.font = 'bold ' + L.curTopSize + 'px sans-serif';
-    ctx.textBaseline = 'alphabetic';
+    // Left tag (navi / pc / pm / S#) and, on Italian, the countdown or minutes box.
+    if (drv) {
+      // Same row as the error box, right edge touching its left edge.
+      const tagText = String(drv.tag || '');
+      const tagSize = boxMode ? 46 * L.fscale : Math.max(16, 22 * L.fscale);
+      ctx.font = 'bold ' + tagSize + 'px sans-serif';
+      const tw = ctx.measureText(tagText).width;
+      const iconKind = Number(drv.icon) || 0;
+      const icon = iconKind ? (boxMode ? 36 : 22) * L.fscale : 0;
+      const igap = icon ? (boxMode ? 8 : 10) * L.fscale : 0;
+      const sideW = boxMode ? 160 * L.fscale
+        : (thirds ? boxW : Math.min(boxX - 4, Math.max(boxH * 1.7, tw + igap + icon + 16)));
+      const tagY = boxY;
+      const tagCy = boxCenterY;
+      const drawTag = (x, text, bg, fg) => {
+        ctx.fillStyle = bg;
+        ctx.fillRect(x, tagY, sideW, boxH);
+        ctx.fillStyle = fg;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.font = 'bold ' + tagSize + 'px sans-serif';
+        const content = tw + igap + icon;
+        const tx = x + Math.max(6, (sideW - content) / 2);
+        ctx.fillText(text, tx, tagCy);
+        if (!iconKind) return;
+        const ox = tx + tw + igap + icon / 2;
+        const oy = tagCy + 1;
+        const r = icon * 0.34;
+        ctx.strokeStyle = fg;
+        ctx.lineWidth = Math.max(1.5, 1.6 * L.fscale);
+        ctx.beginPath();
+        if (iconKind === 1) {
+          ctx.fillRect(ox - r * 0.4, oy - r * 1.7, r * 0.8, r * 0.35);
+          ctx.arc(ox, oy, r, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(ox, oy);
+          ctx.lineTo(ox, oy - r * 0.6);
+          ctx.stroke();
+        } else {
+          ctx.arc(ox, oy, r, 0.75 * Math.PI, 2.25 * Math.PI);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(ox, oy);
+          ctx.lineTo(ox - r * 0.5, oy - r * 0.6);
+          ctx.stroke();
+        }
+      };
+      drawTag(boxX - sideW, tagText,
+        drv.icon === 2 ? '#FFDD00' : (drv.page === 2 || drv.page === 4 ? '#666' : '#DD0000'),
+        drv.icon === 2 ? '#000' : '#fff');
+      if (rightText) {
+        const rx = boxX + boxW;
+        ctx.fillStyle = ahead ? '#00aa00' : '#dd1111';
+        ctx.fillRect(rx, boxY, sideW, boxH);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold ' + (boxMode ? L.boxFontSize * 1.5 : Math.max(18, L.valSize * 0.7)) + 'px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(rightText, rx + sideW / 2, boxCenterY);
+        // Portrait drops the word. The box still draws it, to the right of the box.
+        if (boxMode && drv.legend) {
+          const adv = ctx.measureText(rightText).width;
+          const textRight = rx + (sideW + adv) / 2;
+          const legendX = captionLeftAfter(centerX + 272 * fscale, Math.max(rx + sideW, textRight), 6 * fscale);
+          ctx.font = (18 * fscale) + 'px monospace';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'alphabetic';
+          ctx.fillText(drv.legend, legendX, boxY + boxH / 2 + 6 * fscale);
+        }
+      }
+    }
+    // Averages sit under the arc. Draw them before the pegged needle so the
+    // bar and the chevron stay on top, as they do on the box.
+    if (boxMode) {
+      drawBoxReadouts(ctx, L, drv, msg, boxX, boxY, boxW, fscale,
+        !!(drv && (drv.page === 1 || drv.page === 2)));
+    }
+    if (needlePinned) drawNeedleBar();
 
-    // Same inset as the box: the white speed ends a few pixels in from the panel edge.
-    const topRightInk = width - 4 * L.fscale;
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'right';
-    ctx.fillText(cur, topRightInk, L.speedBase);
-    ctx.font = L.labelSize + 'px sans-serif';
-    ctx.fillText(msg.units === 'mph' ? 'Mph' : 'Kph', topRightInk, L.speedBase + L.labelSize + 4 + L.legendDrop * 0.2);
-
-    // Same inset as the box: the arc's top is near the hub, so the yellow
-    // stack sits a few pixels in from the panel edge, not on bandTargetX.
-    const topLeftInk = 4 * L.fscale;
-    const stageOn = Number(msg.segment_number) > 0;
-    const arrival = msg.arrival && msg.arrival.kph != null ? msg.arrival : null;
-    const showArrival = !!(arrival && Number(msg.rally_type) !== 2 && !(msg.surrey && stageOn));
-    ctx.fillStyle = '#FFDD00';
-    ctx.textAlign = 'left';
-    if (showArrival && !stageOn) {
-      const ak = msg.units === 'mph' ? Math.round(arrival.kph * 0.621371) : arrival.kph;
-      ctx.font = 'bold ' + L.curTopSize + 'px sans-serif';
-      ctx.fillText(String(ak), topLeftInk, L.speedBase);
-      ctx.font = L.labelSize + 'px sans-serif';
-      ctx.fillText(msg.units === 'mph' ? 'Arrival (mph)' : 'Arrival (kph)', topLeftInk,
-                   L.speedBase + L.labelSize + 4 + L.legendDrop * 0.2);
-    } else {
-      ctx.font = 'bold ' + L.curTopSize + 'px sans-serif';
-      ctx.fillText(tgt, topLeftInk, L.speedBase);
-      ctx.font = L.labelSize + 'px sans-serif';
-      ctx.fillText('Target', topLeftInk, L.speedBase + L.labelSize + 4 + L.legendDrop * 0.2);
-      if (showArrival && stageOn) {
-        const ak = msg.units === 'mph' ? Math.round(arrival.kph * 0.621371) : arrival.kph;
-        const arrSize = L.curTopSize * 0.64;
-        ctx.font = 'bold ' + arrSize + 'px sans-serif';
-        const y = L.speedBase + L.labelSize + 4 + L.legendDrop * 0.2 + arrSize * 1.05;
-        ctx.fillText(String(ak), topLeftInk, y);
-        ctx.font = L.labelSize + 'px sans-serif';
-        ctx.fillText('arrival', topLeftInk, y + L.labelSize + 4);
+    // One chevron on the needle, as the box. Italian pc / pm: it waits at the
+    // start and slides to the line tick over the last 5 s. Greek and Surrey: it
+    // walks the row. Hidden with the needle (navi, ct, co, between stages).
+    if (!hideNeedle) {
+      let progress = 0;
+      let showTick = false;
+      if (drv && typeof drv.chev === 'number') {
+        progress = drv.chev;
+        showTick = !!drv.tick;
+      }
+      if (progress < 0) progress = 0;
+      if (progress > 1) progress = 1;
+      const fStart = 0.20;
+      const fTick = 0.80;
+      const fTop = fStart + progress * (fTick - fStart);
+      const halfW = 18 * fscale;
+      const depth = 14 * fscale;
+      const len = needle.length;
+      const strokeV = (x1, y1, x2, y2, colour, widthPx) => {
+        ctx.strokeStyle = colour;
+        ctx.lineWidth = widthPx;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      };
+      if (showTick) {
+        const tx = centerX + fTick * len * dirX;
+        const ty = centerY + fTick * len * dirY;
+        strokeV(tx + halfW * perpX, ty + halfW * perpY,
+                 tx - halfW * perpX, ty - halfW * perpY, '#fff', Math.max(2, 3 * fscale));
+      }
+      if (fTop >= 0.03) {
+        const ax = centerX + fTop * len * dirX;
+        const ay = centerY + fTop * len * dirY;
+        const bx = ax - depth * dirX;
+        const by = ay - depth * dirY;
+        const e1x = bx + halfW * perpX;
+        const e1y = by + halfW * perpY;
+        const e2x = bx - halfW * perpX;
+        const e2y = by - halfW * perpY;
+        const mark = (colour, widthPx) => {
+          ctx.strokeStyle = colour;
+          ctx.lineWidth = widthPx;
+          ctx.beginPath();
+          ctx.moveTo(e1x, e1y);
+          ctx.lineTo(ax, ay);
+          ctx.lineTo(e2x, e2y);
+          ctx.stroke();
+        };
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        mark('#000', Math.max(3, 6 * fscale));
+        mark('#fff', Math.max(2, 3.5 * fscale));
+        ctx.lineCap = 'butt';
+        ctx.lineJoin = 'miter';
       }
     }
 
-    // The stage number, centred just below the ahead/behind box.
-    const stageNo = Number(msg.stage_no) || 0;
-    ctx.fillStyle = '#FFDD00';   // the Target colour, as on the box
-    ctx.textAlign = 'center';
+    // Current (right) / Target (left). Italian figures are the box's km/h strings.
+    const italianFig = drv && (drv.page === 1 || drv.page === 2);
+    const cur = italianFig && drv.speed ? String(drv.speed) : Number(msg.cur_kph || 0).toFixed(1);
+    const tgt = italianFig && drv.target ? String(drv.target) : Number(msg.target_kph || 0).toFixed(1);
     ctx.textBaseline = 'alphabetic';
-    const stageSize = 46.5 * L.fscale;
-    ctx.font = 'bold ' + stageSize + 'px sans-serif';
-    ctx.fillText('Stage ' + (stageNo >= 1 ? stageNo : '-'), centerX, L.footBaseline + 2 + stageSize * 0.8);
 
-    // Total / Trip live in the HTML footer under the canvas (RB-WEB-11).
-
-    // Rally clock top-centre (driver overlay) — larger for glanceability.
+    // Portrait: the dial moved down with the taller canvas. Draw the speeds back
+    // at the old baseline so the arc drops clear of them. Landscape top-aligns
+    // the glyphs to the arc's top, as the box does.
+    const topRightInk = width - 4 * L.fscale;
+    const topLeftInk = 4 * L.fscale;
+    const capDrop = L.legendDrop * 0.2;
+    const drawCorner = (text, anchor, right, size, baseline) => {
+      ctx.font = 'bold ' + size + 'px monospace';
+      ctx.textAlign = 'left';
+      const m = ctx.measureText(text);
+      let y = baseline;
+      let x = right ? anchor - m.width : anchor;
+      if (boxMode && baseline == null) {
+        const ascent = m.actualBoundingBoxAscent > 1 ? m.actualBoundingBoxAscent : size * 0.8;
+        y = L.bandTopY + ascent;
+      }
+      ctx.fillText(text, x, y);
+      return y;
+    };
+    const drawCornerLabel = (text, anchor, right, valueBaseline) => {
+      ctx.font = L.labelSize + 'px sans-serif';
+      ctx.textAlign = 'left';
+      const m = ctx.measureText(text);
+      const x = right ? anchor - m.width : anchor;
+      ctx.fillText(text, x, valueBaseline + L.labelSize + L.labelGap + capDrop);
+    };
+    const figureBase = boxMode ? null : L.speedBase - PORTRAIT_DROP;
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold ' + Math.max(26, 34 * fscale) + 'px monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillText(msg.rally_clock || '--:--:--', width / 2, 6);
+    const curBase = drawCorner(cur, topRightInk, true, L.curTopSize, figureBase);
+    drawCornerLabel(italianFig ? 'Kph' : (msg.units === 'mph' ? 'Mph' : 'Kph'), topRightInk, true, curBase);
+
+    // Same inset as the box: the arc's top is near the hub, so the yellow
+    // stack sits a few pixels in from the panel edge.
+    const stageOn = drv ? drv.page === 3 : Number(msg.segment_number) > 0;
+    const arrival = msg.arrival && msg.arrival.kph != null ? msg.arrival : null;
+    // Between stages only. A Greek stage keeps the target and does not add arrival.
+    const showArrival = !!(arrival && !(msg.surrey && stageOn)
+      && (drv ? drv.page === 4 : (Number(msg.rally_type) !== 2 && !stageOn)));
+    ctx.fillStyle = '#FFDD00';
+    if (showArrival && !stageOn && !italianFig) {
+      const ak = msg.units === 'mph' ? Math.round(arrival.kph * 0.621371) : arrival.kph;
+      const b = drawCorner(String(ak), topLeftInk, false, L.curTopSize, figureBase);
+      drawCornerLabel(msg.units === 'mph' ? 'Arrival (mph)' : 'Arrival (kph)', topLeftInk, false, b);
+    } else {
+      const b = drawCorner(tgt, topLeftInk, false, L.curTopSize, figureBase);
+      drawCornerLabel('Target', topLeftInk, false, b);
+      if (italianFig && drv.dur_s != null) {
+        const ds = Math.max(0, Math.round(Number(drv.dur_s) || 0));
+        const dur = Math.floor(ds / 60) + ':' + String(ds % 60).padStart(2, '0');
+        const durSize = L.curTopSize * 0.64;
+        ctx.font = 'bold ' + durSize + 'px monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(dur, topLeftInk, b + L.labelSize + L.labelGap + capDrop + durSize * 1.05);
+      }
+    }
+
+    // The stage number lives in the left tag once the page is known.
+    if (!drv) {
+      const stageNo = Number(msg.stage_no) || 0;
+      ctx.fillStyle = '#FFDD00';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      const stageSize = 46.5 * L.fscale;
+      ctx.font = 'bold ' + stageSize + 'px sans-serif';
+      ctx.fillText('Stage ' + (stageNo >= 1 ? stageNo : '-'), centerX, L.footBaseline + 2 + stageSize * 0.8);
+    }
+
+    // Portrait keeps Total and Trip in the footer under the canvas.
+    // Landscape has already drawn them on the dial. No rally clock here.
   };
 
   global.RallyDriverGauge = DriverGauge;

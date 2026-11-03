@@ -340,7 +340,7 @@ between pressing and the start minute will be included in the stage distance.</l
 <li>Pressing the button overrides any programmed autostart.</li>
 <li>The Total and Trip distances zero immediately.</li>
 <li>The timer resets immediately.</li>
-<li>The Trip history is kept.</li>
+<li>On a Greek stage the Trip history clears. Italian and Surrey keep it.</li>
 </ul>
 
 <h4>Starting scenarios</h4>
@@ -441,7 +441,8 @@ stage clock keeps running.</li>
 
 <h4>trip</h4>
 <p>Shows intermediate distance and time. Press to zero it; the old figure appears in the <b>Trip
-history</b> column. Trip also restarts at every speed change.</p>
+history</b> column. Trip also restarts at every speed change. Starting a Greek stage clears that
+column, including an autostart or Start on Next Minute. Italian and Surrey keep it.</p>
 
 <h4>countdown</h4>
 <p>Distance and time to the next speed change. If that change is not automatic, press
@@ -617,7 +618,8 @@ figure as the co-pilot's Stage arrival. The distances and averages are Trip and 
   </svg>
 </figure>
 
-<p>During a timed stage the needle shows how far ahead/behind the driver is in seconds. If the
+<p>During a timed stage the needle shows how far ahead/behind the driver is in seconds. Arrival
+speed is not shown; that figure is only there between stages. If the
 error exceeds the current gauge scale (changeable from 1&ndash;3 seconds in settings) the needle will
 stay pinned far left (or far right if ahead) and the scale will expand. The red logo shows the stage
 number (S1, S2 &hellip;). The cyan <b>sub</b> average is your average speed since the current speed section began, that
@@ -1007,7 +1009,7 @@ buttons display as black on white when active and a whooping sound is emitted.</
 </figure>
 
 <p>Past the end of a substage, the count down km (for example <code>+0.04</code>) and seconds (for
-example <code>+0:01.4</code>) turn red and count up. The seconds show only on pc, pm and co rows.</p>
+example <code>+0:01.4</code>) turn red and count up. The seconds show on every row, including navi and ct.</p>
 
 </section>
 
@@ -1016,7 +1018,9 @@ example <code>+0:01.4</code>) turn red and count up. The seconds show only on pc
 <h3 id="italian-driver">The Driver Display in Italian mode</h3>
 
 <p>Two pages: one on navi, ct and co rows, and one inside a pc or pm. All figures are in km and
-kph.</p>
+kph. On a navi, ct or co row the cyan figure is the Trip average and the white figure is the Total
+average, the same live averages as Greek, and both keep moving as the car moves. A pc or pm is
+unchanged: one average, over that pc or pm, beside the sector total.</p>
 
 <p>A legend to the right of the green box reads <b>countdown</b> inside a pc or pm and
 <b>arrival</b> on navi rows. The gauge scale widens when the time error is bigger than the Gauge
@@ -1042,9 +1046,9 @@ range.</p>
       <rect x="8" y="212" width="217" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
       <text x="20" y="244" font-size="24" font-weight="bold">Substage time</text>
       <text x="20" y="270" font-size="21">Time it takes (m:ss).</text>
-      <rect x="8" y="417" width="174" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
-      <text x="20" y="449" font-size="24" font-weight="bold">Average</text>
-      <text x="20" y="474" font-size="21">Average speed.</text>
+      <rect x="8" y="417" width="248" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="20" y="449" font-size="24" font-weight="bold">Total average</text>
+      <text x="20" y="474" font-size="21">Average since the start.</text>
       <rect x="1168" y="8" width="170" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
       <text x="1180" y="40" font-size="24" font-weight="bold">Speed</text>
       <text x="1180" y="65" font-size="21">Present speed.</text>
@@ -1140,7 +1144,7 @@ ahead, red when behind.</p>
       <text x="588" y="581" font-size="21">Seconds ahead or behind.</text>
       <rect x="924" y="524" width="217" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
       <text x="936" y="556" font-size="24" font-weight="bold">Countdown</text>
-      <text x="936" y="581" font-size="21">Seconds to the line.</text>
+      <text x="936" y="581" font-size="21">-.- until the last 5 s.</text>
     </g>
     <g fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round">
       <line x1="191" y1="44" x2="333" y2="58"/>
@@ -1172,8 +1176,8 @@ ahead, red when behind.</p>
 </figure>
 
 <p>Inside a pc or pm the needle and the error box give the <b>error</b> from the start tube, in
-seconds. The yellow time is how long the pc takes. The box on the right counts down the seconds to
-the line, from 5.0 to 0.0.</p>
+seconds. The yellow time is how long the pc takes. The box on the right shows <b>-.-</b> until 5
+seconds remain, then counts down from 5.0 to 0.0.</p>
 
 <h4 id="chevron-italian">The chevron</h4>
 <p>Inside a pc or pm one chevron sits at the start of the needle, with the line tick further up. It
@@ -1327,12 +1331,12 @@ to the phone's home screen, it runs full screen.</p>
 <p><b>Sounds:</b> the top key reads <b>Tap for sound</b> until the phone allows audio, then
 toggles Sound is on / off.</p>
 
-<p><b>Nero2.1:</b> the phone's stage selectors run 1&ndash;99 like the box; the phone does not yet show the italian columns, and its screenshots below are from 27 October (before Nero2.1).</p>
+<p><b>Nero2.1:</b> the phone's stage selectors run 1&ndash;99 like the box. On an Italian rally the Seg table uses the box's columns (sub, type, ref, distances, speed, dur, elapsed) and does not show the Greek speed-change or m/s columns. The screenshots below are from 27 October (before Nero2.1).</p>
 
 <p>Six tabs mirror the box: <b>Navi</b> (navigation, with total, trip, freeze, reverse, and the flag
 keys the box is showing), <b>Seg</b> (segments), <b>Time</b> (date / time), <b>Cal</b>
 (calibration), <b>Set</b> (settings, plus <code>download logs</code>) and <b>Drv</b> (driver gauge
-with Total and Trip). On Navi and Drv, press Total or Trip to zero it. Distance figures on Navi,
+with Total and Trip). The Navi keys use the box's words, so an Italian rally reads sector total, sub, navi, next substage and prev substage. The navi key opens Set Navi Distance, with Set, reset and Cancel. Turn the phone sideways and Navi, Seg, Time, Cal and Set use the box's columns; the menu key changes page. Held upright, the pages stay stacked. The Drv needle carries the same chevron and row-end line as the box. The Drv dial follows the box: Greek in a stage, Greek between stages, Italian navi, or an Italian pc / pm. Total, Trip and the averages stay under the dial. On Navi and Drv, press Total or Trip to zero it. Distance figures on Navi,
 Seg and Drv follow <b>Distance units</b> on Set (the same <b>00.00</b> kilometres or <b>0,000</b>
 metres choice as the box). The box's own Total, Trip, countdown and driver distances follow that
 same choice: <b>00.00</b> is kilometres to two decimals, <b>0,000</b> is whole metres, with no change
@@ -1341,7 +1345,9 @@ rally type (italian, greek, surrey), measure type (AB,BC or AB,AC), and reaction
 Rally type stays locked while a stage is running, and Beep navigation, Beep timing and their
 advance figures stay greyed on an Italian rally, as on the box. On an Italian rally the
 phone hides the next-minute start and autostart keys, and on Seg it hides Autostart and Distance
-at start and shows the sector Duration instead, matching the box. Navi then shows the sector card
+at start and shows the sector Duration instead, matching the box. The Italian Seg rows show
+type and ref, not a speed-change tick or an m/s column. Tap a type to step it, as on the box.
+The calibration page's rpm figure is the large white number beside pulses/rev. Navi then shows the sector card
 (the row being driven, the next row, and the count down) in place of the stage table, Trip history
 and Stage arrival. <code>A-B, B-C zero</code> shows only when the box shows it. Set also has the
 box Setup actions: connect or disconnect the remembered Bluetooth speaker, list and join a saved
@@ -1403,8 +1409,7 @@ single beep (0 recommended).</li>
 </ul>
 <div class="note">In settings, Beep navigation, Beep timing and their advance figures are greyed
 while the rally type is italian; the choices are kept for greek. Beep Assist is for greek stages and is silent in italian. There, inside a pc, the
-box instead beeps the countdown to the end tube: at 30 s and 15 s, then 5, 4, 3, 2, 1, and a short
-beep on 0.</div>
+box instead beeps the countdown to the end tube: at 30 s and 15 s, the navigation double beep at 5 s, a single beep at 4, 3, 2 and 1, and a shorter beep on 0. The same countdown sounds on a navi row, to warn that next is due. Every row that is not a pc also beeps once at 100 m before its end.</div>
 
 </section>
 
@@ -1554,7 +1559,7 @@ screen, it runs without browser bars.</li>
 
 <p>Agreed or planned, but the box does <b>not</b> do these today:</p>
 <ul>
-<li>Italian type, ref and time columns on the phone's Seg table (Duration is there). Keeping phone edits made while disconnected.</li>
+<li>Keeping phone edits made while disconnected.</li>
 </ul>
 
 <h2 id="check" style="page-break-before: always">Things to check</h2>

@@ -238,15 +238,19 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     double tip_x = centerX + needle_length * dir_x;
     double tip_y = centerY + needle_length * dir_y;
 
-    if (!hideNeedle) {
-    cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
-    cairo_move_to(cr, tip_x + needle.halfWidth * perp_x, tip_y + needle.halfWidth * perp_y);
-    cairo_line_to(cr, tip_x - needle.halfWidth * perp_x, tip_y - needle.halfWidth * perp_y);
-    cairo_line_to(cr, centerX - needle.halfWidth * perp_x, centerY - needle.halfWidth * perp_y);
-    cairo_line_to(cr, centerX + needle.halfWidth * perp_x, centerY + needle.halfWidth * perp_y);
-    cairo_close_path(cr);
-    cairo_fill(cr);
-    }
+    // Drawn under the readout so a sweeping needle does not cover the digits.
+    // When the needle is pegged at either end it is drawn again, after the
+    // stage tag and the error box, so those boxes do not hide it.
+    auto drawNeedleBar = [&]() {
+        cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
+        cairo_move_to(cr, tip_x + needle.halfWidth * perp_x, tip_y + needle.halfWidth * perp_y);
+        cairo_line_to(cr, tip_x - needle.halfWidth * perp_x, tip_y - needle.halfWidth * perp_y);
+        cairo_line_to(cr, centerX - needle.halfWidth * perp_x, centerY - needle.halfWidth * perp_y);
+        cairo_line_to(cr, centerX + needle.halfWidth * perp_x, centerY + needle.halfWidth * perp_y);
+        cairo_close_path(cr);
+        cairo_fill(cr);
+    };
+    if (!hideNeedle) drawNeedleBar();
 
     // Hub: a plain filled disc in the needle's own colour. The old ring and
     // inner dot were decoration on the one part of the dial that carries no
@@ -285,10 +289,18 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             double box_center_y = L.boxY + L.boxHeight / 2.0;
             box_y = box_center_y - box_height / 2.0;
             if (data->driverPage != AppData::DP_CLASSIC) {
-                // RB-DRV-18/19: the logo box, this box and the right-hand box form one row, all
-                // 80 px high, tops level, edges touching (16 px wider than before).
+                // RB-DRV-18/19: the logo box, this box and the right-hand box form one row,
+                // tops level, edges touching (16 px wider than before). The row was 80 px,
+                // which started 8 px above the hub. A pinned needle is a 10 px bar through
+                // the hub, so those boxes stuck up past it. Shorten from the top until the
+                // bar lies on the top edge. The bottom stays where it was.
                 box_width += 16.0 * L.fscale;
                 box_height = 80.0 * L.fscale;
+                const double needleTop = centerY - needle.halfWidth;
+                if (box_y < needleTop) {
+                    box_height -= needleTop - box_y;
+                    box_y = needleTop;
+                }
             }
             border = 3.0;
         } else {
@@ -340,7 +352,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             cairo_move_to(cr, text_start_x, baseline_y);
             cairo_show_text(cr, digital);
         } else {
-            cairo_move_to(cr, centerX - dext.width / 2,
+            cairo_move_to(cr, centerX - dext.x_advance / 2.0,
                               box_y + box_height / 2 + dext.height / 2 - 2);
             cairo_show_text(cr, digital);
         }
@@ -352,7 +364,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // whole group slides toward the segment-end tick (20% from the tip) in
     // proportion to how much of the segment has been driven. Outside a segment the
     // chevrons stay at the start position and the tick is hidden.
-    if (!hideNeedle) {
+    auto drawChevrons = [&]() {
         // One chevron only; it carries the countdown (it no longer shows the zone).
         const int num_chevrons = 1;
 
@@ -417,7 +429,8 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         }
         cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
         cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER);
-    }
+    };
+    if (!hideNeedle) drawChevrons();
 
     // Compact layout: draw the speed values inside the gauge area.
     // Fonts match the wide layout at full size and shrink with the gauge.
@@ -460,21 +473,20 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             cairo_show_text(cr, text);
             smallFace();
         };
-        // Top-corner value. Each anchor is an ink edge, not the pen position:
-        // right figures end on it, left figures start on it, so the number
-        // and its legend share one edge. Top-aligns with L.bandTopY using
-        // the drawn text's own ink ascent (font-metric ascent isn't pure
-        // geometry, so this can't be precomputed in CompactGaugeLayout --
-        // RB-DRV-08). Returns the baseline used, so the caller can place
-        // the label beneath it.
+        // Top-corner value. Both edges are the character cells, not the ink:
+        // a right-hand figure ends on the anchor by its advance, a left-hand
+        // figure starts on it. A narrow 1 then stays in its column. Top-aligns
+        // with L.bandTopY using the drawn text's own ink ascent (font-metric
+        // ascent isn't pure geometry, so this can't be precomputed in
+        // CompactGaugeLayout -- RB-DRV-08). Returns the baseline used, so the
+        // caller can place the label beneath it.
         auto drawTopCorner = [&](const char* text, double anchor_x, bool right_align) -> double {
             bigFace();
             cairo_set_font_size(cr, L.curTopSize);
             cairo_text_extents(cr, text, &te);
             double ascent = -te.y_bearing;
             double baseline = L.bandTopY + ascent;
-            double x = right_align ? (anchor_x - te.x_bearing - te.width)
-                                   : (anchor_x - te.x_bearing);
+            double x = right_align ? (anchor_x - te.x_advance) : anchor_x;
             cairo_move_to(cr, x, baseline);
             cairo_show_text(cr, text);
             smallFace();
@@ -486,8 +498,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             cairo_set_font_size(cr, L.labelSize);
             cairo_text_extents_t lte;
             cairo_text_extents(cr, text, &lte);
-            double x = right_align ? (anchor_x - lte.x_bearing - lte.width)
-                                   : (anchor_x - lte.x_bearing);
+            double x = right_align ? (anchor_x - lte.x_advance) : anchor_x;
             cairo_move_to(cr, x, value_baseline + L.labelSize + L.labelGap + capDrop);
             cairo_show_text(cr, text);
         };
@@ -535,30 +546,9 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                 }
                 double baseline = drawTopCorner(big.c_str(), topLeftInk, false);
                 drawTopCornerLabel(cap.c_str(), topLeftInk, false, baseline);
-                // During a Greek stage the target stays, and the arrival speed the
-                // navigator is showing sits under it. Between stages the arrival
-                // speed is the figure above, so this line is the stage page only.
-                if (page == AppData::DP_GREEK_STAGE &&
-                    navigatorShowsArrivalKph(data->state->rally_type, true, data->driverArrivalKph >= 0)) {
-                    char arr[16];
-                    snprintf(arr, sizeof(arr), "%ld",
-                             mph ? std::lround(data->driverArrivalKph * 0.621371)
-                                 : static_cast<long>(data->driverArrivalKph));
-                    bigFace();
-                    const double arrSize = L.curTopSize * 0.64;
-                    cairo_set_font_size(cr, arrSize);
-                    cairo_text_extents(cr, arr, &te);
-                    const double arrBase = baseline + L.labelSize + L.labelGap + capDrop + arrSize * 1.05;
-                    cairo_move_to(cr, topLeftInk - te.x_bearing, arrBase);
-                    cairo_show_text(cr, arr);
-                    smallFace();
-                    const char* acap = "arrival";
-                    cairo_set_font_size(cr, L.labelSize);
-                    cairo_text_extents(cr, acap, &te);
-                    cairo_move_to(cr, topLeftInk - te.x_bearing,
-                                  arrBase + L.labelSize + L.labelGap * 0.4);
-                    cairo_show_text(cr, acap);
-                }
+                // Arrival stays on the between-stages page (the figure above).
+                // A Greek stage shows the target only, even while the navigator
+                // still has Stage arrival.
                 if (italianFig) {   // how long this pc / pm / row takes, m:ss, under the target
                     const double dur_s = (page == AppData::DP_ITALIAN_TRIAL) ? v.durationS : data->driverRowS;
                     char dur[24];
@@ -568,7 +558,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                     const double durSize = L.curTopSize * 0.64;
                     cairo_set_font_size(cr, durSize);
                     cairo_text_extents(cr, dur, &te);
-                    cairo_move_to(cr, topLeftInk - te.x_bearing,
+                    cairo_move_to(cr, topLeftInk,
                                   baseline + L.labelSize + L.labelGap + capDrop + durSize * 1.05);
                     cairo_show_text(cr, dur);
                     smallFace();
@@ -591,21 +581,28 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             auto distText = [&](double metres) {
                 return formatDistance(metres, data->state->distance_km);
             };
-            auto avgKphText = [&](const char* label) {   // a Greek average label is in the shown units
+            // Italian speeds are km/h even when the box is set to mph. A label that is
+            // not a number ("--.-" before the first reading) is drawn as it is.
+            auto avgKphText = [&](const char* label) {
+                if (!label || label[0] < '0' || label[0] > '9') return std::string(label ? label : "");
                 const double x = atof(label);
                 return trialSpeedText(data->state->units ? x / 0.621371 : x);
             };
+            // A pc / pm keeps its own average over the tube. A navi row shows the live
+            // Total average and the live Trip average, the same figures Greek recomputes
+            // every tick. It used to put the Trip average in the Total slot and draw no
+            // Trip average, so Total never moved.
+            const char* totalLabel = gtk_label_get_text(data->totalSpeedLabel);
             const std::string totalAvg = (page == AppData::DP_ITALIAN_TRIAL)
                 ? (v.avgValid ? trialSpeedText(v.avgKph) : std::string("--.--"))
-                : (italianFig   // a navi row: the original Trip average (next zeroes Trip), always km/h
-                       ? avgKphText(gtk_label_get_text(data->tripSpeedLabel))
-                       : std::string(gtk_label_get_text(data->totalSpeedLabel)));
+                : (page == AppData::DP_ITALIAN_NAVI ? avgKphText(totalLabel)
+                                                    : std::string(totalLabel));
             cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
             drawAt(totalAvg, avgAnchor, y2);
             drawAt(distText(page == AppData::DP_ITALIAN_TRIAL ? v.sectorTotalM : data->driverTotalM), distAnchor, y2);
             std::string tripAvg;
             bool haveTripAvg = false;
-            if (page != AppData::DP_ITALIAN_TRIAL) {   // trip row (cyan, as Greek)
+            if (page != AppData::DP_ITALIAN_TRIAL) {   // a pc / pm has no trip row
                 cairo_set_source_rgb(cr, 0.0, 1.0, 1.0);
                 if (page == AppData::DP_GREEK_STAGE) {   // the substage's own average, to match the time error
                     char sb[24];
@@ -614,19 +611,22 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                     tripAvg = sb;
                     haveTripAvg = true;
                     drawAt(tripAvg, avgAnchor, y1);
-                } else if (!italianFig) {
-                    tripAvg = gtk_label_get_text(data->tripSpeedLabel);
+                } else {
+                    const char* raw = gtk_label_get_text(data->tripSpeedLabel);
+                    tripAvg = (page == AppData::DP_ITALIAN_NAVI) ? avgKphText(raw) : std::string(raw);
                     haveTripAvg = true;
                     drawAt(tripAvg, avgAnchor, y1);
                 }
                 drawAt(distText(data->driverTripM), distAnchor, y1);
             }
-            // Left ink of a figure right-aligned on avgAnchor, in the figure font.
+            // Left edge of the character cells of a figure on avgAnchor.
+            // The ink of a 1 sits inside that cell, so the caption does not
+            // step sideways as the digits change.
             auto avgLeftInk = [&](const std::string& text) {
                 bigFace();
                 cairo_set_font_size(cr, L.valSize);
                 cairo_text_extents(cr, text.c_str(), &te);
-                return avgAnchor - te.x_advance + te.x_bearing;
+                return avgAnchor - te.x_advance;
             };
             double numberLeft = avgLeftInk(totalAvg);
             if (haveTripAvg) numberLeft = std::min(numberLeft, avgLeftInk(tripAvg));
@@ -668,7 +668,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                 }
             }
 
-            // ---- the strip: logo box | error box | right-hand box, all 80 px high, edges touching
+            // ---- the strip: logo box | error box | right-hand box, one height, edges touching
             {
                 std::string tag;
                 double bg[3], fgc;
@@ -684,7 +684,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                     tag = "navi";
                     bg[0] = bg[1] = bg[2] = 0.4; fgc = 1.0;
                 }
-                const double w = 160.0 * fs, h = 80.0 * fs;
+                const double w = 160.0 * fs, h = abBoxH;
                 const double x0 = abBoxX - w, y0 = abBoxY;
                 cairo_set_source_rgb(cr, bg[0], bg[1], bg[2]);
                 cairo_rectangle(cr, x0, y0, w, h);
@@ -721,11 +721,11 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                 }
             }
 
-            // Right-hand box: the pc / pm countdown (green, 5.0 -> 0.0) or the navi minutes ahead /
+            // Right-hand box: the pc / pm countdown (green, -.- until 5 s, then 5.0 -> 0.0) or the navi minutes ahead /
             // behind (green ahead, red behind). None in the Greek pages.
             if (page == AppData::DP_ITALIAN_TRIAL
                 || (page == AppData::DP_ITALIAN_NAVI && data->driverMinutesValid)) {
-                const double w = 160.0 * fs, h = 80.0 * fs;
+                const double w = 160.0 * fs, h = abBoxH;
                 const double x0 = abBoxX + abBoxW, y0 = abBoxY;
                 std::string txt;
                 bool ahead = true;
@@ -775,6 +775,14 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         cairo_show_text(cr, cpu_text);
 
         // (Single-display mode: the rally clock now sits above the gauge, on the page.)
+    }
+
+    // Pegged flat at the left or right end: the stage tag, the error box and
+    // the Italian side box have now been painted over the bar. Draw the bar
+    // and its chevron again so they sit on top of those boxes.
+    if (!hideNeedle && max_val > 0.0 && std::abs(seconds) >= max_val) {
+        drawNeedleBar();
+        drawChevrons();
     }
 
     return FALSE;

@@ -13,6 +13,7 @@
 #include "stage_file.h"
 #include "reaction_offset.h"
 #include "sector.h"
+#include "counter_poller.h"
 #include "sector_edit.h"
 #include "ui_setup.h"
 #include "ui_segments.h"
@@ -145,6 +146,26 @@ bool webHandleCommand(AppData* data, const char* json) {
         // 999,999 m the display switches to km and reads as truncated.
         if (meters < 0.0 || meters > 999999.0) return false;
         return applyDistanceSet(data, meters);
+    }
+    // The navi key (Italian and Surrey). Greek's third key is the countdown label and does nothing.
+    if (strcmp(type, "navi_set") == 0) {
+        if (!data->state || data->state->rally_type == 0 || !data->poller) return false;
+        const CounterPoll poll = data->poller->getMostRecent();
+        bool reset = false;
+        jsonFindBool(json, "reset", &reset);
+        bool ok = false;
+        if (reset) {
+            resetOdometerKeepingPosition(*data->state, poll.cntr1, poll.cntr2);
+            ok = true;
+        } else {
+            double navi_m = 0.0;
+            if (!jsonFindDouble(json, "meters", &navi_m) || navi_m < 0.0 || navi_m > 999999.0) return false;
+            ok = setOdometerMetres(*data->state, poll.cntr1, poll.cntr2, navi_m);
+        }
+        if (!ok) return false;
+        data->beepCursorsStale = true;
+        ConfigFile::save(*data->state);
+        return true;
     }
     if (strcmp(type, "next") == 0 || strcmp(type, "prev") == 0) {
         if (strcmp(type, "next") == 0) on_next_press(nullptr, data);
@@ -483,6 +504,30 @@ bool webHandleCommand(AppData* data, const char* json) {
         data->uploadLoaded = stageUploadCommit(data, file);
         data->uploadCheckId.clear();
         data->uploadCheckText.clear();
+        return true;
+    }
+    if (strcmp(type, "sector_type") == 0) {
+        int row = -1;
+        if (!jsonFindInt(json, "row", &row) || row < 0) return false;
+        sectorEditStepType(data, static_cast<size_t>(row));
+        updateSegmentsDisplay(data);
+        return true;
+    }
+    if (strcmp(type, "sector_ref") == 0) {
+        int row = -1, ref = -1;
+        if (!jsonFindInt(json, "row", &row) || !jsonFindInt(json, "ref", &ref) || row < 0) return false;
+        sectorEditSetRef(data, static_cast<size_t>(row), ref);
+        updateSegmentsDisplay(data);
+        return true;
+    }
+    if (strcmp(type, "sector_pc") == 0) {
+        int row = -1;
+        char text[32];
+        if (!jsonFindInt(json, "row", &row) || row < 0) return false;
+        if (!jsonFindString(json, "text", text, sizeof(text))) return false;
+        const long s = parseDurationSeconds(text);
+        if (s > 0) sectorEditSetPcDuration(data, static_cast<size_t>(row), static_cast<double>(s));
+        updateSegmentsDisplay(data);
         return true;
     }
     if (strcmp(type, "sector_duration") == 0) {
