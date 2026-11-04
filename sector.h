@@ -48,16 +48,13 @@ long parseDurationSeconds(const std::string& text);
 // sector's duration (`sector_duration_s`, -1 = not set: the typed speed stays).
 void applySectorRules(std::vector<Segment>& segs, long sector_duration_s);
 
-// The minute a stage start press counts as (11:30:40 -> 11:30:00), as the time card records it.
+// The second a stage start press counts as: the press itself (11:30:40 stays 11:30:40).
 int64_t italianStageStartMs(int64_t press_ms);
 
-// The sector clock reads zero at :00 of the departure minute. The box aims for the middle
-// of the co's arrival minute (card + 30 s), so the card's schedule is scaled to that time.
-const int64_t SECTOR_AIM_MS = 30000;
+// The sector clock reads zero at the second of the departure press. The box aims for the
+// same second of the co's arrival minute (press + card); the arrival minute is managed by the crew.
 int64_t sectorClockZeroMs(const RallyState& s);
-// (card + 30 s) / card; 1.0 when the card has no duration.
-double sectorScheduleScale(const RallyState& s);
-// The co's in-time as the card has it: the departure minute plus the card's sector duration.
+// The co's in-time: the departure second plus the card's sector duration.
 int64_t coInTimeMs(const RallyState& s);
 
 // Starts the sector: the departure minute is the minute pressed (as the card records it) and
@@ -85,7 +82,7 @@ bool applySectorFinish(RallyState& s);
 bool undoSectorTube(RallyState& s);
 
 // Seconds left to the end of the row being driven: inside a pc / pm from its start tube, otherwise
-// from the sector clock's zero (on the co row: the middle of the in-minute minus now). Invalid when
+// from the sector clock's zero (on the co row: the arrival second minus now). Invalid when
 // no row is being driven.
 double sectorSecondsToLine(const RallyState& s, int64_t now_ms, bool* valid);
 
@@ -100,6 +97,9 @@ double pcCountdownSeconds(const RallyState& s, int64_t now_ms, bool* valid);
 // a mark is crossed between them. Marks already gone when the row starts are never heard.
 enum class PcBeep { None, Tick, Five, Zero };
 PcBeep pcCountdownBeep(double prev_s, double now_s);
+// The sound card and the tone thread delay a beep by roughly this long, so the countdown marks are
+// fired this much early and are heard on the second. Tune on the Pi by recording the beep.
+const double PC_BEEP_LEAD_S = 0.10;
 
 // Metres left to the end of the row being driven. Valid on a running italian row that
 // is not a pc (navi, ct, pm, co). Negative once the line is passed.
@@ -176,6 +176,14 @@ struct SectorPanel {
     long coMinutes = 0;            // minutes left to it
 };
 SectorPanel sectorPanel(const RallyState& s, int64_t now_ms, long sector_m);
+
+// The sub (trip) average speed in km/h, from the sub's own start: what a navi row shows in its
+// countdown line, since a navi has no tube to average from.
+double subAverageKph(const RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms);
+
+// Italian, the row being driven is a pc or a pm: resetting sub now would spoil the measurement,
+// so the reset key asks first.
+bool subResetInStage(const RallyState& s);
 // RB-WEB-21: the count down figures as the box prints them, so the phone can show the same text.
 // km to the line with two decimals; "+0.04" once the line has gone by.
 std::string sectorCountdownKmText(const SectorPanel& p);

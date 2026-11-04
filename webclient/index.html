@@ -74,12 +74,13 @@
       <strong id="navi-m" class="big">0</strong>
     </div>
     <div class="nr fig-row">
-      <div class="kcol"><button id="btn-next" type="button" class="key k" disabled>next speed</button>
+      <div class="kcol"><button id="btn-countdown" type="button" class="key k" disabled>countdown</button>
       <span class="el" id="speed-change"></span><span class="el" id="next-s" style="display:none"></span></div>
       <strong id="next-m" class="big sm">---</strong>
     </div>
 
     <div class="nr" id="bottom-keys">
+      <button id="btn-next" type="button" class="key" disabled>next speed</button>
       <button id="btn-prev" type="button" class="key" disabled>prev speed</button>
       <button id="btn-freeze" type="button" class="key">freeze</button>
       <button id="btn-reverse" type="button" class="key">reverse</button>
@@ -93,8 +94,8 @@
     </div>
 
     <div class="nr flags">
-      <button id="btn-flag-minute" type="button" class="key col"><svg class="flag" viewBox="0 0 40 34"><use href="#flag"/></svg><span id="flag-minute-time">--:--</span></button>
       <button id="btn-flag-late" type="button" class="key"><svg class="flag" viewBox="0 0 40 34"><use href="#flag"/></svg><svg class="watch" viewBox="0 0 32 36"><use href="#watch"/></svg></button>
+      <button id="btn-flag-minute" type="button" class="key col"><svg class="flag" viewBox="0 0 40 34"><use href="#flag"/></svg><span id="flag-minute-time">--:--</span></button>
       <button id="btn-flag-auto" type="button" class="key col"><svg class="flag" viewBox="0 0 40 34"><use href="#flag"/></svg><span>auto</span></button>
     </div>
     <div class="nr" id="row-zero">
@@ -106,10 +107,12 @@
       <div class="card">
         <table id="stage-table"><thead><tr><th id="stage-speed-head">KPH</th><th id="stage-at-head">at m</th></tr></thead><tbody></tbody></table>
       </div>
-      <div class="card arr"><span class="cyan">Stage arrival</span>
+      <div class="card arr cdn" id="card-cd" style="display:none"><span class="cyan">countdown</span>
+        <span class="fig"><span><small>m</small><b id="cd-m">--</b></span><span><small>min</small><b id="cd-min">--</b></span></span></div>
+      <div class="card arr" id="card-arr"><span class="cyan">Stage arrival</span>
         <span class="fig"><span><small id="arr-unit">kph</small><b class="cyan" id="arr-kph">--</b></span><span><small>min</small><b id="arr-min">--</b></span></span></div>
     </div>
-    <div class="card hist">Trip history&nbsp; <span id="trip-history">-</span></div>
+    <div class="card hist"><span id="trip-history-label">Trip history</span>&nbsp; <span id="trip-history">-</span></div>
     </div>
     <div class="card sector" id="sector-card" style="display:none">no sector loaded</div>
     <div class="card hist" id="time-taken-row" style="display:none"><span id="time-taken-label">time taken</span>&nbsp; <span id="time-taken">-</span></div>
@@ -131,7 +134,7 @@
     </section>
     <div class="table-wrap">
       <table id="seg-table">
-        <thead><tr><th>#</th><th id="seg-h-from">from m</th><th id="seg-h-to">to m</th><th id="seg-h-dist">dist m</th><th>chg</th><th>KPH</th><th>m/s</th><th>auto</th><th>time</th><th>total</th><th></th></tr></thead>
+        <thead><tr><th>box</th><th id="seg-h-from">from m</th><th id="seg-h-to">to m</th><th id="seg-h-dist">dist m</th><th>chg</th><th>KPH</th><th>auto</th><th>dur</th><th>elapsed</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -155,6 +158,8 @@
     <section class="actions">
       <button id="btn-upload-stage" type="button" class="key">upload<br>stage</button>
     </section>
+    <!-- The rally mode's flag with "mode" across it, as on the box's Segments page. -->
+    <svg id="mode-badge" class="mode-badge" viewBox="0 0 96 24" aria-label="rally mode"></svg>
   </main>
 
   <!-- TIME: the box's Date / Time page -->
@@ -201,6 +206,8 @@
       <div class="beep-row"><label for="beep-timing">Beep timing</label><input id="beep-timing" type="checkbox"><span class="onoff" data-for="beep-timing"><button type="button" class="key" data-on="0">off</button><button type="button" class="key" data-on="1">on</button></span></div>
       <div class="beep-row"><label for="beep-advance-s">Timing advance</label>
         <span class="unit"><input id="beep-advance-s" type="number" min="0" step="1" inputmode="numeric"> s</span></div>
+      <div class="beep-row"><span>Phone sound lead</span>
+        <span class="unit"><button id="phone-lead-minus" type="button" class="key">−</button><span id="phone-lead">100 ms</span><button id="phone-lead-plus" type="button" class="key">+</button></span></div>
       <div class="beep-row"><label for="tone-enabled">Ahead/Behind Tone</label><input id="tone-enabled" type="checkbox"><span class="onoff" data-for="tone-enabled"><button type="button" class="key" data-on="0">off</button><button type="button" class="key" data-on="1">on</button></span></div>
       <div class="beep-row"><span>Tone when behind</span>
         <label><input type="radio" name="tone-behind" value="1"> 1</label><label><input type="radio" name="tone-behind" value="2"> 2</label></div>
@@ -227,19 +234,22 @@
       <div class="beep-row"><label for="set-stage-log">Stage data logging</label><input id="set-stage-log" type="checkbox"><span class="onoff" data-for="set-stage-log"><button type="button" class="key" data-on="0">off</button><button type="button" class="key" data-on="1">on</button></span></div>
       <div class="beep-row"><label for="set-sensor-log">Sensor logging</label><input id="set-sensor-log" type="checkbox"><span class="onoff" data-for="set-sensor-log"><button type="button" class="key" data-on="0">off</button><button type="button" class="key" data-on="1">on</button></span></div>
       <div class="beep-row"><label for="set-force-single">Force single display</label><input id="set-force-single" type="checkbox"><span class="onoff" data-for="set-force-single"><button type="button" class="key" data-on="0">off</button><button type="button" class="key" data-on="1">on</button></span></div>
-      <div class="beep-row"><span>Screen <b id="set-fps">-</b></span><span><b id="set-cpu">-</b></span></div>
       <div class="beep-row"><span>Wi-Fi phone link</span><span id="set-url" class="cyan">-</span></div>
       <button id="btn-spanner" type="button" class="key land-only">setup</button>
+      <div class="beep-row"><span>Screen <b id="set-fps">-</b></span><span><b id="set-cpu">-</b></span></div>
       <div id="setup-sheet">
+      <h3 class="setup-h">Screen setup</h3>
+      <div id="displays-list"></div>
+      <div class="beep-row"><button id="bt-remember" type="button" class="key">remember playing speaker</button></div>
       <div class="beep-row"><span>Bluetooth speaker</span><span id="bt-name">no speaker remembered</span></div>
       <div class="beep-row"><button id="bt-connect" type="button" class="key">connect</button><button id="bt-disconnect" type="button" class="key">disconnect</button></div>
       <div class="beep-row"><button id="wifi-list" type="button" class="key">saved Wi-Fi</button><button id="reset-layout" type="button" class="key">reset layout</button></div>
       <div id="wifi-nets"></div>
+      <div class="beep-row"><button id="btn-update" type="button" class="key">check for software updates</button></div>
       <p id="setup-status" class="dim"></p>
       <div class="beep-note">load from home screen to avoid landscape tabs</div>
       <button id="setup-back" type="button" class="key land-only">settings</button>
       </div>
-      <div class="beep-row"><span>Phone sound</span><span class="dim">the Sound key at the top</span></div>
     </section>
     <section class="logs-panel">
       <button id="btn-download-logs" type="button" class="key">download logs</button>

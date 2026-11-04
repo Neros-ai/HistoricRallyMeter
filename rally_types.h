@@ -139,11 +139,12 @@ struct AppData {
     GtkWidget* setupScreen = nullptr;      // Setup page, opened by the spanner key on Settings
     GtkWidget* setupDisplayRow = nullptr;  // one card per connected display
     GtkLabel* setupStatusLabel = nullptr;
+    GtkLabel* settingsFpsLabel = nullptr;   // under the spanner on Settings
+    GtkLabel* settingsCpuLabel = nullptr;
     GtkWidget* setupWifiRow = nullptr;     // one key per saved Wi-Fi network
     GtkLabel* bluetoothAudioLabel = nullptr;
     GtkWidget* setupBtConnectBtn = nullptr;
     GtkWidget* setupBtDisconnectBtn = nullptr;
-    GtkLabel* settingsInfoLabel = nullptr; // "Screen N fps  CPU N C"
     // Nero2.0 Date/Time and Calibration pages
     GtkWidget* sensor1Btn = nullptr;
     GtkWidget* sensorBothBtn = nullptr;
@@ -221,6 +222,7 @@ struct AppData {
     // Phone Setup: last status line, and the saved Wi-Fi list after the phone asks.
     std::string setupStatus;
     std::string setupWifiJson;
+    std::string setupDisplaysJson;   // the box's displays for the phone Setup sheet
     
     // Stage setup screen
     GtkWidget* stageSetupScreen;

@@ -12,6 +12,7 @@
 #include "ui_datetime.h"
 #include "home_calc.h"
 #include "surrey.h"
+#include "ui_home.h"
 #include "driver_trial.h"
 
 #include <chrono>
@@ -118,6 +119,29 @@ std::string driverGaugeJson(AppData* data) {
     }
     o << ",\"legend\":\"" << driverRightBoxLegend(page) << "\"}";
     return o.str();
+}
+
+// The Navigation stage panel exactly as the box has drawn it: the speed rows, the auto / manual word and
+// time, and the arrival. The phone shows these strings and calculates nothing of its own, so the two can
+// never disagree.
+static std::string stagePanelJson(AppData* data) {
+    if (!data->home) return "null";
+    const HomeUi& h = *data->home;
+    std::string j = "{\"rows\":[";
+    bool first = true;
+    for (const HomeUi::Row& r : h.rows) {
+        if (r.kph.empty()) continue;
+        if (!first) j += ',';
+        first = false;
+        j += "{\"k\":\"" + jsonEscape(r.kph) + "\",\"a\":\"" + jsonEscape(r.at) + "\",\"now\":" + (r.now ? "true" : "false") + "}";
+    }
+    j += "],\"auto\":" + std::string(h.autoArmed ? "true" : "false");
+    j += ",\"time\":\"" + jsonEscape(h.autoTime) + "\"";
+    j += ",\"arr\":" + (h.arrivalValid
+        ? "{\"kph\":" + std::to_string(h.arrivalKph) + ",\"min\":" + std::to_string(h.arrivalMin) + "}"
+        : std::string("null"));
+    j += "}";
+    return j;
 }
 
 std::string buildTelemetryJson(AppData* data) {
@@ -235,11 +259,11 @@ std::string buildTelemetryJson(AppData* data) {
         // Same countdown as the box: to the next speed change, through carried rows.
         const bool greek_like = st.rally_type != 2;
         if (greek_like) next_m = metresToNextChange(st.stage_segments, st.segment_current_number, next_m);
-        const long nxt = greek_like ? nextChangeIndex(st.stage_segments, st.segment_current_number)
-                                    : st.segment_current_number + 1;
-        if (nxt >= 0 && nxt < static_cast<long>(st.stage_segments.size())) {
-            speed_change = speedChangeLine(cur.target_speed_kph,
-                st.stage_segments[nxt].target_speed_kph, true, st.units);
+        // The box draws mm:ss to the next speed change under the third figure, in greek only.
+        if (st.rally_type == 0) {
+            bool ok = false;
+            const double secs = nextChangeSeconds(st.stage_segments, st.segment_current_number, rem_cm / 100.0, &ok);
+            if (ok) speed_change = formatClockMmSs(secs);
         }
     }
     // Stage arrival
@@ -295,8 +319,15 @@ std::string buildTelemetryJson(AppData* data) {
        << ",\"reverse\":" << (data->poller->reverse() ? "true" : "false")
        << ",\"navi_m\":" << ((isSurrey(st) || st.rally_type == 2) ? std::to_string(surreyNaviMetres(st, current_poll.cntr1, current_poll.cntr2)) : std::string("null"))
        << ",\"surrey\":" << (isSurrey(st) ? "true" : "false")
+       << ",\"stage_panel\":" << stagePanelJson(data)
+       << ",\"auto_time_past\":" << ((data->home && data->home->autoTimePast) ? "true" : "false")
+       << ",\"stage_running\":" << (classifyTotalReset(st) == TotalResetCase::StageRunning ? "true" : "false")
+       << ",\"stage_abort_key\":" << ((stageAbortable(st) && !(st.auto_start_rally_time_s != 0 && !st.auto_start_early_departure && st.segment_current_number < 0)) ? "true" : "false")
        << ",\"time_taken\":\"" << (isSurrey(st) ? surreyTimeTakenText(st.time_taken_ms) : std::string()) << "\""
        << ",\"time_taken_stage\":" << (isSurrey(st) ? st.time_taken_stage : 0)
+       << ",\"surrey_cd\":" << ((isSurrey(st) && data->home && data->home->surreyRunning)
+              ? std::string("{\"m\":\"") + jsonEscape(data->home->cdMetres) + "\",\"min\":\"" + jsonEscape(data->home->cdTime) + "\"}"
+              : std::string("null"))
        << ",\"total_s\":" << total_s << ",\"trip_s\":" << trip_s
        << ",\"it_count\":" << itCount
        << ",\"sector\":" << sectorJson
@@ -337,6 +368,7 @@ std::string buildStateJson(AppData* data) {
        // True when Reset Total would be asked about on the box, so the phone
        // asks the same question instead of a plain "Reset total?".
        << "\"frozen\":" << (data->state->freeze_on ? "true" : "false") << ","
+       << "\"sub_reset_asks\":" << (subResetInStage(*data->state) ? "true" : "false") << ","
        << "\"total_reset_asks\":"
        << (classifyTotalReset(*data->state) == TotalResetCase::StageRunning ? "true" : "false")
        << ","
@@ -394,7 +426,7 @@ std::string buildStateJson(AppData* data) {
     }
     ss << "\"trip_history\":[";
     {
-        std::vector<long> hist = parseTripHistory(data->state->trip_history_m);
+        std::vector<long> hist = homeTripHistory(*data->state);   // the box's own four
         for (size_t i = 0; i < hist.size(); i++) { if (i) ss << ','; ss << hist[i]; }
     }
     ss << "],\"stage_logging\":" << (data->state->stage_logging ? "true" : "false")
@@ -430,10 +462,12 @@ std::string buildStateJson(AppData* data) {
        << ",\"tone_type_ahead\":" << data->state->tone_type_ahead
        << ",\"gauge_range\":" << data->state->gauge_range_s
        << ",\"reaction_offset_ms\":" << data->state->reaction_offset_ms
+       << ",\"phone_beep_lead_ms\":" << data->state->phone_beep_lead_ms
        << ",\"bt_name\":\"" << jsonEscape(data->state->bluetooth_audio_name) << "\""
        << ",\"bt_known\":" << (data->state->bluetooth_audio_address.empty() ? "false" : "true")
        << ",\"setup_status\":\"" << jsonEscape(data->setupStatus) << "\""
-       << ",\"wifi\":" << (data->setupWifiJson.empty() ? "null" : data->setupWifiJson);
+       << ",\"wifi\":" << (data->setupWifiJson.empty() ? "null" : data->setupWifiJson)
+       << ",\"displays\":" << (data->setupDisplaysJson.empty() ? "null" : data->setupDisplaysJson);
 
     if (!data->uploadCheckId.empty() || !data->uploadLoaded.empty()) {
         const StageFile file = data->uploadCheckId.empty() ? StageFile() : parseStageFile(data->uploadCheckText);

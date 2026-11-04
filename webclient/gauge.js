@@ -159,7 +159,7 @@
       ctx.fillText(distUnit, rx, y2 - 24 * fs);
     } else {
       ctx.fillStyle = '#0ff';
-      ctx.fillText('Trip', rx, y1 - 4 * fs);
+      ctx.fillText(Number(msg.rally_type) === 2 ? 'sub' : 'Trip', rx, y1 - 4 * fs);
       ctx.fillStyle = '#ccc';
       ctx.fillText(distUnit, rx, (y1 + y2) / 2 + 2 * fs);
     }
@@ -218,9 +218,16 @@
   DriverGauge.prototype.resize = function () {
     const parent = this.canvas.parentElement;
     const dpr = window.devicePixelRatio || 1;
+    // Drop the size the last orientation set. Left in place, it props the
+    // parent open and the next measurement just reads it back, so repeated
+    // rotations ratchet the stage up to the dial's full width.
+    this.canvas.style.width = '';
+    this.canvas.style.height = '';
     if (wideLayout()) {
-      const availW = parent.clientWidth || window.innerWidth;
-      const availH = parent.clientHeight || window.innerHeight;
+      const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+      // The page's own cap (100dvh - 2.4rem) and the viewport bound the stage.
+      const availW = Math.min(parent.clientWidth || window.innerWidth, window.innerWidth);
+      const availH = Math.min(parent.clientHeight || window.innerHeight, window.innerHeight - 2.4 * rem);
       const aspect = 800 / 480;
       let cssW;
       let cssH;
@@ -406,7 +413,7 @@
     // Portrait with the three-box row: equal widths, edges touching, across the
     // screen. Landscape uses the box's own widths. Otherwise the error box keeps
     // a scaled floor so an empty readout is not a small square.
-    const thirds = !boxMode && !!rightText;
+    const thirds = !boxMode && !!drv;
     let boxW;
     let boxH;
     let boxY;
@@ -548,7 +555,8 @@
       if (progress > 1) progress = 1;
       const fStart = 0.20;
       const fTick = 0.80;
-      const fTop = fStart + progress * (fTick - fStart);
+      const fArrive = fTick - 3 * fscale / needle.length;   // the tip's outline lands on the bar, as the box does
+      const fTop = fStart + progress * (fArrive - fStart);
       const halfW = 18 * fscale;
       const depth = 14 * fscale;
       const len = needle.length;

@@ -145,7 +145,7 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         break;
     case HISTORY: {
         cyan(cr);
-        drawText(cr, "Trip history", width / 2.0, 20, 20, CENTRE);
+        drawText(cr, h->labelMode == 2 ? "Sub history" : "Trip history", width / 2.0, 20, 20, CENTRE);
         white(cr);
         // Figures right-aligned inside a block sized for "99,999" (6 x 24 px),
         // and that block centred in the column.
@@ -166,11 +166,9 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         // "auto" (armed, or the autostart that started the running stage) or "manual"
         // in orange, then the start time from Segments.
         const double ay = 12 + 28;
-        const bool check = h->surreyCheck && !h->autoArmed;
-        const char* word = h->autoArmed ? "auto" : (check ? "check total" : "manual");
-        // Measure both texts so the time shrinks rather than touch the word. Surrey's amber
-        // "check total" is 24 px when it has the line to itself (mockup), 18 px beside a start time.
-        const double wordPx = check ? 24 : 18;
+        const char* word = h->autoArmed ? "auto" : "manual";
+        // Measure both texts so the time shrinks rather than touch the word.
+        const double wordPx = 18;
         cairo_text_extents_t we, te26;
         cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
         cairo_set_font_size(cr, wordPx);
@@ -185,9 +183,8 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         }
         drawText(cr, word, 4, ay, wordPx, LEFT);
         white(cr);
-        // "check total" stands alone on the line (mockup S3): no start time, no strike-through.
-        if (!check) drawText(cr, h->autoTime, width - 4, ay, timeFont, RIGHT);
-        if (!check && h->autoTimePast && !h->autoTime.empty()) {
+        drawText(cr, h->autoTime, width - 4, ay, timeFont, RIGHT);
+        if (h->autoTimePast && !h->autoTime.empty()) {
             cairo_text_extents_t te;
             cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
             cairo_set_font_size(cr, timeFont);
@@ -223,29 +220,31 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
             drawText(cr, h->rows[i].at, 193, top + 22 + (i + 1) * 36 - 8, 30, RIGHT);
         }
 
-        // Stage arrival: speed to arrive a minute early, and minutes to go.
+        // Stage arrival (greek) or the countdown (surrey, stage running): the two figures one above the
+        // other, each with its legend after it on the same line, so a long figure has the width.
         const double base = STAGE_AREA_H - 130;
+        const double numRight = width - 56, legendLeft = width - 50;
+        auto line = [&](const std::string& num, const char* legend, double baseline, double px, bool cyanNum) {
+            if (cyanNum) cyan(cr); else white(cr);
+            drawText(cr, num, numRight, baseline, px, RIGHT);
+            grey(cr);
+            drawText(cr, legend, legendLeft, baseline, 18, LEFT);
+        };
         cyan(cr);
         if (h->surreyRunning) {
-            // Surrey, stage running: the countdown (metres, minutes) takes the arrival slot.
             drawText(cr, "countdown", width / 2.0, base + 26, 22, CENTRE);
-            grey(cr);
-            drawText(cr, "m", width * 0.25, base + 62, 18, CENTRE);
-            drawText(cr, "min", width * 0.75, base + 62, 18, CENTRE);
-            white(cr);
-            drawText(cr, h->cdMetres, width * 0.25, base + 106, 28, CENTRE);
-            drawText(cr, h->cdTime, width * 0.75, base + 106, 28, CENTRE);
+            line(h->cdMetres, "m", base + 72, 34, false);
+            line(h->cdTime, "min", base + 118, 34, false);
             break;
         }
         drawText(cr, "Stage arrival", width / 2.0, base + 26, 22, CENTRE);
-        grey(cr);
-        drawText(cr, h->unitsMph ? "mph" : "kph", width * 0.25, base + 62, 18, CENTRE);
-        drawText(cr, "min", width * 0.75, base + 62, 18, CENTRE);
         if (h->arrivalValid) {
-            cyan(cr);
-            drawText(cr, std::to_string(h->unitsMph ? static_cast<int>(std::lround(h->arrivalKph * 0.621371)) : h->arrivalKph), width * 0.25, base + 112, 40, CENTRE);
-            white(cr);
-            drawText(cr, std::to_string(h->arrivalMin), width * 0.75, base + 112, 40, CENTRE);
+            line(std::to_string(h->unitsMph ? static_cast<int>(std::lround(h->arrivalKph * 0.621371)) : h->arrivalKph),
+                 h->unitsMph ? "mph" : "kph", base + 72, 40, true);
+            line(std::to_string(h->arrivalMin), "min", base + 118, 40, false);
+        } else {
+            line("", h->unitsMph ? "mph" : "kph", base + 72, 40, true);
+            line("", "min", base + 118, 40, false);
         }
         break;
     }
@@ -1003,7 +1002,7 @@ void updateHomeDisplay(AppData* data) {
     mirror(h->speedLine, line.c_str(), h->elapsedArea[2]);
 
     // Surrey (RB-NAV-43): navi total in row 3, the countdown panel while a stage runs,
-    // "check total" for a failed start fit, the last time taken under Trip history.
+    // The Surrey countdown panel and the last time taken under Trip history.
     {
         const bool sur = isSurrey(st);
         bool stage_dirty = false, hist_dirty = false;
@@ -1026,15 +1025,14 @@ void updateHomeDisplay(AppData* data) {
                 cdT = surreyCountdownTime(static_cast<double>(remaining_m), cur_seg.target_speed_kph);
             }
         }
-        const bool check = sur && st.surrey_fit_failed && !st.stage_complete;
         std::string tt_label, tt;
         if (sur && st.time_taken_ms >= 0) {
             tt_label = "time taken ss" + (st.time_taken_stage >= 1 ? std::to_string(st.time_taken_stage) : std::string("-"));
             tt = surreyTimeTakenText(st.time_taken_ms);
         }
-        if (running != h->surreyRunning || cdM != h->cdMetres || cdT != h->cdTime || check != h->surreyCheck) stage_dirty = true;
+        if (running != h->surreyRunning || cdM != h->cdMetres || cdT != h->cdTime) stage_dirty = true;
         if (tt != h->timeTaken || tt_label != h->timeTakenLabel) hist_dirty = true;
-        h->surreyRunning = running; h->cdMetres = cdM; h->cdTime = cdT; h->surreyCheck = check;
+        h->surreyRunning = running; h->cdMetres = cdM; h->cdTime = cdT;
         h->timeTaken = tt; h->timeTakenLabel = tt_label;
         if (stage_dirty) markDirty(h->stageArea);
         if (hist_dirty) markDirty(h->historyArea);

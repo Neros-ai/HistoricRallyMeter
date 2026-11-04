@@ -367,6 +367,11 @@ long adjustedDistanceMeters(long raw_cm, long adjust_cm);
 // rather than as negative progress.
 int64_t correctedDistanceCounts(int64_t raw_counts, long adjust_cm, long calibration);
 
+// The same correction without the floor at zero, for navi total (the odometer). A navi whose
+// counter is behind its start point must read negative, so a crew can see something is wrong,
+// instead of sitting silently at 0.
+int64_t signedCorrectedDistanceCounts(int64_t raw_counts, long adjust_cm, long calibration);
+
 // The "next"/"prev" buttons move ONE boundary and nothing else. The crew press
 // them when the distance at which the speed changes was not known in advance:
 // the speed changes here, and they then drive whatever is left -- which may now
@@ -529,6 +534,11 @@ size_t beepTimingCursorFor(const std::vector<double>& waypoints_m, double elapse
 // Navigation mode due-check: true once the Total distance is within
 // advance_m of the waypoint. Pure distance -- current speed plays no part.
 bool navigationBeepDue(double waypoint_m, double travelled_m, double advance_m);
+
+// The needle's chevron, worked on TIME: which scheduled row the stage clock is in (each row lasts its
+// metres at its target speed, added up from the stage start), and how much of that row's scheduled time
+// has gone, 0 to 1. in_row is false before the start, after the last row, or at a row with no speed.
+double scheduledRowProgress(const std::vector<Segment>& segments, double elapsed_stage_s, bool* in_row);
 
 // Timing mode due-check: true once the scheduled time to reach the waypoint,
 // less advance_s, has elapsed. Meaningless outside a stage; callers gate on

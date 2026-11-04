@@ -299,6 +299,8 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.tone_type_behind = state.tone_type_ahead = extractBool(line) ? 2 : 1;
         } else if (line.find("\"tone_type_behind\"") != std::string::npos) {
             state.tone_type_behind = static_cast<int>(extractLong(line)) == 2 ? 2 : 1;
+        } else if (line.find("\"phone_beep_lead_ms\"") != std::string::npos) {
+            state.phone_beep_lead_ms = static_cast<int>(std::max<long>(0, std::min<long>(400, static_cast<long>(extractLong(line)))));
         } else if (line.find("\"reaction_offset_ms\"") != std::string::npos) {
             state.reaction_offset_ms = clampReactionOffsetMs(static_cast<long>(extractLong(line)));
         } else if (line.find("\"gauge_range_s\"") != std::string::npos) {
@@ -328,8 +330,6 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.time_taken_stage = static_cast<int>(extractLong(line));
         } else if (line.find("\"time_taken_ms\"") != std::string::npos) {
             state.time_taken_ms = extractLong(line);
-        } else if (line.find("\"surrey_fit_failed\"") != std::string::npos) {
-            state.surrey_fit_failed = extractBool(line);
         } else if (line.find("\"distance_km\"") != std::string::npos) {
             state.distance_km = extractBool(line);
         } else if (line.find("\"measure_ab_bc\"") != std::string::npos) {
@@ -537,10 +537,10 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"tone_type_ahead\": " << state.tone_type_ahead << ",\n";
     file << "  \"gauge_range_s\": " << state.gauge_range_s << ",\n";
     file << "  \"reaction_offset_ms\": " << state.reaction_offset_ms << ",\n";
+    file << "  \"phone_beep_lead_ms\": " << state.phone_beep_lead_ms << ",\n";
     file << "  \"rally_type\": " << state.rally_type << ",\n";
     file << "  \"time_taken_stage\": " << state.time_taken_stage << ",\n";
     file << "  \"time_taken_ms\": " << state.time_taken_ms << ",\n";
-    file << "  \"surrey_fit_failed\": " << (state.surrey_fit_failed ? "true" : "false") << ",\n";
     file << "  \"odometer_start_cntr1\": " << static_cast<int64_t>(state.odometer_start_cntr1) << ",\n";
     file << "  \"odometer_start_cntr2\": " << static_cast<int64_t>(state.odometer_start_cntr2) << ",\n";
     file << "  \"odometer_adjust_cm\": " << state.odometer_adjust_cm << ",\n";

@@ -112,6 +112,7 @@ void updateWebLinkDisplay(AppData* data);
 void on_show_menu(GtkWidget* widget, gpointer user_data);
 void on_menu_choice(GtkWidget* widget, gpointer user_data);
 void on_show_autostart(GtkWidget* widget, gpointer user_data);
+void applyTripReset(AppData* data);   // the reset itself, no question
 void on_autostart_set(GtkWidget* widget, gpointer user_data);
 void on_autostart_clear(GtkWidget* widget, gpointer user_data);
 void updateAutoStartDisplay(AppData* data);

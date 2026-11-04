@@ -36,6 +36,7 @@ struct WebServerState {
     gulong listen_source = 0;
     std::vector<WsClient> clients;
     int64_t last_telemetry_ms = 0;
+    unsigned long last_beep_sent = 0;   // the last beep sequence already pushed to the phones
     int port = 8080;
     std::string lan_ip = "127.0.0.1";
 };
@@ -475,6 +476,7 @@ bool RallyWebServer::start(int port) {
     g_io_channel_unref(ch);
 
     impl->last_telemetry_ms = 0;
+    impl->last_beep_sent = data_ ? data_->lastBeep.seq : 0;
     return true;
 }
 
@@ -500,6 +502,12 @@ void RallyWebServer::poll(int64_t now_ms) {
     if (now_ms - impl->last_telemetry_ms >= 100) {
         impl->last_telemetry_ms = now_ms;
         broadcastAll(impl, buildTelemetryJson(data_));
+    }
+    // A beep goes out the moment it fires, not with the next 100 ms telemetry: the phone then
+    // hears it with network delay only.
+    if (data_->lastBeep.seq != impl->last_beep_sent) {
+        impl->last_beep_sent = data_->lastBeep.seq;
+        broadcastAll(impl, "{\"type\":\"beep\",\"beep\":" + beepEventJson(data_->lastBeep) + "}");
     }
     if (g_state_dirty) {
         g_state_dirty = false;

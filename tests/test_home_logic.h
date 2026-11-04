@@ -454,14 +454,16 @@ public:
             return formatClockMmSs(131) == "02:11" && formatClockMmSs(0) == "00:00" && formatClockMmSs(3725) == "62:05";
         });
 
-        suite->addTest("A-B, B-C zero key shows only on a greek page with measure type AB,BC, and not single-display", []() {
+        suite->addTest("A-B, B-C zero key shows on greek and surrey pages with measure type AB,BC, not italian, not single-display", []() {
             RallyState s;
             const bool off_by_default = !showAdjZeroKey(s, false);
             s.measure_ab_bc = true;
             const bool greek_on = showAdjZeroKey(s, false);
             const bool single_off = !showAdjZeroKey(s, true);
+            s.rally_type = 1;
+            const bool surrey_on = showAdjZeroKey(s, false);
             s.rally_type = 2;
-            return off_by_default && greek_on && single_off && !showAdjZeroKey(s, false);
+            return off_by_default && greek_on && single_off && surrey_on && !showAdjZeroKey(s, false);
         });
 
         suite->addTest("history figures are grouped and keep a minus sign", []() {

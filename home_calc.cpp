@@ -80,5 +80,5 @@ double homeStartTimeFont(double wordWidth, double timeWidthAt26, double columnW)
 }
 
 bool showAdjZeroKey(const RallyState& s, bool single_display) {
-    return s.measure_ab_bc && s.rally_type == 0 && !single_display;
+    return s.measure_ab_bc && s.rally_type != 2 && !single_display;   // greek and surrey
 }

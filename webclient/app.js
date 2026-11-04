@@ -181,6 +181,17 @@
     return sign + Math.floor(total / 3600) + ':' + p(Math.floor(total / 60) % 60) + ':' + p(total % 60) + '.' + t;
   }
 
+  // The box's own live answers, from the telemetry frame (the state message only
+  // arrives when something is saved, so it can lag a press).
+  const stageRunning = () => !!(lastTelemetry && lastTelemetry.stage_running !== undefined
+    ? lastTelemetry.stage_running : (lastState && lastState.total_reset_asks));
+  const stageActive = () => !!(lastTelemetry && lastTelemetry.stage_abort_key !== undefined
+    ? (lastTelemetry.stage_running || lastTelemetry.stage_abort_key)
+    : (lastState && (lastState.total_reset_asks || lastState.stage_abortable)));
+
+  // The speed table's current row follows the live segment, not the last state message.
+  let lastPanelSig = null;
+
   function applyTelemetry(msg) {
     lastTelemetry = msg;
     lastTelemetryAt = Date.now();
@@ -210,6 +221,17 @@
       $('time-taken').textContent = msg.time_taken || '';
     }
     renderSector(msg);
+    // The stage panel (speed rows, auto / manual and the start time, arrival) is the box's own drawn
+    // strings: the phone shows them and works out nothing for itself.
+    {
+      const sig = JSON.stringify(msg.stage_panel || null);
+      if (sig !== lastPanelSig) {
+        lastPanelSig = sig;
+        renderStagePanel(lastState || {});
+        applyAutoLine();
+        renderArrival();
+      }
+    }
     // Italian: the box's count down text, red past the line (RB-WEB-21).
     const ic = msg.it_count;
     if (ic) {
@@ -271,8 +293,13 @@
       show($('btn-flag-minute'), !italian);
       show($('btn-flag-auto'), !italian);
       show($('navi-auto'), !italian);
-      show($('row-zero'), Number(msg.rally_type) === 0 && !!msg.measure_ab_bc);
+      const zeroShown = Number(msg.rally_type) !== 2 && !!msg.measure_ab_bc;   // greek and surrey
+      show($('row-zero'), zeroShown);
+      $('view-navi').classList.toggle('has-zero', zeroShown);
       show($('seg-auto-row'), !italian);
+      $('btn-trip').textContent = italian ? 'sub' : 'trip';
+      { const hl = $('trip-history-label'); if (hl) hl.textContent = italian ? 'Sub history' : 'Trip history'; }
+      { const dl = document.querySelector('#drv-box-trip .dl'); if (dl) dl.textContent = italian ? 'sub' : 'Trip'; }
       show($('seg-start-dist-label'), !italian);
       show($('seg-duration-label'), italian);
       show($('seg-duration-avg'), italian);
@@ -283,16 +310,24 @@
     $('btn-prev').disabled = !msg.prev_enabled;
     $('btn-reverse').classList.toggle('lit', !!msg.reverse);
     setWhoop(!!msg.reverse || frozen);
-    $('btn-flag-late').innerHTML = (lastState && (lastState.total_reset_asks || lastState.stage_abortable))
+    $('btn-flag-late').innerHTML = stageActive()
       ? 'stage<br>abort'
       : '<svg class="flag" viewBox="0 0 40 34"><use href="#flag"/></svg><svg class="watch" viewBox="0 0 32 36"><use href="#watch"/></svg>';
     $('btn-freeze').classList.toggle('lit', frozen);
     setWhoop(!!(lastTelemetry && lastTelemetry.reverse) || frozen);
 
     // Stage arrival
-    lastArrival = msg.arrival || null;
+    lastArrival = (msg.stage_panel ? msg.stage_panel.arr : msg.arrival) || null;
     renderArrival();
-    $('arr-min').textContent = msg.arrival ? msg.arrival.min : '--';
+    $('arr-min').textContent = lastArrival ? lastArrival.min : '--';
+    $('auto-time').classList.toggle('past', !!msg.auto_time_past);
+    // Surrey, stage running: the countdown (metres, minutes) takes the arrival slot, as on the box.
+    {
+      const cd = msg.surrey_cd;
+      $('card-arr').style.display = cd ? 'none' : '';
+      $('card-cd').style.display = cd ? '' : 'none';
+      if (cd) { $('cd-m').textContent = cd.m || '--'; $('cd-min').textContent = cd.min || '--'; }
+    }
     const sp = $('stage-pick');
     if (document.activeElement !== sp && msg.stage_no >= 1) sp.value = String(msg.stage_no);
 
@@ -372,6 +407,7 @@
       lastTelemetry.distance_km = distanceKm;
       applyTelemetry(lastTelemetry);
     }
+    if ($('phone-lead')) $('phone-lead').textContent = (Number(state.phone_beep_lead_ms) || 0) + ' ms';
     if ($('reaction-offset')) {   // read-only: set on the box
       const ro = Number(state.reaction_offset_ms) || 0;
       $('reaction-offset').textContent = (ro < 0 ? '\u2212' : ro > 0 ? '+' : '') + (Math.abs(ro) / 1000).toFixed(2) + ' s';
@@ -388,6 +424,7 @@
       box.querySelectorAll('button').forEach((b) => b.classList.toggle('lit', (b.dataset.on === '1') === on));
     });
     renderWifi(state.wifi);
+    renderDisplays(state.displays);
     // Calibration
     $('cal-pulses').textContent = state.calibration_pulses;
     $('cal-s1').classList.toggle('lit', !state.sensors_both);
@@ -400,13 +437,18 @@
     $('btn-freeze').classList.toggle('lit', frozen);
     setWhoop(!!(lastTelemetry && lastTelemetry.reverse) || frozen);
     const hist = (state.trip_history || []);
-    $('trip-history').textContent = hist.length ? hist.map((m) => formatDist(m) + (distanceKm ? ' km' : ' m')).join(' \u00b7 ') : '-';
+    // One span per figure: dots between them in portrait, one per line in landscape (as the box lists them).
+    $('trip-history').innerHTML = hist.length
+      ? hist.map((m) => '<span class="th">' + formatDist(m) + '</span>').join('<span class="thsep"> \u00b7 </span>') : '-';
     const sa = state.autostart || 'none';
     const armed = sa !== 'none';
-    $('auto-word').textContent = armed ? 'auto' : 'manual';
-    $('auto-word').classList.toggle('orange', !armed);
-    $('auto-word').classList.toggle('cyan', armed);
-    $('auto-time').textContent = armed ? sa : (state.start_time || '');
+    if (lastTelemetry && lastTelemetry.stage_panel) applyAutoLine();
+    else {
+      $('auto-word').textContent = armed ? 'auto' : 'manual';
+      $('auto-word').classList.toggle('orange', !armed);
+      $('auto-word').classList.toggle('cyan', armed);
+      $('auto-time').textContent = armed ? sa : (state.start_time || '');
+    }
     $('flag-minute-time').textContent = nextMinuteText();
     $('btn-flag-auto').classList.toggle('lit', !!state.autostart_on);
   }
@@ -466,6 +508,60 @@
     card.innerHTML = html;
   }
 
+  // The rally mode's flag with "mode" across it, drawn as the box draws it
+  // (Greece, Union Jack, Italy). Redrawn only when the rally type changes.
+  let badgeType = null;
+  function renderModeBadge(type) {
+    const t = Number(type);
+    if (t === badgeType) return;
+    badgeType = t;
+    const svg = $('mode-badge');
+    if (!svg) return;
+    let flag;
+    if (t === 2) {
+      flag = '<rect width="32" height="24" fill="#009246"/><rect x="32" width="32" height="24" fill="#fff"/><rect x="64" width="32" height="24" fill="#ce2b37"/>';
+    } else if (t === 1) {
+      flag = '<g transform="scale(1.6 0.8)"><rect width="60" height="30" fill="#012169"/>'
+        + '<path d="M0 0L60 30M60 0L0 30" stroke="#fff" stroke-width="6"/>'
+        + '<path d="M0 0L60 30M60 0L0 30" stroke="#c8102e" stroke-width="2"/>'
+        + '<rect x="25" width="10" height="30" fill="#fff"/><rect y="10" width="60" height="10" fill="#fff"/>'
+        + '<rect x="27" width="6" height="30" fill="#c8102e"/><rect y="12" width="60" height="6" fill="#c8102e"/></g>';
+    } else {
+      const sh = 24 / 9;
+      let stripes = '';
+      for (let i = 0; i < 9; i++) stripes += '<rect y="' + (i * sh) + '" width="96" height="' + (sh + 0.5) + '" fill="' + (i % 2 ? '#fff' : '#0d5eaf') + '"/>';
+      const c = 5 * sh;
+      flag = stripes + '<rect width="' + c + '" height="' + c + '" fill="#0d5eaf"/>'
+        + '<rect x="' + (2 * sh) + '" width="' + sh + '" height="' + c + '" fill="#fff"/>'
+        + '<rect y="' + (2 * sh) + '" width="' + c + '" height="' + sh + '" fill="#fff"/>';
+    }
+    svg.innerHTML = flag + '<rect x="0.5" y="0.5" width="95" height="23" fill="none" stroke="#bbb"/>'
+      + '<text x="48" y="12" text-anchor="middle" dominant-baseline="central" font-family="monospace" font-weight="bold" font-size="18"'
+      + ' stroke="#000" stroke-width="3" stroke-linejoin="round" fill="#fff" paint-order="stroke">mode</text>';
+  }
+
+  // The box's screens, for the Setup sheet: name, size, orientation, rotate and keyboard.
+  function renderDisplays(list) {
+    const box = $('displays-list');
+    if (!box || !list) return;
+    box.textContent = '';
+    if (!list.length) { box.textContent = 'No displays found'; return; }
+    list.forEach((d) => {
+      const row = document.createElement('div');
+      row.className = 'beep-row';
+      const label = document.createElement('span');
+      label.textContent = d.name + '  ' + d.w + 'x' + d.h + '  ' + d.orientation;
+      const rot = document.createElement('button');
+      rot.type = 'button'; rot.className = 'key'; rot.textContent = 'rotate';
+      rot.dataset.out = d.name; rot.dataset.act = 'rotate';
+      const kb = document.createElement('button');
+      kb.type = 'button'; kb.className = 'key'; kb.textContent = d.keyboard ? 'keyboard off' : 'keyboard on';
+      kb.dataset.out = d.name; kb.dataset.act = 'keyboard';
+      row.append(label, rot, kb);
+      box.appendChild(row);
+    });
+  }
+
   function renderWifi(list) {
     const box = $('wifi-nets');
     if (!box || !list) return;
@@ -492,30 +588,28 @@
     if ($('stage-at-head')) $('stage-at-head').textContent = distanceKm ? 'at km' : 'at m';
     const tbody = $('stage-table').querySelector('tbody');
     tbody.innerHTML = '';
-    // Speed changes only, as on the box: row 1 and every row that starts a new speed.
-    const rows = [];
-    (state.rows || []).forEach((r, i) => { if (i === 0 || r.chg) rows.push({ r: r, idx: i }); });
-    const cur = Number(state.segment_current_number);
-    let curChange = 0;
-    rows.forEach((x, c) => { if (x.idx <= cur) curChange = c; });
-    const first = curChange > 0 ? Math.min(curChange - 1, Math.max(0, rows.length - 3)) : 0;
-    rows.slice(first, first + 3).forEach((x, i) => {
-      const r = x.r;
+    const panel = lastTelemetry && lastTelemetry.stage_panel;
+    ((panel && panel.rows) || []).forEach((r) => {
       const tr = document.createElement('tr');
-      if (cur >= 0 && first + i === curChange) tr.className = 'now';
-      const speed = Number(r.kph || 0) * (units === 'mph' ? 0.621371 : 1);
-      tr.innerHTML = '<td>' + speed.toFixed(1) + '</td><td>' + formatDist(r.from) + '</td>';
+      if (r.now) tr.className = 'now';
+      tr.innerHTML = '<td>' + r.k + '</td><td>' + r.a + '</td>';
       tbody.appendChild(tr);
     });
-    if (!rows.length) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = '<td colspan="2" class="stage-empty">(no segments set)</td>';
-      tbody.appendChild(tr);
-    }
+  }
+
+  // auto / manual and the start time, as the box has them.
+  function applyAutoLine() {
+    const panel = lastTelemetry && lastTelemetry.stage_panel;
+    if (!panel) return;
+    $('auto-word').textContent = panel.auto ? 'auto' : 'manual';
+    $('auto-word').classList.toggle('orange', !panel.auto);
+    $('auto-word').classList.toggle('cyan', !!panel.auto);
+    $('auto-time').textContent = panel.time || '';
   }
 
   // ---- Seg tab ----
   function renderSegments(state) {
+    renderModeBadge(state.rally_type);
     const active = document.activeElement;
     const tbody = $('seg-table').querySelector('tbody');
     // A field is being typed in: do not rebuild under it, but bring every other figure up to
@@ -525,18 +619,15 @@
     const head = $('seg-table').querySelector('thead tr');
     const step = distanceKm ? '0.01' : '1';
     const mode = distanceKm ? 'decimal' : 'numeric';
-    if (italian) {
-      head.innerHTML = '<th>sub</th><th>type</th><th>ref</th><th>from ' + unit + '</th><th>to ' + unit
-        + '</th><th>dist ' + unit + '</th><th>' + (units === 'mph' ? 'MPH' : 'KPH')
-        + '</th><th>dur</th><th>elapsed</th><th></th>';
-    } else if (!head.querySelector('.chg') && head.children.length < 11) {
-      head.innerHTML = '<th>#</th><th>from ' + unit + '</th><th>to ' + unit + '</th><th>dist ' + unit
-        + '</th><th>chg</th><th>KPH</th><th>m/s</th><th>auto</th><th>time</th><th>total</th><th></th>';
-    } else {
-      if (head.children[1]) head.children[1].textContent = 'from ' + unit;
-      if (head.children[2]) head.children[2].textContent = 'to ' + unit;
-      if (head.children[3]) head.children[3].textContent = 'dist ' + unit;
-      if (head.children[5]) head.children[5].textContent = units === 'mph' ? 'MPH' : 'KPH';
+    const headKey = (italian ? 'it' : 'gr') + '|' + unit + '|' + units;
+    if (head.dataset.k !== headKey) {
+      head.dataset.k = headKey;
+      const kphHead = units === 'mph' ? 'MPH' : 'KPH';
+      head.innerHTML = italian
+        ? '<th>sub</th><th>type</th><th>ref</th><th>from ' + unit + '</th><th>to ' + unit
+          + '</th><th>dist ' + unit + '</th><th>' + kphHead + '</th><th>dur</th><th>elapsed</th><th></th>'
+        : '<th>box</th><th>from ' + unit + '</th><th>to ' + unit + '</th><th>dist ' + unit
+          + '</th><th>chg</th><th>' + kphHead + '</th><th>auto</th><th>dur</th><th>elapsed</th><th></th>';
     }
     const tags = ['-', 'navi', 'pc', 'ct', 'pm', 'co'];
     const rows = state.rows || [];
@@ -558,7 +649,6 @@
         setText(tr.querySelector('.klab'), italian
           ? (Number(r.kph) > 0 ? Number(r.kph).toFixed(2) : '')
           : (r.chg ? '' : '"'));
-        setText(tr.querySelector('.ms'), r.chg && r.kph > 0 ? String(Math.round(r.kph / 3.6)) : '');
         setVal(tr.querySelector('.ref'), r.ref);
         setVal(tr.querySelector('.pc'), mmss(r.pc_s));
         setText(tr.querySelector('.tim'), ty === 2 ? '' : mmss(r.time_s));
@@ -600,7 +690,6 @@
           '<td><input type="checkbox" class="chg"' + (r.chg ? ' checked' : '') + (i === 0 ? ' disabled' : '') + '></td>' +
           (r.chg ? '<td><input type="number" step="0.1" inputmode="decimal" class="spd" value="' + (r.kph || '') + '"></td>'
                  : '<td class="dim klab">&quot;</td>') +
-          '<td class="dim ms">' + (r.chg && r.kph > 0 ? Math.round(r.kph / 3.6) : '') + '</td>' +
           '<td>' + (i >= 1 ? '<input type="checkbox" class="auto"' + (r.auto_on ? ' checked' : '') +
                     (r.auto_av ? '' : ' disabled') + '>' : '') + '</td>' +
           '<td class="dim tim">' + mmss(r.time_s) + '</td><td class="dim tot">' + mmss(r.total_s) + '</td>' + del;
@@ -669,6 +758,7 @@
     let msg;
     try { msg = JSON.parse(ev.data); } catch { return; }
     if (msg.type === 'telemetry') applyTelemetry(msg);
+    if (msg.type === 'beep') beepHeard(msg.beep);
     if (msg.type === 'state') {
       lastState = msg;
       renderSegments(msg);
@@ -700,8 +790,17 @@
   }
 
   TABS.forEach((t) => $('tab-' + t).addEventListener('click', () => showTab(t)));
+  // A rotation reports its size in stages on phones: the first resize can still
+  // carry the old viewport. Measure again once it has settled.
+  const refitDriver = () => { if (activeTab === 'drv' && driverGauge) driverGauge.resize(); };
   window.addEventListener('resize', () => {
-    if (activeTab === 'drv' && driverGauge) driverGauge.resize();
+    refitDriver();
+    setTimeout(refitDriver, 150);
+    setTimeout(refitDriver, 500);
+  });
+  window.addEventListener('orientationchange', () => {
+    setTimeout(refitDriver, 250);
+    setTimeout(refitDriver, 700);
   });
 
   // Heartbeat: this phone's clock, for the Time tab and "set computer to phone time".
@@ -743,12 +842,11 @@
   $('btn-reverse').addEventListener('click', () => send({ type: 'reverse_set', on: !(lastTelemetry && lastTelemetry.reverse) }));
   $('btn-flag-minute').addEventListener('click', () => {
     // A stage already running: ask first, as the box does.
-    const running = !!(lastState && lastState.total_reset_asks);
+    const running = stageRunning();
     if (running && !confirm('Abort the current stage?')) return;
     send({ type: 'flag_next_minute', abort: running });
   });
   // Stage go now -- or, with a stage armed or running, stage abort (as on the box).
-  const stageActive = () => !!(lastState && (lastState.total_reset_asks || lastState.stage_abortable));
   $('btn-flag-late').addEventListener('click', () => {
     if (stageActive()) {
       if (confirm('ABORT the stage?')) send({ type: 'abort_stage' });
@@ -801,15 +899,21 @@
   // distance zero is the press, so the box is told at once and the reset
   // applied only if the crew confirm.
   function resetTotal() {
-    if (lastState && lastState.total_reset_asks) {
+    if (stageRunning()) {
       send({ type: 'reset_total_capture' });
       $('stage-menu').classList.remove('hidden');
       return;
     }
-    if (confirm('Reset total distance?')) send({ type: 'reset_total' });
+    send({ type: 'reset_total' });
   }
-  // The box's trip key never asks, so neither does the phone.
-  function resetTrip() { send({ type: 'reset_trip' }); }
+  // Sub (trip): in a pc / pm the box asks first, so the phone does too.
+  function resetTrip() {
+    if (lastState && lastState.sub_reset_asks) {
+      if (confirm('In stage. Reset sub now?')) send({ type: 'reset_trip', choice: 'confirm' });
+      return;
+    }
+    send({ type: 'reset_trip' });
+  }
   $('btn-total').addEventListener('click', resetTotal);
   $('btn-trip').addEventListener('click', resetTrip);
   // Drv tab: tapping Total or Trip resets it, as on Navi (same questions).
@@ -1027,6 +1131,8 @@
     }));
   document.querySelectorAll('input[name="measure-type"]').forEach((r) =>
     r.addEventListener('change', () => { if (r.checked) send({ type: 'setting', name: 'measure_ab_bc', on: r.value === 'abbc' }); }));
+  $('phone-lead-minus').addEventListener('click', () => send({ type: 'phone_lead_step', ms: -10 }));
+  $('phone-lead-plus').addEventListener('click', () => send({ type: 'phone_lead_step', ms: 10 }));
   $('reaction-minus').addEventListener('click', () => send({ type: 'reaction_step', ms: -10 }));
   $('reaction-plus').addEventListener('click', () => send({ type: 'reaction_step', ms: 10 }));
   $('set-stage-log').addEventListener('change', (e) => send({ type: 'setting', name: 'stage_logging', on: e.target.checked }));
@@ -1058,7 +1164,22 @@
     showTab(b.dataset.tab);
     $('page-menu').classList.add('hidden');
   });
-  $('btn-spanner').addEventListener('click', () => $('view-set').classList.add('show-setup'));
+  $('btn-spanner').addEventListener('click', () => {
+    $('view-set').classList.add('show-setup');
+    send({ type: 'box_setup', name: 'displays' });
+  });
+  $('bt-remember').addEventListener('click', () => send({ type: 'box_setup', name: 'remember_speaker' }));
+  $('btn-update').addEventListener('click', () => {
+    if (confirm('This will exit the app and check for updates. The box must be connected to the internet first. Continue?')) {
+      send({ type: 'box_setup', name: 'update' });
+    }
+  });
+  $('displays-list').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b || !b.dataset.out) return;
+    if (b.dataset.act === 'rotate' && !confirm('Rotate ' + b.dataset.out + '? The app needs a restart afterwards.')) return;
+    send({ type: 'box_setup', name: b.dataset.act, output: b.dataset.out });
+  });
   $('setup-back').addEventListener('click', () => $('view-set').classList.remove('show-setup'));
   $('btn-download-logs').addEventListener('click', () => {
     $('logs-block').classList.toggle('hidden');
@@ -1151,17 +1272,23 @@
     if (!soundOn) return;
     const ctx = audio();
     if (!ctx) return;
+    // A context that is still resuming has a frozen clock, so a click scheduled
+    // now lands at time 0 and is lost. Wait for it to run, then play.
+    if (ctx.state !== 'running') {
+      ctx.resume().then(() => { if (ctx.state === 'running') playClick(); }, () => {});
+      return;
+    }
     const t0 = ctx.currentTime;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.frequency.value = 1200;
     gain.gain.setValueAtTime(0, t0);
-    gain.gain.linearRampToValueAtTime(0.2, t0 + 0.005);
-    gain.gain.setValueAtTime(0.2, t0 + 0.045);
-    gain.gain.linearRampToValueAtTime(0, t0 + 0.05);
+    gain.gain.linearRampToValueAtTime(0.6, t0 + 0.005);
+    gain.gain.setValueAtTime(0.6, t0 + 0.065);
+    gain.gain.linearRampToValueAtTime(0, t0 + 0.07);
     osc.connect(gain).connect(ctx.destination);
     osc.start(t0);
-    osc.stop(t0 + 0.06);
+    osc.stop(t0 + 0.08);
   }
 
   // One Beep Assist beep, at the box's own frequency, waveform, length and
