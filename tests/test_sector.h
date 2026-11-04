@@ -311,6 +311,28 @@ public:
             return refused && odometerCounts(s, 500, 500) == 0;
         });
 
+        suite->addTest("+10 and -10 move navi too, in every rally type, and -10 cannot take it below zero", []() {
+            bool ok = true;
+            for (int type = 0; type <= 2; ++type) {
+                RallyState s = running();
+                s.rally_type = type;
+                zeroOdometer(s, 1000, 1000);
+                auto navi_cm = [&](uint64_t c) { return countsToCentimeters(odometerCounts(s, c, c), s.calibration); };
+                adjustOdometerCm(s, 1000, 1000, 1000);          // +10 m
+                const bool up = navi_cm(1000) == 1000;
+                adjustOdometerCm(s, -2000, 1000, 1000);         // -20 m from 10 m: stops at zero
+                const bool floor = navi_cm(1000) == 0;
+                adjustOdometerCm(s, -1000, 1000, 1000);         // -10 m at zero: nothing
+                const bool stays = navi_cm(1000) == 0;
+                adjustOdometerCm(s, -1000, 400, 400);           // counter behind its start (reverse): already negative
+                const bool behind = navi_cm(400) == -60000;     // -10 does not push it further down
+                adjustOdometerCm(s, 1000, 400, 400);            // +10 still adds
+                const bool plus = navi_cm(400) == -59000;
+                ok = ok && up && floor && stays && behind && plus;
+            }
+            return ok;
+        });
+
         suite->addTest("navi total reads negative when the counter is behind its start, never floored at 0", []() {
             RallyState s = running();
             zeroOdometer(s, 1000, 1000);            // navi starts at counter 1000

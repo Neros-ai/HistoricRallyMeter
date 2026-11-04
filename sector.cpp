@@ -383,6 +383,15 @@ bool setOdometerMetres(RallyState& s, uint64_t c1, uint64_t c2, double metres) {
     return true;
 }
 
+void adjustOdometerCm(RallyState& s, long delta_cm, uint64_t c1, uint64_t c2) {
+    if (delta_cm < 0) {
+        const long now_cm = countsToCentimeters(odometerCounts(s, c1, c2), s.calibration);
+        if (now_cm <= 0) return;
+        if (now_cm + delta_cm < 0) delta_cm = -now_cm;
+    }
+    s.odometer_adjust_cm += delta_cm;
+}
+
 void markSectorOdometer(RallyState& s, uint64_t c1, uint64_t c2) {
     if (s.rally_type == 0) return;   // italian and surrey keep navi total through a stage start
     s.sector_start_odometer_cm = countsToCentimeters(odometerCounts(s, c1, c2), s.calibration);

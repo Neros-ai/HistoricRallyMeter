@@ -248,7 +248,7 @@ static long rawDistanceCm(AppData* data, bool is_trip) {
 void applyDistanceAdjust(AppData* data, long delta_m) {
     long delta_cm = delta_m * 100L;
 
-    // Both counters share the same underlying wheel measurement, so a
+    // All counters share the same underlying wheel measurement, so a
     // wheel-slip correction has to apply to both -- otherwise Trip would
     // keep showing the slipped, uncorrected value. Clamped independently:
     // Total and Trip can have travelled different distances at this instant,
@@ -258,6 +258,10 @@ void applyDistanceAdjust(AppData* data, long delta_m) {
 
     long& trip_adjust = data->state->trip_distance_adjust_cm;
     trip_adjust += clampDistanceAdjust(rawDistanceCm(data, true) + trip_adjust, delta_cm);
+
+    // Navi moves with them, in every rally type; a -10 stops at zero, as for the others.
+    auto poll = data->poller->getMostRecent();
+    adjustOdometerCm(*data->state, delta_cm, poll.cntr1, poll.cntr2);
 
     ConfigFile::save(*data->state);
     updateCopilotDisplay(data);
