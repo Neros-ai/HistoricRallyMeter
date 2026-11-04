@@ -151,14 +151,14 @@ long parseDurationSeconds(const std::string& text) {
 }
 
 int64_t italianStageStartMs(int64_t press_ms) {
-    return press_ms - (press_ms % 60000);
+    return press_ms;
 }
 
 void markSectorStart(RallyState& s) {
     if (s.rally_type != 2) return;
     if (!stageIsSector(s.segments) && !stageIsSector(s.stage_segments)) return;
     s.sector_start_ms = italianStageStartMs(s.total_start_time_ms);
-    s.total_start_time_ms = sectorClockZeroMs(s);   // the start time: :00 of the minute
+    s.total_start_time_ms = sectorClockZeroMs(s);   // the second of the departure press
     s.sector_undo = RallyState::SectorUndo();   // nothing from an earlier sector to undo
     s.last_pc_error = RallyState::PcError();    // the last sector's pc error is not this sector's
     double card_s = 0.0;
@@ -174,11 +174,6 @@ void markSectorStart(RallyState& s) {
 
 int64_t sectorClockZeroMs(const RallyState& s) {
     return s.sector_start_ms;
-}
-
-double sectorScheduleScale(const RallyState& s) {
-    if (s.sector_card_ms <= 0) return 1.0;
-    return (s.sector_card_ms + SECTOR_AIM_MS) / static_cast<double>(s.sector_card_ms);
 }
 
 int64_t coInTimeMs(const RallyState& s) {
@@ -328,7 +323,7 @@ double sectorSecondsToLine(const RallyState& s, int64_t now_ms, bool* valid) {
     const double ideal_s = idealSecondsToReachDistance(s.stage_segments, end_m);
     if (ideal_s < 0.0) return 0.0;
     *valid = true;
-    return ideal_s * sectorScheduleScale(s) - (now_ms - sectorClockZeroMs(s)) / 1000.0;
+    return ideal_s - (now_ms - sectorClockZeroMs(s)) / 1000.0;
 }
 
 double pcCountdownSeconds(const RallyState& s, int64_t now_ms, bool* valid) {
@@ -377,7 +372,8 @@ bool sectorUndoAvailable(const RallyState& s) {
 
 int64_t odometerCounts(const RallyState& s, uint64_t c1, uint64_t c2) {
     const int64_t raw = calculateDistanceCounts(s, c1, c2, s.odometer_start_cntr1, s.odometer_start_cntr2);
-    return correctedDistanceCounts(raw, s.odometer_adjust_cm, s.calibration);
+    // Not floored: a counter behind navi's start reads negative, so the crew can see it.
+    return signedCorrectedDistanceCounts(raw, s.odometer_adjust_cm, s.calibration);
 }
 
 bool setOdometerMetres(RallyState& s, uint64_t c1, uint64_t c2, double metres) {
@@ -413,7 +409,7 @@ double sectorAheadSeconds(const RallyState& s, uint64_t c1, uint64_t c2, int64_t
     const double ideal_s = idealSecondsToReachDistance(s.stage_segments, sectorPositionM(s, c1, c2));
     if (ideal_s < 0.0) return 0.0;
     *valid = true;
-    return ideal_s * sectorScheduleScale(s) - (now_ms - sectorClockZeroMs(s)) / 1000.0;
+    return ideal_s - (now_ms - sectorClockZeroMs(s)) / 1000.0;
 }
 
 double trialAheadSeconds(const RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms, bool* valid) {
@@ -484,6 +480,19 @@ void zeroOdometer(RallyState& s, uint64_t c1, uint64_t c2) {
     s.odometer_adjust_cm = 0;
 }
 
+double subAverageKph(const RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms) {
+    const int64_t counts = calculateDistanceCounts(s, c1, c2, s.trip_start_cntr1, s.trip_start_cntr2);
+    return calculateAverageSpeed(s, s.trip_start_time_ms, now_ms, counts, s.trip_distance_adjust_cm);
+}
+
+bool subResetInStage(const RallyState& s) {
+    if (s.rally_type != 2 || s.stage_complete || !stageIsSector(s.stage_segments)) return false;
+    const long cur = s.segment_current_number;
+    if (cur < 0 || cur >= static_cast<long>(s.stage_segments.size())) return false;
+    const int t = s.stage_segments[cur].type;
+    return t == SEG_PC || t == SEG_PM;
+}
+
 SectorPanel sectorPanel(const RallyState& s, int64_t now_ms, long stage_m) {
     SectorPanel p;
     const std::vector<Segment>& segs = s.stage_segments;
@@ -505,14 +514,14 @@ SectorPanel sectorPanel(const RallyState& s, int64_t now_ms, long stage_m) {
         const double secs = (now_ms - s.trial_start_ms) / 1000.0;
         if (secs > 0.5 && into_m > 0.0) p.avgKph = into_m / secs * 3.6;
     }
-    // The co's arrival: the card's in-time, aimed at the middle of its minute.
+    // The co's arrival: the card's in-time, the same second as the departure.
     double total_m = 0.0;
     for (const Segment& g : segs) total_m += g.distance_m;
     if (s.sector_card_ms > 0) {
         p.coValid = true;
         p.coRef = segs.back().type == SEG_CO ? segs.back().ref : 0;
         p.coInTimeMs = coInTimeMs(s);
-        const double left_ms = static_cast<double>(p.coInTimeMs + SECTOR_AIM_MS - now_ms);
+        const double left_ms = static_cast<double>(p.coInTimeMs - now_ms);
         p.coMinutes = left_ms > 0 ? static_cast<long>(left_ms / 60000.0) : 0;
         if (left_ms > 0 && total_m > stage_m)
             p.coKph = static_cast<int>(std::lround((total_m - stage_m) / 1000.0 / (left_ms / 3600000.0)));
@@ -586,6 +595,8 @@ std::string sectorCardJson(const RallyState& live, int64_t now_ms, long stage_m,
             p.secondsValid = true;
         }
         st = &preview;
+    } else if (p.running && p.kind == SectorPanel::NAVI) {
+        p.avgKph = subAverageKph(live, c1, c2, now_ms);   // a navi row shows the sub average
     }
     if (!p.running) return "{\"loaded\":false}";
     const std::vector<Segment>& segs = st->stage_segments;

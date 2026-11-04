@@ -564,7 +564,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .fig-row .big { font-family: sans-serif; font-weight: bold; font-variant-numeric: tabular-nums; }
 .driver-footer .dist-box > strong,
 .driver-footer .avg b { font-family: monospace; font-weight: bold; }
-.fig-row .big[data-unit]::after, .driver-footer .dist-box > strong[data-unit]::after {
+.fig-row .big[data-unit]::after {
   content: attr(data-unit); font-size: 0.28em; font-weight: 600; margin-left: 0.12em; color: #9ad; vertical-align: 0.4em;
 }
 /* Drv: the Trip block in cyan, as on the box. */
@@ -653,6 +653,34 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 @media (orientation: landscape) and (min-width: 700px) {
   .view.hidden { display: none !important; }
   header { padding: 0.15rem 0.4rem; }
+  /* Sound and link are icons here too, as in portrait: no "Tap for sound" /
+     "connected" words. Other pages keep the slim header line for them. */
+  .sound-toggle .ico, .conn .ico { display: block; width: 1.7rem; height: 1.7rem; }
+  .snd-label, #audio-state, .conn-label { display: none; }
+  .sound-toggle { background: none; border: 0; padding: 0; min-height: 0; color: #1a9933; }
+  .sound-toggle.off { color: #e02020; border: 0; }
+  .sound-toggle.off .slash { opacity: 1; }
+  .sound-toggle.blocked { color: #fc0; }
+  .conn { color: #e02020; font-size: 0; }
+  .conn .tick { display: none; }
+  .conn.ok { color: #1a9933; }
+  .conn.ok .cross { display: none; }
+  .conn.ok .tick { display: inline; }
+  /* Navi and Driver lose the header line: the icons sit inside the page. */
+  body:has(#view-navi:not(.hidden)) header,
+  body:has(#view-drv:not(.hidden)) header,
+  body:has(#view-navi:not(.hidden)) .header-right,
+  body:has(#view-drv:not(.hidden)) .header-right { display: contents; }
+  body:has(#view-navi:not(.hidden)) #sound-toggle,
+  body:has(#view-navi:not(.hidden)) #conn,
+  body:has(#view-drv:not(.hidden)) #sound-toggle,
+  body:has(#view-drv:not(.hidden)) #conn { position: fixed; z-index: 25; }
+  /* Navi: above the rally clock, over the clock's column (grid column 6). */
+  body:has(#view-navi:not(.hidden)) #sound-toggle { top: 0.3rem; left: calc(0.3rem + (100vw - 0.6rem) * 0.5961 - 1.9rem); }
+  body:has(#view-navi:not(.hidden)) #conn { top: 0.3rem; left: calc(0.3rem + (100vw - 0.6rem) * 0.5961 + 0.2rem); }
+  /* Driver: top right, in the menu column beside the current speed. */
+  body:has(#view-drv:not(.hidden)) #sound-toggle { top: 0.3rem; right: 2.6rem; }
+  body:has(#view-drv:not(.hidden)) #conn { top: 0.3rem; right: 0.45rem; }
   .tabs { display: none; }
   #land-menu.land-only {
     display: flex; position: fixed; right: 0.35rem; bottom: 0.3rem; z-index: 25;
@@ -691,7 +719,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
   #view-navi .flags .key { flex: 0 0 22%; height: auto; }
   #view-navi .big { font-size: clamp(3.46rem, 15.84vh, 6.34rem); line-height: 0.9; }
   #view-navi .big[data-unit]::after { content: none; }
-  .nclk { grid-column: 6; grid-row: 1; align-self: center; justify-self: center; margin: 0; font-size: clamp(1.5rem, 6vh, 2.28rem); }
+  .nclk { grid-column: 6; grid-row: 1; align-self: end; justify-self: center; margin: 0; font-size: clamp(1.5rem, 6vh, 2.28rem); }
   #btn-total { grid-column: 1; grid-row: 1; }
   #total-m { grid-column: 2; grid-row: 1; justify-self: end; align-self: end; }
   #btn-total + .el { grid-column: 1; grid-row: 2; justify-self: end; align-self: center; }
@@ -813,4 +841,247 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
     display: block; position: fixed; z-index: 30; left: 8vw; right: 8vw; top: 8vh; bottom: 8vh;
     background: #000; border: 2px solid #fff; padding: 1rem; overflow: auto;
   }
+}
+
+/* Seg: the type tags carry the box's colours (ui_copilot.cpp seg-tag-*). */
+#seg-table button.tag { background: #666; color: #fff; border: 0; font-weight: bold; }
+#seg-table button.tag.t2 { background: #d01010; }
+#seg-table button.tag.t3 { background: #1e50c8; }
+#seg-table button.tag.t4 { background: #f0d000; color: #000; }
+#seg-table button.tag.t5 { background: #10a030; }
+/* Seg: the rally mode's flag, 96 x 24, centred at the foot of the page. */
+.mode-badge { display: block; width: 96px; height: 24px; margin: 0.8rem auto 0.4rem; }
+/* The Setup sheet's headings and the countdown panel. */
+.setup-h { margin: 0.6rem 0 0.3rem; font-size: 1rem; color: #0ff; }
+.card.cdn b { color: #fff; }
+.card.cdn small { color: #888; }
+@media (orientation: landscape) and (min-width: 700px) {
+  #view-seg { grid-template-rows: auto auto minmax(0, 1fr) auto auto auto; }
+  #view-seg .mode-badge { grid-column: 2; grid-row: 6; margin: 0.2rem auto 0; align-self: end; }
+  /* Pages other than Navi and Driver keep the header line: the rally clock beside the sound icon. */
+  body:not(:has(#view-navi:not(.hidden))):not(:has(#view-drv:not(.hidden))) #hdr-clock {
+    display: block; font-weight: bold; font-family: monospace; font-size: 1.3rem; line-height: 1;
+  }
+}
+/* Surrey has no speed-change line under the navi figures on the box. */
+#view-navi.rally-surrey #speed-change { display: none !important; }
+/* Portrait Navi: total, trip and navi use the same key font as reverse. */
+@media not ((orientation: landscape) and (min-width: 700px)) {
+  #btn-total, #btn-trip, #key-navi { font-size: 1.05rem; }
+}
+/* Portrait Navi, greek and surrey: the stage go keys (start now, next minute, auto) take the bottom line. */
+@media not ((orientation: landscape) and (min-width: 700px)) {
+  #view-navi.rally-greek, #view-navi.rally-surrey { display: flex; flex-direction: column; }
+  #view-navi.rally-greek > .flags, #view-navi.rally-surrey > .flags { order: 99; margin-top: 0.4rem; }
+  #view-navi.rally-greek > svg, #view-navi.rally-surrey > svg { order: 100; }
+}
+/* ...and the stage selector row sits directly above them. */
+@media not ((orientation: landscape) and (min-width: 700px)) {
+  #view-navi.rally-greek > #stage-row, #view-navi.rally-surrey > #stage-row { order: 98; }
+}
+/* Portrait Navi: next speed uses the reverse key font, and the gap under the header menu key is doubled. */
+@media not ((orientation: landscape) and (min-width: 700px)) {
+  #btn-next { font-size: 1.05rem; }
+  #view-navi.navi { padding-top: 1.2rem; }
+}
+/* Landscape greek and surrey: the trip history box ends level with the bottom of -10, and time taken sits at its foot. */
+@media (orientation: landscape) and (min-width: 700px) {
+  #view-navi.rally-greek #greek-cards > .card.hist, #view-navi.rally-surrey #greek-cards > .card.hist { grid-row: 2 / 6; }
+  #view-navi.rally-surrey #time-taken-row { grid-row: 5; align-self: end; }
+}
+/* A start time that has gone by, with nothing armed or running, is crossed out in red (as the box draws it). */
+#auto-time.past {
+  display: inline-block;
+  background:
+    linear-gradient(to top right, transparent calc(50% - 1.5px), #ff1a1a calc(50% - 1.5px), #ff1a1a calc(50% + 1.5px), transparent calc(50% + 1.5px)),
+    linear-gradient(to bottom right, transparent calc(50% - 1.5px), #ff1a1a calc(50% - 1.5px), #ff1a1a calc(50% + 1.5px), transparent calc(50% + 1.5px));
+}
+/* Landscape greek and surrey: the start time sits under the word manual / auto, so both can be larger.
+   The stage row takes the empty row beneath it. */
+@media (orientation: landscape) and (min-width: 700px) {
+  #view-navi.rally-greek #stage-row, #view-navi.rally-surrey #stage-row {
+    grid-row: 1 / 3; grid-template-rows: minmax(0, 70fr) minmax(0, 36fr);
+  }
+  #view-navi.rally-greek #stage-row .auto, #view-navi.rally-surrey #stage-row .auto {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.05;
+  }
+  #view-navi.rally-greek #auto-word, #view-navi.rally-surrey #auto-word { font-size: clamp(1.05rem, 4.2vh, 1.4rem); }
+  #view-navi.rally-greek #auto-time, #view-navi.rally-surrey #auto-time { font-size: clamp(1.2rem, 5vh, 1.7rem); font-weight: bold; }
+}
+/* Landscape: the trip history, speed change and arrival boxes have no outline, as on the box. */
+@media (orientation: landscape) and (min-width: 700px) {
+  #greek-cards .card, #time-taken-row.card { border: 0; background: transparent; }
+}
+/* Landscape Segments: clear and upload keys are 1.5x deeper (2.15rem -> 3.225rem). */
+@media (orientation: landscape) and (min-width: 700px) {
+  #view-seg .actions .key { height: 3.225rem; }
+}
+/* Landscape greek and surrey: the stage go keys are as deep as set / +10 / -10 and level with them (rows 1, 3, 5). */
+@media (orientation: landscape) and (min-width: 700px) {
+  #view-navi.rally-greek > .flags, #view-navi.rally-surrey > .flags { display: contents; }
+  #view-navi.rally-greek .flags .key, #view-navi.rally-surrey .flags .key {
+    grid-column: 10; width: 100%; height: 100%; min-height: 0; flex: none;
+  }
+  #view-navi.rally-greek #btn-flag-late, #view-navi.rally-surrey #btn-flag-late { grid-row: 1; }
+  #view-navi.rally-greek #btn-flag-minute, #view-navi.rally-surrey #btn-flag-minute { grid-row: 3; }
+  #view-navi.rally-greek #btn-flag-auto, #view-navi.rally-surrey #btn-flag-auto { grid-row: 5; }
+}
+/* Trip history: the heading in blue (cyan) as on the box, figures white. */
+#trip-history-label { color: #0ff; }
+@media (orientation: landscape) and (min-width: 700px) {
+  /* ...each figure on its own line. */
+  #trip-history .th { display: block; text-align: right; }
+  #trip-history .thsep { display: none; }
+  /* The at m column ends at the right edge of the + key above it. */
+  #greek-cards .cards > .card:not(.arr) { padding-right: 0; }
+  #stage-table th:last-child, #stage-table td:last-child { padding-right: 0; }
+  /* manual / auto and the start time move down a fraction. */
+  #view-navi.rally-greek #stage-row .auto, #view-navi.rally-surrey #stage-row .auto { padding-top: 0.35rem; }
+}
+@media (orientation: landscape) and (min-width: 700px) {
+  #trip-history-label { display: block; text-align: center; }
+}
+@media (orientation: landscape) and (min-width: 700px) {
+  /* Space above manual / auto and below the start time. */
+  #view-navi.rally-greek #stage-row .auto, #view-navi.rally-surrey #stage-row .auto { padding-top: 0.55rem; padding-bottom: 0.4rem; }
+  /* Navi: the menu key is as wide as the stage go keys (grid column 10 = 10.25% of the page grid), same right edge. */
+  body:has(#view-navi:not(.hidden)) #land-menu { width: calc((100vw - 0.6rem) * 0.1025); right: 0.3rem; }
+}
+/* Trip history values use the rally clock's font. */
+#trip-history { font-family: monospace; font-weight: bold; font-size: 1.9rem; }
+@media (orientation: landscape) and (min-width: 700px) {
+  #trip-history { font-size: clamp(1.5rem, 6vh, 2.28rem); line-height: 1.15; }
+}
+@media (orientation: landscape) and (min-width: 700px) {
+  /* The first value moves up half a line so all four show. */
+  #trip-history { display: block; margin-top: -0.575em; }
+}
+/* Speed changes, as on the box: the current row white, the others blue (cyan). */
+#stage-table td { color: #0ff; }
+#stage-table tr.now td { color: #fff; }
+/* Landscape greek and surrey layout tweaks. */
+@media (orientation: landscape) and (min-width: 700px) {
+  /* The rally-time column is 2% narrower; the stage column (selector, speed table, arrival) gets the space. */
+  #view-navi.rally-greek, #view-navi.rally-surrey {
+    grid-template-columns: 10.25% 28.1% 3.08% 7.1% 3.08% 14% 3.08% 17.8% 3.08% 10.25%;
+  }
+  /* A-B, B-C zero is as deep as reverse. */
+  #view-navi.rally-greek #row-zero, #view-navi.rally-surrey #row-zero { align-self: stretch; }
+  #view-navi.rally-greek #btn-zero, #view-navi.rally-surrey #btn-zero { height: 100%; }
+  /* manual / auto sits further from the stage selector. */
+  #view-navi.rally-greek #stage-row .auto, #view-navi.rally-surrey #stage-row .auto { padding-top: 1rem; }
+  /* The arrival section ends level with the bottom of reverse. */
+  #view-navi.rally-greek #greek-cards .card.arr, #view-navi.rally-surrey #greek-cards .card.arr {
+    justify-content: flex-end; padding-bottom: 0; align-self: stretch;
+  }
+}
+/* Landscape greek: the "countdown" label fits its key (the box draws it at 21 px). */
+@media (orientation: landscape) and (min-width: 700px) {
+  #view-navi.rally-greek #key-navi { font-size: clamp(0.7rem, 2.7vh, 0.95rem); padding: 0; }
+}
+/* Landscape: the speed change table uses the start time's font (bold monospace, same size). */
+@media (orientation: landscape) and (min-width: 700px) {
+  #view-navi.rally-greek #stage-table, #view-navi.rally-surrey #stage-table {
+    font-family: monospace; font-weight: bold; font-size: clamp(1.2rem, 5vh, 1.7rem);
+  }
+  #view-navi.rally-greek #stage-table th, #view-navi.rally-surrey #stage-table th { font-weight: bold; }
+}
+/* Landscape greek and surrey: the tops of the "Trip history" and "manual" text sit half way between the start now key
+   (row 1) and the next minute key (row 3), i.e. half way down row 2 (36 of 388 parts of the page grid). */
+@media (orientation: landscape) and (min-width: 700px) {
+  #view-navi.rally-greek, #view-navi.rally-surrey { --half-gap: calc((100dvh - 2.1rem) * 18 / 388); }
+  #view-navi.rally-greek #greek-cards > .card.hist, #view-navi.rally-surrey #greek-cards > .card.hist { padding-top: var(--half-gap); }
+  #view-navi.rally-greek #stage-row .auto, #view-navi.rally-surrey #stage-row .auto {
+    justify-content: flex-start; padding-top: var(--half-gap); padding-bottom: 0;
+  }
+  /* The speed table steps down by what the start time now takes below row 2, so they do not touch. */
+  #view-navi.rally-greek #greek-cards .cards > .card:not(.arr), #view-navi.rally-surrey #greek-cards .cards > .card:not(.arr) {
+    margin-top: calc(3.2rem - var(--half-gap));
+  }
+}
+/* Stage arrival (and the Surrey countdown) figures use the trip history font. */
+.card.arr b { font-family: monospace; font-weight: bold; font-size: 1.9rem; }
+@media (orientation: landscape) and (min-width: 700px) {
+  .card.arr b { font-size: clamp(1.5rem, 6vh, 2.28rem); }
+}
+/* The "Stage arrival" / "countdown" heading uses the "Trip history" heading's font. */
+.card.arr > span.cyan { font-family: monospace; font-size: 0.9rem; font-weight: normal; }
+/* The navi figure is blue (cyan) on the box in Italian and Surrey. */
+#navi-m { color: #0ff; }
+/* Stage arrival and the Surrey countdown: the two figures one above the other, each followed by its legend. */
+.card.arr .fig { display: flex; flex-direction: column; align-items: stretch; gap: 0.1rem; width: 100%; }
+.card.arr .fig > span { display: grid; grid-template-columns: 1fr 2.6rem; column-gap: 0.4rem; align-items: baseline; }
+.card.arr .fig > span > b { grid-column: 1; grid-row: 1; text-align: right; }
+.card.arr .fig > span > small { grid-column: 2; grid-row: 1; text-align: left; display: block; }
+/* Surrey has no next-distance figure on the box (row 3 is navi), in portrait as in landscape. */
+#view-navi.rally-surrey #next-m { display: none; }
+/* Portrait Italian Navi: next (substage) under the navi key with prev to its right, both above the sector card;
+   freeze and reverse, then the stage selector, flags and zero follow the card. */
+@media not ((orientation: landscape) and (min-width: 700px)) {
+  #view-navi.rally-italian #btn-next { grid-column: 1; grid-row: 5; }
+  #view-navi.rally-italian #btn-prev { grid-column: 2; grid-row: 5; }
+  #view-navi.rally-italian > #sector-card { grid-row: 6; }
+  #view-navi.rally-italian #btn-freeze { grid-column: 1; grid-row: 7; }
+  #view-navi.rally-italian #btn-reverse { grid-column: 2; grid-row: 7; }
+  #view-navi.rally-italian > #stage-row { grid-column: 1 / -1; grid-row: 8; }
+  #view-navi.rally-italian > .flags { grid-row: 9; }
+  #view-navi.rally-italian > #row-zero { grid-row: 10; }
+}
+/* Portrait Italian Navi: prev is right aligned; the stage go key sits to the right of the stage selector. */
+@media not ((orientation: landscape) and (min-width: 700px)) {
+  #view-navi.rally-italian #btn-prev { grid-column: 3; }
+  #view-navi.rally-italian > #stage-row { grid-column: 1 / 3; grid-row: 8; }
+  #view-navi.rally-italian > .flags { display: contents; }
+  #view-navi.rally-italian #btn-flag-late { grid-column: 3; grid-row: 8; width: 100%; }
+}
+/* Portrait Surrey Navi: prev is right aligned on the next row; freeze and reverse sit below, left and right. */
+@media not ((orientation: landscape) and (min-width: 700px)) {
+  #view-navi.rally-surrey { display: grid; grid-template-columns: 1fr 1fr; column-gap: 0.4rem; }
+  #view-navi.rally-surrey > * { grid-column: 1 / -1; }
+  #view-navi.rally-surrey > .fig-row:has(#btn-next),
+  #view-navi.rally-surrey > .fig-row:has(#btn-next) .kcol,
+  #view-navi.rally-surrey > #bottom-keys { display: contents; }
+  #view-navi.rally-surrey #btn-next, #view-navi.rally-surrey #btn-prev,
+  #view-navi.rally-surrey #btn-freeze, #view-navi.rally-surrey #btn-reverse {
+    width: 7rem; height: 3rem; margin-bottom: 0.6rem;
+  }
+  #view-navi.rally-surrey #btn-next, #view-navi.rally-surrey #btn-freeze { grid-column: 1; justify-self: start; }
+  #view-navi.rally-surrey #btn-prev, #view-navi.rally-surrey #btn-reverse { grid-column: 2; justify-self: end; }
+}
+/* Portrait Surrey Navi: freeze and reverse sit between the speed table / arrival and the trip history. */
+@media not ((orientation: landscape) and (min-width: 700px)) {
+  #view-navi.rally-surrey > #greek-cards { display: contents; }
+  #view-navi.rally-surrey #greek-cards > * { grid-column: 1 / -1; }
+  #view-navi.rally-surrey #greek-cards > .cards { order: 3; }
+  #view-navi.rally-surrey #btn-freeze, #view-navi.rally-surrey #btn-reverse { order: 5; }
+  #view-navi.rally-surrey #greek-cards > .card.hist { order: 6; }
+  #view-navi.rally-surrey > #time-taken-row { order: 7; }
+}
+/* The next-speed key lives in the bottom keys; the third row's key is a greyed "countdown" label (greek portrait only). */
+#btn-countdown { display: none; }
+@media not ((orientation: landscape) and (min-width: 700px)) {
+  #view-navi.rally-greek #btn-countdown { display: flex; }
+  /* Italian and Surrey have no next-distance row on the box. */
+  #view-navi.rally-italian > .fig-row:has(#next-m), #view-navi.rally-surrey > .fig-row:has(#next-m) { display: none; }
+}
+/* Portrait Greek Navi: countdown row, then next and prev (left and right), and freeze and reverse above the trip history. */
+@media not ((orientation: landscape) and (min-width: 700px)) {
+  #view-navi.rally-greek { display: grid; grid-template-columns: 1fr 1fr; column-gap: 0.4rem; }
+  #view-navi.rally-greek > * { grid-column: 1 / -1; }
+  #view-navi.rally-greek > #bottom-keys { display: contents; }
+  #view-navi.rally-greek #btn-next, #view-navi.rally-greek #btn-prev,
+  #view-navi.rally-greek #btn-freeze, #view-navi.rally-greek #btn-reverse {
+    width: 7rem; height: 3rem; margin-bottom: 0.6rem;
+  }
+  #view-navi.rally-greek #btn-next, #view-navi.rally-greek #btn-freeze { grid-column: 1; justify-self: start; }
+  #view-navi.rally-greek #btn-prev, #view-navi.rally-greek #btn-reverse { grid-column: 2; justify-self: end; }
+  #view-navi.rally-greek > #greek-cards { display: contents; }
+  #view-navi.rally-greek #greek-cards > * { grid-column: 1 / -1; }
+  #view-navi.rally-greek #greek-cards > .cards { order: 3; }
+  #view-navi.rally-greek #btn-freeze, #view-navi.rally-greek #btn-reverse { order: 5; }
+  #view-navi.rally-greek #greek-cards > .card.hist { order: 6; }
+}
+/* Portrait Italian Navi: reverse is right aligned. */
+@media not ((orientation: landscape) and (min-width: 700px)) {
+  #view-navi.rally-italian #btn-reverse { grid-column: 3; }
 }

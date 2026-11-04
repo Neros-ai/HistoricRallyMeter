@@ -331,19 +331,22 @@ void updateCopilotDisplay(AppData* data) {
     // sector clock, to warn that next is due. 30 s, 15 s, the navigation double
     // beep at 5 s, a single beep at 4, 3, 2 and 1, and a shorter beep on 0.
     // A new row starts from its present reading, so marks already gone are skipped.
-    auto playMark = [data](PcBeep beep) {
+    // sound: the box's speaker. announce: the phone is told (it sounds the beep on receipt).
+    auto playMark = [data](PcBeep beep, bool sound, bool announce) {
         const bool five = beep == PcBeep::Five;
         const int duration_ms = five ? BEEP_ASSIST_NAV_DURATION_MS
             : beep == PcBeep::Zero ? PC_BEEP_ZERO_MS : PC_BEEP_TICK_MS;
         const double freq_hz = five ? BEEP_ASSIST_NAV_FREQ_HZ : PC_BEEP_FREQ_HZ;
-        data->lastBeep.seq++;          // the phone sounds it too
-        data->lastBeep.freq_hz = freq_hz;
-        data->lastBeep.duration_ms = duration_ms;
-        data->lastBeep.amplitude = BEEP_ASSIST_AMP;
-        data->lastBeep.triangle = false;
-        data->lastBeep.twice = five;
-        data->lastBeep.gap_ms = five ? BEEP_ASSIST_NAV_GAP_MS : 0;
-        if (!data->toneGen) return;
+        if (announce) {
+            data->lastBeep.seq++;          // the phone sounds it too
+            data->lastBeep.freq_hz = freq_hz;
+            data->lastBeep.duration_ms = duration_ms;
+            data->lastBeep.amplitude = BEEP_ASSIST_AMP;
+            data->lastBeep.triangle = false;
+            data->lastBeep.twice = five;
+            data->lastBeep.gap_ms = five ? BEEP_ASSIST_NAV_GAP_MS : 0;
+        }
+        if (!sound || !data->toneGen) return;
         const ToneWaveform wave = five ? BEEP_ASSIST_NAV_WAVE : ToneWaveform::Sine;
         data->toneGen->playBeep(freq_hz, wave, duration_ms, BEEP_ASSIST_AMP);
         if (five) {
@@ -369,9 +372,13 @@ void updateCopilotDisplay(AppData* data) {
             data->pcBeepTrialMs = data->state->trial_start_ms;
             data->pcBeepPrevS = pc_s + 1e-6;   // a row starting exactly on a mark still hears it
         } else {
-            const PcBeep beep = pcCountdownBeep(data->pcBeepPrevS, pc_s);
+            // The box's speaker and the phone each get their own lead, so each is heard on the second.
+            const PcBeep beep = pcCountdownBeep(data->pcBeepPrevS - PC_BEEP_LEAD_S, pc_s - PC_BEEP_LEAD_S);
+            const double phone_lead_s = data->state->phone_beep_lead_ms / 1000.0;
+            const PcBeep phone_beep = pcCountdownBeep(data->pcBeepPrevS - phone_lead_s, pc_s - phone_lead_s);
             data->pcBeepPrevS = pc_s;
-            if (beep != PcBeep::None) playMark(beep);
+            if (beep != PcBeep::None) playMark(beep, true, false);
+            if (phone_beep != PcBeep::None) playMark(phone_beep, false, true);
         }
 
         // 100 m before the end of every row that is not a pc: one single beep.
@@ -386,7 +393,7 @@ void updateCopilotDisplay(AppData* data) {
             data->distBeepRow = row;
             data->distBeepPrevM = left_m + 1e-3;   // already inside 100 m: stay silent
         } else {
-            if (hundredMetreBeep(data->distBeepPrevM, left_m)) playMark(PcBeep::Tick);
+            if (hundredMetreBeep(data->distBeepPrevM, left_m)) playMark(PcBeep::Tick, true, true);
             data->distBeepPrevM = left_m;
         }
     }

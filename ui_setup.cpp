@@ -330,9 +330,7 @@ std::string shellQuote(const std::string& s) {
 // As upstream's "Exit & Check for updates": save, open a terminal running the
 // install's own update script (on a Rallybox install it pulls the box branch
 // and rebuilds), then close. The crew restart the app when it has finished.
-void onUpdate(GtkWidget* w, gpointer p) {
-    AppData* d = static_cast<AppData*>(p);
-    if (!confirmYesNo(w, "Update", "This will exit the app and check for updates.\nThe box must be connected to the internet first.")) return;
+void doUpdate(AppData* d) {
     ConfigFile::save(*d->state);
 
     const std::string dir = appDirectory();
@@ -368,6 +366,12 @@ void onUpdate(GtkWidget* w, gpointer p) {
         return;
     }
     gtk_main_quit();
+}
+
+void onUpdate(GtkWidget* w, gpointer p) {
+    AppData* d = static_cast<AppData*>(p);
+    if (!confirmYesNo(w, "Update", "This will exit the app and check for updates.\nThe box must be connected to the internet first.")) return;
+    doUpdate(d);
 }
 
 void onShowSetup(GtkWidget*, gpointer p) {
@@ -451,6 +455,53 @@ void phoneResetLayout(AppData* d) {
     std::string err;
     if (!resetPiLayout(err)) phoneNote(d, err);
     else phoneNote(d, "Layout saved. Restart the app so its windows follow the displays.");
+}
+
+void phoneDisplaysList(AppData* d) {
+    if (!d) return;
+    std::vector<PiOutput> outputs = readPiOutputs();
+    std::sort(outputs.begin(), outputs.end(), [](const PiOutput& a, const PiOutput& b) {
+        if (a.x != b.x) return a.x < b.x;
+        return a.name < b.name;
+    });
+    std::string j = "[";
+    for (size_t i = 0; i < outputs.size(); i++) {
+        if (i) j += ',';
+        j += std::string("{\"name\":\"") + jsonEscape(outputs[i].name) + "\",\"w\":" + std::to_string(outputs[i].logicalW())
+            + ",\"h\":" + std::to_string(outputs[i].logicalH()) + ",\"orientation\":\""
+            + jsonEscape(outputs[i].orientationName()) + "\",\"keyboard\":"
+            + (keyboardOnOutput(outputs[i].name) ? "true" : "false") + "}";
+    }
+    j += "]";
+    d->setupDisplaysJson = j;
+}
+
+void phoneRotate(AppData* d, const std::string& output) {
+    if (!d || output.empty()) return;
+    std::string err;
+    if (!rotatePiOutput(output, err)) phoneNote(d, err);
+    else phoneNote(d, "Layout saved. Restart the app so its windows follow the displays.");
+    phoneDisplaysList(d);
+}
+
+void phoneKeyboard(AppData* d, const std::string& output) {
+    if (!d || output.empty()) return;
+    const bool enable = !keyboardOnOutput(output);
+    std::string err;
+    if (!setOnScreenKeyboard(output, enable, err)) phoneNote(d, err);
+    else phoneNote(d, enable ? "Keyboard on " + output : std::string("Keyboard off"));
+    phoneDisplaysList(d);
+}
+
+void phoneRememberSpeaker(AppData* d) {
+    if (!d) return;
+    onRemember(nullptr, d);
+    phoneNote(d, d->setupStatusLabel ? gtk_label_get_text(d->setupStatusLabel) : d->setupStatus);
+}
+
+void phoneUpdate(AppData* d) {
+    if (!d) return;
+    doUpdate(d);
 }
 
 void phoneBtConnect(AppData* d) {

@@ -20,6 +20,11 @@ void phoneResetLayout(AppData* data);
 void phoneBtConnect(AppData* data);
 void phoneBtDisconnect(AppData* data);
 void phoneWifiList(AppData* data);
+void phoneDisplaysList(AppData* data);
+void phoneRotate(AppData* data, const std::string& output);
+void phoneKeyboard(AppData* data, const std::string& output);
+void phoneRememberSpeaker(AppData* data);
+void phoneUpdate(AppData* data);
 void phoneWifiUse(AppData* data, const std::string& name);
 
 #endif // UI_SETUP_H

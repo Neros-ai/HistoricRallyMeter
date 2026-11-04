@@ -119,7 +119,15 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         }
         p = sectorPanel(*preview, now_ms, stage_m);
         if (p.kind == SectorPanel::PC) { p.secondsToLine = live.segments[first].pc_duration_s; p.secondsValid = true; }
+        else {   // navi / ct opener: hold the full time to its line, as at the sector clock's zero -- it starts counting only when the row starts
+            bool ok = false;
+            const double full_s = sectorSecondsToLine(*preview, sectorClockZeroMs(*preview), &ok);
+            p.secondsToLine = full_s;
+            p.secondsValid = ok;
+        }
     }
+    else if (p.running && p.kind == SectorPanel::NAVI)
+        p.avgKph = subAverageKph(live, poll.cntr1, poll.cntr2, now_ms);   // a navi row shows the sub average
     const RallyState& st = preview ? *preview : live;
     const std::vector<Segment>& segs = st.stage_segments;
     const long cur = st.segment_current_number;

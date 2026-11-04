@@ -2,6 +2,7 @@
 #include "config_file.h"
 #include "calculations.h"
 #include "callbacks.h"
+#include "sector.h"
 #include "rally_types.h"
 #include "rally_state.h"
 #include "stage_edit.h"
@@ -98,8 +99,21 @@ bool webHandleCommand(AppData* data, const char* json) {
     char type[64];
     if (!jsonFindString(json, "type", type, sizeof(type))) return false;
 
+    if (strcmp(type, "phone_lead_step") == 0) {
+        // Phone sound lead: 10 ms a press, 0..400, the same setting as the box's Settings page.
+        int ms = 0;
+        if (!jsonFindInt(json, "ms", &ms) || (ms != 10 && ms != -10)) return false;
+        data->state->phone_beep_lead_ms = std::max(0, std::min(400, data->state->phone_beep_lead_ms + ms));
+        updateSettingsDisplay(data);
+        ConfigFile::save(*data->state);
+        return true;
+    }
     if (strcmp(type, "reset_trip") == 0) {
-        on_trip_reset(nullptr, data);
+        // In a pc / pm the phone asks first and sends choice "confirm".
+        char choice[16] = "";
+        jsonFindString(json, "choice", choice, sizeof(choice));
+        if (subResetInStage(*data->state) && strcmp(choice, "confirm") != 0) return false;
+        applyTripReset(data);
         return true;
     }
     if (strcmp(type, "reset_total") == 0) {
@@ -545,6 +559,15 @@ bool webHandleCommand(AppData* data, const char* json) {
         else if (strcmp(name, "bt_connect") == 0) phoneBtConnect(data);
         else if (strcmp(name, "bt_disconnect") == 0) phoneBtDisconnect(data);
         else if (strcmp(name, "wifi_list") == 0) phoneWifiList(data);
+        else if (strcmp(name, "displays") == 0) phoneDisplaysList(data);
+        else if (strcmp(name, "remember_speaker") == 0) phoneRememberSpeaker(data);
+        else if (strcmp(name, "update") == 0) phoneUpdate(data);
+        else if (strcmp(name, "rotate") == 0 || strcmp(name, "keyboard") == 0) {
+            char output[64];
+            if (!jsonFindString(json, "output", output, sizeof(output))) return false;
+            if (strcmp(name, "rotate") == 0) phoneRotate(data, output);
+            else phoneKeyboard(data, output);
+        }
         else if (strcmp(name, "wifi_use") == 0) {
             char net[128];
             if (!jsonFindString(json, "net", net, sizeof(net))) return false;

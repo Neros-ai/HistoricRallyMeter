@@ -311,22 +311,29 @@ public:
             return refused && odometerCounts(s, 500, 500) == 0;
         });
 
-        suite->addTest("ahead / behind: from :00 of the minute, scaled schedule, 60 s early reads +60, 120 s late -120", []() {
+        suite->addTest("navi total reads negative when the counter is behind its start, never floored at 0", []() {
+            RallyState s = running();
+            zeroOdometer(s, 1000, 1000);            // navi starts at counter 1000
+            const long behind_cm = countsToCentimeters(odometerCounts(s, 400, 400), s.calibration);   // counter now 400
+            const long ahead_cm = countsToCentimeters(odometerCounts(s, 1500, 1500), s.calibration);
+            return behind_cm < 0 && behind_cm == -60000 && ahead_cm == 50000;   // one count is one metre here
+        });
+
+        suite->addTest("ahead / behind: from the press second, 60 s early reads +60, 120 s late -120", []() {
             RallyState s = running();
             s.sector_start_ms = 0;
             bool ok = false;
-            const double ideal = idealSecondsToReachDistance(s.stage_segments, 380.0) * sectorScheduleScale(s);
+            const double ideal = idealSecondsToReachDistance(s.stage_segments, 380.0);
             const double early = sectorAheadSeconds(s, 380, 380, static_cast<int64_t>((ideal - 60.0) * 1000), &ok);
             const bool a = ok && std::fabs(early - 60.0) < 0.01;
             const double late = sectorAheadSeconds(s, 380, 380, static_cast<int64_t>((ideal + 120.0) * 1000), &ok);
             return a && ok && std::fabs(late + 120.0) < 0.01;
         });
 
-        suite->addTest("task 11: 3 h sector gets 3 h 30 s; scale and arrival target", []() {
+        suite->addTest("a 3 h sector's arrival target is the departure second plus 3 h exactly", []() {
             RallyState s = running();
-            s.sector_start_ms = 0;
-            return std::fabs(sectorScheduleScale(s) - 10830000.0 / 10800000.0) < 1e-9
-                && coInTimeMs(s) + SECTOR_AIM_MS == 10830000;
+            s.sector_start_ms = 43000;                                     // 00:00:43
+            return coInTimeMs(s) == 43000 + 10800000;
         });
 
         suite->addTest("task 11: leaving at :00 is on schedule, leaving at :50 is 50 s behind", []() {
@@ -338,14 +345,14 @@ public:
             return ok && std::fabs(a) < 0.001 && std::fabs(b + 50.0) < 0.001;
         });
 
-        suite->addTest("task 11: halfway at constant speed is on schedule at half of card + 30 s", []() {
+        suite->addTest("task 11: halfway at constant speed is on schedule at half of the card", []() {
             RallyState s = running();
             s.sector_start_ms = 0;
             s.stage_segments = { row(SEG_NAVI, 10000, 0, 0, 36.0) };
             recomputeSegmentCounts(s.stage_segments, s.calibration);
             s.sector_card_ms = 1000000;                                    // 10 km at 36 kph
             bool ok = false;
-            const double a = sectorAheadSeconds(s, 5000, 5000, (1000000 + 30000) / 2, &ok);
+            const double a = sectorAheadSeconds(s, 5000, 5000, 1000000 / 2, &ok);
             return ok && std::fabs(a) < 0.05;
         });
 
@@ -377,7 +384,7 @@ public:
             return ok && std::fabs(left - 21.0) < 0.01;
         });
 
-        suite->addTest("countdown on the co row is the co in-time's middle minus now", []() {
+        suite->addTest("countdown on the co row is the co in-time minus now", []() {
             RallyState s = running();
             s.segments.push_back(row(SEG_CO, 1000, 0, 2, 30.0));
             applySectorRules(s.segments, 10800);
@@ -386,7 +393,7 @@ public:
             s.segment_current_number = static_cast<long>(s.stage_segments.size()) - 1;
             s.sector_start_ms = 0;
             bool ok = false;
-            const double left = sectorSecondsToLine(s, 30000 + 10800000 - 600000, &ok);
+            const double left = sectorSecondsToLine(s, 10800000 - 600000, &ok);
             return ok && std::fabs(left - 600.0) < 0.01;
         });
 
@@ -498,18 +505,18 @@ public:
                 && parseDurationSeconds("1:") == -1;
         });
 
-        suite->addTest("an italian start counts from the minute pressed", []() {
+        suite->addTest("an italian start counts from the second pressed", []() {
             const int64_t t = (11 * 3600L + 30 * 60 + 40) * 1000L;
-            return italianStageStartMs(t) == (11 * 3600L + 30 * 60) * 1000L && italianStageStartMs(60000) == 60000;
+            return italianStageStartMs(t) == t && italianStageStartMs(60000) == 60000;
         });
 
-        suite->addTest("markSectorStart floors the start and notes the sector start; greek is untouched", []() {
+        suite->addTest("markSectorStart keeps the press second as the sector start; greek is untouched", []() {
             RallyState s = running();
             s.total_start_time_ms = (11 * 3600L + 30 * 60 + 40) * 1000L;
             markSectorStart(s);
-            // The start time is :00 of the minute pressed, the card's departure minute.
-            const bool it = s.total_start_time_ms == (11 * 3600L + 30 * 60) * 1000L
-                && s.sector_start_ms == (11 * 3600L + 30 * 60) * 1000L;
+            // The start is the second pressed.
+            const bool it = s.total_start_time_ms == (11 * 3600L + 30 * 60 + 40) * 1000L
+                && s.sector_start_ms == (11 * 3600L + 30 * 60 + 40) * 1000L;
             RallyState g = running();
             g.rally_type = 0;
             g.total_start_time_ms = 40000;
@@ -517,12 +524,12 @@ public:
             return it && g.total_start_time_ms == 40000;
         });
 
-        suite->addTest("sector clock: go at 11:30:51 zeroes at 11:30:00, co in-time from the card", []() {
+        suite->addTest("sector clock: go at 11:30:51 zeroes at 11:30:51, co in-time from the card", []() {
             RallyState s = running();
             s.total_start_time_ms = s.segment_start_time_ms = 41451000;   // 11:30:51
             markSectorStart(s);
-            return s.sector_start_ms == 41400000 && sectorClockZeroMs(s) == 41400000 && s.total_start_time_ms == 41400000
-                && s.sector_card_ms == 10800000 && coInTimeMs(s) == 41400000 + 10800000
+            return s.sector_start_ms == 41451000 && sectorClockZeroMs(s) == 41451000 && s.total_start_time_ms == 41451000
+                && s.sector_card_ms == 10800000 && coInTimeMs(s) == 41451000 + 10800000
                 && s.trial_start_m < 0.0;
         });
 
@@ -539,19 +546,28 @@ public:
             s.stage_segments.erase(s.stage_segments.begin());            // opens on pc1
             s.total_start_time_ms = s.segment_start_time_ms = 41440000;   // 11:30:40
             markSectorStart(s);
-            return s.trial_start_ms == 41440000 && s.trial_start_m == 0.0 && s.sector_start_ms == 41400000;
+            return s.trial_start_ms == 41440000 && s.trial_start_m == 0.0 && s.sector_start_ms == 41440000;
         });
 
-        suite->addTest("early departure: armed at 11:29:20, the sector starts at the appointed minute", []() {
+        suite->addTest("sub reset asks only in a pc / pm: navi row and no stage do not", []() {
+            RallyState s = running();                       // row 0 is the navi opener
+            const bool navi = !subResetInStage(s);
+            s.segment_current_number = 1;                   // pc1
+            const bool pc = subResetInStage(s);
+            s.stage_complete = true;
+            const bool idle = !subResetInStage(s);
+            RallyState g = running(); g.rally_type = 0; g.segment_current_number = 1;
+            return navi && pc && idle && !subResetInStage(g);
+        });
+
+        suite->addTest("sub average speed: the sub's own distance over the sub's own time", []() {
             RallyState s = running();
-            s.sector_start_ms = 999;                                      // the previous sector's
-            s.total_start_cntr1 = s.total_start_cntr2 = 50;               // distance zeroed at arming
-            s.segment_start_time_ms = 41360000;                           // 11:29:20, the arming press
-            markSectorOdometer(s, 50, 50);
-            s.total_start_time_ms = s.trip_start_time_ms = 41400000;      // the minute: zeroTimeBaselines
-            s.segment_start_time_ms = 41400000;
-            markSectorStart(s);
-            return s.sector_start_ms == 41400000 && s.sector_card_ms == 10800000 && s.trial_start_m < 0.0;
+            s.trip_start_cntr1 = s.trip_start_cntr2 = 0;
+            s.trip_start_time_ms = 0;
+            s.trip_distance_adjust_cm = 0;
+            const double kph = subAverageKph(s, 1000, 1000, 100000);   // 100 s in
+            const double want = calculateAverageSpeed(s, 0, 100000, calculateDistanceCounts(s, 1000, 1000, 0, 0), 0);
+            return std::fabs(kph - want) < 1e-9 && kph > 0.0;
         });
 
         suite->addTest("tags, labels and ref numbering", []() {

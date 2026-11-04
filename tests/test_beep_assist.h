@@ -210,6 +210,37 @@ public:
                 && !navigationBeepDue(1000.0, 999.0, 0.0);
         });
 
+        // ---- the chevron: scheduled rows on the stage clock ----
+
+        suite->addTest("chevron: progress through the scheduled row the clock is in", []() {
+            std::vector<Segment> segs;
+            Segment a{}; a.target_speed_kph = 36.0; a.distance_m = 1000.0;   // 0-100 s
+            Segment b{}; b.target_speed_kph = 72.0; b.distance_m = 1000.0;   // 100-150 s
+            segs.push_back(a); segs.push_back(b);
+            bool in = false;
+            const double p1 = scheduledRowProgress(segs, 25.0, &in);
+            const bool in1 = in;
+            const double p2 = scheduledRowProgress(segs, 125.0, &in);
+            return in1 && in && std::fabs(p1 - 0.25) < 1e-9 && std::fabs(p2 - 0.5) < 1e-9;
+        });
+
+        suite->addTest("chevron: not in a row before the start, after the last row, or with an unknown speed", []() {
+            std::vector<Segment> segs;
+            Segment a{}; a.target_speed_kph = 36.0; a.distance_m = 1000.0;
+            segs.push_back(a);
+            bool in = true;
+            scheduledRowProgress(segs, -1.0, &in);
+            const bool before = !in;
+            in = true;
+            scheduledRowProgress(segs, 100.0, &in);
+            const bool after = !in;
+            Segment hole{}; hole.target_speed_kph = 0.0; hole.distance_m = 500.0;
+            segs.push_back(hole);
+            in = true;
+            scheduledRowProgress(segs, 120.0, &in);
+            return before && after && !in;
+        });
+
         // ---- timingBeepDue ----
 
         suite->addTest("timing mode is due once elapsed time reaches the lead-in point", []() {

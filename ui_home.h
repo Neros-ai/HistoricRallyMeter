@@ -31,10 +31,9 @@ struct HomeUi {
     int arrivalKph = 0;
     int arrivalMin = 0;
     // Surrey (RB-NAV-43): navi in the third row, the countdown panel in the stage column while a
-    // stage runs, "check total" where greek says manual, and the last time taken under Trip history.
+    // stage runs, and the last time taken under Trip history.
     bool surrey = false;
     bool surreyRunning = false;       // countdown panel instead of Stage arrival
-    bool surreyCheck = false;         // amber "check total"
     std::string cdMetres, cdTime;     // countdown panel figures
     std::string timeTakenLabel, timeTaken;   // "time taken ss1", "9:20.6"; empty = none
 

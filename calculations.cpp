@@ -362,6 +362,11 @@ int64_t correctedDistanceCounts(int64_t raw_counts, long adjust_cm, long calibra
     return corrected < 0 ? 0 : corrected;
 }
 
+int64_t signedCorrectedDistanceCounts(int64_t raw_counts, long adjust_cm, long calibration) {
+    if (calibration <= 0) return raw_counts;
+    return raw_counts + (static_cast<int64_t>(adjust_cm) * 10000) / calibration;
+}
+
 // Keeps distance_m in step with the count-based figure that was just changed.
 static void resyncSegmentMeters(Segment& seg, long calibration) {
     seg.distance_m = (seg.distance_counts * static_cast<double>(calibration)) / 1e6;
@@ -697,6 +702,23 @@ int64_t autoStartTargetMsFromSeconds(uint64_t seconds, int64_t epoch_ms) {
 
 bool navigationBeepDue(double waypoint_m, double travelled_m, double advance_m) {
     return travelled_m >= waypoint_m - advance_m;
+}
+
+double scheduledRowProgress(const std::vector<Segment>& segments, double elapsed_stage_s, bool* in_row) {
+    *in_row = false;
+    if (elapsed_stage_s < 0.0) return 0.0;
+    double t = 0.0;
+    for (const auto& seg : segments) {
+        if (seg.distance_m <= 0.0) continue;
+        if (seg.target_speed_kph <= 0.0) return 0.0;   // an incomplete roadbook: the time is unknown
+        const double dur = seg.distance_m / (seg.target_speed_kph * (1000.0 / 3600.0));
+        if (elapsed_stage_s < t + dur) {
+            *in_row = true;
+            return (elapsed_stage_s - t) / dur;
+        }
+        t += dur;
+    }
+    return 0.0;   // past the last row
 }
 
 bool timingBeepDue(double waypoint_m, double elapsed_stage_s,

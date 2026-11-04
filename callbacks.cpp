@@ -186,8 +186,7 @@ void on_total_reset(GtkWidget* widget, gpointer user_data) {
     applyTotalReset(data, choice);
 }
 
-void on_trip_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
+void applyTripReset(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
     // Clears the correction too: it described the old baseline, and carrying
     // it across a reset would silently offset a counter the operator just
@@ -626,8 +625,8 @@ void zeroTimeBaselines(AppData* data) {
     // stays silent on schedule until the appointed minute even though it is
     // already accumulating distance.
     // The roadbook is fixed here for an ordinary start, and re-fixed for an
-    // early departure, which already took it at arming. Harmless for greek and
-    // italian; surrey's early departure re-fits row 1 afterwards
+    // early departure, which already took it at arming. Harmless for greek;
+    // surrey's early departure re-fits row 1 afterwards
     // (surreyStartFromMemory runs after this).
     adoptRoadbookAsStage(data);
 
@@ -643,7 +642,7 @@ void zeroTimeBaselines(AppData* data) {
 }
 
 // Surrey (RB-NAV-43 D1): fit row 1 of the running copy to navi total at the press. The slot is
-// the stage's memory (its "from" figure); with none loaded the fit fails and Home says check total.
+// the stage's memory (its "from" figure); with none loaded the fit does not apply.
 static void surreyStartFromMemory(RallyState& s) {
     static const RallyState::MemorySlot none;
     const int n = s.last_memory_slot;
@@ -678,7 +677,7 @@ void applyAutoStartArming(AppData* data, const AutoStartArming& arming) {
         // looked ignored, and re-pressing the button changed nothing because
         // the arming path never touched the roadbook at all.
         adoptRoadbookAsStage(data);
-        {   // italian: the sector's distance starts here, with Total
+        {   // surrey: the navi total at the arm
             const CounterPoll arm_poll = data->poller->getMostRecent();
             markSectorOdometer(*data->state, arm_poll.cntr1, arm_poll.cntr2);
         }
@@ -702,7 +701,6 @@ void performAutoStart(AppData* data) {
         // starts now and everything rolled on the way to the line counts
         // toward the stage distance -- and therefore toward its average speed.
         zeroTimeBaselines(data);
-        markSectorStart(*data->state);   // italian: the sector starts at the appointed minute
         // zeroTimeBaselines re-adopted the roadbook, which dropped the fit made at the arm;
         // sector_start_odometer_cm is still the arm-time navi, so fit again from it (surrey).
         if (isSurrey(*data->state)) surreyStartFromMemory(*data->state);
@@ -734,7 +732,7 @@ void performStageGo(AppData* data, bool press) {
     // Distance and clock together: this is the ordinary "start now" case.
     zeroDistanceBaselines(data);
     zeroTimeBaselines(data);
-    markSectorStart(*data->state);   // italian: the sector clock starts at :00 of the minute pressed
+    markSectorStart(*data->state);   // italian: the sector clock starts at the second pressed
     if (data->state->rally_type == 2 && stageIsSector(data->state->stage_segments))
         data->autoFiredTime_s = autoStartSecondsFromTargetMs(data->state->total_start_time_ms,
                                                              getAutoStartEpochMs());
@@ -889,6 +887,33 @@ static void flashMessage(GtkWidget* widget, const std::string& text) {
 
 // One tap from the stage-go row must not end a stage: the button sits between
 // the ones that start it.
+// Sub reset while a pc / pm is being driven: asked first, like Total in a stage.
+static bool confirmSubReset(GtkWidget* widget) {
+    GtkWidget* dialog = gtk_dialog_new_with_buttons(
+        "In stage",
+        GTK_WINDOW(gtk_widget_get_toplevel(widget)),
+        GTK_DIALOG_MODAL,
+        "RESET SUB", GTK_RESPONSE_YES,
+        "Back", GTK_RESPONSE_NO,
+        nullptr);
+    GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_set_border_width(GTK_CONTAINER(content), 8);
+    GtkWidget* label = gtk_label_new("In stage\n\nReset sub now?");
+    gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
+    gtk_box_pack_start(GTK_BOX(content), label, FALSE, FALSE, 0);
+    gtk_widget_show(label);
+    applyDialogStyle(dialog);
+    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+    return response == GTK_RESPONSE_YES;
+}
+
+void on_trip_reset(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (widget && subResetInStage(*data->state) && !confirmSubReset(widget)) return;
+    applyTripReset(data);
+}
+
 static bool confirmAbortStage(GtkWidget* widget, const std::string& text) {
     GtkWidget* dialog = gtk_dialog_new_with_buttons(
         "Abort Stage",
@@ -935,6 +960,14 @@ void on_stage_go(GtkWidget* widget, gpointer user_data) {
         "Back", GTK_RESPONSE_NO,
         nullptr);
 
+    if (data->state->rally_type == 2) {   // italian: Stage Go now only
+        const int timed[] = { RESPONSE_AUTO_START, RESPONSE_AUTO_START_NEXT_MINUTE };
+        for (int r : timed) {
+            GtkWidget* btn = gtk_dialog_get_widget_for_response(GTK_DIALOG(dialog), r);
+            if (btn) { gtk_widget_set_no_show_all(btn, TRUE); gtk_widget_hide(btn); }
+        }
+    }
+
     // Always shown, so the row never changes shape; it only acts when there
     // is a stage to abort (see stageAbortable). Otherwise it just closes the
     // dialog.
@@ -952,7 +985,7 @@ void on_stage_go(GtkWidget* widget, gpointer user_data) {
     std::string summary = stageSummary(data->state->segments);
     std::string markup = "Stage Go?\n\nStage = <span foreground=\"#FFDD00\">"
                        + summary + "</span>\n"
-                       + "Total and Trip Counters will reset";
+                       + (data->state->rally_type == 2 ? "Total and Sub Counters will reset" : "Total and Trip Counters will reset");
 
     GtkWidget* label = gtk_label_new(nullptr);
     gtk_label_set_markup(GTK_LABEL(label), markup.c_str());
@@ -1003,7 +1036,7 @@ void on_stage_go(GtkWidget* widget, gpointer user_data) {
             const bool armed = data->state->auto_start_rally_time_s != 0;
             std::string text = on_gauge ? "Abort the stage?\n" : "Cancel the autostart?\n";
             if (on_gauge && armed) text += "\nThe autostart will be cancelled";
-            text += "\nTotal and Trip keep their readings";
+            text += data->state->rally_type == 2 ? "\nTotal and Sub keep their readings" : "\nTotal and Trip keep their readings";
             if (confirmAbortStage(widget, text)) performAbortStage(data);
         }
     } else if (response == RESPONSE_AUTO_START) {

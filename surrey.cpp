@@ -49,8 +49,7 @@ bool fitStageToStart(std::vector<Segment>& stage_segs, double first_from_m, doub
 
 void surreyStart(RallyState& s, const RallyState::MemorySlot& slot) {
     const double navi_m = s.sector_start_odometer_cm / 100.0;
-    const bool fitted = fitStageToStart(s.stage_segments, slot.first_from_m, navi_m, s.calibration);
-    s.surrey_fit_failed = !fitted;
+    fitStageToStart(s.stage_segments, slot.first_from_m, navi_m, s.calibration);
     // The previous stage's time taken stays on Home until the next stage finishes (mockup S1).
     s.surrey_finish_at_ms = 0;
 }

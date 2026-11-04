@@ -36,11 +36,11 @@ public:
 
         suite->addTest("time taken round-trips; an old config gives -1", []() {
             const char* path = "test_surrey_taken.json";
-            RallyState a; a.time_taken_ms = 560600; a.surrey_fit_failed = true;
+            RallyState a; a.time_taken_ms = 560600;
             ConfigFile::save(a, path);
             RallyState b;
             ConfigFile::load(b, path);
-            const bool ok = b.time_taken_ms == 560600 && b.surrey_fit_failed;
+            const bool ok = b.time_taken_ms == 560600;
             RallyState a2; a2.time_taken_ms = 560600; a2.time_taken_stage = 3;
             ConfigFile::save(a2, path);
             RallyState b2; ConfigFile::load(b2, path);
@@ -49,7 +49,7 @@ public:
             RallyState c;
             ConfigFile::load(c, path);
             std::remove(path);
-            return ok && c.time_taken_stage == 0 && c.time_taken_ms == -1 && !c.surrey_fit_failed && c.surrey_finish_at_ms == 0;
+            return ok && c.time_taken_stage == 0 && c.time_taken_ms == -1 && c.surrey_finish_at_ms == 0;
         });
 
         suite->addTest("stage start leaves navi total", []() {
@@ -132,14 +132,13 @@ public:
             return fitStageToStart(st, 22307.0, 22960.0, 1000000) && st[0].distance_m == 1064.0;
         });
 
-        suite->addTest("total zeroed at the start: no fit, check total", [ss2]() {
+        suite->addTest("total zeroed at the start: no fit", [ss2]() {
             RallyState s; s.rally_type = 1; s.calibration = 1000000;
             s.stage_segments = ss2();
-            s.surrey_fit_failed = false;
             RallyState::MemorySlot slot; slot.first_from_m = 22307.0; slot.segments = ss2();
             s.sector_start_odometer_cm = 0;
             surreyStart(s, slot);
-            return s.surrey_fit_failed && s.stage_segments[0].distance_m == 1717.0;
+            return s.stage_segments[0].distance_m == 1717.0;
         });
 
         suite->addTest("press beyond row 1: no fit", [ss2]() {
@@ -154,7 +153,7 @@ public:
             RallyState::MemorySlot slot; slot.first_from_m = 22307.0; slot.segments = ss2();
             s.sector_start_odometer_cm = 2300000;
             surreyStart(s, slot);
-            return !s.surrey_fit_failed && s.stage_segments[0].distance_m == 1024.0
+            return s.stage_segments[0].distance_m == 1024.0
                 && s.segments[0].distance_m == 1717.0 && slot.segments[0].distance_m == 1717.0
                 && s.time_taken_ms == 5000 && s.time_taken_stage == 2 && s.surrey_finish_at_ms == 0;
         });

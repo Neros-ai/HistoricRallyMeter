@@ -148,6 +148,35 @@ void onReactionStep(GtkWidget* w, gpointer) {
     if (g_reactionEntry) gtk_entry_set_text(GTK_ENTRY(g_reactionEntry), reactionText(d->state->reaction_offset_ms).c_str());
 }
 
+// Phone sound lead: how early the phone is told an Italian countdown beep, - / figure / +, 10 ms a press, 0..400 ms.
+GtkWidget* g_phoneLeadEntry = nullptr;
+
+std::string phoneLeadText(int ms) {
+    char b[24];
+    snprintf(b, sizeof(b), "%d ms", ms);
+    return b;
+}
+
+void onPhoneLeadStep(GtkWidget* w, gpointer) {
+    AppData* d = static_cast<AppData*>(g_object_get_data(G_OBJECT(w), "data"));
+    const int step = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w), "step"));
+    d->state->phone_beep_lead_ms = std::max(0, std::min(400, d->state->phone_beep_lead_ms + step));
+    ConfigFile::save(*d->state);
+    notifyWebStateNow(d);   // the phone shows it too
+    if (g_phoneLeadEntry) gtk_entry_set_text(GTK_ENTRY(g_phoneLeadEntry), phoneLeadText(d->state->phone_beep_lead_ms).c_str());
+}
+
+GtkWidget* phoneLeadKey(AppData* d, const char* label, int step) {
+    GtkWidget* k = gtk_button_new_with_label(label);
+    gtk_widget_set_size_request(k, 40, KEY_H);
+    addClass(k, "dist-heading");
+    addClass(k, "key-small");
+    g_object_set_data(G_OBJECT(k), "data", d);
+    g_object_set_data(G_OBJECT(k), "step", GINT_TO_POINTER(step));
+    g_signal_connect(k, "clicked", G_CALLBACK(onPhoneLeadStep), nullptr);
+    return k;
+}
+
 GtkWidget* reactionKey(AppData* d, const char* label, int step) {
     GtkWidget* k = gtk_button_new_with_label(label);
     gtk_widget_set_size_request(k, 40, KEY_H);
@@ -264,16 +293,33 @@ GtkWidget* createSettingsScreen(AppData* d) {
         g_reactionEntry = e;
         gtk_box_pack_start(GTK_BOX(r), reactionKey(d, "+", 10), FALSE, FALSE, 0);
     }
+    {   // Phone sound lead: name, then - figure + (same sizes as the reaction row)
+        GtkWidget* r = row(right, "Phone sound lead");
+        GList* kids = gtk_container_get_children(GTK_CONTAINER(r));
+        if (kids) {
+            PangoAttrList* al = pango_attr_list_new();
+            pango_attr_list_insert(al, pango_attr_size_new_absolute(18 * PANGO_SCALE));
+            gtk_label_set_attributes(GTK_LABEL(kids->data), al);
+            pango_attr_list_unref(al);
+            g_list_free(kids);
+        }
+        gtk_box_pack_start(GTK_BOX(r), phoneLeadKey(d, "\u2212", -10), FALSE, FALSE, 0);
+        GtkWidget* e = gtk_entry_new();
+        gtk_editable_set_editable(GTK_EDITABLE(e), FALSE);
+        gtk_widget_set_can_focus(e, FALSE);
+        gtk_entry_set_alignment(GTK_ENTRY(e), 0.5f);
+        gtk_entry_set_width_chars(GTK_ENTRY(e), 1);
+        gtk_entry_set_max_width_chars(GTK_ENTRY(e), 1);
+        gtk_widget_set_size_request(e, 96, KEY_H);
+        addClass(e, "set-entry");
+        gtk_entry_set_text(GTK_ENTRY(e), phoneLeadText(s.phone_beep_lead_ms).c_str());
+        gtk_box_pack_start(GTK_BOX(r), e, FALSE, FALSE, 0);
+        g_phoneLeadEntry = e;
+        gtk_box_pack_start(GTK_BOX(r), phoneLeadKey(d, "+", 10), FALSE, FALSE, 0);
+    }
     gtk_box_pack_end(GTK_BOX(row(right, "Measure type")), seg(d, MEASURE_TYPE, "AB,BC", "AB,AC", stateIndex(s, MEASURE_TYPE)), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(right, "Stage data logging")), seg(d, STAGE_LOG, "off", "on", s.stage_logging ? 1 : 0), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(right, "Sensor logging")), seg(d, SENSOR_LOG, "off", "on", s.debug_logs_enabled ? 1 : 0), FALSE, FALSE, 0);
-
-    d->settingsInfoLabel = GTK_LABEL(gtk_label_new(""));
-    addClass(GTK_WIDGET(d->settingsInfoLabel), "set-name");
-    gtk_label_set_xalign(d->settingsInfoLabel, 0.0f);
-    gtk_widget_set_size_request(GTK_WIDGET(d->settingsInfoLabel), COL_W, ROW_H);
-    // Not a setting: fps and CPU at the foot of the column.
-    gtk_box_pack_end(GTK_BOX(right), GTK_WIDGET(d->settingsInfoLabel), FALSE, FALSE, 0);
 
     // ── keypad and menu key, far right ──
     GtkWidget* kp = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
@@ -290,7 +336,18 @@ GtkWidget* createSettingsScreen(AppData* d) {
     // The spanner key, bottom left: opens the Setup page.
     GtkWidget* spanner = createSpannerKey(d);
     gtk_widget_set_valign(spanner, GTK_ALIGN_END);
-    gtk_box_pack_start(GTK_BOX(base), spanner, FALSE, FALSE, 0);
+    // fps and CPU temperature under the spanner, as the driver display shows them.
+    GtkWidget* spannerCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_valign(spannerCol, GTK_ALIGN_END);
+    gtk_box_pack_start(GTK_BOX(spannerCol), spanner, FALSE, FALSE, 0);
+    d->settingsFpsLabel = GTK_LABEL(gtk_label_new(""));
+    d->settingsCpuLabel = GTK_LABEL(gtk_label_new(""));
+    for (GtkLabel* l : {d->settingsFpsLabel, d->settingsCpuLabel}) {
+        gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(l)), "footer-info");
+        gtk_label_set_xalign(l, 0.0f);
+        gtk_box_pack_start(GTK_BOX(spannerCol), GTK_WIDGET(l), FALSE, FALSE, 0);
+    }
+    gtk_box_pack_start(GTK_BOX(base), spannerCol, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(kp), base, FALSE, FALSE, 0);
 
     d->settingsScreen = screen;
@@ -298,16 +355,14 @@ GtkWidget* createSettingsScreen(AppData* d) {
 }
 
 void updateSettingsDisplay(AppData* d) {
+    if (g_phoneLeadEntry)
+        gtk_entry_set_text(GTK_ENTRY(g_phoneLeadEntry), phoneLeadText(d->state->phone_beep_lead_ms).c_str());
     if (g_reactionEntry)
         gtk_entry_set_text(GTK_ENTRY(g_reactionEntry), reactionText(d->state->reaction_offset_ms).c_str());
-    if (!d->settingsInfoLabel) return;
     for (SegCtl* c : allCtls()) {
         const int idx = stateIndex(*d->state, c->id);
         for (int i = 0; i < c->n; i++) setLit(c->btn[i], idx == i);
     }
-    std::string info = std::string("Screen ") + gtk_label_get_text(d->updatesPerSecLabel)
-                     + "   " + gtk_label_get_text(d->cpuTempLabel);
-    gtk_label_set_text(d->settingsInfoLabel, info.c_str());
     // Greek beep assist is silent in italian: grey its keys and advance entries (stored values kept).
     const bool beepOn = !greekBeepSettingsLocked(*d->state);
     for (SegCtl* c : allCtls())

@@ -377,7 +377,10 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                                      : (data->inSegment ? data->segmentProgress : 0.0);
         if (progress < 0.0) progress = 0.0;
         if (progress > 1.0) progress = 1.0;
-        double f_top = f_start + progress * (f_tick - f_start);
+        // The tip's outline reaches 3 px past the apex, so stop the apex that far short: the tip then
+        // lands on the end bar as the countdown reads 0, when the beep sounds.
+        const double f_arrive = f_tick - 3.0 / needle_length;
+        double f_top = f_start + progress * (f_arrive - f_start);
 
         const double chevron_half_w = 18.0;  // 36px wide
         const double chevron_depth  = 14.0;  // along the needle
@@ -661,7 +664,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                 } else {
                     cairo_set_source_rgb(cr, 0.0, 1.0, 1.0);
                     cairo_move_to(cr, rx, y1 - 4.0 * fs);
-                    cairo_show_text(cr, "Trip");
+                    cairo_show_text(cr, data->state->rally_type == 2 ? "sub" : "Trip");
                     cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
                     cairo_move_to(cr, rx, (y1 + y2) / 2.0 + 2.0 * fs);
                     cairo_show_text(cr, distUnit);
@@ -890,7 +893,8 @@ void updateDriverDisplay(AppData* data) {
     data->driverArrivalKph = -1;
     {
         const int slot = data->state->last_memory_slot;
-        if (slot >= 1 && slot <= RallyState::MAX_MEMORY_SLOTS) {
+        // Distance to the start belongs to greek and surrey only; an italian sector has none.
+        if (data->state->rally_type != 2 && slot >= 1 && slot <= RallyState::MAX_MEMORY_SLOTS) {
             const long start_s = data->state->memory_slots[slot - 1].start_time_s;
             const long start_dist = data->state->memory_slots[slot - 1].start_distance_m;
             if (start_s >= 0) {
@@ -1020,6 +1024,27 @@ void updateDriverDisplay(AppData* data) {
             } else {
                 data->segmentProgress = 0.0;
                 data->inSegment = false;
+            }
+            if (data->state->rally_type != 2) {
+                // Greek and Surrey: the chevron works on TIME, the only thing known for sure. It walks the
+                // scheduled row the stage clock is in, from its scheduled start to its scheduled end.
+                bool in_row = false;
+                const double stage_s = (current_time_ms - data->state->total_start_time_ms) / 1000.0;
+                data->segmentProgress = scheduledRowProgress(data->state->stage_segments, stage_s, &in_row);
+                data->inSegment = in_row;
+            }
+            if (data->driverPage == AppData::DP_ITALIAN_NAVI) {
+                // Italian navi row: the chevron follows the countdown seconds, as in a pc / pm -- waits at the
+                // start, reaches the end tick over the last 5 s, on the bar as the countdown reads 0.
+                bool sec_ok = false;
+                const double to_line = sectorSecondsToLine(*data->state, current_time_ms, &sec_ok);
+                if (sec_ok) {
+                    data->segmentProgress = finalWindowProgress(to_line);
+                    data->inSegment = true;
+                } else {
+                    data->segmentProgress = 0.0;
+                    data->inSegment = false;
+                }
             }
         }
         
@@ -1154,6 +1179,8 @@ void updateDriverDisplay(AppData* data) {
         ss << "fps: " << data->updateCount;
         gtk_label_set_text(data->updatesPerSecLabel, ss.str().c_str());
         gtk_label_set_text(data->cpuTempLabel, readCpuTemp().c_str());
+        if (data->settingsFpsLabel) gtk_label_set_text(data->settingsFpsLabel, gtk_label_get_text(data->updatesPerSecLabel));
+        if (data->settingsCpuLabel) gtk_label_set_text(data->settingsCpuLabel, gtk_label_get_text(data->cpuTempLabel));
         data->updateCount = 0;
         data->lastUpdateCountTime_ms = current_time_ms;
     }
