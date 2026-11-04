@@ -116,6 +116,11 @@ bool sectorUndoAvailable(const RallyState& s);
 // False (nothing changed) for a negative distance.
 bool setOdometerMetres(RallyState& s, uint64_t c1, uint64_t c2, double metres);
 
+// The +10 / -10 keys on navi: moves navi total by delta_cm, in every rally type. A -10 cannot take
+// navi below zero (it stops at 0), and does nothing to a navi that reverse has already put below
+// zero; +10 always adds.
+void adjustOdometerCm(RallyState& s, long delta_cm, uint64_t c1, uint64_t c2);
+
 // Notes navi total as the sector starts: the roadbook position is navi minus this.
 void markSectorOdometer(RallyState& s, uint64_t c1, uint64_t c2);
 
