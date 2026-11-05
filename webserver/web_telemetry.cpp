@@ -262,7 +262,8 @@ std::string buildTelemetryJson(AppData* data) {
         has_next_m = true;
         // Same countdown as the box: to the next speed change, through carried rows.
         const bool greek_like = st.rally_type != 2;
-        if (greek_like) next_m = metresToNextChange(st.stage_segments, st.segment_current_number, next_m);
+        if (greek_like) next_m = countdownMetres(st.stage_segments, st.segment_current_number,
+                                                  totalShownMetres(st, current_poll.cntr1, current_poll.cntr2));
         // The box draws mm:ss to the next speed change under the third figure, in greek only.
         if (st.rally_type == 0) {
             bool ok = false;

@@ -30,6 +30,55 @@ public:
     TestSuite* createSuite() {
         auto* suite = new TestSuite("Home Logic (RB-NAV-20)");
 
+        // The countdown is the row end from the stage start minus Total as shown, so the two always add up.
+        suite->addTest("countdown: Total + countdown = the row end at every pulse of a 380 m row", []() {
+            RallyState s;
+            s.calibration = 88277;
+            s.counters = false;                       // one sensor: counts are cntr1 - start
+            Segment a; a.distance_m = 380.0; a.changesSpeed = true; s.stage_segments.push_back(a);
+            Segment b; b.distance_m = 180.0; b.changesSpeed = true; s.stage_segments.push_back(b);
+            s.total_start_cntr1 = 1000; s.total_start_cntr2 = 1000;
+            for (uint64_t n = 0; n <= 4300; n++) {
+                const long total = totalShownMetres(s, 1000 + n, 1000 + n);
+                const long cd = countdownMetres(s.stage_segments, 0, total);
+                if (total + cd != 380) return false;
+            }
+            return true;
+        });
+
+        suite->addTest("countdown: still adds up after a +/-10 correction and when reversing past the start", []() {
+            RallyState s;
+            s.calibration = 88277; s.counters = false;
+            Segment a; a.distance_m = 380.0; s.stage_segments.push_back(a);
+            s.total_start_cntr1 = 5000; s.total_start_cntr2 = 5000;
+            for (long adj : {-1000L, 0L, 1000L, 1234L}) {
+                s.total_distance_adjust_cm = adj;
+                for (int64_t n = -300; n <= 4400; n += 7) {
+                    const long total = totalShownMetres(s, static_cast<uint64_t>(5000 + n), static_cast<uint64_t>(5000 + n));
+                    if (total + countdownMetres(s.stage_segments, 0, total) != 380) return false;
+                }
+            }
+            return true;
+        });
+
+        suite->addTest("countdown: runs on to the next speed change through ditto rows; no later change runs to the stage end", []() {
+            std::vector<Segment> segs(4);
+            segs[0].distance_m = 540; segs[1].distance_m = 780; segs[1].changesSpeed = false;
+            segs[2].distance_m = 690; segs[2].changesSpeed = false; segs[3].distance_m = 860;
+            // the speed changes again at row 3 (index 3): the countdown from row 0 ends at the end of row 2
+            if (countdownMetres(segs, 0, 100) != (540 + 780 + 690) - 100) return false;
+            // from the last row, with nothing after it, it runs to the stage end
+            if (countdownMetres(segs, 3, 2000) != (540 + 780 + 690 + 860) - 2000) return false;
+            return countdownMetres(segs, 9, 5) == 0 && countdownMetres(segs, -1, 5) == 0;
+        });
+
+        suite->addTest("countdown: row ends sum the typed metres in millimetres", []() {
+            std::vector<Segment> segs(3);
+            segs[0].distance_m = 380.0; segs[1].distance_m = 179.9996; segs[2].distance_m = 0.4;
+            return stageRowEndMm(segs, 0) == 380000 && stageRowEndMm(segs, 1) == 560000 && stageRowEndMm(segs, 2) == 560400
+                && stageRowEndMm(segs, 5) == 560400 && stageRowEndMm(segs, -1) == 0;
+        });
+
         suite->addTest("trip history: newest first, capped at six", []() {
             std::string h;
             for (long m : {1, 2, 3, 4, 5, 6, 7}) h = pushTripHistory(h, m);

@@ -278,6 +278,10 @@ inline void clearGreekTripHistoryOnStageStart(RallyState& s) {
 }
 // Split a comma-separated history into metres, most recent first. Junk skipped.
 std::vector<long> parseTripHistory(const std::string& history);
+
+// Total exactly as the Total readout shows it: whole metres since the stage's Total zero, with the
+// manual correction, cut toward zero. The countdown subtracts this, so the two always add up to the row end.
+long totalShownMetres(const RallyState& s, uint64_t c1, uint64_t c2);
 void resetTrip(RallyState& state, uint64_t c1, uint64_t c2, int64_t now_ms);
 // A segment change: Trip becomes the new segment's odometer, measured from the
 // segment's own start. Trip's correction expires with its old baseline; Total

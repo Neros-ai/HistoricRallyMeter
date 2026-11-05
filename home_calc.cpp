@@ -39,6 +39,20 @@ long metresToNextChange(const std::vector<Segment>& segs, long cur, long remaini
     return std::lround(m);
 }
 
+int64_t stageRowEndMm(const std::vector<Segment>& segs, long idx) {
+    int64_t mm = 0;
+    for (long i = 0; i <= idx && i < static_cast<long>(segs.size()); i++)
+        mm += std::llround(segs[static_cast<size_t>(i)].distance_m * 1000.0);
+    return mm;
+}
+
+long countdownMetres(const std::vector<Segment>& segs, long cur, long total_shown_m) {
+    if (cur < 0 || cur >= static_cast<long>(segs.size())) return 0;
+    const long next = nextChangeIndex(segs, cur);
+    const long end_idx = next < 0 ? static_cast<long>(segs.size()) - 1 : next - 1;
+    return static_cast<long>(stageRowEndMm(segs, end_idx) / 1000) - total_shown_m;
+}
+
 long foldCarriedRows(std::vector<Segment>& segs, long cur) {
     const long target = nextChangeIndex(segs, cur);
     if (target < 0 || target <= cur + 1) return 0;
