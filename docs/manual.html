@@ -374,7 +374,7 @@ shortly before departure. Total and Trip reset when pressed; timing starts at th
 
 <figure class="screen">
   <img src="manual-images/main-screen.png" alt="The greek navigation page with a stage running">
-  <figcaption>Stage 8 running, 709 m in: 1,301 m and 2 min 10 s to the speed change at 2010 m. Trip was zeroed twice (Trip history 299, 254); Stage arrival needs 23 kph to reach the next stage with 22 min to go.</figcaption>
+  <figcaption>Stage 8 running, 302 m in: 1,708 m and 2 min 51 s to the speed change at 2,010 m. Stage arrival is blank once the stage's start time has passed.</figcaption>
 </figure>
 
 <figure class="screen">
@@ -724,7 +724,7 @@ long as Navi is not reset.</li>
 
 <figure class="screen">
   <img src="manual-images/italian-pc.png" alt="The italian navigation page inside a timed trial">
-  <figcaption>Inside pc 1, 100 m in: 80 m and 18.7 s to its end tube; average so far 29.80.</figcaption>
+  <figcaption>Inside pc 1, 60 m in: 120 m and 23.0 s to its end tube; average so far 23.59.</figcaption>
 </figure>
 
 <figure class="screen">
@@ -794,7 +794,8 @@ is pressed. Press to zero; inside a pc or pm it asks first (<b>In stage / Reset 
 <code>RESET SUB</code> or <code>Back</code>), as sector total does. The phone asks too.</p>
 
 <h4>navi</h4>
-<p>An independent distance counter. Press to change the distance.</p>
+<p>An independent distance counter, shown in cyan. Press to change the distance: the pop-up reads and
+asks for km or metres, whichever <b>Distance units</b> is set to.</p>
 
 <figure class="screen">
   <img src="manual-images/italian-navi-set.png" alt="The Set Navi pop-up">
@@ -866,8 +867,10 @@ buttons display as black on white when active and a whooping sound is emitted. W
   <figcaption>The substage display, inside pc 1.</figcaption>
 </figure>
 
-<p>Past the end of a substage, the count down km (for example <code>+0.04</code>) and seconds (for
-example <code>+0:01.4</code>) turn red and count up. The seconds show on every row, including navi and ct.</p>
+<p>The count down time is large and white. Past the end of a substage, the count down km (for example
+<code>+0.04</code>) and seconds (for example <code>+0:01.4</code>) turn red and count up. The seconds
+show on every row, including navi and ct. The count down km is cut to the 10&nbsp;m below, never
+rounded.</p>
 
 </section>
 
@@ -943,7 +946,7 @@ arrival figures each sit above their legend. A-B, B-C zero is available as in gr
 
 <figure class="screen">
   <img src="manual-images/surrey-nav-idle.png" alt="The surrey navigation page between stages">
-  <figcaption>Between stages: the <b>time taken</b> for the last stage (ss2, 1:24.0) stays under Trip history.</figcaption>
+  <figcaption>Between stages: the <b>time taken</b> for the last stage (ss2, 3:49.2) stays under Trip history.</figcaption>
 </figure>
 
 </section>
@@ -959,7 +962,7 @@ means.</p>
 <table>
 <tr><th style="width: 20%"></th><th>Greek and Surrey</th><th>Italian</th></tr>
 <tr><td>Pages</td><td>Between stages, and in a stage.</td><td>On navi, ct and co rows, and inside a pc or pm.</td></tr>
-<tr><td>Top left</td><td>In a stage the target speed; between stages the <b>arrival</b> speed.</td><td>The row's target speed with, in yellow, how long the row takes.</td></tr>
+<tr><td>Top left</td><td>In a stage the target speed; between stages the <b>arrival</b> speed.</td><td>The row's target speed with, in yellow, the count down to the end of the row (m:ss).</td></tr>
 <tr><td>Needle</td><td>In a stage: seconds ahead or behind. None between stages.</td><td>Only inside a pc or pm: the error from the start tube. None on navi, ct and co rows.</td></tr>
 <tr><td>Averages</td><td><b>Sub</b> average since the last speed change, and the <b>Total</b> average.</td><td>Navi, ct and co rows: sub and Total averages. Pc or pm: one average over that pc or pm.</td></tr>
 <tr><td>Chevron</td><td>Counts down each row, along the needle (Surrey: to the next box).</td><td>Only in a pc or pm: waits until 5 seconds are left, then runs to the line.</td></tr>
@@ -1212,8 +1215,8 @@ range.</p>
   </svg>
 </figure>
 
-<p>The top left shows the row's target speed and, under it in yellow, how long the row takes at that
-speed (m:ss). There is no needle and the middle box is empty: on these rows crews drive flat out and
+<p>The top left shows the row's target speed and, under it in yellow, the count down to the end of
+the row (m:ss, whole seconds; a <b>+</b> once past the line). There is no needle and the middle box is empty: on these rows crews drive flat out and
 a lead of many minutes is normal. The right-hand box shows the <b>minutes</b> in hand: green when
 ahead, red when behind.</p>
 
@@ -1295,7 +1298,8 @@ ahead, red when behind.</p>
 </figure>
 
 <p>Inside a pc or pm the needle and the error box give the <b>error</b> from the start tube, in
-seconds. The yellow time is how long the pc takes. The box on the right shows <b>-.-</b> until 5
+seconds. The yellow time under the target is the count down to the end tube (whole seconds). The average
+speed on the left is captioned <b>sub avg</b>: it is the pc's or pm's own average. The box on the right shows <b>-.-</b> until 5
 seconds remain, then counts down from 5.0 to 0.0.</p>
 
 <h4 id="chevron-italian">The chevron</h4>
@@ -1480,7 +1484,7 @@ revolution in the small box.</p>
 <ul>
 <li><b>Ahead/Behind Tone</b> &ndash; the driver's error tone, off/on.</li>
 <li><b>Tone when behind</b> / <b>Tone when ahead</b> &ndash; type 1 or 2; both silent under 0.2 s
-error and in the first 250 m. <b>Type 1</b>: a buzzer tick that speeds up with the error in 0.2 s
+error and in the first 250 m (in italian from the moment a pc or pm starts). <b>Type 1</b>: a buzzer tick that speeds up with the error in 0.2 s
 steps, from about one a second at 0.2 s to about eight by 3 s; behind ticks slightly higher.
 <b>Type 2</b>: a steady tone rising in pitch in 0.2 s steps to 3 s; behind is higher and harsher,
 ahead lower and smoother.</li>
@@ -1502,7 +1506,10 @@ sets how early the box tells the phone to sound an Italian countdown beep, to co
 delay. It applies to the countdown beeps only, not the 100&nbsp;m beeps, and the phone shows the same figure.</li>
 <li><b>Speed units</b> &ndash; kph or mph.</li>
 <li><b>Distance units</b> &ndash; <b>00.00</b> (km, two decimals) or <b>0,000</b> (whole metres) for
-the driving figures and <code>add distance</code>. It does not flip to kilometres at 100 km.</li>
+the driving figures and <code>add distance</code>. It does not flip to kilometres at 100 km. The
+<b>set</b> pop-ups (Set Total, Set Navi), <b>Distance at start</b> and Trip history use the same unit, and so
+does the phone. In km a figure is cut to the 10&nbsp;m below, never rounded up, so it never reads ahead of
+the car; a counter that reverse takes behind its start reads negative.</li>
 <li><b>Measure type</b> &ndash; <b>AB,BC</b> shows the A-B, B-C zero key on the greek and surrey navigation
 pages; <b>AB,AC</b> hides it.</li>
 <li><b>Stage data logging</b> &ndash; one file per stage, a row a second (distance, speed,
