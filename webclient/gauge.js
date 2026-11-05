@@ -75,6 +75,7 @@
       L.boxY = L.centerY - 8 * L.fscale;
     } else {
       // Distances are the footer. The readout row sits just under the hub.
+      L.boxHeight = 78.0 * L.fscale;   // portrait: a taller row, so the figures do not brush the edges
       L.centerY = height - (L.boxHeight + 20);
       L.valSize = 50 * L.fscale;
       L.curTopSize = 60;   // fixed, not scaled with the dial
@@ -145,8 +146,13 @@
     ctx.font = (18 * fs) + 'px monospace';
     ctx.textAlign = 'right';
     ctx.fillStyle = '#fff';
-    ctx.fillText('avg', legendRight, y2 - 24 * fs);
-    ctx.fillText(unitLow, legendRight, y2 - 4 * fs);
+    if (page === 1) {   // a pc / pm average is the sub's: "sub" above "avg", no unit
+      ctx.fillText('sub', legendRight, y2 - 24 * fs);
+      ctx.fillText('avg', legendRight, y2 - 4 * fs);
+    } else {
+      ctx.fillText('avg', legendRight, y2 - 24 * fs);
+      ctx.fillText(unitLow, legendRight, y2 - 4 * fs);
+    }
     if (page === 3) {
       ctx.fillStyle = '#0ff';
       ctx.fillText('sub', legendRight, y1 - 4 * fs);
@@ -209,7 +215,7 @@
   // Extra canvas under the speed and target lines. The dial stays bottom-anchored,
   // so this lowers the arc and the three boxes. The speed and target are drawn
   // back up by the same amount.
-  const PORTRAIT_DROP = 64;
+  const PORTRAIT_DROP = 44;
 
   function wideLayout() {
     return window.matchMedia('(orientation: landscape) and (min-width: 700px)').matches;
@@ -285,27 +291,30 @@
     const centerY = L.centerY;
     const radius = L.radius;
     const fscale = L.fscale;
+    // Line weights follow the dial: the box page's dial (radius 375, drawn then scaled down) sets them, so a
+    // smaller portrait dial gets proportionally finer lines.
+    const ls = boxMode ? 1 : radius / 375;
 
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, width, height);
 
     // Bezel
     ctx.strokeStyle = 'rgb(64,64,64)';
-    ctx.lineWidth = 4;
+    ctx.lineWidth = 4 * ls;
     ctx.beginPath();
-    ctx.arc(centerX, centerY, radius + 18, Math.PI, 2 * Math.PI);
+    ctx.arc(centerX, centerY, radius + 18 * ls, Math.PI, 2 * Math.PI);
     ctx.stroke();
 
     // Arc background
     ctx.strokeStyle = 'rgb(31,31,31)';
-    ctx.lineWidth = 28;
+    ctx.lineWidth = 28 * ls;
     ctx.beginPath();
     ctx.arc(centerX, centerY, radius, Math.PI, 2 * Math.PI);
     ctx.stroke();
 
     // Coloured arc
     ctx.strokeStyle = rgb(arc);
-    ctx.lineWidth = 12;
+    ctx.lineWidth = 12 * ls;
     ctx.beginPath();
     ctx.arc(centerX, centerY, radius, Math.PI, 2 * Math.PI);
     ctx.stroke();
@@ -315,7 +324,7 @@
     const tickCount = Math.floor(maxVal);
     ctx.strokeStyle = 'rgb(230,230,230)';
     ctx.fillStyle = 'rgb(230,230,230)';
-    ctx.lineWidth = NEEDLE_HALF_WIDTH * 2;
+    ctx.lineWidth = NEEDLE_HALF_WIDTH * 2 * ls;
     ctx.font = 'bold ' + (24 * fscale) + 'px monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -328,20 +337,20 @@
       for (let k = -39; k <= 39; k++) {
         if (k % 10 === 0 || k % step !== 0 || Math.abs(k / 10) > maxVal) continue;
         const a = gaugeTickAngle(k / 10, maxVal);
-        const inner = (Math.abs(k) % 5 === 0) ? radius - 12 : radius - 2;
+        const inner = (Math.abs(k) % 5 === 0) ? radius - 12 * ls : radius - 2 * ls;
         ctx.beginPath();
         ctx.moveTo(centerX + inner * Math.cos(a), centerY + inner * Math.sin(a));
-        ctx.lineTo(centerX + (radius + 8) * Math.cos(a), centerY + (radius + 8) * Math.sin(a));
+        ctx.lineTo(centerX + (radius + 8 * ls) * Math.cos(a), centerY + (radius + 8 * ls) * Math.sin(a));
         ctx.stroke();
       }
       ctx.lineWidth = lw;
     }
     for (let i = -tickCount; i <= tickCount; i++) {
       const angle = gaugeTickAngle(i, maxVal);
-      const x1 = centerX + (radius - 20) * Math.cos(angle);
-      const y1 = centerY + (radius - 20) * Math.sin(angle);
-      const x2 = centerX + (radius + 8) * Math.cos(angle);
-      const y2 = centerY + (radius + 8) * Math.sin(angle);
+      const x1 = centerX + (radius - 20 * ls) * Math.cos(angle);
+      const y1 = centerY + (radius - 20 * ls) * Math.sin(angle);
+      const x2 = centerX + (radius + 8 * ls) * Math.cos(angle);
+      const y2 = centerY + (radius + 8 * ls) * Math.sin(angle);
       ctx.beginPath();
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
@@ -349,7 +358,7 @@
       if (!labelsVisible) continue;
       const label = gaugeTickLabel(i);
       if (!label) continue;
-      const labelR = radius - 38;
+      const labelR = radius - 38 * ls;
       const lx = centerX + labelR * Math.cos(angle);
       const ly = centerY + labelR * Math.sin(angle);
       ctx.save();
@@ -361,10 +370,10 @@
 
     // Top triangle at zero
     ctx.beginPath();
-    const triY = centerY - radius - 12;
-    ctx.moveTo(centerX, triY + 10);
-    ctx.lineTo(centerX - 6, triY);
-    ctx.lineTo(centerX + 6, triY);
+    const triY = centerY - radius - 12 * ls;
+    ctx.moveTo(centerX, triY + 10 * ls);
+    ctx.lineTo(centerX - 6 * ls, triY);
+    ctx.lineTo(centerX + 6 * ls, triY);
     ctx.closePath();
     ctx.fill();
 
@@ -374,6 +383,7 @@
 
     // Needle
     const needle = computeNeedleGeometry(seconds, maxVal, radius);
+    needle.halfWidth *= ls;
     const dirX = Math.cos(needle.angle);
     const dirY = Math.sin(needle.angle);
     const perpX = -Math.sin(needle.angle);
@@ -427,7 +437,7 @@
         boxY = needleTop;
       }
     } else if (thirds) {
-      boxW = (width - 16) / 3;
+      boxW = (width - 16) * 0.46;   // the error box is the widest; the tag and countdown boxes are equal
       boxH = L.boxHeight;
       boxY = L.boxY;
     } else {
@@ -436,7 +446,7 @@
       boxY = L.boxY;
     }
     const boxCenterY = boxY + boxH / 2;
-    const boxX = centerX - boxW / 2;
+    const boxX = thirds ? 8 + (width - 16) * 0.27 : centerX - boxW / 2;   // portrait: tag | error | countdown fill the width
     ctx.fillStyle = '#000';
     ctx.fillRect(boxX, boxY, boxW, boxH);
     // The stroke is centred on the path, so a line on the rectangle edge hangs
@@ -465,14 +475,14 @@
     if (drv) {
       // Same row as the error box, right edge touching its left edge.
       const tagText = String(drv.tag || '');
-      const tagSize = boxMode ? 46 * L.fscale : Math.max(16, 22 * L.fscale);
+      const tagSize = boxMode ? 46 * L.fscale : (thirds ? 30 * L.fscale : Math.max(16, 22 * L.fscale));
       ctx.font = 'bold ' + tagSize + 'px sans-serif';
       const tw = ctx.measureText(tagText).width;
       const iconKind = Number(drv.icon) || 0;
-      const icon = iconKind ? (boxMode ? 36 : 22) * L.fscale : 0;
+      const icon = iconKind ? (boxMode ? 36 : (thirds ? 26 : 22)) * L.fscale : 0;
       const igap = icon ? (boxMode ? 8 : 10) * L.fscale : 0;
       const sideW = boxMode ? 160 * L.fscale
-        : (thirds ? boxW : Math.min(boxX - 4, Math.max(boxH * 1.7, tw + igap + icon + 16)));
+        : (thirds ? (width - 16) * 0.27 : Math.min(boxX - 4, Math.max(boxH * 1.7, tw + igap + icon + 16)));
       const tagY = boxY;
       const tagCy = boxCenterY;
       const drawTag = (x, text, bg, fg) => {
@@ -515,12 +525,19 @@
       if (rightText) {
         const rx = boxX + boxW;
         ctx.fillStyle = ahead ? '#00aa00' : '#dd1111';
-        ctx.fillRect(rx, boxY, sideW, boxH);
+        const rw = thirds ? (width - 16) * 0.27 : sideW;
+        ctx.fillRect(rx, boxY, rw, boxH);
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold ' + (boxMode ? L.boxFontSize * 1.5 : Math.max(18, L.valSize * 0.7)) + 'px monospace';
+        let rtSize = boxMode ? L.boxFontSize * 1.5 : Math.max(18, L.valSize * (thirds ? 0.95 : 0.7));
+        ctx.font = 'bold ' + rtSize + 'px monospace';
+        if (thirds) {   // the countdown fills its box, shrunk only if it would touch the sides
+          const maxW = (width - 16) * 0.27 - 14;
+          const w = ctx.measureText(rightText).width;
+          if (w > maxW) { rtSize *= maxW / w; ctx.font = 'bold ' + rtSize + 'px monospace'; }
+        }
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(rightText, rx + sideW / 2, boxCenterY);
+        ctx.fillText(rightText, rx + rw / 2, boxCenterY);
         // Portrait drops the word. The box still draws it, to the right of the box.
         if (boxMode && drv.legend) {
           const adv = ctx.measureText(rightText).width;
@@ -643,19 +660,19 @@
     const stageOn = drv ? drv.page === 3 : Number(msg.segment_number) > 0;
     const arrival = msg.arrival && msg.arrival.kph != null ? msg.arrival : null;
     // Between stages only. A Greek stage keeps the target and does not add arrival.
-    const showArrival = !!(arrival && !(msg.surrey && stageOn)
-      && (drv ? drv.page === 4 : (Number(msg.rally_type) !== 2 && !stageOn)));
+    // The box shows the Arrival caption on this page even when there is no arrival ("--"); so does the phone.
+    const showArrival = !!(!(msg.surrey && stageOn)
+      && (drv ? drv.page === 4 : (arrival && Number(msg.rally_type) !== 2 && !stageOn)));
     ctx.fillStyle = '#FFDD00';
     if (showArrival && !stageOn && !italianFig) {
-      const ak = msg.units === 'mph' ? Math.round(arrival.kph * 0.621371) : arrival.kph;
-      const b = drawCorner(String(ak), topLeftInk, false, L.curTopSize, figureBase);
+      const ak = !arrival ? '--' : String(msg.units === 'mph' ? Math.round(arrival.kph * 0.621371) : Math.trunc(arrival.kph));
+      const b = drawCorner(ak, topLeftInk, false, L.curTopSize, figureBase);
       drawCornerLabel(msg.units === 'mph' ? 'Arrival (mph)' : 'Arrival (kph)', topLeftInk, false, b);
     } else {
       const b = drawCorner(tgt, topLeftInk, false, L.curTopSize, figureBase);
       drawCornerLabel('Target', topLeftInk, false, b);
-      if (italianFig && drv.dur_s != null) {
-        const ds = Math.max(0, Math.round(Number(drv.dur_s) || 0));
-        const dur = Math.floor(ds / 60) + ':' + String(ds % 60).padStart(2, '0');
+      if (italianFig && drv.cd != null) {
+        const dur = String(drv.cd);   // the countdown to the line, the box's own text
         const durSize = L.curTopSize * 0.64;
         ctx.font = 'bold ' + durSize + 'px monospace';
         ctx.textAlign = 'left';

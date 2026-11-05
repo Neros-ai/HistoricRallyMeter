@@ -75,14 +75,18 @@ std::string driverGaugeJson(AppData* data) {
     o << "{\"page\":" << page << ",\"tag\":\"" << tag << "\",\"icon\":" << icon
       << ",\"needle\":" << (needle ? "true" : "false");
     if (page == AppData::DP_ITALIAN_TRIAL || page == AppData::DP_ITALIAN_NAVI) {
-        const double dur = page == AppData::DP_ITALIAN_TRIAL ? v.durationS : data->driverRowS;
+        // The countdown to the line, as the box prints it under the target (Home's own text).
+        bool cd_ok = false;
+        const double to_line = page == AppData::DP_ITALIAN_TRIAL ? v.toLineS
+            : sectorSecondsToLine(*data->state, getRallyTime_ms(*data->state), &cd_ok);
+        const std::string cd = (page == AppData::DP_ITALIAN_TRIAL || cd_ok) ? sectorSecondsWholeText(to_line) : std::string();
         o << ",\"target\":\"" << data->driverTrialTargetText << "\""
           << ",\"speed\":\"" << data->driverTrialSpeedText << "\""
-          << ",\"dur_s\":" << std::lround(std::max(0.0, dur));
+          << ",\"cd\":\"" << cd << "\"";
     }
     if (page == AppData::DP_ITALIAN_TRIAL) {
         o << ",\"box\":\"" << countdownBoxText(v.toLineS) << "\""
-          << ",\"sector_m\":" << std::lround(v.sectorTotalM)
+          << ",\"sector_m\":" << [&] { char sb[32]; snprintf(sb, sizeof(sb), "%.3f", v.sectorTotalM); return std::string(sb); }()   // unrounded, so the phone rounds as the box does
           << ",\"avg\":\"" << (v.avgValid ? trialSpeedText(v.avgKph) : std::string("--.--")) << "\"";
     } else if (page == AppData::DP_ITALIAN_NAVI) {
         if (data->driverMinutesValid) o << ",\"min\":" << data->driverMinutes;

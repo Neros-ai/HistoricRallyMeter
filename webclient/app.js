@@ -105,7 +105,7 @@
   // (rounded). Metres stay whole, with thousands separators.
   function formatDist(m) {
     m = Number(m) || 0;
-    if (distanceKm) return (Math.floor(m / 10 + 0.5) / 100).toFixed(2);
+    if (distanceKm) return (Math.trunc(m / 10) / 100).toFixed(2);
     return Math.round(m).toLocaleString();
   }
 
@@ -113,7 +113,7 @@
   // numbers; the labels carry the thousands separators.
   function stageInput(m) {
     m = Number(m) || 0;
-    if (distanceKm) return (Math.floor(m / 10 + 0.5) / 100).toFixed(2);
+    if (distanceKm) return (Math.trunc(m / 10) / 100).toFixed(2);
     return String(Math.round(m));
   }
 
@@ -268,6 +268,7 @@
     const tripAvgWrap = $('drv-box-trip').querySelector('.rt');
     if (tripAvgWrap) tripAvgWrap.style.display = '';
     if ($('drv-trip-cap')) $('drv-trip-cap').textContent = page === 3 ? 'sub' : 'avg';
+    if ($('drv-total-cap')) $('drv-total-cap').innerHTML = page === 1 ? 'sub<br>avg' : 'avg';   // a pc / pm average is the sub's
     if (page === 1) showDist($('drv-total-m'), drv.sector_m);
     else {
       showDist($('drv-trip-m'), msg.trip_m);
@@ -283,6 +284,8 @@
     $('drv-trip-avg').textContent = page === 3 && drv.sub ? drv.sub : avgShown(msg.trip_avg_kph, page === 2);
     $('drv-total-avg').textContent = (page === 1 && drv.avg) ? drv.avg : avgShown(msg.total_avg_kph, page === 2);
     document.querySelectorAll('.avg-unit').forEach((e) => { e.textContent = italianFig ? 'kph' : units; });
+    const totalUnit = document.querySelector('#drv-box-total .avg-unit');
+    if (totalUnit) totalUnit.style.display = page === 1 ? 'none' : '';   // a pc / pm shows "sub avg" with no unit
 
     // Italian blanks the next-minute and autostart keys, and the stage panel's
     // auto/manual line. A-B, B-C zero is only the Greek measure-type key.
@@ -334,6 +337,11 @@
     // Time tab
     const rallyMs = Number(msg.computer_ms) + Number(msg.rally_offset_ms || 0);
     $('t-rally').textContent = clockText(rallyMs);
+    // The start-at-next-minute key rolls over with the clock, as the box's does (same rally time, same minute).
+    if ($('flag-minute-time')) {
+      const nm = new Date((Math.floor(rallyMs / 60000) + 1) * 60000 + tzMin * 60000);
+      $('flag-minute-time').textContent = String(nm.getUTCHours()).padStart(2, '0') + ':' + String(nm.getUTCMinutes()).padStart(2, '0');
+    }
     $('t-computer').textContent = clockText(Number(msg.computer_ms));
     $('t-offset').textContent = offsetText(Number(msg.rally_offset_ms) || 0);
     $('t-date').textContent = new Date(rallyMs + tzMin * 60000).toUTCString().slice(0, 16);
@@ -439,7 +447,7 @@
     const hist = (state.trip_history || []);
     // One span per figure: dots between them in portrait, one per line in landscape (as the box lists them).
     $('trip-history').innerHTML = hist.length
-      ? hist.map((m) => '<span class="th">' + formatDist(m) + '</span>').join('<span class="thsep"> \u00b7 </span>') : '-';
+      ? hist.map((m) => '<span class="th">' + formatDist(m) + '</span>').join('<span class="thsep"> \u00b7 </span>') : '';
     const sa = state.autostart || 'none';
     const armed = sa !== 'none';
     if (lastTelemetry && lastTelemetry.stage_panel) applyAutoLine();
@@ -449,7 +457,6 @@
       $('auto-word').classList.toggle('cyan', armed);
       $('auto-time').textContent = armed ? sa : (state.start_time || '');
     }
-    $('flag-minute-time').textContent = nextMinuteText();
     $('btn-flag-auto').classList.toggle('lit', !!state.autostart_on);
   }
 
@@ -482,20 +489,26 @@
       + '</td><td class="orange">' + (s.avg || '') + '</td></tr>';
     if (s.next_tag) {
       html += '<tr class="dim"><td>' + tag(s.next_tag, s.next_type) + '</td><td>' + (s.next_km || '')
-        + '</td><td>' + (s.next_progr || '') + '</td><td>' + (s.next_mmss || '') + '</td><td>' + (s.next_kph || '') + '</td></tr>';
+        + '</td><td class="cyan">' + (s.next_progr || '') + '</td><td class="cyan">' + (s.next_mmss || '') + '</td><td>' + (s.next_kph || '') + '</td></tr>';
     }
     html += '</table><div class="it-foot">';
+    if (!s.pc_ref) html += '<div class="it-err ghost"><span>error</span><b>0</b><b>0</b></div>';   // same size, unseen: keeps the arrival block where it is
     if (s.pc_ref) {
       const metres = Number(s.pc_m);
       const mtxt = (metres > 0 ? '+' : '') + metres + ' m';
       html += '<div class="it-err"><span class="cyan">error pc' + s.pc_ref + '</span><b>'
         + s.pc_s + ' s</b><b>' + mtxt + '</b></div>';
     }
+    // Five fixed cells, always present, so no figure moves when another comes or goes.
     if (s.co_hhmm) {
       html += '<div class="it-co"><span class="cyan">co' + (s.co_ref || '') + ' arrival</span><b class="when">'
         + s.co_hhmm + '</b></div>';
       html += '<div class="it-kph"><span class="cap">kph</span><b class="cyan">' + s.co_kph + '</b></div>';
       html += '<div class="it-min"><span class="cap">min</span><b>' + s.co_min + '</b></div>';
+    } else {
+      html += '<div class="it-co ghost"><span>co</span><b class="when">0</b></div>'
+        + '<div class="it-kph ghost"><span class="cap">kph</span><b>0</b></div>'
+        + '<div class="it-min ghost"><span class="cap">min</span><b>0</b></div>';
     }
     if (s.ahead_min !== undefined && s.ahead_min !== null) {
       const hand = Number(s.ahead_min);
@@ -503,6 +516,8 @@
       const behind = s.behind === true || hand < 0;
       html += '<div class="it-pm"><span class="cap">+/&minus;</span><b class="'
         + (behind ? 'behind' : 'ahead') + '">' + Math.abs(hand) + '</b></div>';
+    } else {
+      html += '<div class="it-pm ghost"><span class="cap">+/&minus;</span><b>0</b></div>';
     }
     html += '</div>';
     card.innerHTML = html;
@@ -740,7 +755,7 @@
     const setIf = (el, v) => { if (el !== active) el.value = v; };
     setIf($('seg-pick'), String(state.edit_slot || 1));
     setIf($('seg-start-time'), state.start_time || '');
-    setIf($('seg-start-dist'), state.start_distance_m || '');
+    setIf($('seg-start-dist'), state.start_distance_m ? stageInput(state.start_distance_m) : '');
     const durS = Number(state.sector_duration_s);
     setIf($('seg-duration'), durS > 0 ? hms(durS) : '');
     if ($('seg-duration-avg')) {
@@ -821,14 +836,15 @@
   $('key-navi').addEventListener('click', () => {
     if ($('view-navi').classList.contains('rally-greek')) return;
     const now = lastTelemetry && Number(lastTelemetry.navi_m);
-    $('navi-metres').value = Number.isFinite(now) ? String(Math.round(now)) : '';
+    $('navi-label').textContent = distanceKm ? 'Set Navi (km)' : 'Set Navi (m)';
+    $('navi-metres').value = Number.isFinite(now) ? stageInput(now) : '';
     $('navi-menu').classList.remove('hidden');
     $('navi-metres').focus();
   });
   $('navi-cancel').addEventListener('click', () => $('navi-menu').classList.add('hidden'));
   $('navi-set').addEventListener('click', () => {
-    const meters = Number(String($('navi-metres').value).trim().replace(',', '.'));
-    if (!Number.isFinite(meters) || meters < 0 || meters > 999999) return;
+    const meters = stageMetres($('navi-metres').value);   // the entry is in the rally's unit, km or m
+    if (meters == null || meters < 0 || meters > 999999) return;
     send({ type: 'navi_set', meters: meters });
     $('navi-menu').classList.add('hidden');
   });
@@ -967,7 +983,7 @@
     $('seg-add-text').value = '';
   });
   const sendStart = () => send({ type: 'stage_start', time: $('seg-start-time').value.trim(),
-                                 distance_m: Number($('seg-start-dist').value) || 0 });
+                                 distance_m: stageMetres($('seg-start-dist').value) || 0 });
   $('seg-start-time').addEventListener('change', sendStart);
   $('seg-start-dist').addEventListener('change', sendStart);
   const sendFirst = () => send({ type: 'stage_first', number: Number($('seg-first-n').value) || 0,

@@ -552,18 +552,18 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                 // Arrival stays on the between-stages page (the figure above).
                 // A Greek stage shows the target only, even while the navigator
                 // still has Stage arrival.
-                if (italianFig) {   // how long this pc / pm / row takes, m:ss, under the target
-                    const double dur_s = (page == AppData::DP_ITALIAN_TRIAL) ? v.durationS : data->driverRowS;
-                    char dur[24];
-                    const long ds = std::lround(std::max(0.0, dur_s));
-                    snprintf(dur, sizeof(dur), "%ld:%02ld", ds / 60, ds % 60);
+                if (italianFig) {   // the countdown to the line, as on Home, under the target
+                    bool cd_ok = false;
+                    const double to_line = (page == AppData::DP_ITALIAN_TRIAL) ? v.toLineS
+                        : sectorSecondsToLine(*data->state, getRallyTime_ms(*data->state), &cd_ok);
+                    const std::string dur = (page == AppData::DP_ITALIAN_TRIAL || cd_ok) ? sectorSecondsWholeText(to_line) : std::string();
                     bigFace();
                     const double durSize = L.curTopSize * 0.64;
                     cairo_set_font_size(cr, durSize);
-                    cairo_text_extents(cr, dur, &te);
+                    cairo_text_extents(cr, dur.c_str(), &te);
                     cairo_move_to(cr, topLeftInk,
                                   baseline + L.labelSize + L.labelGap + capDrop + durSize * 1.05);
-                    cairo_show_text(cr, dur);
+                    cairo_show_text(cr, dur.c_str());
                     smallFace();
                 }
             }
@@ -642,11 +642,20 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                 cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
                 // Figures stay on avgAnchor. A long one pushes this caption left.
                 const double legendRight = avgLegendRight(lcx - 288.0 * fs, numberLeft, 6.0 * fs);
-                const char* left[2] = {"avg", unitLow};
-                for (int i = 0; i < 2; ++i) {
-                    cairo_text_extents(cr, left[i], &te);
-                    cairo_move_to(cr, legendRight - te.x_advance, y2 - (i == 0 ? 24.0 : 4.0) * fs);
-                    cairo_show_text(cr, left[i]);
+                if (page == AppData::DP_ITALIAN_TRIAL) {   // a pc / pm average is the sub's: "sub" above "avg", no unit
+                    cairo_text_extents(cr, "avg", &te);
+                    cairo_move_to(cr, legendRight - te.x_advance, y2 - 4.0 * fs);
+                    cairo_show_text(cr, "avg");
+                    cairo_text_extents(cr, "sub", &te);
+                    cairo_move_to(cr, legendRight - te.x_advance, y2 - 24.0 * fs);
+                    cairo_show_text(cr, "sub");
+                } else {
+                    const char* left[2] = {"avg", unitLow};
+                    for (int i = 0; i < 2; ++i) {
+                        cairo_text_extents(cr, left[i], &te);
+                        cairo_move_to(cr, legendRight - te.x_advance, y2 - (i == 0 ? 24.0 : 4.0) * fs);
+                        cairo_show_text(cr, left[i]);
+                    }
                 }
                 if (page == AppData::DP_GREEK_STAGE) {   // marks the cyan average as the substage's, not Trip's
                     cairo_set_source_rgb(cr, 0.0, 1.0, 1.0);
@@ -1069,6 +1078,10 @@ void updateDriverDisplay(AppData* data) {
         // unaffected by the tone types) and the ahead/behind tone
         // (driven by whichever algorithm the type for the current side selects).
         double stage_dist_m = countsToMeters(total_count_diff_ab, data->state->calibration);
+        // Italian: the tone runs from the moment a pc (its trial running) or a pm starts, not 250 m into the sector.
+        if (data->state->rally_type == 2 && stage_dist_m < 250.0 &&
+            (seg.type == SEG_PM || (seg.type == SEG_PC && data->state->trial_start_m >= 0.0)))
+            stage_dist_m = 250.0;
         double total_stage_counts = 0.0;
         for (const auto& s : data->state->stage_segments)
             total_stage_counts += s.distance_counts;

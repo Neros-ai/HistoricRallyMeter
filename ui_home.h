@@ -33,6 +33,7 @@ struct HomeUi {
     // Surrey (RB-NAV-43): navi in the third row, the countdown panel in the stage column while a
     // stage runs, and the last time taken under Trip history.
     bool surrey = false;
+    bool italian = false;             // navi total in cyan, as surrey
     bool surreyRunning = false;       // countdown panel instead of Stage arrival
     std::string cdMetres, cdTime;     // countdown panel figures
     std::string timeTakenLabel, timeTaken;   // "time taken ss1", "9:20.6"; empty = none

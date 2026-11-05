@@ -91,8 +91,8 @@ double sectorSecondsToLine(const RallyState& s, int64_t now_ms, bool* valid);
 // Seconds to the end line; *valid false elsewhere (ct, pm, co, greek).
 double pcCountdownSeconds(const RallyState& s, int64_t now_ms, bool* valid);
 
-// One beep at 30 s and 15 s to the line, then the navigation double beep at 5,
-// a single beep at 4, 3, 2 and 1, and a shorter beep on 0.
+// The navigation double beep at 5 s to the line, a single beep at 4, 3, 2 and 1,
+// and a shorter beep on 0 (no 30 s or 15 s warning).
 // `prev_s` and `now_s` are successive pcCountdownSeconds readings; a beep is due when
 // a mark is crossed between them. Marks already gone when the row starts are never heard.
 enum class PcBeep { None, Tick, Five, Zero };
@@ -194,6 +194,7 @@ bool subResetInStage(const RallyState& s);
 std::string sectorCountdownKmText(const SectorPanel& p);
 // m:ss.t; "+m:ss.t" when negative (the line has gone by).
 std::string sectorSecondsText(double s);
+std::string sectorSecondsWholeText(double s);   // the same, no tenths
 
 // The italian sector card as the phone draws it. "null" when the box is not italian.
 // Idle with a sector loaded is the same preview the box draws; nothing is written.

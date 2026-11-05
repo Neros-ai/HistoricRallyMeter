@@ -211,17 +211,18 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         text(cr, "down", 0, 171, 15, LEFT);
         if (p.metresPast > 0) {   // RB-NAV-49: past the line, red, counting up
             colour(cr, 1.0, 0.15, 0.15);
-            text(cr, sectorCountdownKmText(p), cKm, 174, 32, RIGHT);
+            text(cr, sectorCountdownKmText(p), cKm, 174, 36, RIGHT);
             colour(cr, 0.85, 0.65, 0.0);
         } else {
-            text(cr, sectorCountdownKmText(p), cKm, 174, 32, RIGHT);
+            text(cr, sectorCountdownKmText(p), cKm, 174, 36, RIGHT);
         }
         if (p.secondsValid) {
-            if (p.secondsToLine < 0) colour(cr, 1.0, 0.15, 0.15);
-            text(cr, tenths(p.secondsToLine), cTime, 174, 32, RIGHT);
+            // The time to the line: larger, white (red once past the line).
+            if (p.secondsToLine < 0) colour(cr, 1.0, 0.15, 0.15); else colour(cr, 1, 1, 1);
+            text(cr, tenths(p.secondsToLine), cTime, 177, 44, RIGHT);
             colour(cr, 0.85, 0.65, 0.0);
         }
-        text(cr, kph2(p.avgKph), cKph, 174, 32, RIGHT);   // 0.00 until a speed has been worked out
+        text(cr, kph2(p.avgKph), cKph, 174, 36, RIGHT);   // 0.00 until a speed has been worked out
         colour(cr, 0.53, 0.53, 0.53);
         cairo_rectangle(cr, 0, 186, width, 3);
         cairo_fill(cr);

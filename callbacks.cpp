@@ -294,6 +294,15 @@ static void on_dialog_response_button(GtkWidget* button, gpointer user_data) {
     gtk_dialog_response(GTK_DIALOG(dialog), response);
 }
 
+// The set dialogs read and show distances in the rally's own unit: km to two decimals, or whole metres.
+static std::string distanceEntryText(long metres, bool km) {
+    return km ? formatDistance(static_cast<double>(metres), true) : std::to_string(metres);
+}
+static double distanceEntryMetres(const char* text, bool km) {
+    const double v = std::stod(text);
+    return km ? v * 1000.0 : v;
+}
+
 void on_distance_set(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
 
@@ -312,13 +321,14 @@ void on_distance_set(GtkWidget* widget, gpointer user_data) {
     GtkWidget* promptRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_box_pack_start(GTK_BOX(content), promptRow, FALSE, FALSE, 3);
 
-    GtkWidget* prompt = gtk_label_new("Set Total (m)");
+    GtkWidget* prompt = gtk_label_new(data->state->distance_km ? "Set Total (km)" : "Set Total (m)");
     gtk_box_pack_start(GTK_BOX(promptRow), prompt, FALSE, FALSE, 0);
 
     GtkEntry* entry = GTK_ENTRY(gtk_entry_new());
     gtk_entry_set_text(entry,
-        std::to_string(adjustedDistanceMeters(rawDistanceCm(data, false),
-                                              data->state->total_distance_adjust_cm)).c_str());
+        distanceEntryText(adjustedDistanceMeters(rawDistanceCm(data, false),
+                                                 data->state->total_distance_adjust_cm),
+                          data->state->distance_km).c_str());
     // Capped at 6 digits (999,999 m): past that the display auto-switches
     // to km, which reads as if the entered value got truncated.
     gtk_entry_set_max_length(entry, 6);
@@ -369,7 +379,7 @@ void on_distance_set(GtkWidget* widget, gpointer user_data) {
     if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_OK) {
         const char* text = gtk_entry_get_text(entry);
         try {
-            applyDistanceSet(data, std::stod(text));
+            applyDistanceSet(data, distanceEntryMetres(text, data->state->distance_km));
         } catch (const std::exception&) {
             // Unparseable entry: leave the correction as it was rather than
             // zeroing a good one on a typo.
@@ -448,12 +458,13 @@ void on_navi_dialog(GtkWidget* widget, gpointer user_data) {
 
     GtkWidget* promptRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_box_pack_start(GTK_BOX(content), promptRow, FALSE, FALSE, 3);
-    gtk_box_pack_start(GTK_BOX(promptRow), gtk_label_new("Set Navi (m)"), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(promptRow), gtk_label_new(data->state->distance_km ? "Set Navi (km)" : "Set Navi (m)"), FALSE, FALSE, 0);
 
     auto poll = data->poller->getMostRecent();
     GtkEntry* entry = GTK_ENTRY(gtk_entry_new());
-    gtk_entry_set_text(entry, std::to_string(adjustedDistanceMeters(
-        countsToCentimeters(odometerCounts(*data->state, poll.cntr1, poll.cntr2), data->state->calibration), 0)).c_str());
+    gtk_entry_set_text(entry, distanceEntryText(adjustedDistanceMeters(
+        countsToCentimeters(odometerCounts(*data->state, poll.cntr1, poll.cntr2), data->state->calibration), 0),
+        data->state->distance_km).c_str());
     gtk_entry_set_max_length(entry, 6);
     gtk_editable_select_region(GTK_EDITABLE(entry), 0, -1);
     gtk_box_pack_start(GTK_BOX(promptRow), GTK_WIDGET(entry), TRUE, TRUE, 0);
@@ -492,7 +503,7 @@ void on_navi_dialog(GtkWidget* widget, gpointer user_data) {
     poll = data->poller->getMostRecent();
     if (response == GTK_RESPONSE_OK) {
         try {
-            setOdometerMetres(*data->state, poll.cntr1, poll.cntr2, std::stod(gtk_entry_get_text(entry)));
+            setOdometerMetres(*data->state, poll.cntr1, poll.cntr2, distanceEntryMetres(gtk_entry_get_text(entry), data->state->distance_km));
         } catch (const std::exception&) {
             // Unparseable entry: leave navi as it was.
         }
@@ -1226,8 +1237,9 @@ int64_t stageCountsCorrected(AppData* data, const CounterPoll& poll) {
         data->state->total_start_cntr1, data->state->total_start_cntr2);
     // The whole correction belongs to this stage: the stage's own start zeroed
     // it along with the counters.
-    return correctedDistanceCounts(raw, data->state->total_distance_adjust_cm,
-                                   data->state->calibration);
+    // Signed: reversing behind the start reads negative, as the Total and Trip do.
+    return signedCorrectedDistanceCounts(raw, data->state->total_distance_adjust_cm,
+                                         data->state->calibration);
 }
 
 int64_t segmentCountsCorrected(AppData* data, const CounterPoll& poll) {
@@ -1235,7 +1247,7 @@ int64_t segmentCountsCorrected(AppData* data, const CounterPoll& poll) {
         data->state->segment_start_cntr1, data->state->segment_start_cntr2);
     // Only the correction made since this segment began: an earlier one
     // already moved the boundary it preceded.
-    return correctedDistanceCounts(raw,
+    return signedCorrectedDistanceCounts(raw,
         data->state->total_distance_adjust_cm - data->state->segment_start_adjust_cm,
         data->state->calibration);
 }
