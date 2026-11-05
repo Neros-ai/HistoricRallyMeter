@@ -1021,11 +1021,16 @@ int64_t elapsedForDisplay(int64_t elapsed_s, bool hold_at_zero) {
     return hold_at_zero ? 0 : elapsed_s;
 }
 
-bool stageDistanceComplete(const std::vector<Segment>& segs, int64_t stage_counts) {
+bool stageDistanceComplete(const std::vector<Segment>& segs, int64_t stage_position_mm) {
     if (segs.empty()) return true;
-    double total = 0.0;
-    for (const auto& seg : segs) total += seg.distance_counts;
-    return static_cast<double>(stage_counts) >= total;
+    int64_t total_mm = 0;
+    for (const auto& seg : segs) total_mm += std::llround(seg.distance_m * 1000.0);
+    return stage_position_mm >= total_mm;
+}
+
+int64_t stagePositionMm(const RallyState& s, uint64_t c1, uint64_t c2) {
+    const int64_t counts = calculateDistanceCounts(s, c1, c2, s.total_start_cntr1, s.total_start_cntr2);
+    return (counts * s.calibration) / 1000 + static_cast<int64_t>(s.total_distance_adjust_cm) * 10;
 }
 
 AutoStartArming autoStartArming(int64_t target_ms, int64_t epoch_ms,

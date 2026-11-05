@@ -72,6 +72,32 @@ public:
             return countdownMetres(segs, 9, 5) == 0 && countdownMetres(segs, -1, 5) == 0;
         });
 
+        suite->addTest("the automatic change falls due exactly when the countdown reaches 0", []() {
+            RallyState s;
+            s.calibration = 88277; s.counters = false;
+            Segment a; a.distance_m = 380.0; s.stage_segments.push_back(a);
+            Segment b; b.distance_m = 180.0; s.stage_segments.push_back(b);
+            s.total_start_cntr1 = 2000; s.total_start_cntr2 = 2000;
+            for (uint64_t n = 0; n <= 4400; n++) {
+                const int64_t pos = stagePositionMm(s, 2000 + n, 2000 + n);
+                const bool due = pos >= stageRowEndMm(s.stage_segments, 0);
+                const long cd = countdownMetres(s.stage_segments, 0, totalShownMetres(s, 2000 + n, 2000 + n));
+                if (due != (cd <= 0)) return false;
+            }
+            return true;
+        });
+
+        suite->addTest("stage position: pulses x calibration in mm, plus the correction; the stage ends at the typed metres", []() {
+            RallyState s;
+            s.calibration = 88277; s.counters = false;
+            s.total_start_cntr1 = 100; s.total_start_cntr2 = 100;
+            if (stagePositionMm(s, 1100, 1100) != 1000LL * 88277 / 1000) return false;   // 1,000 pulses = 88,277 mm
+            s.total_distance_adjust_cm = -500;
+            if (stagePositionMm(s, 1100, 1100) != 88277 - 5000) return false;
+            Segment a; a.distance_m = 380.0; std::vector<Segment> st{a};
+            return !stageDistanceComplete(st, 379999) && stageDistanceComplete(st, 380000);
+        });
+
         suite->addTest("countdown: row ends sum the typed metres in millimetres", []() {
             std::vector<Segment> segs(3);
             segs[0].distance_m = 380.0; segs[1].distance_m = 179.9996; segs[2].distance_m = 0.4;

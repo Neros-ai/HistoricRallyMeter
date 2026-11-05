@@ -346,14 +346,14 @@ public:
         });
 
         suite->addTest("a stage is complete once its own distance is driven out", []() {
-            Segment a{}; a.distance_counts = 1000.0;
-            Segment b{}; b.distance_counts = 2000.0;
+            Segment a{}; a.distance_m = 10.0;
+            Segment b{}; b.distance_m = 20.0;
             std::vector<Segment> stage = { a, b };
             ASSERT_FALSE(stageDistanceComplete(stage, 0));
-            ASSERT_FALSE(stageDistanceComplete(stage, 2999));
-            // Exactly at the line counts as complete.
-            ASSERT_TRUE(stageDistanceComplete(stage, 3000));
-            ASSERT_TRUE(stageDistanceComplete(stage, 5000));
+            ASSERT_FALSE(stageDistanceComplete(stage, 29999));
+            // Exactly at the line (30 m = 30,000 mm) counts as complete.
+            ASSERT_TRUE(stageDistanceComplete(stage, 30000));
+            ASSERT_TRUE(stageDistanceComplete(stage, 50000));
             return true;
         });
 

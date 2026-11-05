@@ -1082,10 +1082,8 @@ void updateDriverDisplay(AppData* data) {
         if (data->state->rally_type == 2 && stage_dist_m < 250.0 &&
             (seg.type == SEG_PM || (seg.type == SEG_PC && data->state->trial_start_m >= 0.0)))
             stage_dist_m = 250.0;
-        double total_stage_counts = 0.0;
-        for (const auto& s : data->state->stage_segments)
-            total_stage_counts += s.distance_counts;
-        bool past_stage_end = (static_cast<double>(total_count_diff_ab) >= total_stage_counts);
+        bool past_stage_end = stageDistanceComplete(data->state->stage_segments,
+            stagePositionMm(*data->state, current_poll.cntr1, current_poll.cntr2));
 
         ArrowToneResult arrow = computeArrowBasedTone(
             data->arrowToneState,
