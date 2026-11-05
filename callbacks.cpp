@@ -229,39 +229,39 @@ static void applyDialogStyle(GtkWidget* dialog) {
     }
 }
 
-// Raw, uncorrected distance in centimetres for one of the two counters.
+// Raw, uncorrected distance in millimetres for one of the two counters.
 // Shared by both correction callbacks so they clamp against the same figure
 // the display is derived from.
-static long rawDistanceCm(AppData* data, bool is_trip) {
+static int64_t rawDistanceMm(AppData* data, bool is_trip) {
     auto poll = data->poller->getMostRecent();
     int64_t counts = is_trip
         ? calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
                                   data->state->trip_start_cntr1, data->state->trip_start_cntr2)
         : calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
                                   data->state->total_start_cntr1, data->state->total_start_cntr2);
-    return countsToCentimeters(counts, data->state->calibration);
+    return countsToMm(counts, data->state->calibration);
 }
 
 // The correction itself, with no widget in sight, so the co-pilot's buttons
 // and the phone client apply exactly the same arithmetic rather than two
 // implementations that can drift apart.
 void applyDistanceAdjust(AppData* data, long delta_m) {
-    long delta_cm = delta_m * 100L;
+    long delta_mm = delta_m * 1000L;
 
     // All counters share the same underlying wheel measurement, so a
     // wheel-slip correction has to apply to both -- otherwise Trip would
     // keep showing the slipped, uncorrected value. Clamped independently:
     // Total and Trip can have travelled different distances at this instant,
     // so a -10 that is safe for one could still drive the other negative.
-    long& total_adjust = data->state->total_distance_adjust_cm;
-    total_adjust += clampDistanceAdjust(rawDistanceCm(data, false) + total_adjust, delta_cm);
+    long& total_adjust = data->state->total_distance_adjust_mm;
+    total_adjust += clampDistanceAdjust(static_cast<long>(rawDistanceMm(data, false)) + total_adjust, delta_mm);
 
-    long& trip_adjust = data->state->trip_distance_adjust_cm;
-    trip_adjust += clampDistanceAdjust(rawDistanceCm(data, true) + trip_adjust, delta_cm);
+    long& trip_adjust = data->state->trip_distance_adjust_mm;
+    trip_adjust += clampDistanceAdjust(static_cast<long>(rawDistanceMm(data, true)) + trip_adjust, delta_mm);
 
     // Navi moves with them, in every rally type; a -10 stops at zero, as for the others.
     auto poll = data->poller->getMostRecent();
-    adjustOdometerCm(*data->state, delta_cm, poll.cntr1, poll.cntr2);
+    adjustOdometerMm(*data->state, delta_mm, poll.cntr1, poll.cntr2);
 
     ConfigFile::save(*data->state);
     updateCopilotDisplay(data);
@@ -271,12 +271,12 @@ void applyDistanceAdjust(AppData* data, long delta_m) {
 // "set" has no Trip equivalent. Returns false for a value the box would not
 // accept, so the phone can decline it the way the dialog does.
 bool applyDistanceSet(AppData* data, double meters) {
-    long wanted_cm = static_cast<long>(meters * 100.0);
-    if (wanted_cm < 0) return false;
+    const int64_t wanted_mm = static_cast<int64_t>(std::llround(meters * 1000.0));
+    if (wanted_mm < 0) return false;
     // Solve for the correction that makes the reading equal what the operator
-    // entered.
-    long raw_cm = rawDistanceCm(data, false);
-    data->state->total_distance_adjust_cm = wanted_cm - raw_cm;
+    // entered, to the millimetre.
+    const int64_t raw_mm = rawDistanceMm(data, false);
+    data->state->total_distance_adjust_mm = static_cast<long>(wanted_mm - raw_mm);
     ConfigFile::save(*data->state);
     updateCopilotDisplay(data);
     return true;
@@ -326,8 +326,8 @@ void on_distance_set(GtkWidget* widget, gpointer user_data) {
 
     GtkEntry* entry = GTK_ENTRY(gtk_entry_new());
     gtk_entry_set_text(entry,
-        distanceEntryText(adjustedDistanceMeters(rawDistanceCm(data, false),
-                                                 data->state->total_distance_adjust_cm),
+        distanceEntryText(adjustedDistanceMetersMm(rawDistanceMm(data, false),
+                                                 data->state->total_distance_adjust_mm),
                           data->state->distance_km).c_str());
     // Capped at 6 digits (999,999 m): past that the display auto-switches
     // to km, which reads as if the entered value got truncated.
@@ -462,8 +462,8 @@ void on_navi_dialog(GtkWidget* widget, gpointer user_data) {
 
     auto poll = data->poller->getMostRecent();
     GtkEntry* entry = GTK_ENTRY(gtk_entry_new());
-    gtk_entry_set_text(entry, distanceEntryText(adjustedDistanceMeters(
-        countsToCentimeters(odometerCounts(*data->state, poll.cntr1, poll.cntr2), data->state->calibration), 0),
+    gtk_entry_set_text(entry, distanceEntryText(adjustedDistanceMetersMm(
+        odometerMm(*data->state, poll.cntr1, poll.cntr2), 0),
         data->state->distance_km).c_str());
     gtk_entry_set_max_length(entry, 6);
     gtk_editable_select_region(GTK_EDITABLE(entry), 0, -1);
@@ -518,27 +518,6 @@ void on_navi_dialog(GtkWidget* widget, gpointer user_data) {
     data->activeEntry = previous_entry;
     gtk_widget_destroy(dialog);
     updateCopilotDisplay(data);
-}
-
-// Every segment's count-based fields re-derived from its stable human values
-// after a change to calibration or sensor mode. Covers the snapshot the
-// running stage is being judged against as well as the editable roadbook and
-// the memory slots -- a mid-stage calibration change that fixed up only the
-// editable copy would leave the stage running on counts derived from the old
-// figure, which is exactly when a calibration gets corrected.
-static void recalculateSegmentCounts(RallyState& state) {
-    auto redo = [&state](std::vector<Segment>& segs) {
-        for (auto& seg : segs) {
-            seg.target_speed_counts_per_hour =
-                kphToCountsPerHour(seg.target_speed_kph, state.calibration);
-            seg.distance_counts = (seg.distance_m * 1e6) / state.calibration;
-        }
-    };
-    redo(state.segments);
-    redo(state.stage_segments);
-    for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
-        redo(state.memory_slots[i].segments);
-    }
 }
 
 void zeroDistanceBaselines(AppData* data) {
@@ -717,7 +696,7 @@ void performAutoStart(AppData* data) {
         // toward the stage distance -- and therefore toward its average speed.
         zeroTimeBaselines(data);
         // zeroTimeBaselines re-adopted the roadbook, which dropped the fit made at the arm;
-        // sector_start_odometer_cm is still the arm-time navi, so fit again from it (surrey).
+        // sector_start_odometer_mm is still the arm-time navi, so fit again from it (surrey).
         if (isSurrey(*data->state)) surreyStartFromMemory(*data->state);
         // Spent. Leaving the target armed would let a restart of the app --
         // which forgets autoStartTriggered -- see it as pending again.
@@ -1182,12 +1161,12 @@ void on_next_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     // being driven, not the roadbook the next stage starts from.
     retimeSegmentBoundaryForward(data->state->stage_segments,
                                  data->state->segment_current_number,
-                                 driven_mm, data->state->calibration);
+                                 driven_mm);
 
     data->state->segment_current_number++;
     data->state->segment_start_cntr1 = current_poll.cntr1;
     data->state->segment_start_cntr2 = current_poll.cntr2;
-    data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
+    data->state->segment_start_adjust_mm = data->state->total_distance_adjust_mm;
     data->state->segment_start_time_ms = pressTimeMs(getRallyTime_ms(*data->state), data->state->reaction_offset_ms);
     rebaseTripToSegment(*data->state, current_poll.cntr1, current_poll.cntr2);
     applyNextBaselineOffset(*data->state, reactionSpeedNow(data));   // RB-SET-12
@@ -1228,30 +1207,6 @@ void on_prev_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     notifyWebState(data);
 }
 
-// The distance the stage and the current segment have actually covered, with
-// the crew's manual correction applied. Everything judged against a roadbook
-// distance goes through these, so a wrong turn knocked off with the -10 button
-// moves the ahead/behind figure, the segment boundary and the end of the stage
-// together -- and not just the odometer, which is all the raw counts show.
-int64_t stageCountsCorrected(AppData* data, const CounterPoll& poll) {
-    int64_t raw = calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
-        data->state->total_start_cntr1, data->state->total_start_cntr2);
-    // The whole correction belongs to this stage: the stage's own start zeroed
-    // it along with the counters.
-    // Signed: reversing behind the start reads negative, as the Total and Trip do.
-    return signedCorrectedDistanceCounts(raw, data->state->total_distance_adjust_cm,
-                                         data->state->calibration);
-}
-
-int64_t segmentCountsCorrected(AppData* data, const CounterPoll& poll) {
-    int64_t raw = calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
-        data->state->segment_start_cntr1, data->state->segment_start_cntr2);
-    // Only the correction made since this segment began: an earlier one
-    // already moved the boundary it preceded.
-    return signedCorrectedDistanceCounts(raw,
-        data->state->total_distance_adjust_cm - data->state->segment_start_adjust_cm,
-        data->state->calibration);
-}
 
 gboolean update_display(gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
@@ -1269,8 +1224,8 @@ gboolean update_display(gpointer user_data) {
         int64_t trip_counts = calculateDistanceCounts(*data->state, p.cntr1, p.cntr2,
             data->state->trip_start_cntr1, data->state->trip_start_cntr2);
         data->debugLog->record(p.time_ms, static_cast<uint32_t>(raw.cntr1), static_cast<uint32_t>(raw.cntr2),
-            countsToCentimeters(total_counts, data->state->calibration) / 100,
-            countsToCentimeters(trip_counts, data->state->calibration) / 100);
+            countsToMm(total_counts, data->state->calibration) / 1000,
+            countsToMm(trip_counts, data->state->calibration) / 1000);
     }
 
     // The stage's own distance is what ends it. Once it is driven out the
@@ -1315,9 +1270,9 @@ gboolean update_display(gpointer user_data) {
                 auto p = data->poller->getMostRecent();
                 int64_t total_counts = calculateDistanceCounts(*data->state, p.cntr1, p.cntr2,
                     data->state->total_start_cntr1, data->state->total_start_cntr2);
-                long total_m = adjustedDistanceMeters(
-                    countsToCentimeters(total_counts, data->state->calibration),
-                    data->state->total_distance_adjust_cm);
+                long total_m = adjustedDistanceMetersMm(
+                    countsToMm(total_counts, data->state->calibration),
+                    data->state->total_distance_adjust_mm);
                 data->stageLog->record(sys_ms, total_m,
                     data->smoothedSpeed < 0 ? 0.0 : data->smoothedSpeed,
                     data->aheadBehindSeconds);
@@ -1349,7 +1304,7 @@ gboolean update_display(gpointer user_data) {
                     auto current_poll = data->poller->getMostRecent();
                     data->state->segment_start_cntr1 = current_poll.cntr1;
                     data->state->segment_start_cntr2 = current_poll.cntr2;
-                    data->state->segment_start_adjust_cm = data->state->total_distance_adjust_cm;
+                    data->state->segment_start_adjust_mm = data->state->total_distance_adjust_mm;
                     data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
                     rebaseTripToSegment(*data->state, current_poll.cntr1, current_poll.cntr2);
                     ConfigFile::save(*data->state);
@@ -1556,7 +1511,7 @@ void updateCalibrationDisplay(AppData* data) {
         cntr_a = cntr1_diff;
     }
     
-    long total_m = countsToCentimeters(cntr_a, data->state->calibration) / 100;
+    long total_m = countsToMm(cntr_a, data->state->calibration) / 1000;
     gtk_label_set_text(data->totalDistCalLabel,
         calibrationReadoutLine(total_m, cntr_a, cntr1_diff, cntr2_diff).c_str());
 
@@ -1679,7 +1634,6 @@ void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
                 resyncSimCounterRate(data);
 
                 // Recalculate count-based values in all segments from stable human values
-                recalculateSegmentCounts(*data->state);
                 
                 ConfigFile::save(*data->state);
                 
@@ -1715,7 +1669,6 @@ void on_reset_calibration_pulses(G_GNUC_UNUSED GtkWidget* widget, gpointer user_
 
     // Recalculate count-based values in all segments from stable human
     // values, same as every other calibration change.
-    recalculateSegmentCounts(*data->state);
 
     ConfigFile::save(*data->state);
     updateCalibrationDisplay(data);
@@ -1742,7 +1695,6 @@ void on_set_sensor_1(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     data->state->counters = false;
 
-    recalculateSegmentCounts(*data->state);
 
     ConfigFile::save(*data->state);
     updateSensorModeLabel(data);
@@ -1753,7 +1705,6 @@ void on_set_sensor_both(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     data->state->counters = true;
 
-    recalculateSegmentCounts(*data->state);
 
     ConfigFile::save(*data->state);
     updateSensorModeLabel(data);
@@ -1769,9 +1720,9 @@ void on_alarm_set(GtkWidget* widget, gpointer user_data) {
         current_poll.cntr1, current_poll.cntr2,
         data->state->total_start_cntr1, data->state->total_start_cntr2);
     
-    int64_t km_in_counts = static_cast<int64_t>((static_cast<double>(km) * 1000.0 * 1e6) / data->state->calibration);
     data->state->alarm_distance_km = km;
-    data->state->alarm_target_counts = total_counts + km_in_counts;
+    data->state->alarm_target_mm = countsToMm(total_counts, data->state->calibration)
+                                   + static_cast<int64_t>(km) * 1000000;
     data->alarmSoundStartTime = 0;
     
     ConfigFile::save(*data->state);
@@ -1780,7 +1731,7 @@ void on_alarm_set(GtkWidget* widget, gpointer user_data) {
 void on_alarm_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     data->state->alarm_distance_km = 0;
-    data->state->alarm_target_counts = 0;
+    data->state->alarm_target_mm = 0;
     data->alarmSoundStartTime = 0;
     system("pkill -f 'aplay alarm.wav' 2>/dev/null");
     gtk_label_set_text(data->alarmCountdownLabel, "");

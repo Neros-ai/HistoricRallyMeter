@@ -19,7 +19,6 @@ int64_t pressTimeMs(int64_t press_ms, int offset_ms);
 
 // How far back the car was, in metres / centimetres / counts (never negative for a late press).
 double pressBackMetres(double speed_mps, int offset_ms);
-long pressBackCm(double speed_mps, int offset_ms);
 int64_t pressBackMm(double speed_mps, int offset_ms);
 
 // The display speed (kph, or mph when `mph`; negative = no reading) in metres per second.

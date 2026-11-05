@@ -20,9 +20,9 @@ class TestTotalReset {
         s.segment_start_time_ms = 200000;
         s.segment_current_number = 1;
         s.stage_complete = false;
-        s.total_distance_adjust_cm = -1000;
-        s.trip_distance_adjust_cm = -1000;
-        s.segment_start_adjust_cm = 0;
+        s.total_distance_adjust_mm = -10000;
+        s.trip_distance_adjust_mm = -10000;
+        s.segment_start_adjust_mm = 0;
         return s;
     }
 
@@ -42,11 +42,11 @@ public:
             s.total_start_cntr1 = s.total_start_cntr2 = 1000;
             s.trip_start_cntr1  = s.trip_start_cntr2  = 2000;
             s.segment_start_cntr1 = s.segment_start_cntr2 = 2500;
-            s.total_distance_adjust_cm = -1000;
-            s.trip_distance_adjust_cm  = -1000;
-            s.segment_start_adjust_cm  = -500;
+            s.total_distance_adjust_mm = -10000;
+            s.trip_distance_adjust_mm  = -10000;
+            s.segment_start_adjust_mm  = -5000;
             s.alarm_distance_km = 20;
-            s.alarm_target_counts = 25000;
+            s.alarm_target_mm = 23000000;
 
             rebaseTotalDistance(s, 6000, 6000);
             rebaseTripDistance(s, 6000, 6000);
@@ -57,12 +57,12 @@ public:
             ASSERT_EQ(s.trip_start_cntr2, 6000u);
             ASSERT_EQ(s.segment_start_cntr1, 6000u);
             ASSERT_EQ(s.segment_start_cntr2, 6000u);
-            ASSERT_EQ(s.total_distance_adjust_cm, 0);
-            ASSERT_EQ(s.trip_distance_adjust_cm, 0);
-            ASSERT_EQ(s.segment_start_adjust_cm, 0);
+            ASSERT_EQ(s.total_distance_adjust_mm, 0);
+            ASSERT_EQ(s.trip_distance_adjust_mm, 0);
+            ASSERT_EQ(s.segment_start_adjust_mm, 0);
             // The whole point: 5000 counts were covered, so the alarm has its
             // remaining 20000 rather than the old absolute 25000.
-            ASSERT_EQ(s.alarm_target_counts, 20000);
+            ASSERT_EQ(s.alarm_target_mm, 20000000);
             return true;
         });
 
@@ -75,10 +75,10 @@ public:
             s.counters = false;                 // counter 1 alone
             s.total_start_cntr1 = s.total_start_cntr2 = 1000;
             s.alarm_distance_km = 20;
-            s.alarm_target_counts = 25000;      // set when 5000 counts were up
+            s.alarm_target_mm = 23000000;       // set when 5000 counts (3,000,000 mm) were up
             // Reset with the car at 6000: 5000 counts covered since the zero.
             rebaseTotalDistance(s, 6000, 6000);
-            ASSERT_EQ(s.alarm_target_counts, 20000);   // still 20000 to run
+            ASSERT_EQ(s.alarm_target_mm, 20000000);   // still 20 km to run
             return true;
         });
 
@@ -87,10 +87,27 @@ public:
             s.counters = false;
             s.total_start_cntr1 = s.total_start_cntr2 = 1000;
             s.alarm_distance_km = 20;
-            s.alarm_target_counts = 5000;
+            s.alarm_target_mm = 3000000;
             rebaseTotalDistance(s, 20000, 20000);      // 19000 covered
-            ASSERT_EQ(s.alarm_target_counts, 0);
+            ASSERT_EQ(s.alarm_target_mm, 0);
             return true;
+        });
+
+        suite->addTest("an old config's alarm target in pulses loads as mm; a new _mm key wins", []() {
+            const char* path = "test_alarm_old.json";
+            FILE* f = fopen(path, "w");
+            fputs("{\n  \"calibration\": 600000,\n  \"alarm_target_counts\": 5000\n}\n", f);
+            fclose(f);
+            RallyState s;
+            ConfigFile::load(s, path);
+            const bool old_ok = s.alarm_target_mm == 3000000;
+            f = fopen(path, "w");
+            fputs("{\n  \"calibration\": 600000,\n  \"alarm_target_mm\": 7000000,\n  \"alarm_target_counts\": 5000\n}\n", f);
+            fclose(f);
+            RallyState n;
+            ConfigFile::load(n, path);
+            std::remove(path);
+            return old_ok && n.alarm_target_mm == 7000000;
         });
 
         suite->addTest("a Total reset with no alarm set touches nothing", []() {
@@ -98,9 +115,9 @@ public:
             s.counters = false;
             s.total_start_cntr1 = s.total_start_cntr2 = 1000;
             s.alarm_distance_km = 0;
-            s.alarm_target_counts = 0;
+            s.alarm_target_mm = 0;
             rebaseTotalDistance(s, 6000, 6000);
-            ASSERT_EQ(s.alarm_target_counts, 0);
+            ASSERT_EQ(s.alarm_target_mm, 0);
             return true;
         });
 
@@ -193,9 +210,9 @@ public:
             ASSERT_EQ(s.total_start_cntr2, 5002u);
             ASSERT_EQ(s.trip_start_cntr1, 5000u);
             ASSERT_EQ(s.segment_start_cntr1, 5000u);
-            ASSERT_EQ(s.total_distance_adjust_cm, 0);
-            ASSERT_EQ(s.trip_distance_adjust_cm, 0);
-            ASSERT_EQ(s.segment_start_adjust_cm, 0);
+            ASSERT_EQ(s.total_distance_adjust_mm, 0);
+            ASSERT_EQ(s.trip_distance_adjust_mm, 0);
+            ASSERT_EQ(s.segment_start_adjust_mm, 0);
             // The stage clock is untouched: the gauge shows the lateness.
             ASSERT_EQ(s.total_start_time_ms, 100000);
             ASSERT_EQ(s.segment_start_time_ms, 100000);
@@ -217,8 +234,8 @@ public:
             s.stage_complete = false;
             s.auto_start_rally_time_s = 1000;
             s.auto_start_early_departure = true;
-            s.total_distance_adjust_cm = -500;
-            s.trip_distance_adjust_cm = -500;
+            s.total_distance_adjust_mm = -5000;
+            s.trip_distance_adjust_mm = -5000;
 
             applyTotalResetAwaitingEarlyDeparture(s, 7000, 7002, 90000);
 
@@ -226,9 +243,9 @@ public:
             ASSERT_EQ(s.total_start_cntr2, 7002u);
             ASSERT_EQ(s.trip_start_cntr1, 7000u);
             ASSERT_EQ(s.segment_start_cntr1, 7000u);
-            ASSERT_EQ(s.total_distance_adjust_cm, 0);
-            ASSERT_EQ(s.trip_distance_adjust_cm, 0);
-            ASSERT_EQ(s.segment_start_adjust_cm, 0);
+            ASSERT_EQ(s.total_distance_adjust_mm, 0);
+            ASSERT_EQ(s.trip_distance_adjust_mm, 0);
+            ASSERT_EQ(s.segment_start_adjust_mm, 0);
             ASSERT_EQ(s.segment_start_time_ms, 90000);
             // The minute zeroes the clocks, not this press.
             ASSERT_EQ(s.total_start_time_ms, 50000);
@@ -252,7 +269,7 @@ public:
             ASSERT_EQ(s.trip_start_cntr1, 9000u);
             ASSERT_EQ(s.total_start_time_ms, 400000);
             ASSERT_EQ(s.trip_start_time_ms, 400000);
-            ASSERT_EQ(s.trip_distance_adjust_cm, 0);
+            ASSERT_EQ(s.trip_distance_adjust_mm, 0);
             ASSERT_EQ(s.segment_current_number, -1);
             ASSERT_TRUE(s.stage_complete);
             ASSERT_EQ(s.auto_start_rally_time_s, 1000u);
@@ -267,10 +284,10 @@ public:
 
             ASSERT_EQ(s.trip_start_cntr1, 5000u);
             ASSERT_EQ(s.trip_start_time_ms, 300000);
-            ASSERT_EQ(s.trip_distance_adjust_cm, 0);
+            ASSERT_EQ(s.trip_distance_adjust_mm, 0);
             ASSERT_EQ(s.total_start_cntr1, before.total_start_cntr1);
             ASSERT_EQ(s.total_start_time_ms, before.total_start_time_ms);
-            ASSERT_EQ(s.total_distance_adjust_cm, before.total_distance_adjust_cm);
+            ASSERT_EQ(s.total_distance_adjust_mm, before.total_distance_adjust_mm);
             ASSERT_EQ(s.segment_start_cntr1, before.segment_start_cntr1);
             ASSERT_EQ(s.segment_start_time_ms, before.segment_start_time_ms);
             ASSERT_EQ(s.segment_current_number, 1);
@@ -289,9 +306,9 @@ public:
             ASSERT_EQ(s.total_start_time_ms, 300000);
             ASSERT_EQ(s.segment_start_time_ms, 300000);
             ASSERT_EQ(s.trip_start_time_ms, 300000);
-            ASSERT_EQ(s.total_distance_adjust_cm, 0);
-            ASSERT_EQ(s.trip_distance_adjust_cm, 0);
-            ASSERT_EQ(s.segment_start_adjust_cm, 0);
+            ASSERT_EQ(s.total_distance_adjust_mm, 0);
+            ASSERT_EQ(s.trip_distance_adjust_mm, 0);
+            ASSERT_EQ(s.segment_start_adjust_mm, 0);
             ASSERT_EQ(s.segment_current_number, -1);
             ASSERT_TRUE(s.stage_complete);
             return true;
@@ -301,7 +318,7 @@ public:
             RallyState s;
             s.trip_start_cntr1 = s.trip_start_cntr2 = 1234;
             s.trip_start_time_ms = 777;
-            s.trip_distance_adjust_cm = -300;
+            s.trip_distance_adjust_mm = -3000;
 
             applyTotalResetToIdle(s, 5000, 5000, 300000, false);
 
@@ -309,7 +326,7 @@ public:
             ASSERT_EQ(s.total_start_time_ms, 300000);
             ASSERT_EQ(s.trip_start_cntr1, 1234u);
             ASSERT_EQ(s.trip_start_time_ms, 777);
-            ASSERT_EQ(s.trip_distance_adjust_cm, -300);
+            ASSERT_EQ(s.trip_distance_adjust_mm, -3000);
             return true;
         });
 
@@ -317,7 +334,7 @@ public:
             // Contingency 2: 50 m knocked off in segment 1 must not leave
             // Trip reading 50 m short all through segment 2.
             RallyState s = runningStage();
-            s.trip_distance_adjust_cm = -5000;
+            s.trip_distance_adjust_mm = -50000;
             s.segment_start_time_ms = 250000;   // the new segment's start
 
             rebaseTripToSegment(s, 6000, 6004);
@@ -325,9 +342,9 @@ public:
             ASSERT_EQ(s.trip_start_cntr1, 6000u);
             ASSERT_EQ(s.trip_start_cntr2, 6004u);
             ASSERT_EQ(s.trip_start_time_ms, 250000);
-            ASSERT_EQ(s.trip_distance_adjust_cm, 0);
+            ASSERT_EQ(s.trip_distance_adjust_mm, 0);
             // Total's correction still stands: it is stage distance.
-            ASSERT_EQ(s.total_distance_adjust_cm, -1000);
+            ASSERT_EQ(s.total_distance_adjust_mm, -10000);
             return true;
         });
 

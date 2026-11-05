@@ -145,13 +145,6 @@ public:
                 && r[1].to_m == 2300;
         });
 
-        suite->addTest("counts are recomputed from kph and metres", []() {
-            auto v = sample();
-            recomputeSegmentCounts(v, 600000);
-            return std::abs(v[0].distance_counts - (1000.0 * 1e6) / 600000) < 1e-6
-                && v[0].target_speed_counts_per_hour > 0;
-        });
-
         suite->addTest("time of day: 10:45, 10:45:30, junk", []() {
             return parseTimeOfDay("10:45") == 38700 && parseTimeOfDay("10:45:30") == 38730
                 && parseTimeOfDay("25:00") == -1 && parseTimeOfDay("abc") == -1

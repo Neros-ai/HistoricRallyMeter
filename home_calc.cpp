@@ -46,11 +46,16 @@ long countdownMetres(const std::vector<Segment>& segs, long cur, long total_show
     return static_cast<long>(stageRowEndMm(segs, end_idx) / 1000) - total_shown_m;
 }
 
+long rowCountdownMetres(const std::vector<Segment>& segs, long cur, int64_t stage_mm) {
+    if (cur < 0 || cur >= static_cast<long>(segs.size())) return 0;
+    const int64_t left_mm = stageRowEndMm(segs, cur) - stage_mm;
+    return static_cast<long>(left_mm >= 0 ? (left_mm + 999) / 1000 : -((-left_mm) / 1000));
+}
+
 long foldCarriedRows(std::vector<Segment>& segs, long cur) {
     const long target = nextChangeIndex(segs, cur);
     if (target < 0 || target <= cur + 1) return 0;
     for (long i = cur + 1; i < target; i++) {
-        segs[cur].distance_counts += segs[i].distance_counts;
         segs[cur].distance_m += segs[i].distance_m;
     }
     // The merged row ends where the last folded row did, so it keeps that row's auto setting

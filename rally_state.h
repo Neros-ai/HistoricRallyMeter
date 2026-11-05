@@ -32,15 +32,15 @@ public:
     // starts -- even though the -10/+10 buttons that set them always write
     // to both together (a wheel-slip correction affects the one shared
     // measurement both readouts are derived from).
-    long total_distance_adjust_cm = 0;
-    // total_distance_adjust_cm as it stood when the current segment began.
+    long total_distance_adjust_mm = 0;
+    // total_distance_adjust_mm as it stood when the current segment began.
     // Only the correction made SINCE then belongs to this segment: an earlier
     // one already moved the boundary it was made before, and applying it again
     // here would shift every later segment by the same amount a second time.
-    long segment_start_adjust_cm = 0;
+    long segment_start_adjust_mm = 0;
     // False for a config written before the field existed; see ConfigFile::load.
     bool segment_start_adjust_recorded = false;
-    long trip_distance_adjust_cm = 0;
+    long trip_distance_adjust_mm = 0;
     // The last six Trip readings in whole metres, newest first, comma
     // separated. Recorded each time Trip is zeroed (see rebaseTripDistance).
     std::string trip_history_m;
@@ -162,7 +162,7 @@ public:
     
     // Alarm: co-pilot sets distance alarm that rings a doorbell
     int alarm_distance_km = 0;          // 0 = no alarm active
-    int64_t alarm_target_counts = 0;    // absolute count target from total_start
+    int64_t alarm_target_mm = 0;        // absolute target, mm from the Total zero
 
     // Beep Assist: operator-entered waypoints that sound a short beep as they
     // are reached, so the co-pilot's eyes can stay on the roadbook instead of
@@ -247,13 +247,13 @@ public:
     // Total key at rest and by a power loss; +10 / -10 correct it too.
     uint64_t odometer_start_cntr1 = 0;
     uint64_t odometer_start_cntr2 = 0;
-    long odometer_adjust_cm = 0;
+    long odometer_adjust_mm = 0;
     bool odometer_recorded = true;      // false for a config written before it existed; not persisted
     // When the running italian sector actually started (rally ms, floored to the
     // minute): the co's in-time is this plus the sector duration.
     int64_t sector_start_ms = 0;
     // Navi total (cm) when the sector started: the car's position in the roadbook is navi minus this.
-    long sector_start_odometer_cm = 0;
+    long sector_start_odometer_mm = 0;
     // The card's sector duration (ms), fixed when the sector starts: the co in-time is
     // sector_start_ms plus this, whatever later presses do to the rows.
     int64_t sector_card_ms = 0;
@@ -270,19 +270,19 @@ public:
         bool valid = false;
         long index = -1;                // the segment the press left
         int64_t total_start_ms = 0;
-        long total_adjust_cm = 0;
+        long total_adjust_mm = 0;
         uint64_t seg_c1 = 0, seg_c2 = 0;
-        long seg_adjust_cm = 0;
+        long seg_adjust_mm = 0;
         int64_t seg_start_ms = 0;
         uint64_t trip_c1 = 0, trip_c2 = 0;
         int64_t trip_start_ms = 0;
-        long trip_adjust_cm = 0;
+        long trip_adjust_mm = 0;
         std::string trip_history;
         PcError pc_error;
         int64_t trial_start_ms = 0;
         double trial_start_m = -1.0;
-        long after_total_adjust_cm = 0;   // the corrections as next left them: a -10 or set
-        long after_trip_adjust_cm = 0;    // made since is carried through prev
+        long after_total_adjust_mm = 0;   // the corrections as next left them: a -10 or set
+        long after_trip_adjust_mm = 0;    // made since is carried through prev
     };
     SectorUndo sector_undo;
 

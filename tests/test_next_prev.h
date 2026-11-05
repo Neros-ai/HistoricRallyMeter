@@ -30,7 +30,7 @@ public:
             auto segs = roadbook();                 // 1000 / 2000 / 1500 = 4500
             // In segment 1 (Auto off), pressed at 2500 -- well past its own
             // 1000, but inside segment 2, which ends at 3000.
-            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, M(2500), 600000));
+            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, M(2500)));
             ASSERT_NEAR(segs[0].distance_m, Mm(2500.0), 0.001);
             ASSERT_NEAR(segs[1].distance_m, Mm(500.0), 0.001);
             ASSERT_NEAR(segs[2].distance_m, Mm(1500.0), 0.001);
@@ -48,7 +48,7 @@ public:
         suite->addTest("a press past the next segment keeps that segment whole", []() {
             auto segs = roadbook();                 // 1000 / 2000 / 1500 = 4500
             // In segment 1, pressed at 3500 -- past segment 2's end at 3000.
-            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, M(3500), 600000));
+            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, M(3500)));
             ASSERT_NEAR(segs[0].distance_m, Mm(3500.0), 0.001);
             ASSERT_NEAR(segs[1].distance_m, Mm(2000.0), 0.001);  // untouched
             ASSERT_NEAR(segs[2].distance_m, Mm(1500.0), 0.001);
@@ -80,15 +80,14 @@ public:
             recordSegmentChange(state, 0, false);
             // The press: retime, step on, and move both segment baselines to
             // the press -- what on_next_press does.
-            ASSERT_TRUE(retimeSegmentBoundaryForward(state.stage_segments, 0, M(600),
-                                                     state.calibration));
+            ASSERT_TRUE(retimeSegmentBoundaryForward(state.stage_segments, 0, M(600)));
             state.segment_current_number = 1;
             state.segment_start_time_ms = 601000;
             // Trip was zeroed at the press and has been counting since.
             state.trip_start_cntr1 = 900;
             state.trip_start_cntr2 = 900;
             state.trip_start_time_ms = 601000;
-            state.trip_distance_adjust_cm = 250;
+            state.trip_distance_adjust_mm = 2500;
 
             // prev, with the car at 800 counts into the stage.
             ASSERT_TRUE(undoSegmentChange(state, 800, 800, M(800)));
@@ -101,7 +100,7 @@ public:
             ASSERT_EQ(state.trip_start_cntr2, state.segment_start_cntr2);
             ASSERT_EQ(state.trip_start_time_ms, state.segment_start_time_ms);
             ASSERT_EQ(state.trip_start_time_ms, 1000);
-            ASSERT_EQ(state.trip_distance_adjust_cm, 0);
+            ASSERT_EQ(state.trip_distance_adjust_mm, 0);
             // The pair must describe the same journey: distance measured from
             // the segment's start, over time measured from the same instant.
             // Mismatched, Trip's average reads hundreds of times too high.
@@ -138,16 +137,16 @@ public:
         suite->addTest("prev merges the segment back and keeps the next known point", []() {
             auto segs = roadbook();
             // "next" pressed too early, at 600: boundary 1 moved to 600.
-            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, M(600), 600000));
+            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, M(600)));
             ASSERT_EQ(segmentStartStageMm(segs, 2), M(3000));   // next known point
             // prev: segment 0 runs on to that known point, segment 1 is empty.
-            ASSERT_TRUE(mergeSegmentBack(segs, 1, 600000));
+            ASSERT_TRUE(mergeSegmentBack(segs, 1));
             ASSERT_NEAR(segs[0].distance_m, Mm(3000.0), 0.001);
             ASSERT_NEAR(segs[1].distance_m, Mm(0.0), 0.001);
             ASSERT_EQ(segmentStartStageMm(segs, 2), M(3000));   // unmoved
             // "next" at the real change point, 1200: back to two segments
             // with the known point still at 3000.
-            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, M(1200), 600000));
+            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, M(1200)));
             ASSERT_NEAR(segs[0].distance_m, Mm(1200.0), 0.001);
             ASSERT_NEAR(segs[1].distance_m, Mm(1800.0), 0.001);
             ASSERT_EQ(segmentStartStageMm(segs, 2), M(3000));
@@ -158,19 +157,19 @@ public:
             auto segs = roadbook();
             segs[0].autoNext = true;    // auto change, fired too early
             segs[1].autoNext = false;   // ends at a timing point: manual
-            ASSERT_TRUE(mergeSegmentBack(segs, 1, 600000));
+            ASSERT_TRUE(mergeSegmentBack(segs, 1));
             ASSERT_FALSE(segs[0].autoNext);
             segs = roadbook();
             segs[0].autoNext = false;
             segs[1].autoNext = true;
-            ASSERT_TRUE(mergeSegmentBack(segs, 1, 600000));
+            ASSERT_TRUE(mergeSegmentBack(segs, 1));
             ASSERT_TRUE(segs[0].autoNext);
             return true;
         });
 
         suite->addTest("prev refuses on the first segment", []() {
             auto segs = roadbook();
-            ASSERT_FALSE(mergeSegmentBack(segs, 0, 600000));
+            ASSERT_FALSE(mergeSegmentBack(segs, 0));
             ASSERT_NEAR(segs[0].distance_m, Mm(1000.0), 0.001);
             return true;
         });
@@ -179,13 +178,13 @@ public:
             for (bool two_wheel : {true, false}) {
                 RallyState s;
                 s.counters = two_wheel;
-                s.total_distance_adjust_cm = -500;
+                s.total_distance_adjust_mm = -5000;
                 rebaseSegmentAt(s, 10000, 10040, M(1700));
                 ASSERT_EQ(calculateDistanceCounts(s, 10000, 10040,
                                                   s.segment_start_cntr1, s.segment_start_cntr2), 1700);
                 // The correction as it stands now belongs to the stage, not
                 // to the segment being re-entered.
-                ASSERT_EQ(s.segment_start_adjust_cm, -500);
+                ASSERT_EQ(s.segment_start_adjust_mm, -5000);
             }
             return true;
         });
@@ -233,7 +232,7 @@ public:
             s.stage_segments = roadbook();
             s.segment_current_number = 0;
             recordSegmentChange(s, 0, false);
-            ASSERT_TRUE(retimeSegmentBoundaryForward(s.stage_segments, 0, M(500), 600000));
+            ASSERT_TRUE(retimeSegmentBoundaryForward(s.stage_segments, 0, M(500)));
             s.segment_current_number = 1;
             // prev at 700: short of 1000, so back in the earlier segment.
             ASSERT_TRUE(undoSegmentChange(s, 10700, 10700, M(700)));
@@ -251,7 +250,7 @@ public:
             s.stage_segments = roadbook();
             s.segment_current_number = 0;
             recordSegmentChange(s, 0, false);
-            ASSERT_TRUE(retimeSegmentBoundaryForward(s.stage_segments, 0, M(500), 600000));
+            ASSERT_TRUE(retimeSegmentBoundaryForward(s.stage_segments, 0, M(500)));
             s.segment_current_number = 1;
             // Noticed only at 1100: past 1000, so it stays in segment 1,
             // counted from 1000.

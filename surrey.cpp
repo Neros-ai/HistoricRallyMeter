@@ -9,7 +9,7 @@ bool isSurrey(const RallyState& s) {
 }
 
 long surreyNaviMetres(const RallyState& s, uint64_t c1, uint64_t c2) {
-    return adjustedDistanceMeters(countsToCentimeters(odometerCounts(s, c1, c2), s.calibration), 0);
+    return adjustedDistanceMetersMm(odometerMm(s, c1, c2), 0);
 }
 
 int tripHistoryRows(const RallyState&) {
@@ -43,12 +43,11 @@ bool fitStageToStart(std::vector<Segment>& stage_segs, double first_from_m, doub
         navi_at_press_m >= first_from_m + row.distance_m)
         return false;
     row.distance_m = (first_from_m + row.distance_m) - navi_at_press_m;
-    row.distance_counts = (row.distance_m * 1e6) / calibration;
     return true;
 }
 
 void surreyStart(RallyState& s, const RallyState::MemorySlot& slot) {
-    const double navi_m = s.sector_start_odometer_cm / 100.0;
+    const double navi_m = s.sector_start_odometer_mm / 1000.0;
     fitStageToStart(s.stage_segments, slot.first_from_m, navi_m, s.calibration);
     // The previous stage's time taken stays on Home until the next stage finishes (mockup S1).
     s.surrey_finish_at_ms = 0;

@@ -61,14 +61,13 @@ int arrowToneGapMs(double errorSeconds) {
 
 ArrowToneResult computeArrowBasedTone(ArrowToneState& state,
                                         double secondsAheadBehind,
-                                        double targetSpeedCountsPerHour,
-                                        long calibration,
+                                        double targetSpeedKph,
                                         bool unitsMph,
                                         double stageDistanceMeters,
                                         bool pastStageEnd) {
     ArrowToneResult result{0, false, false, 0, 0, 0.0};
 
-    double target_kph_raw = countsPerHourToKPH(targetSpeedCountsPerHour, calibration);
+    double target_kph_raw = targetSpeedKph;
     if (target_kph_raw <= 0.0) {
         state.lastCommittedSeconds = 0.0;
         return result;

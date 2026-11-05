@@ -158,23 +158,23 @@ std::string buildTelemetryJson(AppData* data) {
     int64_t trip_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
         data->state->trip_start_cntr1, data->state->trip_start_cntr2);
-    long trip_m = adjustedDistanceMeters(
-        countsToCentimeters(trip_count_diff, data->state->calibration),
-        data->state->trip_distance_adjust_cm);
+    long trip_m = adjustedDistanceMetersMm(
+        countsToMm(trip_count_diff, data->state->calibration),
+        data->state->trip_distance_adjust_mm);
     const bool hold_at_zero = autoStartHoldActive(data);
     double trip_avg = averageSpeedForDisplay(calculateAverageSpeed(*data->state,
         data->state->trip_start_time_ms, current_time_ms, trip_count_diff,
-        data->state->trip_distance_adjust_cm), hold_at_zero);
+        data->state->trip_distance_adjust_mm), hold_at_zero);
 
     int64_t total_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
         data->state->total_start_cntr1, data->state->total_start_cntr2);
-    long total_m = adjustedDistanceMeters(
-        countsToCentimeters(total_count_diff, data->state->calibration),
-        data->state->total_distance_adjust_cm);
+    long total_m = adjustedDistanceMetersMm(
+        countsToMm(total_count_diff, data->state->calibration),
+        data->state->total_distance_adjust_mm);
     double total_avg = averageSpeedForDisplay(calculateAverageSpeed(*data->state,
         data->state->total_start_time_ms, current_time_ms, total_count_diff,
-        data->state->total_distance_adjust_cm), hold_at_zero);
+        data->state->total_distance_adjust_mm), hold_at_zero);
 
     double cur_speed = calculateCurrentSpeed(*data->state, raw_poll, tenth_poll);
     if (cur_speed < 0) cur_speed = 0.0;
@@ -184,14 +184,14 @@ std::string buildTelemetryJson(AppData* data) {
     if (data->state->segment_current_number >= 0 &&
         data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
         const Segment& seg = data->state->stage_segments[data->state->segment_current_number];
-        target_kph = countsPerHourToKPH(seg.target_speed_counts_per_hour, data->state->calibration);
+        target_kph = seg.target_speed_kph;
         // The corrected stage distance, matching ui_driver: see
         // stageCountsCorrected. total_count_diff above stays raw because
         // adjustedDistanceMeters applies the same correction to the odometer
         // itself, and applying it twice would double it.
         // The driver gauge's own figure (italian: the pc / pm error, at rest elsewhere).
         ahead_behind_s = gaugeAheadSeconds(*data->state, current_poll.cntr1, current_poll.cntr2,
-            current_time_ms, stageCountsCorrected(data, current_poll));
+            current_time_ms, stagePositionMm(*data->state, current_poll.cntr1, current_poll.cntr2));
         // The same hold the driver display applies (ui_driver.cpp). Held here
         // too, or the phone would show the previous stage's error climbing at
         // the line while the driver's gauge sits at rest -- two screens
@@ -255,19 +255,25 @@ std::string buildTelemetryJson(AppData* data) {
     const RallyState& st = *data->state;
     if (st.segment_current_number >= 0 &&
         st.segment_current_number < static_cast<long>(st.stage_segments.size())) {
-        const Segment& cur = st.stage_segments[st.segment_current_number];
-        int64_t seg_diff = segmentCountsCorrected(data, current_poll);
-        long rem_cm = countsToCentimeters(static_cast<int64_t>(cur.distance_counts) - seg_diff, st.calibration);
-        next_m = (rem_cm >= 0) ? (rem_cm + 99) / 100 : -((-rem_cm) / 100);
         has_next_m = true;
-        // Same countdown as the box: to the next speed change, through carried rows.
+        // Same countdown as the box: greek and surrey count to the next speed change from the stage start,
+        // italian counts the row's own distance.
         const bool greek_like = st.rally_type != 2;
-        if (greek_like) next_m = countdownMetres(st.stage_segments, st.segment_current_number,
-                                                  totalShownMetres(st, current_poll.cntr1, current_poll.cntr2));
+        double row_left_m;
+        if (greek_like) {
+            next_m = countdownMetres(st.stage_segments, st.segment_current_number,
+                                     totalShownMetres(st, current_poll.cntr1, current_poll.cntr2));
+            row_left_m = static_cast<double>(stageRowEndMm(st.stage_segments, st.segment_current_number)
+                             - stagePositionMm(st, current_poll.cntr1, current_poll.cntr2)) / 1000.0;
+        } else {
+            const int64_t pos_mm = stagePositionMm(st, current_poll.cntr1, current_poll.cntr2);
+            next_m = rowCountdownMetres(st.stage_segments, st.segment_current_number, pos_mm);
+            row_left_m = static_cast<double>(stageRowEndMm(st.stage_segments, st.segment_current_number) - pos_mm) / 1000.0;
+        }
         // The box draws mm:ss to the next speed change under the third figure, in greek only.
         if (st.rally_type == 0) {
             bool ok = false;
-            const double secs = nextChangeSeconds(st.stage_segments, st.segment_current_number, rem_cm / 100.0, &ok);
+            const double secs = nextChangeSeconds(st.stage_segments, st.segment_current_number, row_left_m, &ok);
             if (ok) speed_change = formatClockMmSs(secs);
         }
     }
@@ -309,7 +315,7 @@ std::string buildTelemetryJson(AppData* data) {
     std::string itCount = "null";
     std::string sectorJson = "null";
     if (st.rally_type == 2) {
-        const long stage_m = countsToCentimeters(stageCountsCorrected(data, current_poll), st.calibration) / 100;
+        const long stage_m = stagePositionMm(st, current_poll.cntr1, current_poll.cntr2) / 1000;
         const SectorPanel sp = sectorPanel(st, current_time_ms, stage_m);
         if (sp.running) {
             itCount = "{\"km\":\"" + sectorCountdownKmText(sp) + "\",\"past\":" + (sp.metresPast > 0 ? "true" : "false") +

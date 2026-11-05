@@ -76,15 +76,15 @@ double calculateCurrentSpeed(const RallyState& state, const CounterPoll& current
                             const CounterPoll& tenth);
 
 // Calculate average speed
-// Average speed over a window. adjust_cm is the manual -10/+10 correction for
-// the counter in question (total_distance_adjust_cm / trip_distance_adjust_cm)
+// Average speed over a window. adjust_mm is the manual -10/+10 correction for
+// the counter in question (total_distance_adjust_mm / trip_distance_adjust_mm)
 // and is applied exactly as adjustedDistanceMeters applies it to the readout:
 // without it, a correction moved the displayed distance while the average
 // speed carried on using the uncorrected distance, so the two numbers on the
 // same panel disagreed for the rest of the stage.
 double calculateAverageSpeed(const RallyState& state, int64_t start_time_ms, 
                             int64_t current_time_ms, int64_t count_diff,
-                            long adjust_cm = 0);
+                            long adjust_mm = 0);
 
 // Target speed of the segment AFTER the current one, in KPH. Returns false --
 // leaving *kph untouched -- outside a stage or on the last segment, i.e.
@@ -289,7 +289,7 @@ long totalShownMetres(const RallyState& s, uint64_t c1, uint64_t c2);
 void resetTrip(RallyState& state, uint64_t c1, uint64_t c2, int64_t now_ms);
 // A segment change: Trip becomes the new segment's odometer, measured from the
 // segment's own start. Trip's correction expires with its old baseline; Total
-// keeps the correction. Only Trip's copy goes: total_distance_adjust_cm is
+// keeps the correction. Only Trip's copy goes: total_distance_adjust_mm is
 // untouched here, so a -10 made in the last segment still holds on Total, on
 // stage distance and on every roadbook comparison. Trip's copy expires because
 // Trip is no longer measuring the stretch that -10 belonged to -- carrying it
@@ -327,12 +327,17 @@ double calculateAheadBehind(const RallyState& state, int64_t current_time_ms,
 // if any segment up to and including the current one had distance but no
 // speed, in which case the returned figure is not trustworthy. Left null by
 // callers that do not care.
-double calculateIdealCountsFromStageStart(const RallyState& state, int64_t elapsed_ms,
-                                          bool* roadbook_complete = nullptr);
+// The figure is in millimetres from the stage start; speeds are the rows' typed km/h.
+double calculateIdealMmFromStageStart(const RallyState& state, int64_t elapsed_ms,
+                                      bool* roadbook_complete = nullptr);
 
 // Calculate seconds ahead/behind from stage start (accounts for all segments)
+// `actual_stage_mm` is where the car is (stagePositionMm).
 double calculateAheadBehindFromStageStart(const RallyState& state, int64_t current_time_ms,
-                                          int64_t actual_counts_from_stage_start);
+                                          int64_t actual_stage_mm);
+
+// Pulses to millimetres at the calibration, the one place a pulse count becomes a distance for the stage maths.
+int64_t countsToMm(int64_t counts, long calibration);
 
 // Format a distance in meters with thousands-separator commas. No unit
 // suffix and no padding -- callers that need column alignment use GTK
@@ -355,30 +360,11 @@ std::string formatElapsedInterval(int64_t total_secs);
 // never fall below zero. Clamping the correction rather than the displayed
 // value matters: otherwise repeated downward presses bank an invisible debt
 // that silently swallows the next stretch of real travel.
-long clampDistanceAdjust(long raw_cm, long proposed_adjust_cm);
+long clampDistanceAdjust(long raw_mm, long proposed_adjust_mm);
 
-// Apply a manual distance correction (centimetres) to a raw distance
-// (centimetres) and return whole metres, truncating the same way the
-// uncorrected path does.
-long adjustedDistanceMeters(long raw_cm, long adjust_cm);
-
-// The same manual correction, expressed in counts so it can be applied to the
-// quantities that are compared against a roadbook's distance_counts rather
-// than displayed. Without this the -10/set correction reaches only the
-// odometer and the average speed: the ahead/behind figure, the segment
-// auto-advance and the end of the stage all keep counting the distance the
-// crew just told the box they had not driven. A wrong turn corrected with
-// five presses of -10 would leave the gauge saying "on time" while the crew
-// were a segment's worth of seconds behind, and would move every remaining
-// segment boundary 50 m up the road. Clamped at zero the way
-// adjustedDistanceMeters is, so an over-correction reads as "at the start"
-// rather than as negative progress.
-int64_t correctedDistanceCounts(int64_t raw_counts, long adjust_cm, long calibration);
-
-// The same correction without the floor at zero, for navi total (the odometer). A navi whose
-// counter is behind its start point must read negative, so a crew can see something is wrong,
-// instead of sitting silently at 0.
-int64_t signedCorrectedDistanceCounts(int64_t raw_counts, long adjust_cm, long calibration);
+// Apply a manual distance correction to a raw distance (both in millimetres) and return whole metres,
+// cut toward zero. The one form every readout uses, so no distance goes through whole pulses or centimetres.
+long adjustedDistanceMetersMm(int64_t raw_mm, long adjust_mm);
 
 // The "next"/"prev" buttons move ONE boundary and nothing else. The crew press
 // them when the distance at which the speed changes was not known in advance:
@@ -397,12 +383,11 @@ int64_t signedCorrectedDistanceCounts(int64_t raw_counts, long adjust_cm, long c
 // same distance comes off segment `index`.
 // Both return false, changing nothing, when the neighbour does not exist.
 // `driven_mm` is the distance driven in segment `index` at the press, in millimetres from the segment's start
-// (the stage position minus where the segment starts). The row lengths are the typed metres; `calibration` only
-// keeps the derived pulse copy of each length in step until that copy is removed.
+// (the stage position minus where the segment starts). The row lengths are the typed metres.
 bool retimeSegmentBoundaryForward(std::vector<Segment>& segs, long index,
-                                  int64_t driven_mm, long calibration);
+                                  int64_t driven_mm);
 bool retimeSegmentBoundaryBackward(std::vector<Segment>& segs, long index,
-                                   int64_t driven_mm, long calibration);
+                                   int64_t driven_mm);
 
 // "prev" (owner's ruling, 2026-09-14): undo a speed change. The previous
 // segment's speed comes back at once and the change point becomes unknown
@@ -411,7 +396,7 @@ bool retimeSegmentBoundaryBackward(std::vector<Segment>& segs, long index,
 // move -- and segment `index` is left at zero length, to be given its real
 // start by the next "next" press. Returns false, changing nothing, when there
 // is no previous segment.
-bool mergeSegmentBack(std::vector<Segment>& segs, long index, long calibration);
+bool mergeSegmentBack(std::vector<Segment>& segs, long index);
 
 // Stage distance, in millimetres from the stage start, at which segment `index` starts: the sum of every
 // segment before it.

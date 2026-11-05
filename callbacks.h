@@ -159,14 +159,6 @@ void adoptRoadbookAsStage(AppData* data);
 // The opposite: no stage running, so the gauge rests and the roadbook is free.
 void endStageAsIdle(AppData* data);
 
-// Stage and current-segment distance in counts, with the crew's manual
-// correction applied. Every comparison against a roadbook distance -- the
-// ahead/behind figure, the segment auto-advance, the end of the stage, the
-// "next" readout and the gauge's segment chevrons -- goes through these, so
-// the -10/set button moves all of them together instead of the odometer
-// alone. See correctedDistanceCounts in calculations.h.
-int64_t stageCountsCorrected(AppData* data, const CounterPoll& poll);
-int64_t segmentCountsCorrected(AppData* data, const CounterPoll& poll);
 
 // Adopts the edited roadbook as the stage roadbook, but only when no stage
 // is under way. Call after any change to state->segments.
@@ -189,11 +181,11 @@ void applyDistanceAdjust(AppData* data, long delta_m);
 bool applyDistanceSet(AppData* data, double meters);
 
 // Manual distance correction, buttoned on the co-pilot main screen's Total
-// row. on_distance_adjust writes BOTH total_distance_adjust_cm and
-// trip_distance_adjust_cm -- Total and Trip are two windows onto the same
+// row. on_distance_adjust writes BOTH total_distance_adjust_mm and
+// trip_distance_adjust_mm -- Total and Trip are two windows onto the same
 // wheel-count measurement, so a wheel-slip correction applies to both. It
 // reads a signed "delta_m" object datum carrying the step in metres.
-// on_distance_set only ever resolves total_distance_adjust_cm -- pinning to
+// on_distance_set only ever resolves total_distance_adjust_mm -- pinning to
 // an exact roadbook figure has no Trip equivalent.
 void on_distance_adjust(GtkWidget* widget, gpointer user_data);
 void on_distance_set(GtkWidget* widget, gpointer user_data);

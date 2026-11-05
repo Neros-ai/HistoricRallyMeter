@@ -24,8 +24,6 @@ public:
             Segment seg;
             ASSERT_NEAR(seg.target_speed_kph, 0.0, 0.001);
             ASSERT_NEAR(seg.distance_m, 0.0, 0.001);
-            ASSERT_NEAR(seg.target_speed_counts_per_hour, 0.0, 0.001);
-            ASSERT_NEAR(seg.distance_counts, 0.0, 0.001);
             // Auto-advance is the intended default: the meter rolls on to the
             // next segment by itself at the end of the current one. The
             // assertion here was ASSERT_FALSE, contradicting the `= true`
@@ -43,15 +41,11 @@ public:
 
             Segment seg;
             seg.target_speed_kph = kph;
-            seg.target_speed_counts_per_hour = kphToCountsPerHour(kph, calibration);
             seg.distance_m = meters;
-            seg.distance_counts = (meters * 1e6) / calibration;
             seg.autoNext = true;
 
             ASSERT_NEAR(seg.target_speed_kph, 60.0, 0.001);
-            ASSERT_NEAR(seg.target_speed_counts_per_hour, 100000.0, 1.0);
             ASSERT_NEAR(seg.distance_m, 5000.0, 0.001);
-            ASSERT_NEAR(seg.distance_counts, 8333.333, 1.0);
             ASSERT_TRUE(seg.autoNext);
             return true;
         });
@@ -98,35 +92,25 @@ public:
 
             Segment s1;
             s1.target_speed_kph = 50.0;
-            s1.target_speed_counts_per_hour = kphToCountsPerHour(50.0, state.calibration);
             s1.distance_m = 2000.0;
-            s1.distance_counts = (2000.0 * 1e6) / state.calibration;
             s1.autoNext = true;
             state.segments.push_back(s1);
 
             Segment s2;
             s2.target_speed_kph = 80.0;
-            s2.target_speed_counts_per_hour = kphToCountsPerHour(80.0, state.calibration);
             s2.distance_m = 5000.0;
-            s2.distance_counts = (5000.0 * 1e6) / state.calibration;
             s2.autoNext = false;
             state.segments.push_back(s2);
 
-            double old_speed_counts_0 = state.segments[0].target_speed_counts_per_hour;
-            double old_dist_counts_1 = state.segments[1].distance_counts;
 
             // Change calibration
             state.calibration = 400000;
 
             // Recalculate (mirrors on_save_calibration logic)
             for (auto& seg : state.segments) {
-                seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, state.calibration);
-                seg.distance_counts = (seg.distance_m * 1e6) / state.calibration;
             }
 
             // Count values should have changed
-            ASSERT_TRUE(std::abs(state.segments[0].target_speed_counts_per_hour - old_speed_counts_0) > 1.0);
-            ASSERT_TRUE(std::abs(state.segments[1].distance_counts - old_dist_counts_1) > 1.0);
 
             // Human values should be unchanged
             ASSERT_NEAR(state.segments[0].target_speed_kph, 50.0, 0.001);
@@ -135,10 +119,6 @@ public:
             ASSERT_NEAR(state.segments[1].distance_m, 5000.0, 0.001);
 
             // Recovered real-world values should match originals
-            double kph_0 = (state.segments[0].target_speed_counts_per_hour * state.calibration) / 1e9;
-            double m_1 = (state.segments[1].distance_counts * state.calibration) / 1e6;
-            ASSERT_NEAR(kph_0, 50.0, 0.01);
-            ASSERT_NEAR(m_1, 5000.0, 0.01);
             return true;
         });
 
@@ -148,9 +128,7 @@ public:
 
             Segment seg;
             seg.target_speed_kph = 70.0;
-            seg.target_speed_counts_per_hour = kphToCountsPerHour(70.0, state.calibration);
             seg.distance_m = 3000.0;
-            seg.distance_counts = (3000.0 * 1e6) / state.calibration;
             seg.autoNext = true;
 
             state.memory_slots[0].segments.push_back(seg);
@@ -160,8 +138,6 @@ public:
             state.calibration = 800000;
             for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
                 for (auto& s : state.memory_slots[i].segments) {
-                    s.target_speed_counts_per_hour = kphToCountsPerHour(s.target_speed_kph, state.calibration);
-                    s.distance_counts = (s.distance_m * 1e6) / state.calibration;
                 }
             }
 
@@ -172,8 +148,6 @@ public:
             // Verify recalculated count values are correct for new calibration
             double expected_speed = kphToCountsPerHour(70.0, 800000);
             double expected_dist = (3000.0 * 1e6) / 800000;
-            ASSERT_NEAR(state.memory_slots[0].segments[0].target_speed_counts_per_hour, expected_speed, 0.01);
-            ASSERT_NEAR(state.memory_slots[2].segments[0].distance_counts, expected_dist, 0.01);
             return true;
         });
 
@@ -184,9 +158,7 @@ public:
 
             Segment seg;
             seg.target_speed_kph = 45.0;
-            seg.target_speed_counts_per_hour = kphToCountsPerHour(45.0, save_state.calibration);
             seg.distance_m = 1234.0;
-            seg.distance_counts = (1234.0 * 1e6) / save_state.calibration;
             seg.autoNext = true;
             save_state.segments.push_back(seg);
 
@@ -198,10 +170,6 @@ public:
             ASSERT_EQ(load_state.segments.size(), 1u);
             ASSERT_NEAR(load_state.segments[0].target_speed_kph, 45.0, 0.001);
             ASSERT_NEAR(load_state.segments[0].distance_m, 1234.0, 0.001);
-            ASSERT_NEAR(load_state.segments[0].target_speed_counts_per_hour,
-                        seg.target_speed_counts_per_hour, 0.01);
-            ASSERT_NEAR(load_state.segments[0].distance_counts,
-                        seg.distance_counts, 0.01);
             ASSERT_TRUE(load_state.segments[0].autoNext);
 
             cleanup();
@@ -239,8 +207,6 @@ public:
             ASSERT_EQ(state.segments.size(), 1u);
             ASSERT_NEAR(state.segments[0].target_speed_kph, expected_kph, 0.01);
             ASSERT_NEAR(state.segments[0].distance_m, expected_m, 0.01);
-            ASSERT_NEAR(state.segments[0].target_speed_counts_per_hour, speed_cph, 0.01);
-            ASSERT_NEAR(state.segments[0].distance_counts, dist_counts, 0.01);
 
             cleanup();
             return true;
@@ -253,9 +219,7 @@ public:
 
             Segment seg;
             seg.target_speed_kph = 55.0;
-            seg.target_speed_counts_per_hour = kphToCountsPerHour(55.0, save_state.calibration);
             seg.distance_m = 8000.0;
-            seg.distance_counts = (8000.0 * 1e6) / save_state.calibration;
             seg.autoNext = false;
             save_state.memory_slots[0].segments.push_back(seg);
 
@@ -312,8 +276,6 @@ public:
             ASSERT_NEAR(state.segments[0].target_speed_kph, 0.0, 0.001);
             ASSERT_NEAR(state.segments[0].distance_m, 0.0, 0.001);
             // Count values are still loaded
-            ASSERT_NEAR(state.segments[0].target_speed_counts_per_hour, 100000.0, 0.01);
-            ASSERT_NEAR(state.segments[0].distance_counts, 5000.0, 0.01);
 
             cleanup();
             return true;

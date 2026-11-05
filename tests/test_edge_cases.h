@@ -57,7 +57,7 @@ public:
         // Test segment index beyond bounds
         suite->addTest("segment_current_number beyond segments array", []() {
             RallyState state;
-            state.segments.push_back({0.0, 100, 0.0, 1000, true});
+            state.segments.push_back({100, 1000, true});
             state.segment_current_number = 5;  // Beyond array
             
             bool is_valid = (state.segment_current_number >= 0 && 
@@ -141,10 +141,9 @@ public:
             
             // 2km = 2000m, with 0.6m/count = 3333 counts
             Segment seg;
-            seg.distance_counts = 3333.0;
+            seg.distance_m = 2000.0;
             
-            long cm = countsToCentimeters(static_cast<int64_t>(seg.distance_counts), state.calibration);
-            long meters = cm / 100;
+            long meters = static_cast<long>(seg.distance_m);
             
             // Should be ~2000m
             ASSERT_GT(meters, 1900);
@@ -249,9 +248,9 @@ public:
         // Test rapid segment transitions
         suite->addTest("Rapid segment transitions at high speed", []() {
             RallyState state;
-            state.segments.push_back({0.0, 100000.0, 0.0, 100.0, true});   // Very short
-            state.segments.push_back({0.0, 100000.0, 0.0, 100.0, true});
-            state.segments.push_back({0.0, 100000.0, 0.0, 100.0, true});
+            state.segments.push_back({100000.0, 100.0, true});   // Very short
+            state.segments.push_back({100000.0, 100.0, true});
+            state.segments.push_back({100000.0, 100.0, true});
             state.segment_current_number = 0;
             
             // At high speed, might cover multiple segments in one poll
@@ -260,7 +259,7 @@ public:
             int new_segment = 0;
             double cumulative = 0.0;
             for (size_t i = 0; i < state.segments.size(); i++) {
-                cumulative += state.segments[i].distance_counts;
+                cumulative += state.segments[i].distance_m;
                 if (distance_covered >= cumulative && state.segments[i].autoNext) {
                     new_segment = i + 1;
                 }

@@ -224,7 +224,7 @@ public:
             // 1 hour of travel, no correction, gives some baseline speed.
             double plain = calculateAverageSpeed(state, 0, 3600000, 600000, 0);
             // Removing 100 m of that distance must lower the average.
-            double corrected = calculateAverageSpeed(state, 0, 3600000, 600000, -10000);
+            double corrected = calculateAverageSpeed(state, 0, 3600000, 600000, -100000);
             ASSERT_TRUE(corrected < plain);
             return true;
         });
@@ -232,7 +232,7 @@ public:
         suite->addTest("a correction that would drive distance negative clamps at zero", []() {
             RallyState state;
             state.calibration = 600000;
-            double speed = calculateAverageSpeed(state, 0, 3600000, 600000, -99999999);
+            double speed = calculateAverageSpeed(state, 0, 3600000, 600000, -999999999);
             ASSERT_NEAR(speed, 0.0, 0.001);
             return true;
         });

@@ -104,7 +104,7 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
     const int height = gtk_widget_get_allocated_height(w);
     const int64_t now_ms = getRallyTime_ms(live);
     const CounterPoll poll = data->poller->getMostRecent();
-    long stage_m = countsToCentimeters(stageCountsCorrected(data, poll), live.calibration) / 100;
+    long stage_m = stagePositionMm(live, poll.cntr1, poll.cntr2) / 1000;
     SectorPanel p = sectorPanel(live, now_ms, stage_m);
     // Before the sector starts, show the card as it will look at the first row (drawing only:
     // a copy of the state, the real one is never touched).

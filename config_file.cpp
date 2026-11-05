@@ -113,6 +113,8 @@ static void parseSegmentArray(std::istringstream& stream, std::vector<Segment>& 
     bool in_obj = false;
     Segment seg{};
     bool has_kph = false, has_m = false;
+    double legacy_cph = 0.0;      // target_speed_counts_per_hour of an older file, used only when target_speed_kph is missing
+    double legacy_counts = 0.0;   // distance_counts of an older file, used only when distance_m is missing
     
     while (std::getline(stream, line)) {
         if (line.find('{') != std::string::npos) {
@@ -120,12 +122,14 @@ static void parseSegmentArray(std::istringstream& stream, std::vector<Segment>& 
             seg = Segment{};
             has_kph = false;
             has_m = false;
+            legacy_counts = 0.0;
+            legacy_cph = 0.0;
         } else if (line.find('}') != std::string::npos && in_obj) {
-            if (!has_kph && calibration > 0) {
-                seg.target_speed_kph = (seg.target_speed_counts_per_hour * calibration) / 1e9;
+            if (!has_kph && calibration > 0) {   // an older file: only the pulse rate was saved
+                seg.target_speed_kph = (legacy_cph * calibration) / 1e9;
             }
-            if (!has_m && calibration > 0) {
-                seg.distance_m = (seg.distance_counts * calibration) / 1e6;
+            if (!has_m && calibration > 0) {   // an older file: only the pulse figure was saved
+                seg.distance_m = (legacy_counts * calibration) / 1e6;
             }
             out.push_back(seg);
             in_obj = false;
@@ -136,12 +140,12 @@ static void parseSegmentArray(std::istringstream& stream, std::vector<Segment>& 
                 seg.target_speed_kph = extractDouble(line);
                 has_kph = true;
             } else if (line.find("\"target_speed_counts_per_hour\"") != std::string::npos) {
-                seg.target_speed_counts_per_hour = extractDouble(line);
+                legacy_cph = extractDouble(line);
             } else if (line.find("\"distance_m\"") != std::string::npos) {
                 seg.distance_m = extractDouble(line);
                 has_m = true;
             } else if (line.find("\"distance_counts\"") != std::string::npos) {
-                seg.distance_counts = extractDouble(line);
+                legacy_counts = extractDouble(line);
             } else if (line.find("\"changes_speed\"") != std::string::npos) {
                 seg.changesSpeed = extractBool(line);
             } else if (line.find("\"autoNext\"") != std::string::npos) {
@@ -190,6 +194,9 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
     }
 
     std::string memTail;
+    // The corrections are held in millimetres; a file from before that carries them in centimetres under the
+    // old key names. mm_seen: segment start, total, trip, odometer, sector-start odometer (a _mm key wins).
+    bool mm_seen[5] = {false, false, false, false, false};
     state.odometer_recorded = false;   // set again when the file carries the odometer
     while (std::getline(stream, line)) {
         if (line.find("\"stage_segments\"") != std::string::npos) {
@@ -259,13 +266,19 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.rallyTimeOffset_ms = extractLong(line);
         } else if (line.find("\"ahead_behind_zero_offset_ms\"") != std::string::npos) {
             state.ahead_behind_zero_offset_ms = extractLong(line);
-        } else if (line.find("\"segment_start_adjust_cm\"") != std::string::npos) {
-            state.segment_start_adjust_cm = static_cast<long>(extractLong(line));
+        } else if (line.find("\"segment_start_adjust_mm\"") != std::string::npos) {
+            state.segment_start_adjust_mm = static_cast<long>(extractLong(line)); mm_seen[0] = true;
+        } else if (line.find("\"segment_start_adjust_cm\"") != std::string::npos) {   // an older file, in centimetres
+            if (!mm_seen[0]) state.segment_start_adjust_mm = static_cast<long>(extractLong(line)) * 10;
             state.segment_start_adjust_recorded = true;
+        } else if (line.find("\"total_distance_adjust_mm\"") != std::string::npos) {
+            state.total_distance_adjust_mm = static_cast<long>(extractLong(line)); mm_seen[1] = true;
         } else if (line.find("\"total_distance_adjust_cm\"") != std::string::npos) {
-            state.total_distance_adjust_cm = static_cast<long>(extractLong(line));
+            if (!mm_seen[1]) state.total_distance_adjust_mm = static_cast<long>(extractLong(line)) * 10;
+        } else if (line.find("\"trip_distance_adjust_mm\"") != std::string::npos) {
+            state.trip_distance_adjust_mm = static_cast<long>(extractLong(line)); mm_seen[2] = true;
         } else if (line.find("\"trip_distance_adjust_cm\"") != std::string::npos) {
-            state.trip_distance_adjust_cm = static_cast<long>(extractLong(line));
+            if (!mm_seen[2]) state.trip_distance_adjust_mm = static_cast<long>(extractLong(line)) * 10;
         } else if (line.find("\"auto_start_rally_time_s\"") != std::string::npos) {
             state.auto_start_rally_time_s = static_cast<uint64_t>(extractLong(line));
         } else if (line.find("\"auto_start_rally_time_minutes\"") != std::string::npos) {
@@ -288,8 +301,11 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.driver_window_monitor = static_cast<int>(extractLong(line));
         } else if (line.find("\"alarm_distance_km\"") != std::string::npos) {
             state.alarm_distance_km = static_cast<int>(extractLong(line));
+        } else if (line.find("\"alarm_target_mm\"") != std::string::npos) {
+            state.alarm_target_mm = extractLong(line);
         } else if (line.find("\"alarm_target_counts\"") != std::string::npos) {
-            state.alarm_target_counts = extractLong(line);
+            // an older file: pulses, turned into mm once here (an _mm key wins if present)
+            if (state.alarm_target_mm == 0) state.alarm_target_mm = countsToMm(extractLong(line), state.calibration);
         } else if (line.find("\"force_single_display\"") != std::string::npos) {
             state.force_single_display = extractBool(line);
         } else if (line.find("\"tone_enabled\"") != std::string::npos) {
@@ -311,10 +327,14 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.odometer_recorded = true;
         } else if (line.find("\"odometer_start_cntr2\"") != std::string::npos) {
             state.odometer_start_cntr2 = extractCounter(line);
+        } else if (line.find("\"odometer_adjust_mm\"") != std::string::npos) {
+            state.odometer_adjust_mm = extractLong(line); mm_seen[3] = true;
         } else if (line.find("\"odometer_adjust_cm\"") != std::string::npos) {
-            state.odometer_adjust_cm = extractLong(line);
+            if (!mm_seen[3]) state.odometer_adjust_mm = extractLong(line) * 10;
+        } else if (line.find("\"sector_start_odometer_mm\"") != std::string::npos) {
+            state.sector_start_odometer_mm = extractLong(line); mm_seen[4] = true;
         } else if (line.find("\"sector_start_odometer_cm\"") != std::string::npos) {
-            state.sector_start_odometer_cm = extractLong(line);
+            if (!mm_seen[4]) state.sector_start_odometer_mm = extractLong(line) * 10;
         } else if (line.find("\"sector_start_ms\"") != std::string::npos) {
             state.sector_start_ms = extractLong(line);
         } else if (line.find("\"sector_card_ms\"") != std::string::npos) {
@@ -384,7 +404,7 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
     if (!state.odometer_recorded) {
         state.odometer_start_cntr1 = state.total_start_cntr1;
         state.odometer_start_cntr2 = state.total_start_cntr2;
-        state.odometer_adjust_cm = state.total_distance_adjust_cm;
+        state.odometer_adjust_mm = state.total_distance_adjust_mm;
         state.odometer_recorded = true;
     }
 
@@ -402,15 +422,15 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
         if (state.segment_current_number >= 0) state.stage_complete = false;
     }
 
-    // A config written before segment_start_adjust_cm existed would default it
-    // to zero while total_distance_adjust_cm still holds a standing
+    // A config written before segment_start_adjust_mm existed would default it
+    // to zero while total_distance_adjust_mm still holds a standing
     // correction, so the segment running across the upgrade would be credited
     // with a correction made before it began -- moving its boundary once, on
     // the first restart after the update. Seeding from the standing value
     // makes the difference zero, which is what "no correction since this
     // segment started" means.
     if (!state.segment_start_adjust_recorded) {
-        state.segment_start_adjust_cm = state.total_distance_adjust_cm;
+        state.segment_start_adjust_mm = state.total_distance_adjust_mm;
         state.segment_start_adjust_recorded = true;
     }
 
@@ -448,15 +468,17 @@ static void writeDoubleArray(std::ofstream& file, const std::string& name,
 }
 
 static void writeSegmentArray(std::ofstream& file, const std::string& name,
-                              const std::vector<Segment>& segs, bool trailing_comma) {
+                              const std::vector<Segment>& segs, bool trailing_comma, long calibration) {
     file << "  \"" << name << "\": [\n";
     for (size_t i = 0; i < segs.size(); i++) {
         file << "    {\n";
         file << std::fixed << std::setprecision(6);
         file << "      \"target_speed_kph\": " << segs[i].target_speed_kph << ",\n";
-        file << "      \"target_speed_counts_per_hour\": " << segs[i].target_speed_counts_per_hour << ",\n";
+        // Still written (derived from the km/h) so an older build reading this file keeps working.
+        file << "      \"target_speed_counts_per_hour\": " << (calibration > 0 ? kphToCountsPerHour(segs[i].target_speed_kph, calibration) : 0.0) << ",\n";
         file << "      \"distance_m\": " << segs[i].distance_m << ",\n";
-        file << "      \"distance_counts\": " << segs[i].distance_counts << ",\n";
+        // Still written (derived from the metres) so an older build reading this file keeps working.
+        file << "      \"distance_counts\": " << (calibration > 0 ? segs[i].distance_m * 1e6 / calibration : 0.0) << ",\n";
         file << "      \"changes_speed\": " << (segs[i].changesSpeed ? "true" : "false") << ",\n";
         file << "      \"autoNext\": " << (segs[i].autoNext ? "true" : "false") << ",\n";
         file << "      \"box\": " << segs[i].box << ",\n";
@@ -520,9 +542,13 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"segment_current_number\": " << state.segment_current_number << ",\n";
     file << "  \"rallyTimeOffset_ms\": " << state.rallyTimeOffset_ms << ",\n";
     file << "  \"ahead_behind_zero_offset_ms\": " << state.ahead_behind_zero_offset_ms << ",\n";
-    file << "  \"total_distance_adjust_cm\": " << state.total_distance_adjust_cm << ",\n";
-    file << "  \"segment_start_adjust_cm\": " << state.segment_start_adjust_cm << ",\n";
-    file << "  \"trip_distance_adjust_cm\": " << state.trip_distance_adjust_cm << ",\n";
+    file << "  \"total_distance_adjust_mm\": " << state.total_distance_adjust_mm << ",\n";
+    file << "  \"segment_start_adjust_mm\": " << state.segment_start_adjust_mm << ",\n";
+    file << "  \"trip_distance_adjust_mm\": " << state.trip_distance_adjust_mm << ",\n";
+    // Still written in centimetres so an older build reading this file keeps its corrections.
+    file << "  \"total_distance_adjust_cm\": " << state.total_distance_adjust_mm / 10 << ",\n";
+    file << "  \"segment_start_adjust_cm\": " << state.segment_start_adjust_mm / 10 << ",\n";
+    file << "  \"trip_distance_adjust_cm\": " << state.trip_distance_adjust_mm / 10 << ",\n";
     file << "  \"auto_start_rally_time_s\": " << state.auto_start_rally_time_s << ",\n";
     file << "  \"driver_window_x\": " << state.driver_window_x << ",\n";
     file << "  \"driver_window_y\": " << state.driver_window_y << ",\n";
@@ -530,7 +556,8 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"driver_window_height\": " << state.driver_window_height << ",\n";
     file << "  \"driver_window_monitor\": " << state.driver_window_monitor << ",\n";
     file << "  \"alarm_distance_km\": " << state.alarm_distance_km << ",\n";
-    file << "  \"alarm_target_counts\": " << state.alarm_target_counts << ",\n";
+    file << "  \"alarm_target_mm\": " << state.alarm_target_mm << ",\n";
+    file << "  \"alarm_target_counts\": " << (state.calibration > 0 ? state.alarm_target_mm * 1000 / state.calibration : 0) << ",\n";
     file << "  \"force_single_display\": " << (state.force_single_display ? "true" : "false") << ",\n";
     file << "  \"tone_enabled\": " << (state.tone_enabled ? "true" : "false") << ",\n";
     file << "  \"tone_type_behind\": " << state.tone_type_behind << ",\n";
@@ -543,9 +570,11 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"time_taken_ms\": " << state.time_taken_ms << ",\n";
     file << "  \"odometer_start_cntr1\": " << static_cast<int64_t>(state.odometer_start_cntr1) << ",\n";
     file << "  \"odometer_start_cntr2\": " << static_cast<int64_t>(state.odometer_start_cntr2) << ",\n";
-    file << "  \"odometer_adjust_cm\": " << state.odometer_adjust_cm << ",\n";
+    file << "  \"odometer_adjust_mm\": " << state.odometer_adjust_mm << ",\n";
+    file << "  \"odometer_adjust_cm\": " << state.odometer_adjust_mm / 10 << ",\n";
     file << "  \"sector_start_ms\": " << state.sector_start_ms << ",\n";
-    file << "  \"sector_start_odometer_cm\": " << state.sector_start_odometer_cm << ",\n";
+    file << "  \"sector_start_odometer_mm\": " << state.sector_start_odometer_mm << ",\n";
+    file << "  \"sector_start_odometer_cm\": " << state.sector_start_odometer_mm / 10 << ",\n";
     file << "  \"sector_card_ms\": " << state.sector_card_ms << ",\n";
     file << "  \"trial_start_ms\": " << state.trial_start_ms << ",\n";
     file << "  \"trial_start_m\": " << std::to_string(state.trial_start_m) << ",\n";
@@ -584,8 +613,8 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
         if (!state.memory_slots[i].empty()) { has_memory = true; break; }
     }
 
-    writeSegmentArray(file, "stage_segments", state.stage_segments, true);
-    writeSegmentArray(file, "segments", state.segments, has_memory);
+    writeSegmentArray(file, "stage_segments", state.stage_segments, true, state.calibration);
+    writeSegmentArray(file, "segments", state.segments, has_memory, state.calibration);
     
     if (has_memory) {
         int last_populated = -1;
@@ -597,7 +626,7 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
                 std::string name = "memory_" + std::to_string(i + 1);
                 // Segments always take a trailing comma here: the slot's
                 // waypoints array follows them and carries the real one.
-                writeSegmentArray(file, name, state.memory_slots[i].segments, true);
+                writeSegmentArray(file, name, state.memory_slots[i].segments, true, state.calibration);
                 writeDoubleArray(file, name + "_waypoints",
                                  state.memory_slots[i].beep_waypoints_m, i < last_populated);
             }

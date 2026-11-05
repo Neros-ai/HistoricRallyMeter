@@ -33,7 +33,6 @@ class TestSector {
         s.rally_type = 2;
         s.segments = mugello();
         applySectorRules(s.segments, sector_s);
-        recomputeSegmentCounts(s.segments, s.calibration);
         s.stage_segments = s.segments;
         s.segment_current_number = 0;
         s.stage_complete = false;
@@ -44,9 +43,10 @@ class TestSector {
         s.sector_card_ms = sector_s * 1000L;
         return s;
     }
+    static int64_t stageMm(const RallyState& s, uint64_t c) { return stagePositionMm(s, c, c); }
+    // Whole metres of stage position (these tests run at 1 m a pulse, so it also reads as pulses).
     static int64_t stageCounts(const RallyState& s, uint64_t c) {
-        return correctedDistanceCounts(calculateDistanceCounts(s, c, c, s.total_start_cntr1, s.total_start_cntr2),
-                                       s.total_distance_adjust_cm, s.calibration);
+        return stagePositionMm(s, c, c) / 1000;
     }
 public:
     TestSuite* createSuite() {
@@ -57,7 +57,6 @@ public:
             s.calibration = 1000000; s.counters = true;
             Segment a, b; a.distance_m = 1000; a.target_speed_kph = 36; b = a;
             s.segments = {a, b};
-            recomputeSegmentCounts(s.segments, s.calibration);
             s.stage_segments = s.segments; s.segment_current_number = 0; s.stage_complete = false;
             const int64_t t0 = s.total_start_time_ms; const long cur = s.segment_current_number;
             const bool applied = applySectorNext(s, 500, 500, 99999);
@@ -156,18 +155,17 @@ public:
             return ok && std::fabs(ab + 10.0) < 0.05 && std::fabs(gauge - ab) < 0.001;
         });
 
-        suite->addTest("a pc a centimetre short of its tube is still behind, not zero", []() {
-            // Calibration that does not divide the centimetre pin evenly: Total reads the
-            // card but the measured point stays short of trial_start_m until the car rolls.
+        suite->addTest("a pc pinned at its tube is measured from the tube to within 5 mm; a late press still reads behind", []() {
+            // Calibration that does not divide the centimetre pin evenly. The pin is worked in millimetres, so
+            // it no longer goes through whole pulses (which left the point up to a pulse short of the tube).
             RallyState s = running();
             s.calibration = 88277;
-            recomputeSegmentCounts(s.segments, s.calibration);
             s.stage_segments = s.segments;
             applySectorNext(s, 0, 0, 70000);
             bool ok = false;
             const double ab = trialAheadSeconds(s, 0, 0, 70000 + 10000, &ok);
             const double pos = sectorPositionM(s, 0, 0);
-            return ok && pos < s.trial_start_m && ab < -9.5 && ab > -11.0;
+            return ok && std::fabs(pos - s.trial_start_m) < 0.006 && ab < -9.5 && ab > -11.0;
         });
 
         suite->addTest("tube pressed 5 m early or late leaves later rows' starts where the card has them", []() {
@@ -181,17 +179,17 @@ public:
 
         suite->addTest("prev after a tube restores everything", []() {
             RallyState s = running();
-            s.trip_start_cntr1 = 11; s.trip_start_cntr2 = 12; s.trip_start_time_ms = 5; s.trip_distance_adjust_cm = 700;
-            s.total_distance_adjust_cm = 250; s.segment_start_adjust_cm = 100;
+            s.trip_start_cntr1 = 11; s.trip_start_cntr2 = 12; s.trip_start_time_ms = 5; s.trip_distance_adjust_mm = 7000;
+            s.total_distance_adjust_mm = 2500; s.segment_start_adjust_mm = 1000;
             RallyState before = s;
             applySectorNext(s, 385, 385, 70000);
             const bool undone = undoSectorTube(s);
             return undone && s.segment_current_number == before.segment_current_number
                 && s.total_start_time_ms == before.total_start_time_ms
-                && s.total_distance_adjust_cm == before.total_distance_adjust_cm
-                && s.segment_start_cntr1 == before.segment_start_cntr1 && s.segment_start_adjust_cm == before.segment_start_adjust_cm
+                && s.total_distance_adjust_mm == before.total_distance_adjust_mm
+                && s.segment_start_cntr1 == before.segment_start_cntr1 && s.segment_start_adjust_mm == before.segment_start_adjust_mm
                 && s.segment_start_time_ms == before.segment_start_time_ms
-                && s.trip_start_cntr1 == 11 && s.trip_start_time_ms == 5 && s.trip_distance_adjust_cm == 700
+                && s.trip_start_cntr1 == 11 && s.trip_start_time_ms == 5 && s.trip_distance_adjust_mm == 7000
                 && s.trip_history_m == before.trip_history_m && !s.sector_undo.valid
                 && s.trial_start_m == before.trial_start_m && s.trial_start_ms == before.trial_start_ms;
         });
@@ -206,7 +204,7 @@ public:
             const bool left = s.trial_start_m < 0.0 && s.segment_current_number == 4;
             const bool undone = undoSectorTube(s);
             return left && undone && s.segment_current_number == 3 && s.trial_start_m == 620.0
-                && s.trial_start_ms == 111000 && s.total_distance_adjust_cm == before.total_distance_adjust_cm
+                && s.trial_start_ms == 111000 && s.total_distance_adjust_mm == before.total_distance_adjust_mm
                 && s.segment_start_time_ms == before.segment_start_time_ms && s.last_pc_error.ref == before.last_pc_error.ref;
         });
 
@@ -221,8 +219,7 @@ public:
             bool same = s.total_start_time_ms == 12345 && s.sector_card_ms == before.sector_card_ms
                 && s.stage_segments.size() == before.stage_segments.size();
             for (size_t i = 0; same && i < s.stage_segments.size(); i++)
-                same = s.stage_segments[i].distance_m == before.stage_segments[i].distance_m
-                    && s.stage_segments[i].distance_counts == before.stage_segments[i].distance_counts;
+                same = s.stage_segments[i].distance_m == before.stage_segments[i].distance_m;
             return same;
         });
 
@@ -250,7 +247,6 @@ public:
             RallyState s = running();
             s.stage_segments = { row(SEG_NAVI, 1000, 0, 0, 36.0), row(SEG_PM, 1000, 0, 1, 40.0),
                                  row(SEG_PM, 1000, 0, 1, 40.0), row(SEG_NAVI, 1000, 0, 0, 36.0) };
-            recomputeSegmentCounts(s.stage_segments, s.calibration);
             applySectorNext(s, 1000, 1000, 100000);
             const bool start = s.trial_start_ms == 100000 && s.trial_start_m == 1000.0;
             applySectorNext(s, 2000, 2000, 190000);
@@ -264,7 +260,6 @@ public:
             applySectorNext(s, 385, 385, 70000);                          // undo valid, index 0
             Segment a; a.distance_m = 1000; a.target_speed_kph = 36;
             s.stage_segments = {a, a};                                   // a greek stage now, on segment 1
-            recomputeSegmentCounts(s.stage_segments, s.calibration);
             s.segment_current_number = 1;
             const bool greek = !undoSectorTube(s) && !sectorUndoAvailable(s);
             RallyState t = running();
@@ -277,13 +272,13 @@ public:
         suite->addTest("prev keeps a -10 made after the next", []() {
             RallyState s = running();
             applySectorNext(s, 385, 385, 70000);                          // pinned: 385 reads 380
-            s.total_distance_adjust_cm -= 1000;                          // -10
-            s.trip_distance_adjust_cm -= 1000;
-            const long trip_before = s.trip_distance_adjust_cm;
+            s.total_distance_adjust_mm -= 10000;                          // -10
+            s.trip_distance_adjust_mm -= 10000;
+            const long trip_before = s.trip_distance_adjust_mm;
             RallyState t = running();
-            const long trip_unmoved = t.trip_distance_adjust_cm;
+            const long trip_unmoved = t.trip_distance_adjust_mm;
             undoSectorTube(s);
-            return stageCounts(s, 385) == 375 && s.trip_distance_adjust_cm == trip_unmoved - 1000 && trip_before != 0;
+            return stageCounts(s, 385) == 375 && s.trip_distance_adjust_mm == trip_unmoved - 10000 && trip_before != 0;
         });
 
         suite->addTest("nothing to undo before a tube, and not twice", []() {
@@ -296,19 +291,19 @@ public:
 
         suite->addTest("set navi: reads the typed distance, leaves Total and Trip alone", []() {
             RallyState s = running();
-            s.total_distance_adjust_cm = 700; s.trip_distance_adjust_cm = 300;
+            s.total_distance_adjust_mm = 7000; s.trip_distance_adjust_mm = 3000;
             const bool ok = setOdometerMetres(s, 500, 500, 120.0);
-            return ok && countsToCentimeters(odometerCounts(s, 500, 500), s.calibration) == 12000
-                && s.total_distance_adjust_cm == 700 && s.trip_distance_adjust_cm == 300;
+            return ok && odometerMm(s, 500, 500) == 120000
+                && s.total_distance_adjust_mm == 7000 && s.trip_distance_adjust_mm == 3000;
         });
 
         suite->addTest("set navi: a negative distance changes nothing; reset zeroes it", []() {
             RallyState s = running();
-            s.odometer_adjust_cm = 40;
-            const bool refused = !setOdometerMetres(s, 500, 500, -1.0) && s.odometer_adjust_cm == 40;
+            s.odometer_adjust_mm = 400;
+            const bool refused = !setOdometerMetres(s, 500, 500, -1.0) && s.odometer_adjust_mm == 400;
             setOdometerMetres(s, 500, 500, 120.0);
             zeroOdometer(s, 500, 500);
-            return refused && odometerCounts(s, 500, 500) == 0;
+            return refused && odometerMm(s, 500, 500) == 0;
         });
 
         suite->addTest("+10 and -10 move navi too, in every rally type, and -10 cannot take it below zero", []() {
@@ -317,17 +312,17 @@ public:
                 RallyState s = running();
                 s.rally_type = type;
                 zeroOdometer(s, 1000, 1000);
-                auto navi_cm = [&](uint64_t c) { return countsToCentimeters(odometerCounts(s, c, c), s.calibration); };
-                adjustOdometerCm(s, 1000, 1000, 1000);          // +10 m
-                const bool up = navi_cm(1000) == 1000;
-                adjustOdometerCm(s, -2000, 1000, 1000);         // -20 m from 10 m: stops at zero
+                auto navi_cm = [&](uint64_t c) { return static_cast<long>(odometerMm(s, c, c)); };   // millimetres
+                adjustOdometerMm(s, 10000, 1000, 1000);          // +10 m
+                const bool up = navi_cm(1000) == 10000;
+                adjustOdometerMm(s, -20000, 1000, 1000);         // -20 m from 10 m: stops at zero
                 const bool floor = navi_cm(1000) == 0;
-                adjustOdometerCm(s, -1000, 1000, 1000);         // -10 m at zero: nothing
+                adjustOdometerMm(s, -10000, 1000, 1000);         // -10 m at zero: nothing
                 const bool stays = navi_cm(1000) == 0;
-                adjustOdometerCm(s, -1000, 400, 400);           // counter behind its start (reverse): already negative
-                const bool behind = navi_cm(400) == -60000;     // -10 does not push it further down
-                adjustOdometerCm(s, 1000, 400, 400);            // +10 still adds
-                const bool plus = navi_cm(400) == -59000;
+                adjustOdometerMm(s, -10000, 400, 400);           // counter behind its start (reverse): already negative
+                const bool behind = navi_cm(400) == -600000;     // -10 does not push it further down
+                adjustOdometerMm(s, 10000, 400, 400);            // +10 still adds
+                const bool plus = navi_cm(400) == -590000;
                 ok = ok && up && floor && stays && behind && plus;
             }
             return ok;
@@ -336,9 +331,9 @@ public:
         suite->addTest("navi total reads negative when the counter is behind its start, never floored at 0", []() {
             RallyState s = running();
             zeroOdometer(s, 1000, 1000);            // navi starts at counter 1000
-            const long behind_cm = countsToCentimeters(odometerCounts(s, 400, 400), s.calibration);   // counter now 400
-            const long ahead_cm = countsToCentimeters(odometerCounts(s, 1500, 1500), s.calibration);
-            return behind_cm < 0 && behind_cm == -60000 && ahead_cm == 50000;   // one count is one metre here
+            const long behind_cm = static_cast<long>(odometerMm(s, 400, 400));   // counter now 400
+            const long ahead_cm = static_cast<long>(odometerMm(s, 1500, 1500));
+            return behind_cm < 0 && behind_cm == -600000 && ahead_cm == 500000;   // one count is one metre here
         });
 
         suite->addTest("ahead / behind: from the press second, 60 s early reads +60, 120 s late -120", []() {
@@ -371,7 +366,6 @@ public:
             RallyState s = running();
             s.sector_start_ms = 0;
             s.stage_segments = { row(SEG_NAVI, 10000, 0, 0, 36.0) };
-            recomputeSegmentCounts(s.stage_segments, s.calibration);
             s.sector_card_ms = 1000000;                                    // 10 km at 36 kph
             bool ok = false;
             const double a = sectorAheadSeconds(s, 5000, 5000, 1000000 / 2, &ok);
@@ -385,7 +379,7 @@ public:
             const double before = sectorAheadSeconds(s, 380, 380, 20000, &ok);
             setOdometerMetres(s, 380, 380, 5000.0);
             const double after = sectorAheadSeconds(s, 380, 380, 20000, &ok);
-            s.total_distance_adjust_cm = -1000;                         // -10 on sector total
+            s.total_distance_adjust_mm = -10000;                         // -10 on sector total
             const double minus10 = sectorAheadSeconds(s, 380, 380, 20000, &ok);
             return ok && std::fabs(before - after) < 0.001 && minus10 < before - 0.1;
         });
@@ -410,7 +404,6 @@ public:
             RallyState s = running();
             s.segments.push_back(row(SEG_CO, 1000, 0, 2, 30.0));
             applySectorRules(s.segments, 10800);
-            recomputeSegmentCounts(s.segments, s.calibration);
             s.stage_segments = s.segments;
             s.segment_current_number = static_cast<long>(s.stage_segments.size()) - 1;
             s.sector_start_ms = 0;
@@ -423,7 +416,6 @@ public:
             RallyState s = running();
             s.stage_segments = { row(SEG_NAVI, 1000, 0, 0, 36.0), row(SEG_PM, 1000, 0, 1, 40.0),
                                  row(SEG_PM, 1000, 0, 1, 40.0), row(SEG_PM, 1000, 0, 1, 40.0) };
-            recomputeSegmentCounts(s.stage_segments, s.calibration);
             s.segment_current_number = 3;
             s.trial_start_ms = 500000; s.trial_start_m = 1000.0;
             bool ok = false, lok = false;
@@ -586,7 +578,7 @@ public:
             RallyState s = running();
             s.trip_start_cntr1 = s.trip_start_cntr2 = 0;
             s.trip_start_time_ms = 0;
-            s.trip_distance_adjust_cm = 0;
+            s.trip_distance_adjust_mm = 0;
             const double kph = subAverageKph(s, 1000, 1000, 100000);   // 100 s in
             const double want = calculateAverageSpeed(s, 0, 100000, calculateDistanceCounts(s, 1000, 1000, 0, 0), 0);
             return std::fabs(kph - want) < 1e-9 && kph > 0.0;
@@ -606,9 +598,9 @@ public:
             s.calibration = 1000000; s.counters = true;
             s.odometer_start_cntr1 = s.odometer_start_cntr2 = 1000;
             s.total_start_cntr1 = s.total_start_cntr2 = 3000;
-            const int64_t before = odometerCounts(s, 5000, 5000);
+            const int64_t before = odometerMm(s, 5000, 5000);
             zeroOdometer(s, 5000, 5000);
-            return before == 4000 && odometerCounts(s, 5000, 5000) == 0 && s.odometer_adjust_cm == 0
+            return before == 4000000 && odometerMm(s, 5000, 5000) == 0 && s.odometer_adjust_mm == 0
                 && s.total_start_cntr1 == 3000;
         });
 
@@ -756,14 +748,14 @@ public:
 
         suite->addTest("gauge figure (driver and phone): italian navi rests at 0, pc follows its tube, greek unchanged", []() {
             RallyState s = running(); s.sector_start_ms = 0;
-            const bool navi = gaugeAheadSeconds(s, 300, 300, 1000, stageCounts(s, 300)) == 0.0;
+            const bool navi = gaugeAheadSeconds(s, 300, 300, 1000, stageMm(s, 300)) == 0.0;
             s.segment_current_number = 1; s.trial_start_ms = 70000; s.trial_start_m = 380.0;
             bool tok = false;
             const double tr = trialAheadSeconds(s, 470, 470, 85500, &tok);
-            const bool pc = std::fabs(gaugeAheadSeconds(s, 470, 470, 85500, stageCounts(s, 470)) - tr) < 0.001;
+            const bool pc = std::fabs(gaugeAheadSeconds(s, 470, 470, 85500, stageMm(s, 470)) - tr) < 0.001;
             RallyState g = running(); g.rally_type = 0; g.ahead_behind_zero_offset_ms = 5000;
-            const double want = calculateAheadBehindFromStageStart(g, 40000, stageCounts(g, 300)) + 5.0;
-            const bool greek = std::fabs(gaugeAheadSeconds(g, 300, 300, 40000, stageCounts(g, 300)) - want) < 0.001;
+            const double want = calculateAheadBehindFromStageStart(g, 40000, stageMm(g, 300)) + 5.0;
+            const bool greek = std::fabs(gaugeAheadSeconds(g, 300, 300, 40000, stageMm(g, 300)) - want) < 0.001;
             return navi && pc && greek;
         });
 
@@ -778,7 +770,7 @@ public:
             RallyState a;
             a.segments = mugello();
             a.memory_slots[17].sector_duration_s = 10800;
-            a.odometer_start_cntr1 = 42; a.odometer_adjust_cm = -300; a.sector_start_ms = 123456;
+            a.odometer_start_cntr1 = 42; a.odometer_adjust_mm = -3000; a.sector_start_ms = 123456;
             a.sector_card_ms = 10800000; a.trial_start_ms = 654321; a.trial_start_m = 380.0;
             ConfigFile::save(a, path);
             RallyState b;
@@ -786,7 +778,7 @@ public:
             std::remove(path);
             const bool rt = b.segments.size() == 7 && b.segments[1].type == SEG_PC && b.segments[1].ref == 1
                 && b.segments[1].pc_duration_s == 31 && b.memory_slots[17].sector_duration_s == 10800
-                && b.odometer_start_cntr1 == 42 && b.odometer_adjust_cm == -300 && b.sector_start_ms == 123456
+                && b.odometer_start_cntr1 == 42 && b.odometer_adjust_mm == -3000 && b.sector_start_ms == 123456
                 && b.sector_card_ms == 10800000 && b.trial_start_ms == 654321 && b.trial_start_m == 380.0;
             RallyState g;
             Segment x; x.distance_m = 100; g.segments = {x};
@@ -805,7 +797,7 @@ public:
             RallyState s;
             ConfigFile::load(s, path);
             std::remove(path);
-            return s.odometer_start_cntr1 == 3000 && s.odometer_start_cntr2 == 3100 && s.odometer_adjust_cm == 500;
+            return s.odometer_start_cntr1 == 3000 && s.odometer_start_cntr2 == 3100 && s.odometer_adjust_mm == 5000;
         });
 
         suite->addTest("preview: opens on the opening navi", []() {
@@ -819,7 +811,6 @@ public:
             RallyState s = running();
             s.segments.erase(s.segments.begin());
             applySectorRules(s.segments, 10800);
-            recomputeSegmentCounts(s.segments, s.calibration);
             s.stage_complete = true;
             RallyState v = sectorPreviewState(s, 5000);
             SectorPanel p = sectorPanel(v, 5000, 0);

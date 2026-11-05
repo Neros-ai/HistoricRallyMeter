@@ -113,8 +113,8 @@ public:
             state.total_start_cntr2 = 2000;
             state.segment_current_number = 2;
             state.rallyTimeOffset_ms = 3600000;
-            state.segments.push_back({0.0, 100.0, 0.0, 5000.0, true});
-            state.segments.push_back({0.0, 120.0, 0.0, 8000.0, false});
+            state.segments.push_back({100.0, 5000.0, true});
+            state.segments.push_back({120.0, 8000.0, false});
             
             ASSERT_TRUE(state.units);
             ASSERT_EQ(state.calibration, 750000);
@@ -122,10 +122,8 @@ public:
             ASSERT_EQ(state.segment_current_number, 2);
             ASSERT_EQ(state.rallyTimeOffset_ms, 3600000);
             ASSERT_EQ(state.segments.size(), 2u);
-            ASSERT_NEAR(state.segments[0].target_speed_counts_per_hour, 100.0, 0.001);
-            ASSERT_NEAR(state.segments[0].distance_counts, 5000.0, 0.001);
+            ASSERT_NEAR(state.segments[0].distance_m, 5000.0, 0.001);
             ASSERT_TRUE(state.segments[0].autoNext);
-            ASSERT_NEAR(state.segments[1].target_speed_counts_per_hour, 120.0, 0.001);
             ASSERT_FALSE(state.segments[1].autoNext);
             
             return true;
@@ -170,15 +168,12 @@ public:
         suite->addTest("Load JSON with multiple segments", []() {
             // Test that segments vector can hold multiple segments correctly
             std::vector<Segment> segments;
-            segments.push_back({0.0, 50.0, 0.0, 1000.0, true});
-            segments.push_back({0.0, 60.0, 0.0, 2000.0, false});
-            segments.push_back({0.0, 70.0, 0.0, 3000.0, true});
+            segments.push_back({50.0, 1000.0, true});
+            segments.push_back({60.0, 2000.0, false});
+            segments.push_back({70.0, 3000.0, true});
             
             ASSERT_EQ(segments.size(), 3u);
-            ASSERT_NEAR(segments[0].target_speed_counts_per_hour, 50.0, 0.001);
-            ASSERT_NEAR(segments[1].target_speed_counts_per_hour, 60.0, 0.001);
-            ASSERT_NEAR(segments[2].target_speed_counts_per_hour, 70.0, 0.001);
-            ASSERT_NEAR(segments[0].distance_counts, 1000.0, 0.001);
+            ASSERT_NEAR(segments[0].distance_m, 1000.0, 0.001);
             ASSERT_TRUE(segments[0].autoNext);
             ASSERT_FALSE(segments[1].autoNext);
             
@@ -223,8 +218,8 @@ public:
             state.segment_start_time_ms = 7777777;
             state.segment_current_number = 1;
             state.rallyTimeOffset_ms = 1800000;
-            state.segments.push_back({0.0, 100, 0.0, 2000, true});
-            state.segments.push_back({0.0, 150, 0.0, 3000, false});
+            state.segments.push_back({100, 2000, true});
+            state.segments.push_back({150, 3000, false});
             
             // Save using ConfigFile::save logic
             std::ofstream file(test_config_file);
@@ -239,8 +234,8 @@ public:
             file << "  \"rallyTimeOffset_ms\": " << state.rallyTimeOffset_ms << ",\n";
             file << "  \"segments\": [\n";
             for (size_t i = 0; i < state.segments.size(); i++) {
-                file << "    {\"target_speed_counts_per_hour\": " << state.segments[i].target_speed_counts_per_hour;
-                file << ", \"distance_counts\": " << state.segments[i].distance_counts;
+                file << "    {\"target_speed_kph\": " << state.segments[i].target_speed_kph;
+                file << ", \"distance_m\": " << state.segments[i].distance_m;
                 file << ", \"autoNext\": " << (state.segments[i].autoNext ? "true" : "false") << "}";
                 if (i < state.segments.size() - 1) file << ",";
                 file << "\n";
@@ -259,7 +254,6 @@ public:
             ASSERT_TRUE(content.find("\"calibration\": 800000") != std::string::npos);
             ASSERT_TRUE(content.find("\"counters\": false") != std::string::npos);
             ASSERT_TRUE(content.find("\"segment_current_number\": 1") != std::string::npos);
-            ASSERT_TRUE(content.find("\"target_speed_counts_per_hour\": 100") != std::string::npos);
             
             cleanup();
             return true;
@@ -291,21 +285,21 @@ public:
             // a power blip silently reintroduces the error it cancelled.
             const std::string path = "/tmp/rallybox_test_dist_adjust.json";
             RallyState out;
-            out.total_distance_adjust_cm = -2500;
-            out.trip_distance_adjust_cm = -1800;
+            out.total_distance_adjust_mm = -25000;
+            out.trip_distance_adjust_mm = -18000;
             ConfigFile::save(out, path);
 
             RallyState in;
             ConfigFile::load(in, path);
             std::remove(path.c_str());
-            return in.total_distance_adjust_cm == -2500
-                && in.trip_distance_adjust_cm == -1800;
+            return in.total_distance_adjust_mm == -25000
+                && in.trip_distance_adjust_mm == -18000;
         });
 
         suite->addTest("distance corrections default to zero", []() {
             RallyState fresh;
-            return fresh.total_distance_adjust_cm == 0
-                && fresh.trip_distance_adjust_cm == 0;
+            return fresh.total_distance_adjust_mm == 0
+                && fresh.trip_distance_adjust_mm == 0;
         });
 
         suite->addTest("beep assist settings survive a save/load round trip", []() {
@@ -600,7 +594,7 @@ public:
 
             RallyState state;
             state.calibration = 910000;
-            state.segments.push_back({50.0, 100.0, 1000.0, 2000.0, true});
+            state.segments.push_back({100.0, 2000.0, true});
             ConfigFile::save(state, path);
 
             std::ifstream tmp(path + ".tmp");

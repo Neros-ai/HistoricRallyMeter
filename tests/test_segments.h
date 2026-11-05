@@ -17,15 +17,13 @@ public:
             RallyState state;
             
             Segment seg;
-            seg.target_speed_counts_per_hour = 50000.0;
-            seg.distance_counts = 10000.0;
+            seg.distance_m = 10000.0;
             seg.autoNext = true;
             
             state.segments.push_back(seg);
             
             ASSERT_EQ(state.segments.size(), 1u);
-            ASSERT_NEAR(state.segments[0].target_speed_counts_per_hour, 50000.0, 0.001);
-            ASSERT_NEAR(state.segments[0].distance_counts, 10000.0, 0.001);
+            ASSERT_NEAR(state.segments[0].distance_m, 10000.0, 0.001);
             ASSERT_TRUE(state.segments[0].autoNext);
             
             return true;
@@ -35,16 +33,14 @@ public:
         suite->addTest("Delete segment from list", []() {
             RallyState state;
             
-            state.segments.push_back({0.0, 100.0, 0.0, 1000.0, true});
-            state.segments.push_back({0.0, 200.0, 0.0, 2000.0, false});
-            state.segments.push_back({0.0, 300.0, 0.0, 3000.0, true});
+            state.segments.push_back({100.0, 1000.0, true});
+            state.segments.push_back({200.0, 2000.0, false});
+            state.segments.push_back({300.0, 3000.0, true});
             
             // Delete middle segment
             state.segments.erase(state.segments.begin() + 1);
             
             ASSERT_EQ(state.segments.size(), 2u);
-            ASSERT_NEAR(state.segments[0].target_speed_counts_per_hour, 100.0, 0.001);
-            ASSERT_NEAR(state.segments[1].target_speed_counts_per_hour, 300.0, 0.001);
             
             return true;
         });
@@ -64,9 +60,7 @@ public:
             ASSERT_NEAR(counts_per_hour, 100000.0, 0.001);
             
             Segment seg;
-            seg.target_speed_counts_per_hour = counts_per_hour;
             
-            ASSERT_NEAR(seg.target_speed_counts_per_hour, 100000.0, 0.001);
             
             return true;
         });
@@ -86,14 +80,14 @@ public:
         // Test autoNext advances segment
         suite->addTest("AutoNext=true advances segment when distance reached", []() {
             RallyState state;
-            state.segments.push_back({0.0, 100000.0, 0.0, 1000.0, true});   // 1000 counts, autoNext
-            state.segments.push_back({0.0, 120000.0, 0.0, 2000.0, false});
+            state.segments.push_back({100000.0, 1000.0, true});   // 1000 counts, autoNext
+            state.segments.push_back({120000.0, 2000.0, false});
             state.segment_current_number = 0;
             state.segment_start_cntr1 = 0;
             
             // Simulate distance covered
             uint64_t current_cntr1 = 1500;  // > 1000 counts
-            double segment_counts = state.segments[0].distance_counts;
+            double segment_counts = state.segments[0].distance_m;
             
             bool should_advance = (current_cntr1 - state.segment_start_cntr1) >= segment_counts;
             
@@ -106,7 +100,7 @@ public:
         // Test autoNext=false requires manual
         suite->addTest("AutoNext=false requires manual next segment button", []() {
             RallyState state;
-            state.segments.push_back({0.0, 100000.0, 0.0, 1000.0, false});  // autoNext = false
+            state.segments.push_back({100000.0, 1000.0, false});  // autoNext = false
             state.segment_current_number = 0;
             
             // Even if distance exceeded, should NOT auto-advance
@@ -118,9 +112,9 @@ public:
         // Test skip multiple segments
         suite->addTest("Skip multiple segments if polling lag", []() {
             RallyState state;
-            state.segments.push_back({0.0, 100000.0, 0.0, 100.0, true});   // 100 counts
-            state.segments.push_back({0.0, 100000.0, 0.0, 100.0, true});   // 100 counts
-            state.segments.push_back({0.0, 100000.0, 0.0, 100.0, true});   // 100 counts
+            state.segments.push_back({100000.0, 100.0, true});   // 100 counts
+            state.segments.push_back({100000.0, 100.0, true});   // 100 counts
+            state.segments.push_back({100000.0, 100.0, true});   // 100 counts
             state.segment_current_number = 0;
             state.segment_start_cntr1 = 0;
             
@@ -130,7 +124,7 @@ public:
             double cumulative = 0.0;
             
             for (size_t i = state.segment_current_number; i < state.segments.size(); i++) {
-                cumulative += state.segments[i].distance_counts;
+                cumulative += state.segments[i].distance_m;
                 if (distance_covered >= cumulative && state.segments[i].autoNext) {
                     segments_to_skip++;
                 }
@@ -156,13 +150,13 @@ public:
         suite->addTest("Past end of last segment by >1000m shows --.--", []() {
             RallyState state;
             state.calibration = 600000;  // 0.6m per count
-            state.segments.push_back({0.0, 100000.0, 0.0, 10000.0, false});  // 10000 counts = 6000m
+            state.segments.push_back({100000.0, 10000.0, false});  // 10000 counts = 6000m
             state.segment_current_number = 0;
             state.segment_start_cntr1 = 0;
             
             // Current position: 10000 + 2000 counts = 12000 counts (1200m past end)
             double current_counts = 12000.0;
-            double segment_end = state.segments[0].distance_counts;
+            double segment_end = state.segments[0].distance_m;
             double distance_past = current_counts - segment_end;  // 2000 counts
             
             // Convert to meters: 2000 * 0.6 = 1200m
@@ -394,7 +388,7 @@ public:
             std::vector<Segment> segs(2);
             segs[0].distance_m = 1000.0;   // boundary 1 at 1000 m
             segs[1].distance_m = 2000.0;   // boundary 2 at 3000 m
-            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, 950000, 1000));
+            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, 950000));
             ASSERT_TRUE(std::abs(segs[0].distance_m - 950.0) < 1e-6);
             ASSERT_TRUE(std::abs(segs[1].distance_m - 2050.0) < 1e-6);
             // The point that matters: boundary 2, and so the stage total, is
@@ -409,7 +403,7 @@ public:
             segs[0].distance_m = 1000.0;
             segs[1].distance_m = 2000.0;
             // 200 m into segment 2, the crew decide the change really came here.
-            ASSERT_TRUE(retimeSegmentBoundaryBackward(segs, 1, 200000, 1000));
+            ASSERT_TRUE(retimeSegmentBoundaryBackward(segs, 1, 200000));
             ASSERT_TRUE(std::abs(segs[0].distance_m - 1200.0) < 1e-6);
             ASSERT_TRUE(std::abs(segs[1].distance_m - 1800.0) < 1e-6);
             ASSERT_TRUE(std::abs((segs[0].distance_m + segs[1].distance_m)
@@ -423,8 +417,8 @@ public:
             // Last segment: "next" has nowhere to hand the distance, and the
             // first segment has no predecessor to give it to. Changing one
             // side alone would silently resize the stage.
-            ASSERT_FALSE(retimeSegmentBoundaryForward(segs, 0, 950000, 1000));
-            ASSERT_FALSE(retimeSegmentBoundaryBackward(segs, 0, 200000, 1000));
+            ASSERT_FALSE(retimeSegmentBoundaryForward(segs, 0, 950000));
+            ASSERT_FALSE(retimeSegmentBoundaryBackward(segs, 0, 200000));
             ASSERT_TRUE(std::abs(segs[0].distance_m - 1000.0) < 1e-6);
             return true;
         });
@@ -435,7 +429,7 @@ public:
             segs[1].distance_m = 100.0;
             // "next" pressed well past the segment end hands back a negative
             // distance; the next segment floors at zero rather than inverting.
-            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, 2000000, 1000));
+            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, 2000000));
             ASSERT_TRUE(segs[1].distance_m >= 0.0);
             return true;
         });

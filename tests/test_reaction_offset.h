@@ -37,7 +37,6 @@ class TestReactionOffset {
         s.segments = { row(SEG_NAVI, 380, 0, 0, 30.0), row(SEG_PC, 180, 31, 1), row(SEG_PC, 60, 10, 2),
                        row(SEG_NAVI, 5000, 0, 0, 30.0) };
         applySectorRules(s.segments, 10800);
-        recomputeSegmentCounts(s.segments, s.calibration);
         s.stage_segments = s.segments;
         s.segment_current_number = 0;
         s.stage_complete = false;
@@ -64,7 +63,7 @@ public:
         suite->addTest("flying start: Trip and Total take the same distance back", []() {
             RallyState s; s.rally_type = 0; s.reaction_offset_ms = 100;
             applyStartPressOffset(s, 10.0);
-            return s.total_distance_adjust_cm == 100 && s.trip_distance_adjust_cm == 100;
+            return s.total_distance_adjust_mm == 1000 && s.trip_distance_adjust_mm == 1000;
         });
 
         suite->addTest("italian tube press: the clock starts 80 ms earlier", []() {
@@ -93,8 +92,8 @@ public:
                 applyNextBaselineOffset(s, 10.0);
                 ok = ok && s.total_start_time_ms == 5000000 && s.segment_start_time_ms == 5000000 &&
                      s.trip_start_time_ms == 5000000 && s.trial_start_ms == 5000000 &&
-                     s.total_distance_adjust_cm == 0 && s.sector_start_odometer_cm == 0 &&
-                     s.segment_start_adjust_cm == 0 && s.trip_distance_adjust_cm == 0;
+                     s.total_distance_adjust_mm == 0 && s.sector_start_odometer_mm == 0 &&
+                     s.segment_start_adjust_mm == 0 && s.trip_distance_adjust_mm == 0;
             }
             return ok && pressTimeMs(1234, 0) == 1234 && pressBackMm(10.0, 0) == 0 &&
                    boundaryMmAtPress(-5000, 10.0, 0) == -5000 &&
@@ -106,9 +105,8 @@ public:
             const double v = reactionSpeedMps(36.0, false);
             Segment a, b; a.distance_m = 2000; b.distance_m = 3000;
             std::vector<Segment> segs = {a, b};
-            recomputeSegmentCounts(segs, 1000000);
             const int64_t driven = boundaryMmAtPress(1005000, v, 100);
-            retimeSegmentBoundaryForward(segs, 0, driven, 1000000);
+            retimeSegmentBoundaryForward(segs, 0, driven);
             return driven == 1004000 && segs[0].distance_m == 1004.0 && pressTimeMs(36000000, 100) == 35999900;
         });
 
@@ -118,13 +116,13 @@ public:
             const double v = 10.0;
             // press 1 at 1000 m driven
             int64_t d1 = boundaryMmAtPress(
-                1000000 + static_cast<int64_t>(s.total_distance_adjust_cm - s.segment_start_adjust_cm) * 10, v, 100);
-            s.segment_start_adjust_cm = s.total_distance_adjust_cm;   // what on_next_press does
+                1000000 + static_cast<int64_t>(s.total_distance_adjust_mm - s.segment_start_adjust_mm), v, 100);
+            s.segment_start_adjust_mm = s.total_distance_adjust_mm;   // what on_next_press does
             applyNextBaselineOffset(s, v);
             // press 2 at 2000 m on the counters, 1000 m since press 1's counters
             int64_t d2 = boundaryMmAtPress(
-                1000000 + static_cast<int64_t>(s.total_distance_adjust_cm - s.segment_start_adjust_cm) * 10, v, 100);
-            return d1 == 999000 && d2 == 1000000 && s.trip_distance_adjust_cm == 100;
+                1000000 + static_cast<int64_t>(s.total_distance_adjust_mm - s.segment_start_adjust_mm), v, 100);
+            return d1 == 999000 && d2 == 1000000 && s.trip_distance_adjust_mm == 1000;
         });
 
         suite->addTest("negative offset pushes the boundary on", []() {
@@ -134,17 +132,17 @@ public:
         suite->addTest("surrey start at a waypoint", []() {
             // +100 ms at 50 kph: stage distance baseline 1.39 m back, stage clock 100 ms earlier.
             RallyState s = started(1, 100, 8000000);
-            s.sector_start_odometer_cm = 500000;
+            s.sector_start_odometer_mm = 5000000;
             applyStartPressOffset(s, reactionSpeedMps(50.0, false));
             return s.total_start_time_ms == 7999900 && s.segment_start_time_ms == 7999900 &&
-                   s.total_distance_adjust_cm == 139 && s.sector_start_odometer_cm == 500000 - 139;
+                   s.total_distance_adjust_mm == 1389 && s.sector_start_odometer_mm == 5000000 - 1389;
         });
 
         suite->addTest("greek start now as a flying start", []() {
             RallyState s = started(0, 100, 8000000);
             applyStartPressOffset(s, 10.0);
-            return s.total_start_time_ms == 7999900 && s.total_distance_adjust_cm == 100 &&
-                   s.sector_start_odometer_cm == 0;
+            return s.total_start_time_ms == 7999900 && s.total_distance_adjust_mm == 1000 &&
+                   s.sector_start_odometer_mm == 0;
         });
 
         suite->addTest("a standing start is untouched; 5 kph and over counts as moving", []() {
@@ -154,9 +152,9 @@ public:
             applyStartPressOffset(z, reactionSpeedMps(-1.0, false));   // no reading
             RallyState b = started(0, 100, 8000000);
             applyStartPressOffset(b, reactionSpeedMps(5.0, false));
-            return a.total_start_time_ms == 8000000 && a.total_distance_adjust_cm == 0 &&
-                   z.total_start_time_ms == 8000000 && z.total_distance_adjust_cm == 0 &&
-                   b.total_start_time_ms == 7999900 && b.total_distance_adjust_cm == 14;
+            return a.total_start_time_ms == 8000000 && a.total_distance_adjust_mm == 0 &&
+                   z.total_start_time_ms == 8000000 && z.total_distance_adjust_mm == 0 &&
+                   b.total_start_time_ms == 7999900 && b.total_distance_adjust_mm == 139;
         });
 
         suite->addTest("surrey time taken is unchanged", []() {

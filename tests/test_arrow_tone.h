@@ -26,7 +26,7 @@ public:
             // Straddling the floor by less than the latch threshold: the tone
             // must make one decision and hold it, not follow each wobble.
             for (double s : {0.15, 0.05, 0.12, 0.08, 0.15, 0.05}) {
-                ArrowToneResult r = computeArrowBasedTone(st, s, TARGET_100KPH, CAL,
+                ArrowToneResult r = computeArrowBasedTone(st, s, TARGET_100KPH,
                                                           false, 1000.0, false);
                 ASSERT_FALSE(r.tone_active);
             }
@@ -40,17 +40,17 @@ public:
         // crew who were exactly on time.
         suite->addTest("an error closing onto zero goes silent", [CAL, TARGET_100KPH]() {
             ArrowToneState st;
-            ASSERT_TRUE(computeArrowBasedTone(st, -1.0, TARGET_100KPH, CAL, false,
+            ASSERT_TRUE(computeArrowBasedTone(st, -1.0, TARGET_100KPH, false,
                                               1000.0, false).tone_active);
             // Closed smoothly, 10ms-tick sized steps, as the crew actually do it.
             for (int i = 99; i >= 0; i--) {
                 double s = -(i / 100.0);
-                ArrowToneResult r = computeArrowBasedTone(st, s, TARGET_100KPH, CAL,
+                ArrowToneResult r = computeArrowBasedTone(st, s, TARGET_100KPH,
                                                           false, 1000.0, false);
                 ASSERT_EQ(r.tone_active,
                           std::abs(s) >= ARROW_TONE_SOUND_THRESHOLD_S);
             }
-            ASSERT_FALSE(computeArrowBasedTone(st, 0.0, TARGET_100KPH, CAL, false,
+            ASSERT_FALSE(computeArrowBasedTone(st, 0.0, TARGET_100KPH, false,
                                                1000.0, false).tone_active);
             return true;
         });
@@ -59,33 +59,33 @@ public:
             ArrowToneState st;
             // Rising: silent right up to the edge, sounding at it.
             for (double s : {0.0, 0.10, 0.15, 0.19}) {
-                ASSERT_FALSE(computeArrowBasedTone(st, s, TARGET_100KPH, CAL, false,
+                ASSERT_FALSE(computeArrowBasedTone(st, s, TARGET_100KPH, false,
                                                    1000.0, false).tone_active);
             }
-            ASSERT_TRUE(computeArrowBasedTone(st, 0.20, TARGET_100KPH, CAL, false,
+            ASSERT_TRUE(computeArrowBasedTone(st, 0.20, TARGET_100KPH, false,
                                               1000.0, false).tone_active);
             // Falling: the same point, not a lower one.
-            ASSERT_TRUE(computeArrowBasedTone(st, 0.20, TARGET_100KPH, CAL, false,
+            ASSERT_TRUE(computeArrowBasedTone(st, 0.20, TARGET_100KPH, false,
                                               1000.0, false).tone_active);
-            ASSERT_FALSE(computeArrowBasedTone(st, 0.19, TARGET_100KPH, CAL, false,
+            ASSERT_FALSE(computeArrowBasedTone(st, 0.19, TARGET_100KPH, false,
                                                1000.0, false).tone_active);
             // And negative errors behave identically.
-            ASSERT_TRUE(computeArrowBasedTone(st, -0.20, TARGET_100KPH, CAL, false,
+            ASSERT_TRUE(computeArrowBasedTone(st, -0.20, TARGET_100KPH, false,
                                               1000.0, false).tone_active);
-            ASSERT_FALSE(computeArrowBasedTone(st, -0.19, TARGET_100KPH, CAL, false,
+            ASSERT_FALSE(computeArrowBasedTone(st, -0.19, TARGET_100KPH, false,
                                                1000.0, false).tone_active);
             return true;
         });
 
         suite->addTest("a real error holds the tone through small wobble", [CAL, TARGET_100KPH]() {
             ArrowToneState st;
-            ArrowToneResult first = computeArrowBasedTone(st, 5.0, TARGET_100KPH, CAL,
+            ArrowToneResult first = computeArrowBasedTone(st, 5.0, TARGET_100KPH,
                                                           false, 1000.0, false);
             ASSERT_TRUE(first.tone_active);
             // Wobble under the latch threshold: same cadence, same pitch, no
             // gap -- the tone the crew hear does not change at all.
             for (double s : {5.1, 4.95, 5.05, 4.9, 5.15}) {
-                ArrowToneResult r = computeArrowBasedTone(st, s, TARGET_100KPH, CAL,
+                ArrowToneResult r = computeArrowBasedTone(st, s, TARGET_100KPH,
                                                           false, 1000.0, false);
                 ASSERT_TRUE(r.tone_active);
                 ASSERT_EQ(r.tone_ms, first.tone_ms);
@@ -97,24 +97,24 @@ public:
 
         suite->addTest("a genuine move is followed", [CAL, TARGET_100KPH]() {
             ArrowToneState st;
-            ASSERT_TRUE(computeArrowBasedTone(st, 5.0, TARGET_100KPH, CAL, false,
+            ASSERT_TRUE(computeArrowBasedTone(st, 5.0, TARGET_100KPH, false,
                                               1000.0, false).tone_active);
             // Back on time by a clear margin: the tone stops, as it should.
-            ASSERT_FALSE(computeArrowBasedTone(st, 0.0, TARGET_100KPH, CAL, false,
+            ASSERT_FALSE(computeArrowBasedTone(st, 0.0, TARGET_100KPH, false,
                                                1000.0, false).tone_active);
             return true;
         });
 
         suite->addTest("an error dithering across the 30s ceiling does not chatter", [CAL, TARGET_100KPH]() {
             ArrowToneState st;
-            computeArrowBasedTone(st, 29.9, TARGET_100KPH, CAL, false, 1000.0, false);
-            bool first = computeArrowBasedTone(st, 29.9, TARGET_100KPH, CAL, false,
+            computeArrowBasedTone(st, 29.9, TARGET_100KPH, false, 1000.0, false);
+            bool first = computeArrowBasedTone(st, 29.9, TARGET_100KPH, false,
                                                1000.0, false).tone_active;
             // Wobble strictly inside the latch threshold. A move BIGGER
             // than the threshold is a genuine change and is followed, which
             // is the point -- one clean transition, not a chatter.
             for (double s : {30.05, 29.95, 30.02, 29.98}) {
-                ArrowToneResult r = computeArrowBasedTone(st, s, TARGET_100KPH, CAL,
+                ArrowToneResult r = computeArrowBasedTone(st, s, TARGET_100KPH,
                                                           false, 1000.0, false);
                 ASSERT_EQ(r.tone_active, first);
             }
@@ -123,13 +123,13 @@ public:
 
         suite->addTest("the arrows still follow the live error, not the latch", [CAL, TARGET_100KPH]() {
             ArrowToneState st;
-            computeArrowBasedTone(st, 5.0, TARGET_100KPH, CAL, false, 1000.0, false);
+            computeArrowBasedTone(st, 5.0, TARGET_100KPH, false, 1000.0, false);
             // The latch is at 5.0. A wobble to 5.1 must still be what the
             // on-screen arrows are computed from -- only the TONE is latched.
             ArrowToneState fresh;
-            ArrowToneResult live = computeArrowBasedTone(fresh, 5.1, TARGET_100KPH, CAL,
+            ArrowToneResult live = computeArrowBasedTone(fresh, 5.1, TARGET_100KPH,
                                                          false, 1000.0, false);
-            ArrowToneResult held = computeArrowBasedTone(st, 5.1, TARGET_100KPH, CAL,
+            ArrowToneResult held = computeArrowBasedTone(st, 5.1, TARGET_100KPH,
                                                          false, 1000.0, false);
             ASSERT_EQ(held.num_arrows, live.num_arrows);
             ASSERT_EQ(held.increase_speed, live.increase_speed);
@@ -138,44 +138,44 @@ public:
 
         suite->addTest("leaving the zone clears the latch", [CAL, TARGET_100KPH]() {
             ArrowToneState st;
-            computeArrowBasedTone(st, 5.0, TARGET_100KPH, CAL, false, 1000.0, false);
+            computeArrowBasedTone(st, 5.0, TARGET_100KPH, false, 1000.0, false);
             // Out of the zone (before 250m): latch cleared, so the next stage
             // is never judged against the last one's error.
-            computeArrowBasedTone(st, 5.0, TARGET_100KPH, CAL, false, 100.0, false);
+            computeArrowBasedTone(st, 5.0, TARGET_100KPH, false, 100.0, false);
             ASSERT_NEAR(st.lastCommittedSeconds, 0.0, 0.0001);
             return true;
         });
 
         suite->addTest("no arrows/no tone within the 0.1s dead zone", [CAL, TARGET_100KPH]() {
             ArrowToneState st1;
-            ArrowToneResult r = computeArrowBasedTone(st1, 0.05, TARGET_100KPH, CAL, false, 1000.0, false);
+            ArrowToneResult r = computeArrowBasedTone(st1, 0.05, TARGET_100KPH, false, 1000.0, false);
             return r.num_arrows == 0 && r.tone_active == false;
         });
 
         suite->addTest("no arrows/no tone when there is no target speed", [CAL, TARGET_100KPH]() {
             ArrowToneState st2;
-            ArrowToneResult r = computeArrowBasedTone(st2, 5.0, 0.0, CAL, false, 1000.0, false);
+            ArrowToneResult r = computeArrowBasedTone(st2, 5.0, 0.0, false, 1000.0, false);
             return r.num_arrows == 0 && r.tone_active == false;
         });
 
         suite->addTest("a small correction gives 1 arrow", [CAL, TARGET_100KPH]() {
             // seconds=-0.3: adjusted=17.7s, needed=101.69kph, diff=1.69 -> 1 arrow
             ArrowToneState st3;
-            ArrowToneResult r = computeArrowBasedTone(st3, -0.3, TARGET_100KPH, CAL, false, 1000.0, false);
+            ArrowToneResult r = computeArrowBasedTone(st3, -0.3, TARGET_100KPH, false, 1000.0, false);
             return r.num_arrows == 1;
         });
 
         suite->addTest("a moderate correction gives 2 arrows", [CAL, TARGET_100KPH]() {
             // seconds=-1.0: adjusted=17.0s, needed=105.88kph, diff=5.88 -> 2 arrows
             ArrowToneState st4;
-            ArrowToneResult r = computeArrowBasedTone(st4, -1.0, TARGET_100KPH, CAL, false, 1000.0, false);
+            ArrowToneResult r = computeArrowBasedTone(st4, -1.0, TARGET_100KPH, false, 1000.0, false);
             return r.num_arrows == 2;
         });
 
         suite->addTest("a large correction gives 3 arrows, behind => increase_speed", [CAL, TARGET_100KPH]() {
             // seconds=-2.0: adjusted=16.0s, needed=112.5kph, diff=12.5 -> 3 arrows
             ArrowToneState st5;
-            ArrowToneResult r = computeArrowBasedTone(st5, -2.0, TARGET_100KPH, CAL, false, 1000.0, false);
+            ArrowToneResult r = computeArrowBasedTone(st5, -2.0, TARGET_100KPH, false, 1000.0, false);
             return r.num_arrows == 3 && r.increase_speed == true;
         });
 
@@ -186,20 +186,20 @@ public:
             // exactly representable, so the computed diff falls a hair under 10.0 and resolves
             // to 2 arrows instead of 3. 3.0s gives diff~=14.286, well clear of the boundary.)
             ArrowToneState st6;
-            ArrowToneResult r = computeArrowBasedTone(st6, 3.0, TARGET_100KPH, CAL, false, 1000.0, false);
+            ArrowToneResult r = computeArrowBasedTone(st6, 3.0, TARGET_100KPH, false, 1000.0, false);
             return r.num_arrows == 3 && r.increase_speed == false;
         });
 
         suite->addTest("behind schedule ticks at the lower-pitched behind tone", [CAL, TARGET_100KPH]() {
             ArrowToneState st7;
-            ArrowToneResult r = computeArrowBasedTone(st7, -2.0, TARGET_100KPH, CAL, false, 1000.0, false);
+            ArrowToneResult r = computeArrowBasedTone(st7, -2.0, TARGET_100KPH, false, 1000.0, false);
             return r.tone_active == true && std::abs(r.freq_hz - ARROW_TONE_BEHIND_HZ) < 0.01
                 && r.tone_ms == ARROW_TONE_TICK_MS && r.silence_ms == 130;
         });
 
         suite->addTest("ahead of schedule ticks at the ahead pitch", [CAL, TARGET_100KPH]() {
             ArrowToneState st8;
-            ArrowToneResult r = computeArrowBasedTone(st8, 2.0, TARGET_100KPH, CAL, false, 1000.0, false);
+            ArrowToneResult r = computeArrowBasedTone(st8, 2.0, TARGET_100KPH, false, 1000.0, false);
             return r.tone_active == true && std::abs(r.freq_hz - ARROW_TONE_AHEAD_HZ) < 0.01;
         });
 
@@ -221,34 +221,34 @@ public:
 
         suite->addTest("the tick does not depend on the target speed", [CAL]() {
             ArrowToneState a, b;
-            ArrowToneResult slow = computeArrowBasedTone(a, -1.0, 30.0 * 1e9 / CAL, CAL, false, 1000.0, false);
-            ArrowToneResult fast = computeArrowBasedTone(b, -1.0, 100.0 * 1e9 / CAL, CAL, false, 1000.0, false);
+            ArrowToneResult slow = computeArrowBasedTone(a, -1.0, 30.0, false, 1000.0, false);
+            ArrowToneResult fast = computeArrowBasedTone(b, -1.0, 100.0, false, 1000.0, false);
             return slow.tone_active && fast.tone_active
                 && slow.silence_ms == fast.silence_ms && slow.tone_ms == fast.tone_ms;
         });
 
         suite->addTest("arrows still show but tone is silent before 250m", [CAL, TARGET_100KPH]() {
             ArrowToneState st11;
-            ArrowToneResult r = computeArrowBasedTone(st11, -2.0, TARGET_100KPH, CAL, false, 100.0, false);
+            ArrowToneResult r = computeArrowBasedTone(st11, -2.0, TARGET_100KPH, false, 100.0, false);
             return r.num_arrows == 3 && r.tone_active == false;
         });
 
         suite->addTest("arrows still show but tone is silent past the stage end", [CAL, TARGET_100KPH]() {
             ArrowToneState st12;
-            ArrowToneResult r = computeArrowBasedTone(st12, -2.0, TARGET_100KPH, CAL, false, 1000.0, true);
+            ArrowToneResult r = computeArrowBasedTone(st12, -2.0, TARGET_100KPH, false, 1000.0, true);
             return r.num_arrows == 3 && r.tone_active == false;
         });
 
         suite->addTest("arrows still show but tone is silent beyond 30s", [CAL, TARGET_100KPH]() {
             ArrowToneState st13;
-            ArrowToneResult r = computeArrowBasedTone(st13, -31.0, TARGET_100KPH, CAL, false, 1000.0, false);
+            ArrowToneResult r = computeArrowBasedTone(st13, -31.0, TARGET_100KPH, false, 1000.0, false);
             return r.num_arrows == 3 && r.tone_active == false;
         });
 
         suite->addTest("unit conversion to MPH can change the arrow tier", [CAL, TARGET_100KPH]() {
             // Same -2.0s case as the km/h 3-arrow test: diff=12.5kph -> 12.5*0.621371=7.77mph -> 2 arrows, not 3
             ArrowToneState st14;
-            ArrowToneResult r = computeArrowBasedTone(st14, -2.0, TARGET_100KPH, CAL, true, 1000.0, false);
+            ArrowToneResult r = computeArrowBasedTone(st14, -2.0, TARGET_100KPH, true, 1000.0, false);
             return r.num_arrows == 2;
         });
 

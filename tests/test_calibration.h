@@ -68,18 +68,18 @@ public:
             RallyState state;
             state.calibration = 600000;
             
-            // Add segment with target speed stored as counts per hour
+            // A segment's speed is the typed km/h, whatever the calibration
             Segment seg;
-            seg.target_speed_counts_per_hour = 100000.0;  // Stored value
-            seg.distance_counts = 50000.0;
+            seg.target_speed_kph = 60.0;
+            seg.distance_m = 5000.0;
             state.segments.push_back(seg);
             
             // Change calibration
             state.calibration = 800000;
             
-            // Segment speed should be unchanged (still in counts/hour)
-            ASSERT_NEAR(state.segments[0].target_speed_counts_per_hour, 100000.0, 0.001);
-            
+            // Nothing about the segment depends on it
+            ASSERT_NEAR(state.segments[0].target_speed_kph, 60.0, 1e-9);
+            ASSERT_NEAR(state.segments[0].distance_m, 5000.0, 1e-9);
             return true;
         });
         

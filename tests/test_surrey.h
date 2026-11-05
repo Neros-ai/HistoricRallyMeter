@@ -64,21 +64,21 @@ public:
         suite->addTest("set navi moves navi only", []() {
             RallyState s; s.rally_type = 1; s.calibration = 1000000;
             s.total_start_cntr1 = s.total_start_cntr2 = 22982;
-            s.total_distance_adjust_cm = 700;
+            s.total_distance_adjust_mm = 7000;
             const bool ok = setOdometerMetres(s, 24040, 24040, 24024);
-            return ok && surreyNaviMetres(s, 24040, 24040) == 24024 && s.total_distance_adjust_cm == 700
+            return ok && surreyNaviMetres(s, 24040, 24040) == 24024 && s.total_distance_adjust_mm == 7000
                 && calculateDistanceCounts(s, 24040, 24040, s.total_start_cntr1, s.total_start_cntr2) == 1058;
         });
 
         suite->addTest("greek set in surrey moves total only", []() {
             RallyState s; s.rally_type = 1; s.calibration = 1000000;
-            s.odometer_adjust_cm = 55;
+            s.odometer_adjust_mm = 550;
             s.total_start_cntr1 = s.total_start_cntr2 = 1000;
             // applyDistanceSet's arithmetic: solve total's correction for the wanted figure.
-            const long raw_cm = countsToCentimeters(
+            const int64_t raw_mm = countsToMm(
                 calculateDistanceCounts(s, 1800, 1800, s.total_start_cntr1, s.total_start_cntr2), s.calibration);
-            s.total_distance_adjust_cm = 80000 - raw_cm;
-            return s.odometer_adjust_cm == 55 && surreyNaviMetres(s, 1800, 1800) == 1800;
+            s.total_distance_adjust_mm = static_cast<long>(8000000 - raw_mm);
+            return s.odometer_adjust_mm == 550 && surreyNaviMetres(s, 1800, 1800) == 1800;
         });
 
         suite->addTest("surrey readout keys", []() {
@@ -107,7 +107,7 @@ public:
 
         // Task 3: fixtures (calibration 1,000,000: one count = one metre).
         auto seg = [](double m, double kph, bool autoNext) {
-            Segment g; g.distance_m = m; g.distance_counts = m; g.target_speed_kph = kph; g.autoNext = autoNext;
+            Segment g; g.distance_m = m; g.target_speed_kph = kph; g.autoNext = autoNext;
             return g;
         };
         auto ss1 = [seg]() { return std::vector<Segment>{seg(9418, 60, true)}; };
@@ -117,7 +117,7 @@ public:
             auto st = ss1();
             const bool ok = fitStageToStart(st, 9148.0, 9231.0, 1000000);
             // ideal time to the last "to" (18,566) at 60 kph
-            return ok && st[0].distance_m == 9335.0 && st[0].distance_counts == 9335.0
+            return ok && st[0].distance_m == 9335.0
                 && (st[0].distance_m / (60.0 / 3.6) > 560.0) && (st[0].distance_m / (60.0 / 3.6) < 560.2);
         });
 
@@ -136,7 +136,7 @@ public:
             RallyState s; s.rally_type = 1; s.calibration = 1000000;
             s.stage_segments = ss2();
             RallyState::MemorySlot slot; slot.first_from_m = 22307.0; slot.segments = ss2();
-            s.sector_start_odometer_cm = 0;
+            s.sector_start_odometer_mm = 0;
             surreyStart(s, slot);
             return s.stage_segments[0].distance_m == 1717.0;
         });
@@ -151,7 +151,7 @@ public:
             s.segments = ss2(); s.stage_segments = ss2();
             s.time_taken_ms = 5000; s.time_taken_stage = 2; s.surrey_finish_at_ms = 7;
             RallyState::MemorySlot slot; slot.first_from_m = 22307.0; slot.segments = ss2();
-            s.sector_start_odometer_cm = 2300000;
+            s.sector_start_odometer_mm = 23000000;
             surreyStart(s, slot);
             return s.stage_segments[0].distance_m == 1024.0
                 && s.segments[0].distance_m == 1717.0 && slot.segments[0].distance_m == 1717.0
