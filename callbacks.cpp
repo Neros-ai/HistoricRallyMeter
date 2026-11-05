@@ -1278,9 +1278,9 @@ gboolean update_display(gpointer user_data) {
     // until the crew actually change something.
     if (!data->state->stage_complete) {
         auto poll = data->poller->getMostRecent();
-        int64_t stage_counts = stageCountsCorrected(data, poll);
+        const int64_t stage_mm = stagePositionMm(*data->state, poll.cntr1, poll.cntr2);
         if (sectorEndsOnDistance(*data->state) &&
-            stageDistanceComplete(data->state->stage_segments, stage_counts)) {
+            stageDistanceComplete(data->state->stage_segments, stage_mm)) {
             data->state->stage_complete = true;
             surreyDistanceEnd(*data->state, getRallyTime_ms(*data->state));   // surrey: time taken
             ConfigFile::save(*data->state);
@@ -1329,12 +1329,17 @@ gboolean update_display(gpointer user_data) {
     // Check for auto-advance segments
     if (data->state->segment_current_number >= 0 && 
         data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
-        Segment& seg = data->state->stage_segments[data->state->segment_current_number];
-        if (seg.autoNext) {
+        // The speed changes when the car reaches the row's end measured from the stage start (typed metres summed
+        // in mm), the same position Total and the countdown count from. Several rows can fall due in one tick.
+        for (int guard = 0; guard < 8; guard++) {
+            const long cur_idx = data->state->segment_current_number;
+            if (cur_idx < 0 || cur_idx >= static_cast<long>(data->state->stage_segments.size())) break;
+            Segment& seg = data->state->stage_segments[cur_idx];
+            if (!seg.autoNext) break;
             auto current_poll = data->poller->getMostRecent();
-            int64_t seg_count_diff = segmentCountsCorrected(data, current_poll);
-            
-            if (seg_count_diff >= seg.distance_counts) {
+            const int64_t stage_mm = stagePositionMm(*data->state, current_poll.cntr1, current_poll.cntr2);
+            if (stage_mm < stageRowEndMm(data->state->stage_segments, cur_idx)) break;
+            {
                 // Advance to next segment
                 if (data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size()) - 1) {
                     // So prev can undo an automatic change too.
@@ -1348,6 +1353,8 @@ gboolean update_display(gpointer user_data) {
                     rebaseTripToSegment(*data->state, current_poll.cntr1, current_poll.cntr2);
                     ConfigFile::save(*data->state);
                     notifyWebState(data);
+                } else {
+                    break;   // the last row: nothing to advance to
                 }
             }
         }

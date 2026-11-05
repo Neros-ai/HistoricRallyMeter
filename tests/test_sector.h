@@ -837,8 +837,8 @@ public:
         suite->addTest("RB-NAV-52: past the card km with no press the italian sector is not ended by distance", []() {
             RallyState s = running();
             s.segment_current_number = 6;   // the last row
-            double total = 0; for (const Segment& g : s.stage_segments) total += g.distance_counts;
-            return stageDistanceComplete(s.stage_segments, static_cast<int64_t>(total) + 500)
+            double total_m = 0; for (const Segment& g : s.stage_segments) total_m += g.distance_m;
+            return stageDistanceComplete(s.stage_segments, static_cast<int64_t>(total_m * 1000.0) + 500)
                 && !sectorEndsOnDistance(s);
         });
 

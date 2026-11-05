@@ -180,7 +180,11 @@ int64_t elapsedForDisplay(int64_t elapsed_s, bool hold_at_zero);
 // distance, summed from its segments, against the counts driven since the
 // stage started. The point at which the stage is over and its roadbook is
 // no longer the one the crew are working to.
-bool stageDistanceComplete(const std::vector<Segment>& segs, int64_t stage_counts);
+bool stageDistanceComplete(const std::vector<Segment>& segs, int64_t stage_position_mm);
+
+// Where the car is in the stage, in whole millimetres from the Total's zero: pulses since then x calibration,
+// plus the manual correction. The same distance Total counts before it is cut to whole metres.
+int64_t stagePositionMm(const RallyState& s, uint64_t c1, uint64_t c2);
 
 // The complete armed-autostart state. Every arming press produces one of
 // these and the caller ASSIGNS it wholesale, which is what makes a press
