@@ -81,7 +81,7 @@ public:
 
         suite->addTest("a boundary into a pc is never crossed by the odometer", []() {
             RallyState s = running();
-            return segmentIndexAtStageCounts(s.segments, 400) == 0 && segmentIndexAtStageCounts(s.segments, 17000) == 0;
+            return segmentIndexAtStageMm(s.segments, 400000) == 0 && segmentIndexAtStageMm(s.segments, 17000000) == 0;   // 1 m a pulse
         });
 
         suite->addTest("untimed rows get the speed that fits the sector duration", []() {
@@ -173,10 +173,10 @@ public:
         suite->addTest("tube pressed 5 m early or late leaves later rows' starts where the card has them", []() {
             RallyState s = running();
             applySectorNext(s, 375, 375, 60000);                       // 5 m early
-            const int64_t at1 = segmentStartStageCounts(s.stage_segments, 2);
+            const int64_t at1 = segmentStartStageMm(s.stage_segments, 2);
             RallyState t = running();
             applySectorNext(t, 385, 385, 70000);                       // 5 m late
-            return segmentStartStageCounts(t.stage_segments, 2) == at1 && std::llabs(stageCounts(s, 375) - 380) <= 1;
+            return segmentStartStageMm(t.stage_segments, 2) == at1 && std::llabs(stageCounts(s, 375) - 380) <= 1;
         });
 
         suite->addTest("prev after a tube restores everything", []() {

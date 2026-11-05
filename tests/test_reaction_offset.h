@@ -96,9 +96,9 @@ public:
                      s.total_distance_adjust_cm == 0 && s.sector_start_odometer_cm == 0 &&
                      s.segment_start_adjust_cm == 0 && s.trip_distance_adjust_cm == 0;
             }
-            return ok && pressTimeMs(1234, 0) == 1234 && pressBackCounts(10.0, 0, 1000000) == 0 &&
-                   boundaryCountsAtPress(-5, 10.0, 0, 1000000) == -5 &&
-                   boundaryCountsAtPress(1000, 10.0, 0, 1000000) == 1000;
+            return ok && pressTimeMs(1234, 0) == 1234 && pressBackMm(10.0, 0) == 0 &&
+                   boundaryMmAtPress(-5000, 10.0, 0) == -5000 &&
+                   boundaryMmAtPress(1000000, 10.0, 0) == 1000000;
         });
 
         suite->addTest("greek next pulls the boundary back", []() {
@@ -107,9 +107,9 @@ public:
             Segment a, b; a.distance_m = 2000; b.distance_m = 3000;
             std::vector<Segment> segs = {a, b};
             recomputeSegmentCounts(segs, 1000000);
-            const int64_t driven = boundaryCountsAtPress(1005, v, 100, 1000000);
+            const int64_t driven = boundaryMmAtPress(1005000, v, 100);
             retimeSegmentBoundaryForward(segs, 0, driven, 1000000);
-            return driven == 1004 && segs[0].distance_m == 1004.0 && pressTimeMs(36000000, 100) == 35999900;
+            return driven == 1004000 && segs[0].distance_m == 1004.0 && pressTimeMs(36000000, 100) == 35999900;
         });
 
         suite->addTest("greek next: the second boundary lands at the real point", []() {
@@ -117,20 +117,18 @@ public:
             RallyState s = started(0, 100, 0);
             const double v = 10.0;
             // press 1 at 1000 m driven
-            int64_t d1 = boundaryCountsAtPress(
-                correctedDistanceCounts(1000, s.total_distance_adjust_cm - s.segment_start_adjust_cm, s.calibration),
-                v, 100, s.calibration);
+            int64_t d1 = boundaryMmAtPress(
+                1000000 + static_cast<int64_t>(s.total_distance_adjust_cm - s.segment_start_adjust_cm) * 10, v, 100);
             s.segment_start_adjust_cm = s.total_distance_adjust_cm;   // what on_next_press does
             applyNextBaselineOffset(s, v);
             // press 2 at 2000 m on the counters, 1000 m since press 1's counters
-            int64_t d2 = boundaryCountsAtPress(
-                correctedDistanceCounts(1000, s.total_distance_adjust_cm - s.segment_start_adjust_cm, s.calibration),
-                v, 100, s.calibration);
-            return d1 == 999 && d2 == 1000 && s.trip_distance_adjust_cm == 100;
+            int64_t d2 = boundaryMmAtPress(
+                1000000 + static_cast<int64_t>(s.total_distance_adjust_cm - s.segment_start_adjust_cm) * 10, v, 100);
+            return d1 == 999000 && d2 == 1000000 && s.trip_distance_adjust_cm == 100;
         });
 
         suite->addTest("negative offset pushes the boundary on", []() {
-            return boundaryCountsAtPress(1000, 10.0, -100, 1000000) == 1001;
+            return boundaryMmAtPress(1000000, 10.0, -100) == 1001000;
         });
 
         suite->addTest("surrey start at a waypoint", []() {

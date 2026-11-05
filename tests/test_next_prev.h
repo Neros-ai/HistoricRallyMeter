@@ -8,12 +8,15 @@
 // next / prev at any point in a segment, and prev as an undo -- usership
 // contingency 3 in docs/HANDOFF.md.
 class TestNextPrev {
+    static int64_t M(int64_t counts) { return counts * 600; }              // mm for a number of 600 mm pulses
+    static double Mm(double counts) { return counts * 0.6; }               // metres for the same
     static std::vector<Segment> roadbook() {
-        // 1000 / 2000 / 1500, at 1 count per mm-ish: counts are what matter.
+        // 600 / 1200 / 900 m. The tests think in millimetres from the stage start: M(n) is n "counts" of the
+        // 600 mm pulse these figures were first written for (1000 / 2000 / 1500 of them).
         std::vector<Segment> segs(3);
-        segs[0].distance_counts = 1000; segs[0].target_speed_kph = 30;
-        segs[1].distance_counts = 2000; segs[1].target_speed_kph = 45;
-        segs[2].distance_counts = 1500; segs[2].target_speed_kph = 60;
+        segs[0].distance_m = 600;  segs[0].target_speed_kph = 30;
+        segs[1].distance_m = 1200; segs[1].target_speed_kph = 45;
+        segs[2].distance_m = 900;  segs[2].target_speed_kph = 60;
         return segs;
     }
 
@@ -27,13 +30,13 @@ public:
             auto segs = roadbook();                 // 1000 / 2000 / 1500 = 4500
             // In segment 1 (Auto off), pressed at 2500 -- well past its own
             // 1000, but inside segment 2, which ends at 3000.
-            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, 2500, 600000));
-            ASSERT_NEAR(segs[0].distance_counts, 2500.0, 0.001);
-            ASSERT_NEAR(segs[1].distance_counts,  500.0, 0.001);
-            ASSERT_NEAR(segs[2].distance_counts, 1500.0, 0.001);
-            double total = segs[0].distance_counts + segs[1].distance_counts
-                         + segs[2].distance_counts;
-            ASSERT_NEAR(total, 4500.0, 0.001);      // finish unmoved
+            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, M(2500), 600000));
+            ASSERT_NEAR(segs[0].distance_m, Mm(2500.0), 0.001);
+            ASSERT_NEAR(segs[1].distance_m, Mm(500.0), 0.001);
+            ASSERT_NEAR(segs[2].distance_m, Mm(1500.0), 0.001);
+            double total = segs[0].distance_m + segs[1].distance_m
+                         + segs[2].distance_m;
+            ASSERT_NEAR(total, Mm(4500.0), 0.001);      // finish unmoved
             return true;
         });
 
@@ -45,17 +48,17 @@ public:
         suite->addTest("a press past the next segment keeps that segment whole", []() {
             auto segs = roadbook();                 // 1000 / 2000 / 1500 = 4500
             // In segment 1, pressed at 3500 -- past segment 2's end at 3000.
-            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, 3500, 600000));
-            ASSERT_NEAR(segs[0].distance_counts, 3500.0, 0.001);
-            ASSERT_NEAR(segs[1].distance_counts, 2000.0, 0.001);  // untouched
-            ASSERT_NEAR(segs[2].distance_counts, 1500.0, 0.001);
-            double total = segs[0].distance_counts + segs[1].distance_counts
-                         + segs[2].distance_counts;
-            ASSERT_NEAR(total, 7000.0, 0.001);      // 3500 + the rest, in full
+            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, M(3500), 600000));
+            ASSERT_NEAR(segs[0].distance_m, Mm(3500.0), 0.001);
+            ASSERT_NEAR(segs[1].distance_m, Mm(2000.0), 0.001);  // untouched
+            ASSERT_NEAR(segs[2].distance_m, Mm(1500.0), 0.001);
+            double total = segs[0].distance_m + segs[1].distance_m
+                         + segs[2].distance_m;
+            ASSERT_NEAR(total, Mm(7000.0), 0.001);      // 3500 + the rest, in full
             // Nothing is thrown away: the two later segments keep their whole
             // roadbook lengths, so their speeds are still driven.
-            ASSERT_EQ(segmentStartStageCounts(segs, 1), 3500);
-            ASSERT_EQ(segmentStartStageCounts(segs, 2), 5500);
+            ASSERT_EQ(segmentStartStageMm(segs, 1), M(3500));
+            ASSERT_EQ(segmentStartStageMm(segs, 2), M(5500));
             return true;
         });
 
@@ -77,7 +80,7 @@ public:
             recordSegmentChange(state, 0, false);
             // The press: retime, step on, and move both segment baselines to
             // the press -- what on_next_press does.
-            ASSERT_TRUE(retimeSegmentBoundaryForward(state.stage_segments, 0, 600,
+            ASSERT_TRUE(retimeSegmentBoundaryForward(state.stage_segments, 0, M(600),
                                                      state.calibration));
             state.segment_current_number = 1;
             state.segment_start_time_ms = 601000;
@@ -88,7 +91,7 @@ public:
             state.trip_distance_adjust_cm = 250;
 
             // prev, with the car at 800 counts into the stage.
-            ASSERT_TRUE(undoSegmentChange(state, 800, 800, 800));
+            ASSERT_TRUE(undoSegmentChange(state, 800, 800, M(800)));
             ASSERT_EQ(state.segment_current_number, 0);
             // RB-NAV-17: the segment's clock goes back to the segment's real
             // start, not the press it just undid.
@@ -125,7 +128,7 @@ public:
             state.segment_start_time_ms = 121000;
             state.trip_start_time_ms = 121000;
 
-            ASSERT_TRUE(undoSegmentChange(state, 1200, 1200, 1200));
+            ASSERT_TRUE(undoSegmentChange(state, 1200, 1200, M(1200)));
             ASSERT_EQ(state.segment_current_number, 0);
             ASSERT_EQ(state.segment_start_time_ms, 1000);
             ASSERT_EQ(state.trip_start_time_ms, 1000);
@@ -135,19 +138,19 @@ public:
         suite->addTest("prev merges the segment back and keeps the next known point", []() {
             auto segs = roadbook();
             // "next" pressed too early, at 600: boundary 1 moved to 600.
-            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, 600, 600000));
-            ASSERT_EQ(segmentStartStageCounts(segs, 2), 3000);   // next known point
+            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, M(600), 600000));
+            ASSERT_EQ(segmentStartStageMm(segs, 2), M(3000));   // next known point
             // prev: segment 0 runs on to that known point, segment 1 is empty.
             ASSERT_TRUE(mergeSegmentBack(segs, 1, 600000));
-            ASSERT_NEAR(segs[0].distance_counts, 3000.0, 0.001);
-            ASSERT_NEAR(segs[1].distance_counts, 0.0, 0.001);
-            ASSERT_EQ(segmentStartStageCounts(segs, 2), 3000);   // unmoved
+            ASSERT_NEAR(segs[0].distance_m, Mm(3000.0), 0.001);
+            ASSERT_NEAR(segs[1].distance_m, Mm(0.0), 0.001);
+            ASSERT_EQ(segmentStartStageMm(segs, 2), M(3000));   // unmoved
             // "next" at the real change point, 1200: back to two segments
             // with the known point still at 3000.
-            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, 1200, 600000));
-            ASSERT_NEAR(segs[0].distance_counts, 1200.0, 0.001);
-            ASSERT_NEAR(segs[1].distance_counts, 1800.0, 0.001);
-            ASSERT_EQ(segmentStartStageCounts(segs, 2), 3000);
+            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, M(1200), 600000));
+            ASSERT_NEAR(segs[0].distance_m, Mm(1200.0), 0.001);
+            ASSERT_NEAR(segs[1].distance_m, Mm(1800.0), 0.001);
+            ASSERT_EQ(segmentStartStageMm(segs, 2), M(3000));
             return true;
         });
 
@@ -168,7 +171,7 @@ public:
         suite->addTest("prev refuses on the first segment", []() {
             auto segs = roadbook();
             ASSERT_FALSE(mergeSegmentBack(segs, 0, 600000));
-            ASSERT_NEAR(segs[0].distance_counts, 1000.0, 0.001);
+            ASSERT_NEAR(segs[0].distance_m, Mm(1000.0), 0.001);
             return true;
         });
 
@@ -177,7 +180,7 @@ public:
                 RallyState s;
                 s.counters = two_wheel;
                 s.total_distance_adjust_cm = -500;
-                rebaseSegmentAt(s, 10000, 10040, 1700);
+                rebaseSegmentAt(s, 10000, 10040, M(1700));
                 ASSERT_EQ(calculateDistanceCounts(s, 10000, 10040,
                                                   s.segment_start_cntr1, s.segment_start_cntr2), 1700);
                 // The correction as it stands now belongs to the stage, not
@@ -190,15 +193,15 @@ public:
         suite->addTest("the segment at a stage distance crosses only auto boundaries", []() {
             auto segs = roadbook();               // 1000 / 2000 / 1500
             for (auto& s : segs) s.autoNext = true;
-            ASSERT_EQ(segmentIndexAtStageCounts(segs, 0), 0);
-            ASSERT_EQ(segmentIndexAtStageCounts(segs, 999), 0);
-            ASSERT_EQ(segmentIndexAtStageCounts(segs, 1000), 1);
-            ASSERT_EQ(segmentIndexAtStageCounts(segs, 3500), 2);
-            ASSERT_EQ(segmentIndexAtStageCounts(segs, 9999), 2);   // past the end: last
+            ASSERT_EQ(segmentIndexAtStageMm(segs, M(0)), 0);
+            ASSERT_EQ(segmentIndexAtStageMm(segs, M(999)), 0);
+            ASSERT_EQ(segmentIndexAtStageMm(segs, M(1000)), 1);
+            ASSERT_EQ(segmentIndexAtStageMm(segs, M(3500)), 2);
+            ASSERT_EQ(segmentIndexAtStageMm(segs, M(9999)), 2);   // past the end: last
             // A manual boundary waits for "next".
             segs[0].autoNext = false;
-            ASSERT_EQ(segmentIndexAtStageCounts(segs, 3500), 0);
-            ASSERT_EQ(segmentIndexAtStageCounts({}, 100), -1);
+            ASSERT_EQ(segmentIndexAtStageMm(segs, M(3500)), 0);
+            ASSERT_EQ(segmentIndexAtStageMm({}, M(100)), -1);
             return true;
         });
 
@@ -230,13 +233,13 @@ public:
             s.stage_segments = roadbook();
             s.segment_current_number = 0;
             recordSegmentChange(s, 0, false);
-            ASSERT_TRUE(retimeSegmentBoundaryForward(s.stage_segments, 0, 500, 600000));
+            ASSERT_TRUE(retimeSegmentBoundaryForward(s.stage_segments, 0, M(500), 600000));
             s.segment_current_number = 1;
             // prev at 700: short of 1000, so back in the earlier segment.
-            ASSERT_TRUE(undoSegmentChange(s, 10700, 10700, 700));
+            ASSERT_TRUE(undoSegmentChange(s, 10700, 10700, M(700)));
             ASSERT_EQ(s.segment_current_number, 0);
-            ASSERT_NEAR(s.stage_segments[0].distance_counts, 1000.0, 0.001);
-            ASSERT_NEAR(s.stage_segments[1].distance_counts, 2000.0, 0.001);
+            ASSERT_NEAR(s.stage_segments[0].distance_m, Mm(1000.0), 0.001);
+            ASSERT_NEAR(s.stage_segments[1].distance_m, Mm(2000.0), 0.001);
             ASSERT_EQ(calculateDistanceCounts(s, 10700, 10700,
                 s.segment_start_cntr1, s.segment_start_cntr2), 700);
             ASSERT_FALSE(prevAvailable(s));          // once only
@@ -248,13 +251,13 @@ public:
             s.stage_segments = roadbook();
             s.segment_current_number = 0;
             recordSegmentChange(s, 0, false);
-            ASSERT_TRUE(retimeSegmentBoundaryForward(s.stage_segments, 0, 500, 600000));
+            ASSERT_TRUE(retimeSegmentBoundaryForward(s.stage_segments, 0, M(500), 600000));
             s.segment_current_number = 1;
             // Noticed only at 1100: past 1000, so it stays in segment 1,
             // counted from 1000.
-            ASSERT_TRUE(undoSegmentChange(s, 11100, 11100, 1100));
+            ASSERT_TRUE(undoSegmentChange(s, 11100, 11100, M(1100)));
             ASSERT_EQ(s.segment_current_number, 1);
-            ASSERT_NEAR(s.stage_segments[0].distance_counts, 1000.0, 0.001);
+            ASSERT_NEAR(s.stage_segments[0].distance_m, Mm(1000.0), 0.001);
             ASSERT_EQ(calculateDistanceCounts(s, 11100, 11100,
                 s.segment_start_cntr1, s.segment_start_cntr2), 100);
             return true;
@@ -267,12 +270,12 @@ public:
             s.segment_current_number = 0;
             recordSegmentChange(s, 0, true);          // auto-advance at 1000
             s.segment_current_number = 1;
-            ASSERT_TRUE(undoSegmentChange(s, 11200, 11200, 1200));
+            ASSERT_TRUE(undoSegmentChange(s, 11200, 11200, M(1200)));
             ASSERT_EQ(s.segment_current_number, 0);
             // Runs on to the next known point, 3000, not re-firing at 1000.
-            ASSERT_NEAR(s.stage_segments[0].distance_counts, 3000.0, 0.001);
-            ASSERT_NEAR(s.stage_segments[1].distance_counts, 0.0, 0.001);
-            ASSERT_EQ(segmentStartStageCounts(s.stage_segments, 2), 3000);
+            ASSERT_NEAR(s.stage_segments[0].distance_m, Mm(3000.0), 0.001);
+            ASSERT_NEAR(s.stage_segments[1].distance_m, Mm(0.0), 0.001);
+            ASSERT_EQ(segmentStartStageMm(s.stage_segments, 2), M(3000));
             ASSERT_EQ(calculateDistanceCounts(s, 11200, 11200,
                 s.segment_start_cntr1, s.segment_start_cntr2), 1200);
             return true;
