@@ -20,7 +20,7 @@ int64_t pressTimeMs(int64_t press_ms, int offset_ms);
 // How far back the car was, in metres / centimetres / counts (never negative for a late press).
 double pressBackMetres(double speed_mps, int offset_ms);
 long pressBackCm(double speed_mps, int offset_ms);
-int64_t pressBackCounts(double speed_mps, int offset_ms, long calibration);
+int64_t pressBackMm(double speed_mps, int offset_ms);
 
 // The display speed (kph, or mph when `mph`; negative = no reading) in metres per second.
 double reactionSpeedMps(double displayed_speed, bool mph);
@@ -38,7 +38,7 @@ void applyStartPressOffset(RallyState& s, double speed_mps);
 // time baseline already taken back. Without it boundary k drifts by (k-1) x speed x offset.
 void applyNextBaselineOffset(RallyState& s, double speed_mps);
 
-// Greek `next`: the driven counts handed to the boundary move, taken back by speed x offset.
-int64_t boundaryCountsAtPress(int64_t driven_counts, double speed_mps, int offset_ms, long calibration);
+// Greek `next`: the driven millimetres handed to the boundary move, taken back by speed x offset.
+int64_t boundaryMmAtPress(int64_t driven_mm, double speed_mps, int offset_ms);
 
 #endif

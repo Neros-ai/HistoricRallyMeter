@@ -18,8 +18,8 @@ long pressBackCm(double speed_mps, int offset_ms) {
     return static_cast<long>(std::lround(pressBackMetres(speed_mps, offset_ms) * 100.0));
 }
 
-int64_t pressBackCounts(double speed_mps, int offset_ms, long calibration) {
-    return static_cast<int64_t>(std::llround(pressBackMetres(speed_mps, offset_ms) * calibration / 1e6));
+int64_t pressBackMm(double speed_mps, int offset_ms) {
+    return static_cast<int64_t>(std::llround(pressBackMetres(speed_mps, offset_ms) * 1000.0));
 }
 
 double reactionSpeedMps(double displayed_speed, bool mph) {
@@ -51,8 +51,8 @@ void applyNextBaselineOffset(RallyState& s, double speed_mps) {
     s.trip_distance_adjust_cm += back;
 }
 
-int64_t boundaryCountsAtPress(int64_t driven_counts, double speed_mps, int offset_ms, long calibration) {
-    const int64_t back = pressBackCounts(speed_mps, offset_ms, calibration);
-    if (back == 0) return driven_counts;   // offset zero (or standing still): exactly today's figure
-    return std::max<int64_t>(0, driven_counts - back);
+int64_t boundaryMmAtPress(int64_t driven_mm, double speed_mps, int offset_ms) {
+    const int64_t back = pressBackMm(speed_mps, offset_ms);
+    if (back == 0) return driven_mm;   // offset zero (or standing still): exactly today's figure
+    return std::max<int64_t>(0, driven_mm - back);
 }

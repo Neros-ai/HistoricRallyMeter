@@ -396,10 +396,13 @@ int64_t signedCorrectedDistanceCounts(int64_t raw_counts, long adjust_cm, long c
 // prev is now mergeSegmentBack): segment index-1 is extended to here, and the
 // same distance comes off segment `index`.
 // Both return false, changing nothing, when the neighbour does not exist.
+// `driven_mm` is the distance driven in segment `index` at the press, in millimetres from the segment's start
+// (the stage position minus where the segment starts). The row lengths are the typed metres; `calibration` only
+// keeps the derived pulse copy of each length in step until that copy is removed.
 bool retimeSegmentBoundaryForward(std::vector<Segment>& segs, long index,
-                                  int64_t driven_counts, long calibration);
+                                  int64_t driven_mm, long calibration);
 bool retimeSegmentBoundaryBackward(std::vector<Segment>& segs, long index,
-                                   int64_t driven_counts, long calibration);
+                                   int64_t driven_mm, long calibration);
 
 // "prev" (owner's ruling, 2026-09-14): undo a speed change. The previous
 // segment's speed comes back at once and the change point becomes unknown
@@ -410,23 +413,26 @@ bool retimeSegmentBoundaryBackward(std::vector<Segment>& segs, long index,
 // is no previous segment.
 bool mergeSegmentBack(std::vector<Segment>& segs, long index, long calibration);
 
-// Stage distance, in counts, at which segment `index` starts: the sum of every
+// Stage distance, in millimetres from the stage start, at which segment `index` starts: the sum of every
 // segment before it.
-int64_t segmentStartStageCounts(const std::vector<Segment>& segs, long index);
+int64_t segmentStartStageMm(const std::vector<Segment>& segs, long index);
+
+// Distance from the stage start to the end of row `idx`, in whole millimetres (the rows' typed metres summed).
+int64_t stageRowEndMm(const std::vector<Segment>& segs, long idx);
 
 // The segment the car is in at `stage_counts`, walking forward from the first
 // only across boundaries auto-advance would cross itself (the segment ending
 // there has autoNext set) -- a manual boundary waits for "next" as it always
 // does. How a confirmed missed-start reset (usership 6) lands the car in the
 // right segment when it has already driven past boundaries since the press.
-long segmentIndexAtStageCounts(const std::vector<Segment>& segs, int64_t stage_counts);
+long segmentIndexAtStageMm(const std::vector<Segment>& segs, int64_t stage_mm);
 
-// Puts the segment's distance baseline `counts_into_segment` behind the
+// Puts the segment's distance baseline `mm_into_segment` behind the
 // counters' current reading, with the correction taken as it stands now, so
 // the segment reads exactly that far driven. How "prev" re-enters a segment
 // whose start was passed long ago.
 void rebaseSegmentAt(RallyState& state, uint64_t c1, uint64_t c2,
-                     int64_t counts_into_segment);
+                     int64_t mm_into_segment);
 
 // Whether the co-pilot's next / prev buttons (and the phone's) are live.
 // next: at any point in a segment (the old 500 m windows are gone) while a
@@ -450,9 +456,9 @@ void recordSegmentChange(RallyState& state, long from_index, bool automatic);
 //  - After an auto-advance: putting the point back would re-fire it at once,
 //    so the earlier segment runs on to the next known point instead
 //    (mergeSegmentBack) and waits for "next" at the real change.
-// `stage_counts` is the stage distance now. Returns false, changing nothing,
+// `stage_mm` is the stage position now, in millimetres from the stage start (stagePositionMm). Returns false, changing nothing,
 // when prev is not available.
-bool undoSegmentChange(RallyState& state, uint64_t c1, uint64_t c2, int64_t stage_counts);
+bool undoSegmentChange(RallyState& state, uint64_t c1, uint64_t c2, int64_t stage_mm);
 
 // Heading for the co-pilot's next-segment row: the current segment's own
 // target speed, with an arrow toward the change ahead. This is the one fact

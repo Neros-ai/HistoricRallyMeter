@@ -28,9 +28,6 @@ long nextChangeIndex(const std::vector<Segment>& segs, long cur);
 // to the end of each row.
 long metresToNextChange(const std::vector<Segment>& segs, long cur, long remaining_m);
 
-// Distance from the stage start to the end of row `idx`, in whole millimetres (the rows' typed metres summed).
-int64_t stageRowEndMm(const std::vector<Segment>& segs, long idx);
-
 // The countdown shown (greek and surrey): the end of the row the speed next changes at, measured from the
 // stage start and cut to whole metres, minus Total as shown. Total + countdown therefore always equals the
 // roadbook figure. `cur` out of range gives 0.

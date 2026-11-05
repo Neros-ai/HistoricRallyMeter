@@ -367,20 +367,21 @@ int64_t signedCorrectedDistanceCounts(int64_t raw_counts, long adjust_cm, long c
     return raw_counts + (static_cast<int64_t>(adjust_cm) * 10000) / calibration;
 }
 
-// Keeps distance_m in step with the count-based figure that was just changed.
-static void resyncSegmentMeters(Segment& seg, long calibration) {
-    seg.distance_m = (seg.distance_counts * static_cast<double>(calibration)) / 1e6;
+// The pulse copy of a row length follows the typed metres (it is derived, and goes away with the last pulse user).
+static void syncSegmentCounts(Segment& seg, long calibration) {
+    if (calibration > 0) seg.distance_counts = seg.distance_m * 1e6 / static_cast<double>(calibration);
 }
 
 bool retimeSegmentBoundaryForward(std::vector<Segment>& segs, long index,
-                                  int64_t driven_counts, long calibration) {
+                                  int64_t driven_mm, long calibration) {
     if (index < 0 || index + 1 >= static_cast<long>(segs.size())) return false;
     Segment& cur = segs[index];
     Segment& next = segs[index + 1];
     // What this segment gives up is exactly what the next one takes on, so the
     // boundary after it does not move.
-    double surrendered = cur.distance_counts - static_cast<double>(driven_counts);
-    cur.distance_counts = static_cast<double>(driven_counts);
+    const double driven_m = static_cast<double>(driven_mm) / 1000.0;
+    double surrendered = cur.distance_m - driven_m;
+    cur.distance_m = driven_m;
     // A "next" pressed past the end of the NEXT segment asks it to give back
     // more distance than it has. Clamping it at zero dropped the difference:
     // nothing accounted for it, so the stage total grew, the finish moved out
@@ -393,27 +394,28 @@ bool retimeSegmentBoundaryForward(std::vector<Segment>& segs, long index,
     // long, so its speed is still driven and no distance disappears. A press
     // the next segment CAN absorb is unchanged: it shrinks and the finish
     // stays put, which is the ordinary case.
-    if (next.distance_counts + surrendered >= 0.0) {
-        next.distance_counts += surrendered;
+    if (next.distance_m + surrendered >= 0.0) {
+        next.distance_m += surrendered;
     }
-    resyncSegmentMeters(cur, calibration);
-    resyncSegmentMeters(next, calibration);
+    syncSegmentCounts(cur, calibration);
+    syncSegmentCounts(next, calibration);
     return true;
 }
 
 bool retimeSegmentBoundaryBackward(std::vector<Segment>& segs, long index,
-                                   int64_t driven_counts, long calibration) {
+                                   int64_t driven_mm, long calibration) {
     if (index <= 0 || index >= static_cast<long>(segs.size())) return false;
     Segment& prev = segs[index - 1];
     Segment& cur = segs[index];
     // The previous segment really ran to here, so it grows by what has been
     // driven since the boundary -- and this segment loses the same, leaving
     // its own end where the roadbook has it.
-    prev.distance_counts += static_cast<double>(driven_counts);
-    cur.distance_counts -= static_cast<double>(driven_counts);
-    if (cur.distance_counts < 0.0) cur.distance_counts = 0.0;
-    resyncSegmentMeters(prev, calibration);
-    resyncSegmentMeters(cur, calibration);
+    const double driven_m = static_cast<double>(driven_mm) / 1000.0;
+    prev.distance_m += driven_m;
+    cur.distance_m -= driven_m;
+    if (cur.distance_m < 0.0) cur.distance_m = 0.0;
+    syncSegmentCounts(prev, calibration);
+    syncSegmentCounts(cur, calibration);
     return true;
 }
 
@@ -421,39 +423,43 @@ bool mergeSegmentBack(std::vector<Segment>& segs, long index, long calibration) 
     if (index <= 0 || index >= static_cast<long>(segs.size())) return false;
     Segment& prev = segs[index - 1];
     Segment& cur = segs[index];
-    prev.distance_counts += cur.distance_counts;
-    cur.distance_counts = 0.0;
+    prev.distance_m += cur.distance_m;
+    cur.distance_m = 0.0;
     // The merged segment now ends where the undone one did, so it takes that
     // segment's auto-advance: an automatic change point stays automatic, and
     // a manual one (a timing point) still waits for "next".
     prev.autoNext = cur.autoNext;
-    resyncSegmentMeters(prev, calibration);
-    resyncSegmentMeters(cur, calibration);
+    syncSegmentCounts(prev, calibration);
+    syncSegmentCounts(cur, calibration);
     return true;
 }
 
-int64_t segmentStartStageCounts(const std::vector<Segment>& segs, long index) {
-    double sum = 0.0;
-    for (long i = 0; i < index && i < static_cast<long>(segs.size()); i++) {
-        sum += segs[i].distance_counts;
-    }
-    return static_cast<int64_t>(sum);
+int64_t stageRowEndMm(const std::vector<Segment>& segs, long idx) {
+    int64_t mm = 0;
+    for (long i = 0; i <= idx && i < static_cast<long>(segs.size()); i++)
+        mm += std::llround(segs[static_cast<size_t>(i)].distance_m * 1000.0);
+    return mm;
 }
 
-long segmentIndexAtStageCounts(const std::vector<Segment>& segs, int64_t stage_counts) {
+int64_t segmentStartStageMm(const std::vector<Segment>& segs, long index) {
+    return index <= 0 ? 0 : stageRowEndMm(segs, index - 1);
+}
+
+long segmentIndexAtStageMm(const std::vector<Segment>& segs, int64_t stage_mm) {
     if (segs.empty()) return -1;
     long idx = 0;
-    double end = segs[0].distance_counts;
-    while (idx + 1 < static_cast<long>(segs.size()) && segs[idx].autoNext &&
-           static_cast<double>(stage_counts) >= end) {
+    int64_t end = stageRowEndMm(segs, 0);
+    while (idx + 1 < static_cast<long>(segs.size()) && segs[idx].autoNext && stage_mm >= end) {
         idx++;
-        end += segs[idx].distance_counts;
+        end = stageRowEndMm(segs, idx);
     }
     return idx;
 }
 
 void rebaseSegmentAt(RallyState& state, uint64_t c1, uint64_t c2,
-                     int64_t counts_into_segment) {
+                     int64_t mm_into_segment) {
+    // The distance baselines are still raw counter readings, so the millimetres are turned into pulses once, here.
+    const int64_t counts_into_segment = state.calibration > 0 ? mm_into_segment * 1000 / state.calibration : 0;
     uint64_t into = counts_into_segment > 0 ? static_cast<uint64_t>(counts_into_segment) : 0;
     // Both counters by the same amount: calculateDistanceCounts averages the
     // two deltas in two-wheel mode and reads counter 1 alone otherwise, and
@@ -483,8 +489,8 @@ void recordSegmentChange(RallyState& state, long from_index, bool automatic) {
     }
     state.undo_valid = true;
     state.undo_from_index = from_index;
-    state.undo_from_counts = state.stage_segments[from_index].distance_counts;
-    state.undo_to_counts = state.stage_segments[from_index + 1].distance_counts;
+    state.undo_from_m = state.stage_segments[from_index].distance_m;
+    state.undo_to_m = state.stage_segments[from_index + 1].distance_m;
     // Taken before the caller moves it on: both "next" and an auto-advance
     // set segment_start_time_ms to the moment of the change.
     state.undo_from_segment_start_ms = state.segment_start_time_ms;
@@ -492,7 +498,7 @@ void recordSegmentChange(RallyState& state, long from_index, bool automatic) {
     state.undo_stage_start_ms = state.total_start_time_ms;
 }
 
-bool undoSegmentChange(RallyState& state, uint64_t c1, uint64_t c2, int64_t stage_counts) {
+bool undoSegmentChange(RallyState& state, uint64_t c1, uint64_t c2, int64_t stage_mm) {
     if (!prevAvailable(state)) return false;
     auto& segs = state.stage_segments;
     const long i = state.undo_from_index;
@@ -500,15 +506,15 @@ bool undoSegmentChange(RallyState& state, uint64_t c1, uint64_t c2, int64_t stag
         mergeSegmentBack(segs, i + 1, state.calibration);
         state.segment_current_number = i;
     } else {
-        segs[i].distance_counts = state.undo_from_counts;
-        segs[i + 1].distance_counts = state.undo_to_counts;
-        resyncSegmentMeters(segs[i], state.calibration);
-        resyncSegmentMeters(segs[i + 1], state.calibration);
-        const int64_t point = segmentStartStageCounts(segs, i + 1);
-        state.segment_current_number = stage_counts < point ? i : i + 1;
+        segs[i].distance_m = state.undo_from_m;
+        segs[i + 1].distance_m = state.undo_to_m;
+        syncSegmentCounts(segs[i], state.calibration);
+        syncSegmentCounts(segs[i + 1], state.calibration);
+        const int64_t point = segmentStartStageMm(segs, i + 1);
+        state.segment_current_number = stage_mm < point ? i : i + 1;
     }
     const long cur = state.segment_current_number;
-    rebaseSegmentAt(state, c1, c2, stage_counts - segmentStartStageCounts(segs, cur));
+    rebaseSegmentAt(state, c1, c2, stage_mm - segmentStartStageMm(segs, cur));
     // rebaseSegmentAt rewinds the segment's DISTANCE baseline but not its
     // clock, which the change being undone overwrote with its own moment. Put
     // that back first (RB-NAV-17): everything below, and Trip's average above

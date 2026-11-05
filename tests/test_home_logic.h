@@ -98,6 +98,34 @@ public:
             return !stageDistanceComplete(st, 379999) && stageDistanceComplete(st, 380000);
         });
 
+        suite->addTest("next early keeps every later row end where it was, and the countdown follows", []() {
+            std::vector<Segment> segs(3);
+            segs[0].distance_m = 380; segs[1].distance_m = 180; segs[2].distance_m = 640;
+            const int64_t end1 = stageRowEndMm(segs, 1);
+            // "next" at 150 m (a press measured from the stage start): row 0 shrinks to 150, row 1 takes the rest.
+            if (!retimeSegmentBoundaryForward(segs, 0, 150000, 88277)) return false;
+            if (segs[0].distance_m != 150.0 || segs[1].distance_m != 410.0) return false;
+            if (stageRowEndMm(segs, 1) != end1 || stageRowEndMm(segs, 2) != 1200000) return false;
+            // Now in row 1: Total + countdown is that row's end, 560 m, as it was before the press.
+            for (long total : {151L, 200L, 379L, 559L})
+                if (total + countdownMetres(segs, 1, total) != 560) return false;
+            return true;
+        });
+
+        suite->addTest("a press is measured from the stage start, not from where the last change happened to fire", []() {
+            RallyState s;
+            s.calibration = 88277; s.counters = false;
+            s.stage_segments.resize(2);
+            s.stage_segments[0].distance_m = 380; s.stage_segments[1].distance_m = 180;
+            s.total_start_cntr1 = 0; s.total_start_cntr2 = 0;
+            s.segment_current_number = 1;
+            // The change fired one tick late, so the row's own counters began at 4,313 pulses (380.7 m):
+            s.segment_start_cntr1 = 4313; s.segment_start_cntr2 = 4313;
+            // At 4,500 pulses (397.3 m) the press is 17.3 m into row 1 by the stage position:
+            const int64_t driven = stagePositionMm(s, 4500, 4500) - segmentStartStageMm(s.stage_segments, 1);
+            return driven == 4500LL * 88277 / 1000 - 380000 && driven / 1000 == 17;
+        });
+
         suite->addTest("countdown: row ends sum the typed metres in millimetres", []() {
             std::vector<Segment> segs(3);
             segs[0].distance_m = 380.0; segs[1].distance_m = 179.9996; segs[2].distance_m = 0.4;
@@ -357,8 +385,8 @@ public:
             feed(p, a, b, 6000);                  // off route, not counted
             auto now = p.getMostRecent();
             const int64_t driven = calculateDistanceCounts(s, now.cntr1, now.cntr2, s.segment_start_cntr1, s.segment_start_cntr2);
-            retimeSegmentBoundaryForward(v, 0, driven, s.calibration);
-            return driven == 4200 && v[0].distance_counts == 4200 && v[1].distance_counts == 3800;
+            retimeSegmentBoundaryForward(v, 0, driven * 1000, s.calibration);   // 1 m a pulse: mm = pulses x 1000
+            return driven == 4200 && v[0].distance_m == 4200 && v[1].distance_m == 3800;
         });
 
         suite->addTest("poller: the shift is saved and restored", [this]() {
@@ -468,7 +496,7 @@ public:
             v[3].target_speed_kph = 49; v[3].distance_m = 860; v[3].distance_counts = 8600;
             const long folded = foldCarriedRows(v, 0);
             const bool ok = folded == 2 && v.size() == 2 && v[0].distance_m == 2010 && v[0].distance_counts == 20100
-                && v[1].target_speed_kph == 49 && segmentStartStageCounts(v, 1) == 20100;
+                && v[1].target_speed_kph == 49 && segmentStartStageMm(v, 1) == 2010000;
             // Nothing to fold: next row already changes, or no change follows.
             const bool none = foldCarriedRows(v, 0) == 0 && foldCarriedRows(v, 1) == 0;
             return ok && none;

@@ -98,12 +98,12 @@ bool applyTotalReset(AppData* data, TotalResetChoice choice) {
         // confirm, not at its boundary: put the car straight into the segment
         // its distance from the press says it is in.
         {
-            const int64_t stage_counts = stageCountsCorrected(data, poll);
-            const long idx = segmentIndexAtStageCounts(state.stage_segments, stage_counts);
+            const int64_t stage_mm = stagePositionMm(state, poll.cntr1, poll.cntr2);
+            const long idx = segmentIndexAtStageMm(state.stage_segments, stage_mm);
             if (idx > 0) {
                 state.segment_current_number = idx;
                 rebaseSegmentAt(state, poll.cntr1, poll.cntr2,
-                    stage_counts - segmentStartStageCounts(state.stage_segments, idx));
+                    stage_mm - segmentStartStageMm(state.stage_segments, idx));
             }
         }
         break;
@@ -1172,16 +1172,17 @@ void on_next_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     // Corrected, like every other comparison against a roadbook distance: a
     // nav error has often just been knocked off with -10, and this figure is
     // written into the roadbook as the segment's real length.
-    int64_t seg_count_diff = segmentCountsCorrected(data, current_poll);
+    // From the stage start, like Total: where the car is minus where this row starts.
+    int64_t driven_mm = stagePositionMm(*data->state, current_poll.cntr1, current_poll.cntr2)
+                      - segmentStartStageMm(data->state->stage_segments, data->state->segment_current_number);
     // RB-SET-12: the press marks a point the car passed speed x offset ago.
-    seg_count_diff = boundaryCountsAtPress(seg_count_diff, reactionSpeedNow(data),
-                                           data->state->reaction_offset_ms, data->state->calibration);
+    driven_mm = boundaryMmAtPress(driven_mm, reactionSpeedNow(data), data->state->reaction_offset_ms);
 
     // The snapshot, not the saved roadbook: this retimes the stage actually
     // being driven, not the roadbook the next stage starts from.
     retimeSegmentBoundaryForward(data->state->stage_segments,
                                  data->state->segment_current_number,
-                                 seg_count_diff, data->state->calibration);
+                                 driven_mm, data->state->calibration);
 
     data->state->segment_current_number++;
     data->state->segment_start_cntr1 = current_poll.cntr1;
@@ -1221,7 +1222,7 @@ void on_prev_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     if (!prevAvailable(*data->state)) return;
 
     auto poll = data->poller->getMostRecent();
-    undoSegmentChange(*data->state, poll.cntr1, poll.cntr2, stageCountsCorrected(data, poll));
+    undoSegmentChange(*data->state, poll.cntr1, poll.cntr2, stagePositionMm(*data->state, poll.cntr1, poll.cntr2));
 
     ConfigFile::save(*data->state);
     notifyWebState(data);

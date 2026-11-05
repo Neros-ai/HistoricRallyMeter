@@ -293,8 +293,8 @@ public:
     // restart.
     bool undo_valid = false;
     long undo_from_index = -1;           // the segment the change left
-    double undo_from_counts = 0.0;       // its length before the change
-    double undo_to_counts = 0.0;         // the next segment's, before it
+    double undo_from_m = 0.0;            // its length before the change, in metres
+    double undo_to_m = 0.0;              // the next segment's, before it
     // The segment's own clock baseline before the change. "next" overwrites
     // segment_start_time_ms with the moment of the press, and the undo has to
     // put it back: the distance baseline is rewound to the segment's real
