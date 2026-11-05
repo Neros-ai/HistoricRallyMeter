@@ -59,6 +59,15 @@
     .screen, table, .note { page-break-inside: avoid; }
     a { text-decoration: none; color: var(--ink); }
   }
+
+  .toc-page .toc2, .toc-page .toc3 { display:flex; align-items:baseline; font-size:10pt; line-height:1.55; }
+  .toc-page .toc2 { font-weight:bold; margin-top:1.2mm; }
+  .toc-page .toc3 { padding-left:7mm; font-weight:normal; }
+  .dots { flex:1; border-bottom:1px dotted #888; margin:0 2mm; }
+  .pn { min-width:7mm; text-align:right; }
+  .ixcols { column-count:2; column-gap:12mm; }
+  .ix > span:first-child { white-space:nowrap; }
+  .ix { display:flex; align-items:baseline; font-size:10pt; line-height:1.5; break-inside:avoid; }
 </style>
 </head>
 <body>
@@ -87,6 +96,39 @@
 </figure>
 
 </div>
+
+<!--TOC-START-->
+<div class="toc-page" style="page-break-after: always">
+<h2 style="margin-top:0">Contents</h2>
+<div class="toc2"><a href="#rally-types">Rally types</a><span class="dots"></span><span class="pn">3</span></div>
+<div class="toc2"><a href="#menu">Getting around</a><span class="dots"></span><span class="pn">3</span></div>
+<div class="toc2"><a href="#greek">Greek rally type</a><span class="dots"></span><span class="pn">4</span></div>
+<div class="toc3"><a href="#segments">Programming Greek Stages</a><span class="dots"></span><span class="pn">4</span></div>
+<div class="toc3"><a href="#starting">Starting a Greek Stage</a><span class="dots"></span><span class="pn">5</span></div>
+<div class="toc3"><a href="#main-screen">Navigating a Greek Stage</a><span class="dots"></span><span class="pn">7</span></div>
+<div class="toc2"><a href="#italian">Italian rally type</a><span class="dots"></span><span class="pn">9</span></div>
+<div class="toc3"><a href="#italian-programming">Programming Italian Sectors</a><span class="dots"></span><span class="pn">9</span></div>
+<div class="toc3"><a href="#starting-sector">Starting an Italian Sector</a><span class="dots"></span><span class="pn">11</span></div>
+<div class="toc3"><a href="#italian-navigation">Navigating an Italian Sector</a><span class="dots"></span><span class="pn">12</span></div>
+<div class="toc2"><a href="#surrey">Surrey rally type</a><span class="dots"></span><span class="pn">14</span></div>
+<div class="toc3"><a href="#surrey-programming">Programming Surrey Stages</a><span class="dots"></span><span class="pn">14</span></div>
+<div class="toc3"><a href="#surrey-starting">Starting a Surrey Stage</a><span class="dots"></span><span class="pn">14</span></div>
+<div class="toc3"><a href="#surrey-navigation">Navigating a Surrey Stage</a><span class="dots"></span><span class="pn">15</span></div>
+<div class="toc2"><a href="#driver-displays">Driver displays</a><span class="dots"></span><span class="pn">16</span></div>
+<div class="toc3"><a href="#driver-zero">Greek and Surrey driver display</a><span class="dots"></span><span class="pn">16</span></div>
+<div class="toc3"><a href="#italian-driver">Italian driver display</a><span class="dots"></span><span class="pn">18</span></div>
+<div class="toc2"><a href="#single">Single-display mode</a><span class="dots"></span><span class="pn">19</span></div>
+<div class="toc2"><a href="#phone-app">The phone app</a><span class="dots"></span><span class="pn">20</span></div>
+<div class="toc2"><a href="#beep-assist">Beep assist</a><span class="dots"></span><span class="pn">23</span></div>
+<div class="toc2"><a href="#adjusting-settings">Setting rally configurations</a><span class="dots"></span><span class="pn">24</span></div>
+<div class="toc3"><a href="#datetime">DATE / TIME</a><span class="dots"></span><span class="pn">24</span></div>
+<div class="toc3"><a href="#calibration">CALIBRATION</a><span class="dots"></span><span class="pn">25</span></div>
+<div class="toc3"><a href="#settings">SETTINGS</a><span class="dots"></span><span class="pn">26</span></div>
+<div class="toc3"><a href="#setup">SETUP</a><span class="dots"></span><span class="pn">27</span></div>
+<div class="toc2"><a href="#manual-index">Index</a><span class="dots"></span><span class="pn">28</span></div>
+<div class="toc2"><a href="#manual-index">Index</a><span class="dots"></span><span class="pn">28</span></div>
+</div>
+<!--TOC-END-->
 
 <section class="screen-page">
 
@@ -316,7 +358,7 @@ black on white, and the word <b>auto</b> (cyan) appears next to the start time. 
 quickly toggled on/off using the Autostart button on the navigation display. When Autostart is not
 armed the word <b>manual</b> (orange) appears next to the start time. A start time that has passed,
 with nothing armed or running, is crossed out in red. After <code>start now</code> the panel reads
-<b>manual</b> and the time of the press; the time shrinks to leave a gap before the word.</p>
+<b>manual</b> and the time of the press.</p>
 
 <p>What happens with autostart:</p>
 <ul>
@@ -374,7 +416,7 @@ shortly before departure. Total and Trip reset when pressed; timing starts at th
 
 <figure class="screen">
   <img src="manual-images/main-screen.png" alt="The greek navigation page with a stage running">
-  <figcaption>Stage 8 running, 302 m in: 1,708 m and 2 min 51 s to the speed change at 2,010 m. Stage arrival is blank once the stage's start time has passed.</figcaption>
+  <figcaption>Stage 8 running, 302 m in: 1,708 m and 2 min 51 s to the speed change at 2,010 m. Stage arrival shows the arrival time at the next programmed stage.</figcaption>
 </figure>
 
 <figure class="screen">
@@ -490,7 +532,13 @@ already applied.</p>
 <h4>The stage panel display</h4>
 <p>The column shows the selected stage, the start time of the stage and autostart status, the
 distances at which speed changes commence and the speed needed (and allotted time) to reach the
-next stage with 1 minute to spare.</p>
+next stage with 1 minute to spare. The current speed segment is shown in white; the segments still to
+come are cyan.</p>
+
+<figure class="screen">
+  <img src="manual-images/stage-panel.png" alt="The stage panel on the greek navigation page" style="width: 30%; margin-left: auto; margin-right: auto">
+  <figcaption>The stage panel: stage 8 selected, start time and autostart status, and the speed segments (current segment white).</figcaption>
+</figure>
 
 </section>
 
@@ -656,7 +704,7 @@ Both ask first.</p>
       <rect x="8" y="110" width="330" height="66" rx="5"/>
       <rect x="8" y="239" width="330" height="66" rx="5"/>
       <rect x="8" y="328" width="330" height="118" rx="5"/>
-      <rect x="1030" y="119" width="308" height="66" rx="5"/>
+      <rect x="1030" y="119" width="308" height="118" rx="5"/>
       <rect x="950" y="560" width="388" height="94" rx="5"/>
       <rect x="1030" y="254" width="308" height="120" rx="5"/>
       <rect x="306" y="560" width="620" height="94" rx="5"/>
@@ -673,7 +721,8 @@ Both ask first.</p>
     </g>
     <g font-size="26" font-weight="bold" fill="#111" text-anchor="middle">
       <text x="708" y="50">Select Sector</text>
-      <text x="1184" y="161">Start Sector Now</text>
+      <text x="1184" y="152">Start Sector Now</text>
+      <image href="manual-images/key-start-now.png" x="1132" y="164" width="104" height="55"/>
       <text x="1144" y="599">Minutes ahead (green)</text>
       <text x="1144" y="633">or behind (red)</text>
       <text x="1184" y="290" font-size="22">Count down to the next</text>
@@ -869,8 +918,7 @@ buttons display as black on white when active and a whooping sound is emitted. W
 
 <p>The count down time is large and white. Past the end of a substage, the count down km (for example
 <code>+0.04</code>) and seconds (for example <code>+0:01.4</code>) turn red and count up. The seconds
-show on every row, including navi and ct. The count down km is cut to the 10&nbsp;m below, never
-rounded.</p>
+show on every row, including navi and ct.</p>
 
 </section>
 
@@ -955,28 +1003,9 @@ arrival figures each sit above their legend. A-B, B-C zero is available as in gr
 
 <h2 id="driver-displays">Driver displays</h2>
 
-<p>The driver display is the same gauge in every rally type: present speed, a needle for how far ahead or behind
-the car is, a chevron that counts down the row, and the distances and averages. What changes is what each part
-means.</p>
-
-<table>
-<tr><th style="width: 20%"></th><th>Greek and Surrey</th><th>Italian</th></tr>
-<tr><td>Pages</td><td>Between stages, and in a stage.</td><td>On navi, ct and co rows, and inside a pc or pm.</td></tr>
-<tr><td>Top left</td><td>In a stage the target speed; between stages the <b>arrival</b> speed.</td><td>The row's target speed with, in yellow, the count down to the end of the row (m:ss).</td></tr>
-<tr><td>Needle</td><td>In a stage: seconds ahead or behind. None between stages.</td><td>Only inside a pc or pm: the error from the start tube. None on navi, ct and co rows.</td></tr>
-<tr><td>Averages</td><td><b>Sub</b> average since the last speed change, and the <b>Total</b> average.</td><td>Navi, ct and co rows: sub and Total averages. Pc or pm: one average over that pc or pm.</td></tr>
-<tr><td>Chevron</td><td>Counts down each row, along the needle (Surrey: to the next box).</td><td>Only in a pc or pm: waits until 5 seconds are left, then runs to the line.</td></tr>
-<tr><td>Distances</td><td>Trip and Total.</td><td>Sub and sector total.</td></tr>
-<tr><td>Logo</td><td>Red stage number (S1, S2 &hellip;; Surrey: S); the navi logo between stages.</td><td>The substage being driven (pc 1 &hellip;), or navi.</td></tr>
-</table>
-
-</section>
-
-<section class="screen-page">
-
 <h3 id="driver-zero">Greek and Surrey driver display</h3>
 
-<p>The driver display has two pages in Greek mode: one between stages (navigation) and one in a stage. Surrey uses the same two pages.</p>
+<p>The driver display has two designs in Greek/Surrey mode - one for navigation and one in a stage.</p>
 
 <h4>Navigation (between stages)</h4>
 
@@ -1036,8 +1065,7 @@ means.</p>
 </figure>
 
 <p>With no stage running there is no needle. The top left shows the
-<b>arrival</b> speed: the speed needed to reach the next stage with a minute to spare, the same
-figure as the co-pilot's Stage arrival. The distances and averages are Trip and Total.</p>
+<b>arrival</b> speed: the speed needed to reach the next stage with a minute to spare. The distances and averages are Trip and Total.</p>
 
 <h4>In a stage</h4>
 
@@ -1080,58 +1108,44 @@ figure as the co-pilot's Stage arrival. The distances and averages are Trip and 
     </g>
     <g fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round">
       <line x1="181" y1="44" x2="333" y2="58"/>
-      <line x1="187" y1="180" x2="598" y2="248"/>
+      <line x1="187" y1="180" x2="641" y2="188"/>
       <line x1="261" y1="329" x2="503" y2="290"/>
-      <line x1="247" y1="452" x2="645" y2="353"/>
-      <line x1="1113" y1="186" x2="557" y2="162"/>
+      <polyline points="247,452 613,385 613,244 631,244"/>
+      <line x1="1113" y1="186" x2="667" y2="136"/>
       <line x1="376" y1="522" x2="483" y2="447"/>
       <line x1="673" y1="522" x2="673" y2="447"/>
     </g>
     <g fill="none" stroke="#111" stroke-width="3.5" marker-end="url(#drvgs-arrow)">
       <line x1="181" y1="44" x2="333" y2="58"/>
-      <line x1="187" y1="180" x2="598" y2="248"/>
+      <line x1="187" y1="180" x2="641" y2="188"/>
       <line x1="261" y1="329" x2="503" y2="290"/>
-      <line x1="247" y1="452" x2="645" y2="353"/>
-      <line x1="1113" y1="186" x2="557" y2="162"/>
+      <polyline points="247,452 613,385 613,244 631,244"/>
+      <line x1="1113" y1="186" x2="667" y2="136"/>
       <line x1="376" y1="522" x2="483" y2="447"/>
       <line x1="673" y1="522" x2="673" y2="447"/>
     </g>
   </svg>
 </figure>
 
-<p>During a timed stage the needle shows how far ahead/behind the driver is in seconds. Arrival
-speed is not shown; that figure is only there between stages. If the
+<p>During a timed stage the needle shows how far ahead/behind the driver is in seconds. If the
 error exceeds the current gauge scale (changeable from 1&ndash;3 seconds in settings) the needle will
 stay pinned far left (or far right if ahead) and the scale will expand. The red logo shows the stage
-number (S1, S2 &hellip;). The cyan <b>sub</b> average is your average speed since the last speed change in the stage data, that
-is, the distance driven divided by the time elapsed since then
-(see <a href="#greek-stage-data">Entering Greek stage data</a>). It restarts at each speed change, so
-it goes with the time error; the white average is the average since the start. The
-<a href="#chevron-greek">chevron</a> slides up the needle and reaches the <b>row end line</b>, the
-short cross-bar on the needle, as the box ends.</p>
-
-<h4>Surrey stage</h4>
-<figure class="screen">
-  <img src="manual-images/surrey-driver.png" alt="The Surrey driver display in a stage" style="width: 62.5%; margin-left: auto; margin-right: auto">
-  <figcaption>Surrey driver display in a stage: the needle, the error box and the red <b>S</b> logo.</figcaption>
-</figure>
-<p>In a stage the Surrey driver display shows the needle, the error box and the red <b>S</b> logo. Between stages it shows
-the arrival speed, the <b>navi</b> logo and no needle.</p>
+number (S1, S2 &hellip;). The cyan <b>sub</b> average is your average speed since the last speed change. It restarts at each speed change, so
+it corresponds with the time error; the white average is the average since the total counter started.</p>
 
 <h4 id="chevron-greek">The chevron</h4>
-<p>One chevron rides the needle. At the start of each row it sits 20% of the way up the needle; as
-the row is driven it slides up toward the <b>row end line</b>, arriving as the row ends (on the stage clock, for the scheduled row), then drops
-back to the start for the next row. It only counts the row down: it does not show how far ahead or
-behind you are (the needle does that) and there is only ever one. Between stages there is no needle
-and no chevron.</p>
+<p>The chevron slides up the needle to visually represent the impending end to the current programmed segment row which has been programmed (and may include navigations, speed changes and the finish line). At the start of each row it sits 20% of the way up the needle; as the row is driven it
+slides up toward the horizontal <b>row end line</b>, arriving as the row ends.</p>
 
+<h4>Autostart warnings</h4>
 <p>While an autostart is pending, a <code>T- hh:mm:ss</code> countdown shows mid-display with
 <b>Early Departure ENABLED</b> or <b>DISABLED</b> beneath, depending on whether a regular autostart
-or a start on next minute is triggered. Early departure does not exist in Italian, which starts by Stage Go only.</p>
+or a start on next minute is triggered.</p>
 
-<h4 id="chevron-surrey">The chevron in Surrey</h4>
-<p>As in greek, with one difference. In Surrey a row ends at a box or at the finish, so the chevron counts down to the next
-box, on the stage clock (the navigation beep stays on distance). Between stages there is no needle and no chevron.</p>
+<figure class="screen">
+  <img src="manual-images/driver-autostart.png" alt="The driver display with an autostart countdown" style="width: 62.5%; margin-left: auto; margin-right: auto">
+  <figcaption>Driver display while a start is pending with Early Departure ENABLED: the coming stage (S1) and its target speed, with the T- countdown and Early Departure ENABLED beneath.</figcaption>
+</figure>
 
 </section>
 
@@ -1139,14 +1153,7 @@ box, on the stage clock (the navigation beep stays on distance). Between stages 
 
 <h3 id="italian-driver">Italian driver display</h3>
 
-<p>Two pages: one on navi, ct and co rows, and one inside a pc or pm. All figures are in km and
-kph. On a navi, ct or co row the cyan figure is the sub average and the white figure is the Total
-average, the same live averages as Greek, and both keep moving as the car moves. A pc or pm is
-unchanged: one average, over that pc or pm, beside the sector total.</p>
-
-<p>A legend to the right of the green box reads <b>countdown</b> inside a pc or pm and
-<b>arrival</b> on navi rows. The gauge scale widens when the time error is bigger than the Gauge
-range.</p>
+<p>The driver display has two designs in Italian mode - one for untimed/navigation substages and one for timed (pc &amp; pm) substages.</p>
 
 <h4>Navigation (navi, ct and co rows)</h4>
 
@@ -1183,11 +1190,8 @@ range.</p>
       <rect x="204" y="524" width="217" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
       <text x="216" y="556" font-size="24" font-weight="bold">Navi substage</text>
       <text x="216" y="581" font-size="21">No pc / pm running.</text>
-      <rect x="606" y="524" width="214" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
-      <text x="618" y="556" font-size="24" font-weight="bold">Empty box</text>
-      <text x="618" y="581" font-size="21">No error, no needle.</text>
-      <rect x="900" y="524" width="266" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
-      <text x="912" y="556" font-size="24" font-weight="bold">Minutes box</text>
+      <rect x="900" y="524" width="316" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
+      <text x="912" y="556" font-size="24" font-weight="bold">Control arrival timing</text>
       <text x="912" y="581" font-size="21">Green ahead, red behind.</text>
     </g>
     <g fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round">
@@ -1198,7 +1202,6 @@ range.</p>
       <line x1="1159" y1="248" x2="863" y2="291"/>
       <line x1="1146" y1="452" x2="863" y2="358"/>
       <line x1="402" y1="522" x2="483" y2="447"/>
-      <line x1="673" y1="522" x2="673" y2="447"/>
       <line x1="1146" y1="522" x2="863" y2="447"/>
     </g>
     <g fill="none" stroke="#111" stroke-width="3.5" marker-end="url(#drvin-arrow)">
@@ -1209,16 +1212,12 @@ range.</p>
       <line x1="1159" y1="248" x2="863" y2="291"/>
       <line x1="1146" y1="452" x2="863" y2="358"/>
       <line x1="402" y1="522" x2="483" y2="447"/>
-      <line x1="673" y1="522" x2="673" y2="447"/>
       <line x1="1146" y1="522" x2="863" y2="447"/>
     </g>
   </svg>
 </figure>
 
-<p>The top left shows the row's target speed and, under it in yellow, the count down to the end of
-the row (m:ss, whole seconds; a <b>+</b> once past the line). There is no needle and the middle box is empty: on these rows crews drive flat out and
-a lead of many minutes is normal. The right-hand box shows the <b>minutes</b> in hand: green when
-ahead, red when behind.</p>
+<p>The display is similar to those for greek/surrey rallies except the right-hand box shows the <b>minutes</b> in hand to the control arrival minutes: green when ahead, red when behind.</p>
 
 <h4>In a pc or pm</h4>
 
@@ -1238,8 +1237,8 @@ ahead, red when behind.</p>
       <text x="20" y="40" font-size="24" font-weight="bold">Target</text>
       <text x="20" y="65" font-size="21">pc target speed.</text>
       <rect x="8" y="144" width="264" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
-      <text x="20" y="176" font-size="24" font-weight="bold">pc time</text>
-      <text x="20" y="201" font-size="21">Time the pc takes (m:ss).</text>
+      <text x="20" y="176" font-size="24" font-weight="bold">substage time</text>
+      <text x="20" y="201" font-size="21">Remaining (m:ss).</text>
       <rect x="8" y="281" width="109" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
       <text x="20" y="313" font-size="24" font-weight="bold">Needle</text>
       <text x="20" y="338" font-size="21">pc error.</text>
@@ -1271,11 +1270,11 @@ ahead, red when behind.</p>
     <g fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round">
       <line x1="191" y1="44" x2="333" y2="58"/>
       <line x1="274" y1="180" x2="338" y2="136"/>
-      <line x1="119" y1="316" x2="735" y2="198"/>
+      <line x1="119" y1="316" x2="697" y2="198"/>
       <line x1="238" y1="452" x2="503" y2="358"/>
       <line x1="1166" y1="44" x2="973" y2="58"/>
-      <line x1="1199" y1="180" x2="741" y2="141"/>
-      <line x1="1092" y1="316" x2="710" y2="270"/>
+      <line x1="1199" y1="180" x2="735" y2="137"/>
+      <line x1="1092" y1="316" x2="719" y2="293"/>
       <line x1="1146" y1="452" x2="863" y2="358"/>
       <line x1="344" y1="522" x2="483" y2="447"/>
       <line x1="673" y1="522" x2="673" y2="447"/>
@@ -1284,11 +1283,11 @@ ahead, red when behind.</p>
     <g fill="none" stroke="#111" stroke-width="3.5" marker-end="url(#drvip-arrow)">
       <line x1="191" y1="44" x2="333" y2="58"/>
       <line x1="274" y1="180" x2="338" y2="136"/>
-      <line x1="119" y1="316" x2="735" y2="198"/>
+      <line x1="119" y1="316" x2="697" y2="198"/>
       <line x1="238" y1="452" x2="503" y2="358"/>
       <line x1="1166" y1="44" x2="973" y2="58"/>
-      <line x1="1199" y1="180" x2="741" y2="141"/>
-      <line x1="1092" y1="316" x2="710" y2="270"/>
+      <line x1="1199" y1="180" x2="735" y2="137"/>
+      <line x1="1092" y1="316" x2="719" y2="293"/>
       <line x1="1146" y1="452" x2="863" y2="358"/>
       <line x1="344" y1="522" x2="483" y2="447"/>
       <line x1="673" y1="522" x2="673" y2="447"/>
@@ -1297,16 +1296,8 @@ ahead, red when behind.</p>
   </svg>
 </figure>
 
-<p>Inside a pc or pm the needle and the error box give the <b>error</b> from the start tube, in
-seconds. The yellow time under the target is the count down to the end tube (whole seconds). The average
-speed on the left is captioned <b>sub avg</b>: it is the pc's or pm's own average. The box on the right shows <b>-.-</b> until 5
-seconds remain, then counts down from 5.0 to 0.0.</p>
-
 <h4 id="chevron-italian">The chevron</h4>
-<p>Inside a pc or pm one chevron sits at the start of the needle, with the line tick further up. It
-waits there until 5 seconds are left to the line; then it slides up the needle to the tick, arriving
-as the countdown reads 0.0. It only does the countdown, and there is only one. On navi, ct and co
-rows there is no needle and no chevron.</p>
+<p>Due to the short nature of many timed stages, and the increased timing accuracy in Italian stages, the chevron only moves in the last 5 seconds of the stage to visually count down to the end.</p>
 
 </section>
 
@@ -1335,45 +1326,57 @@ are reached through <code>menu</code>. A pending start's countdown shows over th
 
 <p>Connect the phone app to the box using the instructions on the settings page and navigate to the displayed browser address. The page will load more cleanly if the web page is saved to the home screen as this disables tabbed browsing. All box features are mirrored on the phone. In landscape views mirror the box display as closely as possible; in portrait the displays are redesigned to fit the screen.</p>
 
-<p style="margin: 0 0 2mm"><b>Navi</b></p>
-<div style="display: flex; gap: 6mm; align-items: flex-end; margin-bottom: 6mm">
-  <img src="manual-images/phone-navi-portrait.png" alt="Phone Navi tab, portrait" style="flex: 0 0 25%; width: 25%; height: auto; border: 1px solid var(--rule)">
-  <img src="manual-images/phone-navi-landscape.png" alt="Phone Navi tab, landscape" style="flex: 0 0 68%; width: 68%; height: auto; border: 1px solid var(--rule)">
+<div class="phone-pair" style="break-inside: avoid; page-break-inside: avoid; margin-bottom: 6mm">
+<p style="margin: 0 0 2mm; page-break-after: avoid; break-after: avoid"><b>Navi</b></p>
+<div style="display: flex; justify-content: space-between; align-items: flex-start">
+  <img src="manual-images/phone-navi-portrait.png" alt="Phone Navi tab, portrait" style="flex: 0 0 21%; width: 21%; height: auto; border: 1px solid var(--rule)">
+  <img src="manual-images/phone-navi-landscape.png" alt="Phone Navi tab, landscape" style="flex: 0 0 74%; width: 74%; height: auto; border: 1px solid var(--rule)">
 </div>
-<p style="margin: 0 0 2mm"><b>Drv</b></p>
-<div style="display: flex; gap: 6mm; align-items: flex-end; margin-bottom: 6mm">
-  <img src="manual-images/phone-drv-portrait.png" alt="Phone Drv tab, portrait" style="flex: 0 0 25%; width: 25%; height: auto; border: 1px solid var(--rule)">
-  <img src="manual-images/phone-drv-landscape.png" alt="Phone Drv tab, landscape" style="flex: 0 0 68%; width: 68%; height: auto; border: 1px solid var(--rule)">
 </div>
-
-</section>
-
-<section class="screen-page">
-
-<p style="margin: 0 0 2mm"><b>Seg</b></p>
-<div style="display: flex; gap: 6mm; align-items: flex-end; margin-bottom: 6mm">
-  <img src="manual-images/phone-seg-portrait.png" alt="Phone Seg tab, portrait" style="flex: 0 0 25%; width: 25%; height: auto; border: 1px solid var(--rule)">
-  <img src="manual-images/phone-seg-landscape.png" alt="Phone Seg tab, landscape" style="flex: 0 0 68%; width: 68%; height: auto; border: 1px solid var(--rule)">
+<div class="phone-pair" style="break-inside: avoid; page-break-inside: avoid; margin-bottom: 6mm">
+<p style="margin: 0 0 2mm; page-break-after: avoid; break-after: avoid"><b>Drv</b></p>
+<div style="display: flex; justify-content: space-between; align-items: flex-start">
+  <img src="manual-images/phone-drv-portrait.png" alt="Phone Drv tab, portrait" style="flex: 0 0 21%; width: 21%; height: auto; border: 1px solid var(--rule)">
+  <img src="manual-images/phone-drv-landscape.png" alt="Phone Drv tab, landscape" style="flex: 0 0 74%; width: 74%; height: auto; border: 1px solid var(--rule)">
 </div>
-<p style="margin: 0 0 2mm"><b>Set</b></p>
-<div style="display: flex; gap: 6mm; align-items: flex-end; margin-bottom: 6mm">
-  <img src="manual-images/phone-set-portrait.png" alt="Phone Set tab, portrait" style="flex: 0 0 25%; width: 25%; height: auto; border: 1px solid var(--rule)">
-  <img src="manual-images/phone-set-landscape.png" alt="Phone Set tab, landscape" style="flex: 0 0 68%; width: 68%; height: auto; border: 1px solid var(--rule)">
 </div>
 
 </section>
 
 <section class="screen-page">
 
-<p style="margin: 0 0 2mm"><b>Time</b></p>
-<div style="display: flex; gap: 6mm; align-items: flex-end; margin-bottom: 6mm">
-  <img src="manual-images/phone-time-portrait.png" alt="Phone Time tab, portrait" style="flex: 0 0 25%; width: 25%; height: auto; border: 1px solid var(--rule)">
-  <img src="manual-images/phone-time-landscape.png" alt="Phone Time tab, landscape" style="flex: 0 0 68%; width: 68%; height: auto; border: 1px solid var(--rule)">
+<div class="phone-pair" style="break-inside: avoid; page-break-inside: avoid; margin-bottom: 6mm">
+<p style="margin: 0 0 2mm; page-break-after: avoid; break-after: avoid"><b>Seg</b></p>
+<div style="display: flex; justify-content: space-between; align-items: flex-start">
+  <img src="manual-images/phone-seg-portrait.png" alt="Phone Seg tab, portrait" style="flex: 0 0 21%; width: 21%; height: auto; border: 1px solid var(--rule)">
+  <img src="manual-images/phone-seg-landscape.png" alt="Phone Seg tab, landscape" style="flex: 0 0 74%; width: 74%; height: auto; border: 1px solid var(--rule)">
 </div>
-<p style="margin: 0 0 2mm"><b>Cal</b></p>
-<div style="display: flex; gap: 6mm; align-items: flex-end; margin-bottom: 6mm">
-  <img src="manual-images/phone-cal-portrait.png" alt="Phone Cal tab, portrait" style="flex: 0 0 25%; width: 25%; height: auto; border: 1px solid var(--rule)">
-  <img src="manual-images/phone-cal-landscape.png" alt="Phone Cal tab, landscape" style="flex: 0 0 68%; width: 68%; height: auto; border: 1px solid var(--rule)">
+</div>
+<div class="phone-pair" style="break-inside: avoid; page-break-inside: avoid; margin-bottom: 6mm">
+<p style="margin: 0 0 2mm; page-break-after: avoid; break-after: avoid"><b>Set</b></p>
+<div style="display: flex; justify-content: space-between; align-items: flex-start">
+  <img src="manual-images/phone-set-portrait.png" alt="Phone Set tab, portrait" style="flex: 0 0 21%; width: 21%; height: auto; border: 1px solid var(--rule)">
+  <img src="manual-images/phone-set-landscape.png" alt="Phone Set tab, landscape" style="flex: 0 0 74%; width: 74%; height: auto; border: 1px solid var(--rule)">
+</div>
+</div>
+
+</section>
+
+<section class="screen-page">
+
+<div class="phone-pair" style="break-inside: avoid; page-break-inside: avoid; margin-bottom: 6mm">
+<p style="margin: 0 0 2mm; page-break-after: avoid; break-after: avoid"><b>Time</b></p>
+<div style="display: flex; justify-content: space-between; align-items: flex-start">
+  <img src="manual-images/phone-time-portrait.png" alt="Phone Time tab, portrait" style="flex: 0 0 21%; width: 21%; height: auto; border: 1px solid var(--rule)">
+  <img src="manual-images/phone-time-landscape.png" alt="Phone Time tab, landscape" style="flex: 0 0 74%; width: 74%; height: auto; border: 1px solid var(--rule)">
+</div>
+</div>
+<div class="phone-pair" style="break-inside: avoid; page-break-inside: avoid; margin-bottom: 6mm">
+<p style="margin: 0 0 2mm; page-break-after: avoid; break-after: avoid"><b>Cal</b></p>
+<div style="display: flex; justify-content: space-between; align-items: flex-start">
+  <img src="manual-images/phone-cal-portrait.png" alt="Phone Cal tab, portrait" style="flex: 0 0 21%; width: 21%; height: auto; border: 1px solid var(--rule)">
+  <img src="manual-images/phone-cal-landscape.png" alt="Phone Cal tab, landscape" style="flex: 0 0 74%; width: 74%; height: auto; border: 1px solid var(--rule)">
+</div>
 </div>
 
 </section>
@@ -1545,5 +1548,48 @@ screen, it runs without browser bars.</li>
 
 </section>
 
+<!--INDEX-START-->
+<section class="index-page" style="page-break-before: always">
+<h2 id="manual-index" style="margin-top:0">Index</h2>
+<div class="ixcols">
+<div class="ix"><span>Abort stage</span><span class="dots"></span><span class="pn">11, 26</span></div>
+<div class="ix"><span>Ahead / behind</span><span class="dots"></span><span class="pn">11, 14, 16, 17, 18, 24, 26</span></div>
+<div class="ix"><span>Autostart</span><span class="dots"></span><span class="pn">4, 5, 6, 7, 8, 11, 14, 17</span></div>
+<div class="ix"><span>Beep assist</span><span class="dots"></span><span class="pn">4, 23</span></div>
+<div class="ix"><span>Calibration</span><span class="dots"></span><span class="pn">3, 11, 25</span></div>
+<div class="ix"><span>Chevron</span><span class="dots"></span><span class="pn">16, 17, 18</span></div>
+<div class="ix"><span>pc, pm, ct, co</span><span class="dots"></span><span class="pn">3, 9, 10, 11, 12, 13, 18, 23, 26</span></div>
+<div class="ix"><span>Countdown</span><span class="dots"></span><span class="pn">7, 14, 15, 17, 18, 23, 26</span></div>
+<div class="ix"><span>Date and time</span><span class="dots"></span><span class="pn">3, 24</span></div>
+<div class="ix"><span>Distance +10 / −10</span><span class="dots"></span><span class="pn">7, 8, 12, 13, 19, 23</span></div>
+<div class="ix"><span>Driver display</span><span class="dots"></span><span class="pn">16, 17, 18</span></div>
+<div class="ix"><span>Greek rally type</span><span class="dots"></span><span class="pn">4, 5, 7, 14, 15, 16, 23, 26</span></div>
+<div class="ix"><span>Italian rally type</span><span class="dots"></span><span class="pn">9, 11, 18, 23, 26</span></div>
+<div class="ix"><span>Late arrival flag</span><span class="dots"></span><span class="pn">4, 6, 9, 11, 19</span></div>
+<div class="ix"><span>Navi</span><span class="dots"></span><span class="pn">9, 11, 12, 13, 15, 18</span></div>
+<div class="ix"><span>Next speed</span><span class="dots"></span><span class="pn">4, 7, 8, 15</span></div>
+<div class="ix"><span>Phone app</span><span class="dots"></span><span class="pn">15, 20, 24, 26, 27</span></div>
+<div class="ix"><span>Pulses per km</span><span class="dots"></span><span class="pn">3, 8, 13, 25</span></div>
+<div class="ix"><span>Rally clock</span><span class="dots"></span><span class="pn">11, 19, 24</span></div>
+<div class="ix"><span>Reaction time</span><span class="dots"></span><span class="pn">26</span></div>
+<div class="ix"><span>Reset</span><span class="dots"></span><span class="pn">5, 6, 12, 15, 25</span></div>
+<div class="ix"><span>Reverse</span><span class="dots"></span><span class="pn">7, 8, 12, 13, 19, 26</span></div>
+<div class="ix"><span>Sector</span><span class="dots"></span><span class="pn">3, 9, 10, 11, 12, 13, 18, 26</span></div>
+<div class="ix"><span>Segments</span><span class="dots"></span><span class="pn">3, 4, 5, 8, 9, 14, 23</span></div>
+<div class="ix"><span>Settings</span><span class="dots"></span><span class="pn">3, 4, 9, 23, 26, 27</span></div>
+<div class="ix"><span>Setup</span><span class="dots"></span><span class="pn">3, 26, 27</span></div>
+<div class="ix"><span>Single-display mode</span><span class="dots"></span><span class="pn">19</span></div>
+<div class="ix"><span>Speed change</span><span class="dots"></span><span class="pn">4, 5, 7, 8, 14, 15, 16, 17</span></div>
+<div class="ix"><span>Surrey rally type</span><span class="dots"></span><span class="pn">14, 15, 16, 26</span></div>
+<div class="ix"><span>Tone</span><span class="dots"></span><span class="pn">3, 26</span></div>
+<div class="ix"><span>Total</span><span class="dots"></span><span class="pn">5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 18</span></div>
+<div class="ix"><span>Trip</span><span class="dots"></span><span class="pn">5, 7, 8, 14, 15, 16, 19</span></div>
+<div class="ix"><span>Units (kph / mph)</span><span class="dots"></span><span class="pn">4, 5, 9, 10, 26</span></div>
+<div class="ix"><span>Upload stage</span><span class="dots"></span><span class="pn">4, 10, 14</span></div>
+<div class="ix"><span>Wi-Fi</span><span class="dots"></span><span class="pn">3, 27</span></div>
+<div class="ix"><span>Zero (driver)</span><span class="dots"></span><span class="pn">5, 7, 8, 11, 12, 15, 25</span></div>
+</div>
+</section>
+<!--INDEX-END-->
 </body>
 </html>
