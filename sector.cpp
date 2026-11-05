@@ -658,8 +658,9 @@ std::string sectorCardJson(const RallyState& live, int64_t now_ms, long stage_m,
 
 std::string sectorCountdownKmText(const SectorPanel& p) {
     char b[32];
-    if (p.metresPast > 0) snprintf(b, sizeof(b), "+%.2f", p.metresPast / 1000.0);
-    else snprintf(b, sizeof(b), "%.2f", p.metresToGo / 1000.0);
+    // Truncated to the 10 m, never rounded, like every other km figure.
+    if (p.metresPast > 0) snprintf(b, sizeof(b), "+%.2f", std::trunc(p.metresPast / 10.0) / 100.0);
+    else snprintf(b, sizeof(b), "%.2f", std::trunc(p.metresToGo / 10.0) / 100.0 + 0.0);
     return b;
 }
 
