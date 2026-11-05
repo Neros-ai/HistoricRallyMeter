@@ -547,8 +547,9 @@ void updateCopilotDisplay(AppData* data) {
         // The countdown runs to the next speed change, on through rows that
         // carry the speed on (Nero2.0 ditto rows); italian counts each row.
         const bool greek_like = data->state->rally_type != 2;
-        if (greek_like)
-            remaining_m = metresToNextChange(data->state->stage_segments, data->state->segment_current_number, remaining_m);
+        if (greek_like)   // row end from the stage start minus Total as shown: the two always sum to the roadbook figure
+            remaining_m = countdownMetres(data->state->stage_segments, data->state->segment_current_number,
+                                          totalShownMetres(*data->state, current_poll.cntr1, current_poll.cntr2));
         const char* next_unit = dist_km ? "km" : "m";
         std::string next_str = formatDistance(static_cast<double>(remaining_m), dist_km);
         gtk_label_set_text(data->nextDistLabel, next_str.c_str());

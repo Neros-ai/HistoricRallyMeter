@@ -529,6 +529,12 @@ bool undoSegmentChange(RallyState& state, uint64_t c1, uint64_t c2, int64_t stag
     return true;
 }
 
+long totalShownMetres(const RallyState& s, uint64_t c1, uint64_t c2) {
+    return adjustedDistanceMeters(
+        countsToCentimeters(calculateDistanceCounts(s, c1, c2, s.total_start_cntr1, s.total_start_cntr2), s.calibration),
+        s.total_distance_adjust_cm);
+}
+
 long adjustedDistanceMeters(long raw_cm, long adjust_cm) {
     // Not floored at zero: reversing past the start counts into negative
     // metres (-12), and counts back up again when the car goes forward -- what

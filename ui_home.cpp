@@ -1024,7 +1024,8 @@ void updateHomeDisplay(AppData* data) {
                 const int64_t remaining_counts = static_cast<int64_t>(cur_seg.distance_counts) - segmentCountsCorrected(data, poll);
                 const long remaining_cm = countsToCentimeters(remaining_counts, st.calibration);
                 long remaining_m = (remaining_cm >= 0) ? (remaining_cm + 99) / 100 : -((-remaining_cm) / 100);
-                remaining_m = metresToNextChange(st.stage_segments, st.segment_current_number, remaining_m);
+                remaining_m = countdownMetres(st.stage_segments, st.segment_current_number,
+                                              totalShownMetres(st, poll.cntr1, poll.cntr2));
                 cdM = formatDistance(static_cast<double>(remaining_m < 0 ? 0 : remaining_m), st.distance_km);
                 cdT = surreyCountdownTime(static_cast<double>(remaining_m), cur_seg.target_speed_kph);
             }
