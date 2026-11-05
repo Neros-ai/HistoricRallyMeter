@@ -212,7 +212,8 @@ std::string formatHMmSs(double seconds) {
 std::string formatDistance(double metres, bool km) {
     char buf[32];
     if (km) {
-        snprintf(buf, sizeof(buf), "%.2f", std::floor(metres / 10.0 + 0.5) / 100.0);
+        // Truncated to the 10 m, never rounded up: the figure must not read ahead of the car.
+        snprintf(buf, sizeof(buf), "%.2f", std::trunc(metres / 10.0) / 100.0 + 0.0);   // + 0.0 turns -0 into 0
         return buf;
     }
     return formatDistanceGrouped(static_cast<long>(std::lround(metres)));

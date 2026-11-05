@@ -112,7 +112,7 @@
       <div class="card arr" id="card-arr"><span class="cyan">Stage arrival</span>
         <span class="fig"><span><small id="arr-unit">kph</small><b class="cyan" id="arr-kph">--</b></span><span><small>min</small><b id="arr-min">--</b></span></span></div>
     </div>
-    <div class="card hist"><span id="trip-history-label">Trip history</span>&nbsp; <span id="trip-history">-</span></div>
+    <div class="card hist"><span id="trip-history-label">Trip history</span>&nbsp; <span id="trip-history"></span></div>
     </div>
     <div class="card sector" id="sector-card" style="display:none">no sector loaded</div>
     <div class="card hist" id="time-taken-row" style="display:none"><span id="time-taken-label">time taken</span>&nbsp; <span id="time-taken">-</span></div>
@@ -140,7 +140,7 @@
     </div>
     <section class="start-block">
       <label>Stage Start time <input id="seg-start-time" type="text" inputmode="numeric" placeholder="hh:mm:ss"></label>
-      <label id="seg-start-dist-label">Distance at start <input id="seg-start-dist" type="number" min="0" step="1" inputmode="numeric"></label>
+      <label id="seg-start-dist-label">Distance at start <input id="seg-start-dist" type="text" inputmode="decimal"></label>
       <label id="seg-duration-label" style="display:none">Duration <input id="seg-duration" type="text" inputmode="numeric" placeholder="h:mm:ss"></label>
       <p id="seg-duration-avg" class="dim" style="display:none"></p>
       <input id="seg-first-n" type="hidden">
@@ -267,10 +267,10 @@
   <main id="view-drv" class="view view-driver hidden">
     <canvas id="driver-gauge" width="390" height="360" aria-label="Driver gauge"></canvas>
     <div class="driver-footer">
-      <section class="dist-box" id="drv-box-total"><span class="dl">Total</span><strong id="drv-total-m">0</strong>
-        <span class="rt"><span class="avg"><span id="drv-total-cap">avg</span> <b id="drv-total-avg">0.0</b> <small class="avg-unit">kph</small></span></span></section>
       <section class="dist-box" id="drv-box-trip"><span class="dl">Trip</span><strong id="drv-trip-m">0</strong>
         <span class="rt"><span class="avg"><span id="drv-trip-cap">avg</span> <b id="drv-trip-avg">0.0</b> <small class="avg-unit">kph</small></span></span></section>
+      <section class="dist-box" id="drv-box-total"><span class="dl">Total</span><strong id="drv-total-m">0</strong>
+        <span class="rt"><span class="avg"><span id="drv-total-cap">avg</span> <b id="drv-total-avg">0.0</b> <small class="avg-unit">kph</small></span></span></section>
     </div>
   </main>
 
@@ -288,7 +288,7 @@
   <div id="navi-menu" class="modal hidden" role="dialog" aria-modal="true">
     <div class="modal-box">
       <p class="modal-title">Set Navi Distance</p>
-      <label class="navi-ask">Set Navi (m) <input id="navi-metres" type="text" inputmode="decimal"></label>
+      <label class="navi-ask"><span id="navi-label">Set Navi (m)</span> <input id="navi-metres" type="text" inputmode="decimal"></label>
       <div class="modal-actions">
         <button id="navi-set" type="button">Set</button>
         <button id="navi-reset" type="button">reset</button>

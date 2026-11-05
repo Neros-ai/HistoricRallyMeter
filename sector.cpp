@@ -357,7 +357,7 @@ bool hundredMetreBeep(double prev_m, double now_m) {
 
 PcBeep pcCountdownBeep(double prev_s, double now_s) {
     if (prev_s > 0.0 && now_s <= 0.0) return PcBeep::Zero;
-    static const double marks[] = { 30, 15, 5, 4, 3, 2, 1 };
+    static const double marks[] = { 5, 4, 3, 2, 1 };
     for (double m : marks) {
         if (prev_s > m && now_s <= m)
             return m == 5.0 ? PcBeep::Five : PcBeep::Tick;
@@ -660,6 +660,15 @@ std::string sectorCountdownKmText(const SectorPanel& p) {
     char b[32];
     if (p.metresPast > 0) snprintf(b, sizeof(b), "+%.2f", p.metresPast / 1000.0);
     else snprintf(b, sizeof(b), "%.2f", p.metresToGo / 1000.0);
+    return b;
+}
+
+// The same text without the tenths (the whole seconds of sectorSecondsText).
+std::string sectorSecondsWholeText(double s) {
+    const bool late = s < 0;
+    const long whole = static_cast<long>(std::fabs(s));
+    char b[32];
+    snprintf(b, sizeof(b), "%s%ld:%02ld", late ? "+" : "", whole / 60, whole % 60);
     return b;
 }
 

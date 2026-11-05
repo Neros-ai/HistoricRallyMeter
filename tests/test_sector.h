@@ -660,9 +660,9 @@ public:
             return p.metresPast == 40;
         });
 
-        suite->addTest("pc countdown beeps: 30 and 15 single, double at 5, single 4-1, short on 0", []() {
+        suite->addTest("pc countdown beeps: none at 30 and 15, double at 5, single 4-1, short on 0", []() {
             auto b = pcCountdownBeep;
-            return b(30.05, 29.95) == PcBeep::Tick && b(15.01, 14.99) == PcBeep::Tick
+            return b(30.05, 29.95) == PcBeep::None && b(15.01, 14.99) == PcBeep::None
                 && b(5.02, 4.98) == PcBeep::Five && b(4.02, 3.98) == PcBeep::Tick
                 && b(1.01, 0.99) == PcBeep::Tick
                 && b(0.01, -0.01) == PcBeep::Zero

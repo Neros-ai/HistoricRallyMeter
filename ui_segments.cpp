@@ -498,7 +498,9 @@ void loadFields(AppData* d) {
         gtk_entry_set_text(GTK_ENTRY(u->timeEntry), "");
     }
     gtk_entry_set_text(GTK_ENTRY(u->distEntry),
-                       slot.start_distance_m > 0 ? (formatDistanceGrouped(slot.start_distance_m) + " m").c_str() : "");
+                       slot.start_distance_m > 0
+                           ? (formatDistance(static_cast<double>(slot.start_distance_m), d->state->distance_km) +
+                              (d->state->distance_km ? " km" : " m")).c_str() : "");
     // Greek shows the distance at start and the Autostart tick; italian shows the sector duration instead.
     const bool it = d->state->rally_type == 2;
     for (GtkWidget* w : {u->distCaption, u->distEntry, u->autoRow}) gtk_widget_set_visible(w, !it);
@@ -644,7 +646,7 @@ void segmentsCommitImpl(AppData* d, bool quiet) {
             if (!notice.empty() && !quiet) flashNotice(GTK_WIDGET(e), notice);
         }
     } else if (!strcmp(kind, "start_dist")) {
-        long m = parseMetres(text);
+        long m = parseDistance(text, d->state->distance_km);   // in the rally's unit, km or m
         if (m >= 0) stageEditSetStart(d, slot.start_time_s, m);
     }
     updateRowText(d);

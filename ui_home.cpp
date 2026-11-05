@@ -124,7 +124,7 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
     case FIGURE:
         // 88 px digits, right-aligned; their foot sits a quarter of the way
         // into the gap below the key (key bottom + 9).
-        if (h->surrey && idx == 2) cyan(cr); else white(cr);   // navi total in cyan, as italian
+        if ((h->surrey || h->italian) && idx == 2) cyan(cr); else white(cr);   // navi total in cyan (surrey, italian)
         drawText(cr, h->figure[idx], width, KEY_H + 9, 88, RIGHT);
         break;
     case ELAPSED:
@@ -738,6 +738,7 @@ GtkWidget* createHomeScreen(AppData* data) {
 static void updateItalianHome(AppData* data) {
     HomeUi* h = data->home;
     const bool it = data->state->rally_type == 2;
+    if (it != h->italian) { h->italian = it; if (h->figureArea[2]) markDirty(h->figureArea[2]); }
     if (h->stack && gtk_stack_get_child_by_name(GTK_STACK(h->stack), "italian")) {
         const char* shown = gtk_stack_get_visible_child_name(GTK_STACK(h->stack));
         const char* want = it ? "italian" : "main";
@@ -977,12 +978,15 @@ void updateHomeDisplay(AppData* data) {
     auto mirror = [&](std::string& dst, const char* src, GtkWidget* area) {
         if (dst != src) { dst = src; markDirty(area); }
     };
-    mirror(h->figure[0], gtk_label_get_text(data->totalDistLabel), h->figureArea[0]);
-    mirror(h->figure[1], gtk_label_get_text(data->tripDistLabel), h->figureArea[1]);
-    // "---.---" (no segment) is wider than the 88 px figure column.
-    std::string next_fig = gtk_label_get_text(data->nextDistLabel);
-    if (!next_fig.empty() && next_fig[0] == '-' && next_fig.find('.') != std::string::npos) next_fig = "---";
-    if (!isSurrey(*data->state)) mirror(h->figure[2], next_fig.c_str(), h->figureArea[2]);   // surrey: navi, below
+    // The three figures are written once per cycle: italian's km figures come from updateItalianHome below.
+    if (data->state->rally_type != 2) {
+        mirror(h->figure[0], gtk_label_get_text(data->totalDistLabel), h->figureArea[0]);
+        mirror(h->figure[1], gtk_label_get_text(data->tripDistLabel), h->figureArea[1]);
+        // "---.---" (no segment) is wider than the 88 px figure column.
+        std::string next_fig = gtk_label_get_text(data->nextDistLabel);
+        if (!next_fig.empty() && next_fig[0] == '-' && next_fig.find('.') != std::string::npos) next_fig = "---";
+        if (!isSurrey(*data->state)) mirror(h->figure[2], next_fig.c_str(), h->figureArea[2]);   // surrey: navi, below
+    }
     mirror(h->elapsed[0], gtk_label_get_text(data->totalTimeLabel), h->elapsedArea[0]);
     mirror(h->elapsed[1], gtk_label_get_text(data->tripTimeLabel), h->elapsedArea[1]);
 
@@ -1011,7 +1015,7 @@ void updateHomeDisplay(AppData* data) {
         std::string cdM, cdT;
         if (sur && data->poller) {
             const CounterPoll poll = data->poller->getMostRecent();
-            const std::string navi = formatDistanceGrouped(surreyNaviMetres(st, poll.cntr1, poll.cntr2));
+            const std::string navi = formatDistance(static_cast<double>(surreyNaviMetres(st, poll.cntr1, poll.cntr2)), st.distance_km);
             mirror(h->figure[2], navi.c_str(), h->figureArea[2]);
             if (st.segment_current_number >= 0 && !st.stage_complete &&
                 st.segment_current_number < static_cast<long>(st.stage_segments.size())) {
@@ -1021,7 +1025,7 @@ void updateHomeDisplay(AppData* data) {
                 const long remaining_cm = countsToCentimeters(remaining_counts, st.calibration);
                 long remaining_m = (remaining_cm >= 0) ? (remaining_cm + 99) / 100 : -((-remaining_cm) / 100);
                 remaining_m = metresToNextChange(st.stage_segments, st.segment_current_number, remaining_m);
-                cdM = formatDistanceGrouped(remaining_m < 0 ? 0 : remaining_m);
+                cdM = formatDistance(static_cast<double>(remaining_m < 0 ? 0 : remaining_m), st.distance_km);
                 cdT = surreyCountdownTime(static_cast<double>(remaining_m), cur_seg.target_speed_kph);
             }
         }
@@ -1041,7 +1045,7 @@ void updateHomeDisplay(AppData* data) {
     std::vector<long> hist = homeTripHistory(st);
     bool hchanged = false;
     for (size_t i = 0; i < HOME_HISTORY_ENTRIES; i++) {
-        std::string v = (i < hist.size()) ? formatDistanceGrouped(hist[i]) : "";
+        std::string v = (i < hist.size()) ? formatDistance(static_cast<double>(hist[i]), st.distance_km) : "";
         if (v != h->history[i]) { h->history[i] = v; hchanged = true; }
     }
     if (hchanged) markDirty(h->historyArea);

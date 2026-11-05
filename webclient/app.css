@@ -377,7 +377,8 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .sector td:first-child, .sector th:first-child { text-align: left; }
 .sector .tag { display: inline-flex; align-items: center; justify-content: center; gap: 0.18rem; min-width: 3.2rem; text-align: center; padding: 0.15rem 0.3rem; color: #fff; background: #666; }
 .sector .tag .watch { width: 0.85em; height: 1em; flex: none; color: inherit; }
-.sector tr.now td { font-size: 1.125em; }
+.sector tr.now td, .sector tr.cdrow td { font-size: 1.125em; }
+.sector tr.cdrow td.cd { font-size: 1em; }   /* the "count down" label keeps its size */
 .sector .t2 { background: #d10f0f; }
 .sector .t3 { background: #1f4fc7; }
 .sector .t4 { background: #f0d100; color: #000; }
@@ -392,7 +393,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .sector .late { color: #ff2626; }
 .sector .cd { color: #ffa500; }
 .sector .cd span { display: block; line-height: 1.05; }
-.it-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 0.4rem; margin-top: 0.25rem; }
+.it-foot { display: grid; grid-template-columns: 4.6rem minmax(0, 1fr) 3.4rem 3.4rem 3rem; align-items: end; gap: 0.3rem; margin-top: 0.25rem; }
 .it-err { display: flex; flex-direction: column; line-height: 1.05; }
 .it-err b { font-weight: bold; }
 .it-co, .it-kph, .it-min, .it-pm { display: flex; flex-direction: column; align-items: center; line-height: 1; }
@@ -519,7 +520,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .kcol { flex: 0 0 5.2rem; display: flex; flex-direction: column; align-items: center; gap: 0.15rem; }
 .kcol .key.k { flex: none; width: 100%; display: flex; align-items: center; justify-content: center; text-align: center; white-space: pre-line; line-height: 1.05; font-size: 0.78rem; }
 .nr > .key { white-space: pre-line; line-height: 1.05; }
-.kcol .el { flex: none; font-size: 0.85rem; justify-content: center; min-height: 1.1rem; }
+.kcol .el { flex: none; font-size: 1.2rem; justify-content: center; min-height: 1.1rem; }
 .fig-row .big { font-size: 4.4rem; }
 .fig-row .big.sm { font-size: 3.6rem; }
 /* Time page: the title (over two lines) at the left of its row, the time right-justified;
@@ -646,7 +647,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
   #view-navi.rally-italian #sector-card th,
   #view-navi.rally-italian #sector-card td { border: 0; }
   #view-navi.rally-italian #sector-card tr:first-child th,
-  #view-navi.rally-italian #sector-card tr.cdrow td { border-bottom: 2px solid #9a9a9a; }
+  #view-navi.rally-italian #sector-card tr.cdrow td { border-bottom: 2px solid #878787; }
 }
 
 /* Wide window: the co-pilot pages use the box's columns. Portrait is unchanged. */
@@ -706,7 +707,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
     padding: 0.2rem 0.3rem 0.2rem;
     overflow: hidden;
     grid-template-columns: 10.25% 28.1% 3.08% 7.1% 3.08% 16% 3.08% 15.8% 3.08% 10.25%;
-    grid-template-rows: 70fr 36fr 70fr 36fr 70fr 36fr 70fr;
+    grid-template-rows: 66fr 42fr 66fr 42fr 66fr 42fr 66fr;
   }
   #view-navi > svg { display: none; }
   #adj-row, #view-navi .fig-row, #bottom-keys, #greek-cards, #greek-cards .cards, #view-navi .kcol { display: contents; }
@@ -715,7 +716,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
   #view-navi .nr { height: auto; margin: 0; }
   #view-navi .fig-row { height: auto; }
   #view-navi .key { width: 100%; height: 100%; min-height: 0; font-size: clamp(0.95rem, 3.8vh, 1.2rem); padding: 0 0.15rem; line-height: 1.05; }
-  #view-navi .el { font-size: clamp(0.85rem, 3.1vh, 1.05rem); }
+  #view-navi .el { font-size: 1.2rem; }   /* as portrait */
   #view-navi .flags .key { flex: 0 0 22%; height: auto; }
   #view-navi .big { font-size: clamp(3.46rem, 15.84vh, 6.34rem); line-height: 0.9; }
   #view-navi .big[data-unit]::after { content: none; }
@@ -748,11 +749,11 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
   .flags { grid-column: 10; grid-row: 1 / 7; display: flex; flex-direction: column; justify-content: space-between; gap: 0.3rem; height: auto; }
   #view-navi.rally-italian .flags { justify-content: flex-start; }
   #row-zero { grid-column: 6; grid-row: 7; align-self: end; }
-  #sector-card { grid-column: 6 / 11; grid-row: 2 / 7; overflow: hidden; margin: 14px 0 0; align-self: stretch; font-size: clamp(1.05rem, 3.8vh, 1.35rem); padding: 0; border: 0; background: transparent; display: flex; flex-direction: column; justify-content: space-between; }
+  #sector-card { grid-column: 6 / 11; grid-row: 2 / 7; overflow: visible; margin: 14px 0 0; align-self: stretch; font-size: clamp(1.05rem, 3.8vh, 1.35rem); padding: 0; border: 0; background: transparent; display: flex; flex-direction: column; justify-content: space-between; }
   #view-navi #sector-card table { font-size: 1.12em; margin-top: 0.35rem; width: 100%; table-layout: fixed; }
   #view-navi #sector-card th, #view-navi #sector-card td { border: 0; padding: 0.1rem 0.4rem; white-space: nowrap; overflow: visible; }
-  #view-navi #sector-card tr:first-child th { border-bottom: 2px solid #9a9a9a; }
-  #view-navi #sector-card tr.cdrow td { border-bottom: 2px solid #9a9a9a; }
+  #view-navi #sector-card tr:first-child th { border-bottom: 2px solid #878787; }
+  #view-navi #sector-card tr.cdrow td { border-bottom: 2px solid #878787; }
   #view-navi #sector-card th:nth-child(4), #view-navi #sector-card td:nth-child(4) { width: 17%; padding-left: 0.12rem; padding-right: 0.12rem; }
   #view-navi #sector-card td:first-child, #view-navi #sector-card th:first-child { width: 4rem; padding-left: 0; text-align: left; }
   #view-navi #sector-card .tag { min-width: 2.5rem; font-size: 1em; padding: 0.12rem 0.3rem; text-align: center; }
@@ -761,7 +762,20 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
     position: absolute; right: 0.15rem; top: 50%; transform: translateY(-50%); white-space: nowrap;
   }
   #view-navi #sector-card .cd span { line-height: 1; }
-  #view-navi #sector-card .it-foot { margin-top: 0.15rem; }
+  #view-navi #sector-card .it-foot { margin-top: 0.15rem; padding-bottom: 0; position: relative; top: 0; align-items: flex-end; grid-template-columns: 4.6rem minmax(0, 1fr) 4rem 4rem 3.2rem; }
+  /* Number colours as the box draws them: white, cyan progress/time, amber countdown, red when past, faded next row. */
+  #sector-card th, #sector-card td { color: #fff; }
+  #sector-card td.cyan { color: #0ff; }
+  #sector-card td.orange, #sector-card .cd { color: #d9a600; }
+  #sector-card td.late { color: #ff2626; }
+  #sector-card tr.dim td { color: #737373; }
+  #sector-card tr.dim td.cyan { color: #008080; }
+  /* Same place with or without the last-results (error) block: it keeps its slot. */
+  #view-navi #sector-card .it-err { min-width: 4.6rem; align-self: flex-end; }
+  #view-navi #sector-card .it-foot .cap,
+  #view-navi #sector-card .it-co > span { margin-bottom: 0.3rem; }
+  /* Line spacing in the sector table. */
+  #view-navi #sector-card th, #view-navi #sector-card td { padding-top: 0.28rem; padding-bottom: 0.28rem; }
   #view-navi #sector-card .it-co .when,
   #view-navi #sector-card .it-kph b,
   #view-navi #sector-card .it-min b,
@@ -918,13 +932,13 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 }
 /* Landscape greek and surrey: the stage go keys are as deep as set / +10 / -10 and level with them (rows 1, 3, 5). */
 @media (orientation: landscape) and (min-width: 700px) {
-  #view-navi.rally-greek > .flags, #view-navi.rally-surrey > .flags { display: contents; }
-  #view-navi.rally-greek .flags .key, #view-navi.rally-surrey .flags .key {
+  #view-navi.rally-greek > .flags, #view-navi.rally-surrey > .flags, #view-navi.rally-italian > .flags { display: contents; }
+  #view-navi.rally-greek .flags .key, #view-navi.rally-surrey .flags .key, #view-navi.rally-italian .flags .key {
     grid-column: 10; width: 100%; height: 100%; min-height: 0; flex: none;
   }
-  #view-navi.rally-greek #btn-flag-late, #view-navi.rally-surrey #btn-flag-late { grid-row: 1; }
-  #view-navi.rally-greek #btn-flag-minute, #view-navi.rally-surrey #btn-flag-minute { grid-row: 3; }
-  #view-navi.rally-greek #btn-flag-auto, #view-navi.rally-surrey #btn-flag-auto { grid-row: 5; }
+  #view-navi.rally-greek #btn-flag-late, #view-navi.rally-surrey #btn-flag-late, #view-navi.rally-italian #btn-flag-late { grid-row: 1; }
+  #view-navi.rally-greek #btn-flag-minute, #view-navi.rally-surrey #btn-flag-minute, #view-navi.rally-italian #btn-flag-minute { grid-row: 3; }
+  #view-navi.rally-greek #btn-flag-auto, #view-navi.rally-surrey #btn-flag-auto, #view-navi.rally-italian #btn-flag-auto { grid-row: 5; }
 }
 /* Trip history: the heading in blue (cyan) as on the box, figures white. */
 #trip-history-label { color: #0ff; }
@@ -945,7 +959,8 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
   /* Space above manual / auto and below the start time. */
   #view-navi.rally-greek #stage-row .auto, #view-navi.rally-surrey #stage-row .auto { padding-top: 0.55rem; padding-bottom: 0.4rem; }
   /* Navi: the menu key is as wide as the stage go keys (grid column 10 = 10.25% of the page grid), same right edge. */
-  body:has(#view-navi:not(.hidden)) #land-menu { width: calc((100vw - 0.6rem) * 0.1025); right: 0.3rem; }
+  /* ...and it fills the page grid's last row (66 of 390 parts of the grid height), level with next substage / reverse. */
+  body:has(#view-navi:not(.hidden)) #land-menu { width: calc((100vw - 0.6rem) * 0.1025); right: 0.3rem; bottom: 1.9rem; height: calc((100dvh - 2.1rem) * 0.1692); }
 }
 /* Trip history values use the rally clock's font. */
 #trip-history { font-family: monospace; font-weight: bold; font-size: 1.9rem; }
@@ -1085,3 +1100,48 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 @media not ((orientation: landscape) and (min-width: 700px)) {
   #view-navi.rally-italian #btn-reverse { grid-column: 3; }
 }
+
+/* Portrait driver page: the Total and Sub row sits directly under the gauge (no pinning to the screen foot). */
+
+/* Round-cornered keys, as the box (pure CSS, no extra weight). */
+.key { border-radius: 4px; }
+
+/* The arrival strip never changes size or place: absent parts are ghosts of the same size, unseen. */
+.it-foot .ghost { visibility: hidden; }
+.it-pm b { display: block; width: 2.6rem; min-width: 0; box-sizing: border-box; padding-left: 0; padding-right: 0; }
+
+/* Portrait Italian Navi: even vertical spacing between the key rows, about the gap under sector total. */
+@media not ((orientation: landscape) and (min-width: 700px)) {
+  #view-navi.rally-italian > .fig-row:has(#btn-total),
+  #view-navi.rally-italian #btn-next,
+  #view-navi.rally-italian #btn-prev { margin-top: 1rem; }
+  #view-navi.rally-italian > #row-navi { margin-top: -0.5rem; }   /* sub to navi was wider than the others */
+  /* the same spacing below freeze / reverse, above the stage row and stage abort */
+  #view-navi.rally-italian > #stage-row,
+  #view-navi.rally-italian > .flags,
+  #view-navi.rally-italian .flags .key { margin-top: 1rem; }
+}
+
+/* Count down time: larger and white on the phone, as the box (red once past the line). */
+#sector-card td.cdtime.orange { color: #fff; }
+#view-navi #sector-card td.cdtime span { font-size: clamp(1.35rem, 6.4vh, 2.1rem); font-weight: bold; font-family: monospace; }   /* the arrival figures' font */
+/* The big count down time must not widen its column: it floats over the row's free space (progr is empty). */
+#sector-card td.cdtime { position: relative; }
+#sector-card td.cdtime span { position: absolute; right: 0.15rem; top: 50%; transform: translateY(-50%); white-space: nowrap; }
+/* Landscape: the count down time a little larger (portrait keeps its size). */
+@media (orientation: landscape) and (min-width: 700px) {
+  #view-navi #sector-card td.cdtime span { font-size: clamp(1.55rem, 7.4vh, 2.4rem); }
+}
+/* Portrait navi: more line spacing in the sector table. */
+@media not ((orientation: landscape) and (min-width: 700px)) {
+  #view-navi #sector-card th, #view-navi #sector-card td { padding-top: 0.42rem; padding-bottom: 0.42rem; }
+}
+
+/* Sector table colours as the box draws them, in every orientation: white, cyan progress/time, amber countdown, red when past, faded next row. */
+#sector-card th, #sector-card td { color: #fff; }
+#sector-card td.cyan { color: #0ff; }
+#sector-card td.orange, #sector-card td.cd { color: #d9a600; }
+#sector-card td.cdtime.orange { color: #fff; }
+#sector-card td.late { color: #ff2626; }
+#sector-card tr.dim td { color: #737373; }
+#sector-card tr.dim td.cyan { color: #008080; }

@@ -183,7 +183,7 @@ static constexpr int BEEP_ASSIST_NAV_GAP_MS = 150;
 // on the box louder too, since the global click hook shares playBeep().
 static constexpr double BEEP_ASSIST_AMP = 0.45;
 
-// pc countdown beeps: the same single tick at 30, 15 and 4..1. At 5 s the
+// pc countdown beeps: the single tick at 4..1. At 5 s the
 // navigation double beep (same pitch, length and gap). On 0 a shorter beep,
 // so its start marks the instant to be on the tube and it is not the 4..1 tick.
 static constexpr double PC_BEEP_FREQ_HZ = 3200.0;
@@ -328,7 +328,7 @@ void updateCopilotDisplay(AppData* data) {
     }
 
     // Press warning (italian). A pc uses its own tube clock; a navi row uses the
-    // sector clock, to warn that next is due. 30 s, 15 s, the navigation double
+    // sector clock, to warn that next is due. The navigation double
     // beep at 5 s, a single beep at 4, 3, 2 and 1, and a shorter beep on 0.
     // A new row starts from its present reading, so marks already gone are skipped.
     // sound: the box's speaker. announce: the phone is told (it sounds the beep on receipt).
