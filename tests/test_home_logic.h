@@ -52,7 +52,7 @@ public:
             Segment a; a.distance_m = 380.0; s.stage_segments.push_back(a);
             s.total_start_cntr1 = 5000; s.total_start_cntr2 = 5000;
             for (long adj : {-1000L, 0L, 1000L, 1234L}) {
-                s.total_distance_adjust_cm = adj;
+                s.total_distance_adjust_mm = adj;
                 for (int64_t n = -300; n <= 4400; n += 7) {
                     const long total = totalShownMetres(s, static_cast<uint64_t>(5000 + n), static_cast<uint64_t>(5000 + n));
                     if (total + countdownMetres(s.stage_segments, 0, total) != 380) return false;
@@ -92,7 +92,7 @@ public:
             s.calibration = 88277; s.counters = false;
             s.total_start_cntr1 = 100; s.total_start_cntr2 = 100;
             if (stagePositionMm(s, 1100, 1100) != 1000LL * 88277 / 1000) return false;   // 1,000 pulses = 88,277 mm
-            s.total_distance_adjust_cm = -500;
+            s.total_distance_adjust_mm = -5000;
             if (stagePositionMm(s, 1100, 1100) != 88277 - 5000) return false;
             Segment a; a.distance_m = 380.0; std::vector<Segment> st{a};
             return !stageDistanceComplete(st, 379999) && stageDistanceComplete(st, 380000);
@@ -103,7 +103,7 @@ public:
             segs[0].distance_m = 380; segs[1].distance_m = 180; segs[2].distance_m = 640;
             const int64_t end1 = stageRowEndMm(segs, 1);
             // "next" at 150 m (a press measured from the stage start): row 0 shrinks to 150, row 1 takes the rest.
-            if (!retimeSegmentBoundaryForward(segs, 0, 150000, 88277)) return false;
+            if (!retimeSegmentBoundaryForward(segs, 0, 150000)) return false;
             if (segs[0].distance_m != 150.0 || segs[1].distance_m != 410.0) return false;
             if (stageRowEndMm(segs, 1) != end1 || stageRowEndMm(segs, 2) != 1200000) return false;
             // Now in row 1: Total + countdown is that row's end, 560 m, as it was before the press.
@@ -124,6 +124,20 @@ public:
             // At 4,500 pulses (397.3 m) the press is 17.3 m into row 1 by the stage position:
             const int64_t driven = stagePositionMm(s, 4500, 4500) - segmentStartStageMm(s.stage_segments, 1);
             return driven == 4500LL * 88277 / 1000 - 380000 && driven / 1000 == 17;
+        });
+
+        suite->addTest("time error in metres: 650 m driven when the schedule says 640 is 0.5 s ahead at 72 km/h", []() {
+            RallyState s;
+            s.segment_current_number = 1;
+            s.total_start_time_ms = 0;
+            s.stage_segments.resize(2);
+            s.stage_segments[0].distance_m = 360; s.stage_segments[0].target_speed_kph = 36;   // 10 m/s: 36 s
+            s.stage_segments[1].distance_m = 1000; s.stage_segments[1].target_speed_kph = 72;  // 20 m/s
+            // 50 s in: 360 m by 36 s, then 14 s at 20 m/s = 280 m, so the schedule is at 640 m.
+            const double ahead = calculateAheadBehindFromStageStart(s, 50000, 650000);
+            const double behind = calculateAheadBehindFromStageStart(s, 50000, 630000);
+            return std::fabs(ahead - 0.5) < 1e-9 && std::fabs(behind + 0.5) < 1e-9
+                && calculateAheadBehindFromStageStart(s, 0, 650000) == 0.0;
         });
 
         suite->addTest("countdown: row ends sum the typed metres in millimetres", []() {
@@ -181,7 +195,7 @@ public:
             s.counters = false;
             s.calibration = 1000000;
             s.trip_start_cntr1 = 100;
-            s.trip_distance_adjust_cm = -2000;   // -20 m correction
+            s.trip_distance_adjust_mm = -20000;   // -20 m correction
             resetTrip(s, 110, 0, 1);             // 10 m driven, 20 m back: reads -10
             return s.trip_history_m == "-10";
         });
@@ -217,14 +231,14 @@ public:
             p.setReverse(true);
             feed(p, a, b, 1017);               // 12 m back: -7 m
             auto now = p.getMostRecent();
-            long m = adjustedDistanceMeters(countsToCentimeters(
+            long m = adjustedDistanceMetersMm(countsToMm(
                 calculateDistanceCounts(s, now.cntr1, now.cntr2, s.total_start_cntr1, s.total_start_cntr2),
                 s.calibration), 0);
             bool neg = (m == -7);
             p.setReverse(false);
             feed(p, a, b, 1024);               // 7 m forward: back to 0
             now = p.getMostRecent();
-            long m2 = adjustedDistanceMeters(countsToCentimeters(
+            long m2 = adjustedDistanceMetersMm(countsToMm(
                 calculateDistanceCounts(s, now.cntr1, now.cntr2, s.total_start_cntr1, s.total_start_cntr2),
                 s.calibration), 0);
             return neg && m2 == 0;
@@ -373,8 +387,8 @@ public:
             s.counters = false;
             s.calibration = 1000000;
             std::vector<Segment> v(2);
-            v[0].distance_counts = 5000; v[0].distance_m = 5000;
-            v[1].distance_counts = 3000; v[1].distance_m = 3000;
+            v[0].distance_m = 5000;
+            v[1].distance_m = 3000;
             CounterPoller p;
             p.setSpuriousCheckEnabled(false);   // whole-km steps in one poll
             MockI2CCounter a(1, 0x70), b(1, 0x71);
@@ -385,7 +399,7 @@ public:
             feed(p, a, b, 6000);                  // off route, not counted
             auto now = p.getMostRecent();
             const int64_t driven = calculateDistanceCounts(s, now.cntr1, now.cntr2, s.segment_start_cntr1, s.segment_start_cntr2);
-            retimeSegmentBoundaryForward(v, 0, driven * 1000, s.calibration);   // 1 m a pulse: mm = pulses x 1000
+            retimeSegmentBoundaryForward(v, 0, driven * 1000);   // 1 m a pulse: mm = pulses x 1000
             return driven == 4200 && v[0].distance_m == 4200 && v[1].distance_m == 3800;
         });
 
@@ -490,12 +504,12 @@ public:
         suite->addTest("next speed folds the carried rows in, so the next row is the speed change", []() {
             // Manual's stage 8: 36 kph 540 + 780 + 690 (ditto), 49 kph at 2010 m.
             std::vector<Segment> v(4);
-            v[0].target_speed_kph = 36; v[0].distance_m = 540; v[0].distance_counts = 5400;
-            v[1].target_speed_kph = 36; v[1].distance_m = 780; v[1].distance_counts = 7800; v[1].changesSpeed = false;
-            v[2].target_speed_kph = 36; v[2].distance_m = 690; v[2].distance_counts = 6900; v[2].changesSpeed = false;
-            v[3].target_speed_kph = 49; v[3].distance_m = 860; v[3].distance_counts = 8600;
+            v[0].target_speed_kph = 36; v[0].distance_m = 540;
+            v[1].target_speed_kph = 36; v[1].distance_m = 780; v[1].changesSpeed = false;
+            v[2].target_speed_kph = 36; v[2].distance_m = 690; v[2].changesSpeed = false;
+            v[3].target_speed_kph = 49; v[3].distance_m = 860;
             const long folded = foldCarriedRows(v, 0);
-            const bool ok = folded == 2 && v.size() == 2 && v[0].distance_m == 2010 && v[0].distance_counts == 20100
+            const bool ok = folded == 2 && v.size() == 2 && v[0].distance_m == 2010
                 && v[1].target_speed_kph == 49 && segmentStartStageMm(v, 1) == 2010000;
             // Nothing to fold: next row already changes, or no change follows.
             const bool none = foldCarriedRows(v, 0) == 0 && foldCarriedRows(v, 1) == 0;

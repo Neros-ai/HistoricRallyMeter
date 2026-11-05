@@ -81,8 +81,7 @@ struct ArrowToneResult {
 // latch, so a new stage starts fresh.
 ArrowToneResult computeArrowBasedTone(ArrowToneState& state,
                                         double secondsAheadBehind,
-                                        double targetSpeedCountsPerHour,
-                                        long calibration,
+                                        double targetSpeedKph,
                                         bool unitsMph,
                                         double stageDistanceMeters,
                                         bool pastStageEnd);

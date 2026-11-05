@@ -856,7 +856,7 @@ void updateDriverDisplay(AppData* data) {
         data->state->trip_start_cntr1, data->state->trip_start_cntr2);
     double trip_speed = calculateAverageSpeed(*data->state,
         data->state->trip_start_time_ms, current_time_ms, trip_count_diff,
-        data->state->trip_distance_adjust_cm);
+        data->state->trip_distance_adjust_mm);
     trip_speed = averageSpeedForDisplay(trip_speed, holdTimeErrorAtZero);
     ss.str("");
     ss << std::fixed << std::setprecision(1) << trip_speed;
@@ -868,7 +868,7 @@ void updateDriverDisplay(AppData* data) {
         data->state->total_start_cntr1, data->state->total_start_cntr2);
     double total_speed = calculateAverageSpeed(*data->state,
         data->state->total_start_time_ms, current_time_ms, total_count_diff,
-        data->state->total_distance_adjust_cm);
+        data->state->total_distance_adjust_mm);
     total_speed = averageSpeedForDisplay(total_speed, holdTimeErrorAtZero);
     ss.str("");
     ss << std::fixed << std::setprecision(1) << total_speed;
@@ -879,18 +879,18 @@ void updateDriverDisplay(AppData* data) {
     // same manual correction the co-pilot applies (RB-NAV-03), from the
     // start: if the two panels ever disagreed about distance travelled, even
     // briefly, that would be worse than not having the correction at all.
-    long total_dist_m = adjustedDistanceMeters(
-        countsToCentimeters(total_count_diff, data->state->calibration),
-        data->state->total_distance_adjust_cm);
+    long total_dist_m = adjustedDistanceMetersMm(
+        countsToMm(total_count_diff, data->state->calibration),
+        data->state->total_distance_adjust_mm);
     const bool dist_km = data->state->distance_km;
     const char* total_unit = dist_km ? "km" : "m";
     std::string total_dist_str = formatDistance(static_cast<double>(total_dist_m), dist_km);
     data->driverTotalDistText = total_dist_str;
     data->driverTotalUnitText = total_unit;
 
-    long trip_dist_m = adjustedDistanceMeters(
-        countsToCentimeters(trip_count_diff, data->state->calibration),
-        data->state->trip_distance_adjust_cm);
+    long trip_dist_m = adjustedDistanceMetersMm(
+        countsToMm(trip_count_diff, data->state->calibration),
+        data->state->trip_distance_adjust_mm);
     const char* trip_unit = dist_km ? "km" : "m";
     std::string trip_dist_str = formatDistance(static_cast<double>(trip_dist_m), dist_km);
     data->driverTripDistText = trip_dist_str;
@@ -923,7 +923,7 @@ void updateDriverDisplay(AppData* data) {
     if (data->state->segment_current_number >= 0 && 
         data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
         const Segment& seg = data->state->stage_segments[data->state->segment_current_number];
-        double target_kph = countsPerHourToKPH(seg.target_speed_counts_per_hour, data->state->calibration);
+        double target_kph = seg.target_speed_kph;
         if (data->state->units) {
             target_kph = target_kph * 0.621371;  // Convert to MPH
         }
@@ -949,10 +949,10 @@ void updateDriverDisplay(AppData* data) {
         // Corrected, not raw: a wrong turn knocked off with -10 has to move
         // the time error too, or the gauge keeps crediting distance the crew
         // just told the box they had not driven.
-        int64_t total_count_diff_ab = stageCountsCorrected(data, current_poll);
+        const int64_t stage_now_mm = stagePositionMm(*data->state, current_poll.cntr1, current_poll.cntr2);
         // Italian: the pc / pm error inside one, at rest (tone silent) on navi / ct / co subs.
         double seconds = gaugeAheadSeconds(*data->state, current_poll.cntr1, current_poll.cntr2,
-                                           current_time_ms, total_count_diff_ab);
+                                           current_time_ms, stage_now_mm);
         // Nothing to be ahead or behind of until the clock zeroes at the
         // minute. Held before the value is stored, so the gauge needle, the
         // chevrons and the tone all sit at rest too rather than tracking a
@@ -987,7 +987,7 @@ void updateDriverDisplay(AppData* data) {
         }
         if (data->driverTrial.active || data->driverPage == AppData::DP_ITALIAN_NAVI) {
             data->driverTrialTargetText = trialSpeedText(
-                countsPerHourToKPH(seg.target_speed_counts_per_hour, data->state->calibration));
+                seg.target_speed_kph);
             double kph = data->smoothedSpeed;
             if (kph >= 0.0 && data->state->units) kph *= 1.609344;   // smoothedSpeed is mph then
             data->driverTrialSpeedText = kph < 0.0 ? "--.--" : trialSpeedText(kph);
@@ -996,7 +996,9 @@ void updateDriverDisplay(AppData* data) {
         // Fraction of the current segment driven, for the needle's scale chevrons
         // and segment-end tick. "In segment" while between the segment start and end.
         {
-            int64_t seg_count_diff = segmentCountsCorrected(data, current_poll);
+            // Driven in this row: the stage position minus where the row starts (stage start, typed metres summed).
+            const int64_t seg_driven_mm = stage_now_mm - segmentStartStageMm(data->state->stage_segments,
+                                                                               data->state->segment_current_number);
             {   // average speed over the run being driven: from the box where the speed last changed.
                 // The run's start is taken when the segment changes: kept through a box that carries
                 // the speed on, restarted at a speed change, the first box, or any step back.
@@ -1008,28 +1010,26 @@ void updateDriverDisplay(AppData* data) {
                         data->runStartCntr1 = data->state->segment_start_cntr1;
                         data->runStartCntr2 = data->state->segment_start_cntr2;
                         data->runStartMs = data->state->segment_start_time_ms;
-                        data->runStartAdjustCm = data->state->segment_start_adjust_cm;
+                        data->runStartAdjustMm = data->state->segment_start_adjust_mm;
                     }
                     data->runSegIndex = cur_seg;
                 }
                 // The original average function, fed the run's own start.
-                const int64_t run_counts = correctedDistanceCounts(
-                    calculateDistanceCounts(*data->state, current_poll.cntr1, current_poll.cntr2,
-                                            data->runStartCntr1, data->runStartCntr2),
-                    data->state->total_distance_adjust_cm - data->runStartAdjustCm, data->state->calibration);
+                const int64_t run_counts = calculateDistanceCounts(*data->state, current_poll.cntr1, current_poll.cntr2,
+                                                                   data->runStartCntr1, data->runStartCntr2);
                 const double avg = calculateAverageSpeed(*data->state, data->runStartMs, current_time_ms,
-                                                         run_counts, 0);
+                                                         run_counts, data->state->total_distance_adjust_mm - data->runStartAdjustMm);
                 data->driverSubAvgValid = (current_time_ms - data->runStartMs > 500 && avg > 0.0);
                 data->driverSubAvgKph = data->driverSubAvgValid ? (data->state->units ? avg / 0.621371 : avg) : 0.0;
             }
-            double seg_total = seg.distance_counts;
+            const double seg_total = seg.distance_m * 1000.0;   // millimetres
+            const double seg_driven = static_cast<double>(seg_driven_mm);
             if (seg_total > 0.0) {
-                double frac = static_cast<double>(seg_count_diff) / seg_total;
+                double frac = seg_driven / seg_total;
                 if (frac < 0.0) frac = 0.0;
                 if (frac > 1.0) frac = 1.0;
                 data->segmentProgress = frac;
-                data->inSegment = (seg_count_diff >= 0 &&
-                                   static_cast<double>(seg_count_diff) <= seg_total);
+                data->inSegment = (seg_driven >= 0 && seg_driven <= seg_total);
             } else {
                 data->segmentProgress = 0.0;
                 data->inSegment = false;
@@ -1077,7 +1077,7 @@ void updateDriverDisplay(AppData* data) {
         // calculation, regardless of tone mode -- the visual indicator is
         // unaffected by the tone types) and the ahead/behind tone
         // (driven by whichever algorithm the type for the current side selects).
-        double stage_dist_m = countsToMeters(total_count_diff_ab, data->state->calibration);
+        double stage_dist_m = static_cast<double>(stage_now_mm) / 1000.0;
         // Italian: the tone runs from the moment a pc (its trial running) or a pm starts, not 250 m into the sector.
         if (data->state->rally_type == 2 && stage_dist_m < 250.0 &&
             (seg.type == SEG_PM || (seg.type == SEG_PC && data->state->trial_start_m >= 0.0)))
@@ -1087,7 +1087,7 @@ void updateDriverDisplay(AppData* data) {
 
         ArrowToneResult arrow = computeArrowBasedTone(
             data->arrowToneState,
-            seconds, seg.target_speed_counts_per_hour, data->state->calibration,
+            seconds, seg.target_speed_kph,
             data->state->units, stage_dist_m, past_stage_end);
 
         if (arrow.num_arrows > 0) {
@@ -1143,14 +1143,12 @@ void updateDriverDisplay(AppData* data) {
     // Next segment info
     if (data->state->segment_current_number >= 0 && 
         data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size()) - 1) {
-        const Segment& current_seg = data->state->stage_segments[data->state->segment_current_number];
-        int64_t seg_count_diff = segmentCountsCorrected(data, current_poll);
-        
-        double remaining_counts = current_seg.distance_counts - static_cast<double>(seg_count_diff);
-        double remaining_m = countsToMeters(static_cast<int64_t>(remaining_counts), data->state->calibration);
+        // Left in the row: its end from the stage start minus where the car is.
+        double remaining_m = static_cast<double>(stageRowEndMm(data->state->stage_segments, data->state->segment_current_number)
+                                                 - stagePositionMm(*data->state, current_poll.cntr1, current_poll.cntr2)) / 1000.0;
         
         const Segment& next_seg = data->state->stage_segments[data->state->segment_current_number + 1];
-        double next_target = countsPerHourToKPH(next_seg.target_speed_counts_per_hour, data->state->calibration);
+        double next_target = next_seg.target_speed_kph;
         if (data->state->units) {
             next_target = next_target * 0.621371;
         }

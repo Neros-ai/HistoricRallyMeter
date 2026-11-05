@@ -195,22 +195,21 @@ bool applySectorNext(RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms) {
     const long cur = s.segment_current_number;
     if (s.rally_type != 2 || !stageIsSector(segs) || cur < 0 || cur + 1 >= static_cast<long>(segs.size())) return false;
 
-    const int64_t raw_counts = calculateDistanceCounts(s, c1, c2, s.total_start_cntr1, s.total_start_cntr2);
-    const long raw_cm = countsToCentimeters(raw_counts, s.calibration);
-    const double here_m = (raw_cm + s.total_distance_adjust_cm) / 100.0;
+    const int64_t raw_mm = countsToMm(calculateDistanceCounts(s, c1, c2, s.total_start_cntr1, s.total_start_cntr2), s.calibration);
+    const double here_m = (raw_mm + static_cast<int64_t>(s.total_distance_adjust_mm)) / 1000.0;
     const double end_m = endOfRowM(segs, cur);
 
     RallyState::SectorUndo& u = s.sector_undo;
     u.valid = true;
     u.index = cur;
     u.total_start_ms = s.total_start_time_ms;
-    u.total_adjust_cm = s.total_distance_adjust_cm;
+    u.total_adjust_mm = s.total_distance_adjust_mm;
     u.seg_c1 = s.segment_start_cntr1; u.seg_c2 = s.segment_start_cntr2;
-    u.seg_adjust_cm = s.segment_start_adjust_cm;
+    u.seg_adjust_mm = s.segment_start_adjust_mm;
     u.seg_start_ms = s.segment_start_time_ms;
     u.trip_c1 = s.trip_start_cntr1; u.trip_c2 = s.trip_start_cntr2;
     u.trip_start_ms = s.trip_start_time_ms;
-    u.trip_adjust_cm = s.trip_distance_adjust_cm;
+    u.trip_adjust_mm = s.trip_distance_adjust_mm;
     u.trip_history = s.trip_history_m;
     u.pc_error = s.last_pc_error;
     u.trial_start_ms = s.trial_start_ms;
@@ -229,7 +228,7 @@ bool applySectorNext(RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms) {
 
     // Every line is a printed card point: Total is pinned there as `set` pins it. No clock
     // moves and no row length changes, so the schedule and the co in-time stay the card's.
-    s.total_distance_adjust_cm = static_cast<long>(std::lround(end_m * 100.0)) - raw_cm;
+    s.total_distance_adjust_mm = static_cast<long>(std::llround(end_m * 1000.0 - static_cast<double>(raw_mm)));
 
     const Segment& next = segs[cur + 1];
     if (rowStartsTube(segs, cur + 1)) {
@@ -242,11 +241,11 @@ bool applySectorNext(RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms) {
     s.segment_current_number = cur + 1;
     s.segment_start_cntr1 = c1;
     s.segment_start_cntr2 = c2;
-    s.segment_start_adjust_cm = s.total_distance_adjust_cm;
+    s.segment_start_adjust_mm = s.total_distance_adjust_mm;
     s.segment_start_time_ms = now_ms;
     rebaseTripToSegment(s, c1, c2);
-    u.after_total_adjust_cm = s.total_distance_adjust_cm;
-    u.after_trip_adjust_cm = s.trip_distance_adjust_cm;
+    u.after_total_adjust_mm = s.total_distance_adjust_mm;
+    u.after_trip_adjust_mm = s.trip_distance_adjust_mm;
     return true;
 }
 
@@ -272,17 +271,17 @@ bool undoSectorTube(RallyState& s) {
     RallyState::SectorUndo& u = s.sector_undo;
     if (s.rally_type != 2 || !sectorUndoAvailable(s)) return false;
     // A -10 or set made after the next is kept: only what the next itself changed goes back.
-    const long total_since_cm = s.total_distance_adjust_cm - u.after_total_adjust_cm;
-    const long trip_since_cm = s.trip_distance_adjust_cm - u.after_trip_adjust_cm;
+    const long total_since_mm = s.total_distance_adjust_mm - u.after_total_adjust_mm;
+    const long trip_since_mm = s.trip_distance_adjust_mm - u.after_trip_adjust_mm;
     s.segment_current_number = u.index;
     s.total_start_time_ms = u.total_start_ms;
-    s.total_distance_adjust_cm = u.total_adjust_cm + total_since_cm;
+    s.total_distance_adjust_mm = u.total_adjust_mm + total_since_mm;
     s.segment_start_cntr1 = u.seg_c1; s.segment_start_cntr2 = u.seg_c2;
-    s.segment_start_adjust_cm = u.seg_adjust_cm;
+    s.segment_start_adjust_mm = u.seg_adjust_mm;
     s.segment_start_time_ms = u.seg_start_ms;
     s.trip_start_cntr1 = u.trip_c1; s.trip_start_cntr2 = u.trip_c2;
     s.trip_start_time_ms = u.trip_start_ms;
-    s.trip_distance_adjust_cm = u.trip_adjust_cm + trip_since_cm;
+    s.trip_distance_adjust_mm = u.trip_adjust_mm + trip_since_mm;
     s.trip_history_m = u.trip_history;
     s.last_pc_error = u.pc_error;
     s.trial_start_ms = u.trial_start_ms;
@@ -370,46 +369,43 @@ bool sectorUndoAvailable(const RallyState& s) {
         && s.segment_current_number == s.sector_undo.index + 1;
 }
 
-int64_t odometerCounts(const RallyState& s, uint64_t c1, uint64_t c2) {
+int64_t odometerMm(const RallyState& s, uint64_t c1, uint64_t c2) {
     const int64_t raw = calculateDistanceCounts(s, c1, c2, s.odometer_start_cntr1, s.odometer_start_cntr2);
     // Not floored: a counter behind navi's start reads negative, so the crew can see it.
-    return signedCorrectedDistanceCounts(raw, s.odometer_adjust_cm, s.calibration);
+    return countsToMm(raw, s.calibration) + static_cast<int64_t>(s.odometer_adjust_mm);
 }
 
 bool setOdometerMetres(RallyState& s, uint64_t c1, uint64_t c2, double metres) {
     if (metres < 0.0) return false;
-    const int64_t raw = calculateDistanceCounts(s, c1, c2, s.odometer_start_cntr1, s.odometer_start_cntr2);
-    s.odometer_adjust_cm = static_cast<long>(std::lround(metres * 100.0)) - countsToCentimeters(raw, s.calibration);
+    const int64_t raw_mm = countsToMm(calculateDistanceCounts(s, c1, c2, s.odometer_start_cntr1, s.odometer_start_cntr2), s.calibration);
+    s.odometer_adjust_mm = static_cast<long>(std::llround(metres * 1000.0 - static_cast<double>(raw_mm)));
     return true;
 }
 
-void adjustOdometerCm(RallyState& s, long delta_cm, uint64_t c1, uint64_t c2) {
-    if (delta_cm < 0) {
-        const long now_cm = countsToCentimeters(odometerCounts(s, c1, c2), s.calibration);
-        if (now_cm <= 0) return;
-        if (now_cm + delta_cm < 0) delta_cm = -now_cm;
+void adjustOdometerMm(RallyState& s, long delta_mm, uint64_t c1, uint64_t c2) {
+    if (delta_mm < 0) {
+        const long now_mm = static_cast<long>(odometerMm(s, c1, c2));
+        if (now_mm <= 0) return;
+        if (now_mm + delta_mm < 0) delta_mm = -now_mm;
     }
-    s.odometer_adjust_cm += delta_cm;
+    s.odometer_adjust_mm += delta_mm;
 }
 
 void markSectorOdometer(RallyState& s, uint64_t c1, uint64_t c2) {
     if (s.rally_type == 0) return;   // italian and surrey keep navi total through a stage start
-    s.sector_start_odometer_cm = countsToCentimeters(odometerCounts(s, c1, c2), s.calibration);
+    s.sector_start_odometer_mm = static_cast<long>(odometerMm(s, c1, c2));
 }
 
 void resetOdometerKeepingPosition(RallyState& s, uint64_t c1, uint64_t c2) {
-    const long position_cm = countsToCentimeters(odometerCounts(s, c1, c2), s.calibration) - s.sector_start_odometer_cm;
+    const long position_mm = static_cast<long>(odometerMm(s, c1, c2)) - s.sector_start_odometer_mm;
     s.odometer_start_cntr1 = c1;
     s.odometer_start_cntr2 = c2;
-    s.odometer_adjust_cm = 0;
-    s.sector_start_odometer_cm = -position_cm;
+    s.odometer_adjust_mm = 0;
+    s.sector_start_odometer_mm = -position_mm;
 }
 
 double sectorPositionM(const RallyState& s, uint64_t c1, uint64_t c2) {
-    const int64_t counts = correctedDistanceCounts(
-        calculateDistanceCounts(s, c1, c2, s.total_start_cntr1, s.total_start_cntr2),
-        s.total_distance_adjust_cm, s.calibration);
-    return std::max<long>(0, countsToCentimeters(counts, s.calibration)) / 100.0;
+    return std::max<int64_t>(0, stagePositionMm(s, c1, c2)) / 1000.0;
 }
 
 double sectorAheadSeconds(const RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms, bool* valid) {
@@ -444,13 +440,13 @@ double italianNeedleSeconds(const RallyState& s, uint64_t c1, uint64_t c2, int64
 }
 
 double gaugeAheadSeconds(const RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms,
-                         int64_t corrected_stage_counts) {
+                         int64_t stage_mm) {
     if (s.rally_type == 2 && stageIsSector(s.stage_segments)) {
         bool valid = false;
         const double secs = italianNeedleSeconds(s, c1, c2, now_ms, &valid);
         return valid ? secs : 0.0;
     }
-    return calculateAheadBehindFromStageStart(s, now_ms, corrected_stage_counts)
+    return calculateAheadBehindFromStageStart(s, now_ms, stage_mm)
          + s.ahead_behind_zero_offset_ms / 1000.0;
 }
 
@@ -486,12 +482,12 @@ RallyState sectorPreviewState(const RallyState& live, int64_t now_ms) {
 void zeroOdometer(RallyState& s, uint64_t c1, uint64_t c2) {
     s.odometer_start_cntr1 = c1;
     s.odometer_start_cntr2 = c2;
-    s.odometer_adjust_cm = 0;
+    s.odometer_adjust_mm = 0;
 }
 
 double subAverageKph(const RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms) {
     const int64_t counts = calculateDistanceCounts(s, c1, c2, s.trip_start_cntr1, s.trip_start_cntr2);
-    return calculateAverageSpeed(s, s.trip_start_time_ms, now_ms, counts, s.trip_distance_adjust_cm);
+    return calculateAverageSpeed(s, s.trip_start_time_ms, now_ms, counts, s.trip_distance_adjust_mm);
 }
 
 bool subResetInStage(const RallyState& s) {

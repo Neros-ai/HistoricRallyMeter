@@ -410,7 +410,6 @@ std::vector<int> applyStageFile(RallyState& s, const StageFile& f) {
         slot.first_number = st.slot.first_number;
         slot.first_from_m = st.slot.first_from_m;
         slot.sector_duration_s = st.slot.sector_duration_s;
-        recomputeSegmentCounts(slot.segments, s.calibration);
         if (s.last_memory_slot == st.stage) s.segments = slot.segments;
         written.push_back(st.stage);
     }

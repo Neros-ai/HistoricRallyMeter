@@ -35,7 +35,6 @@ void stageEditCommit(AppData* d) {
     RallyState::MemorySlot& slot = slotOf(d);
     // Italian: the row rules (every row waits for next, speeds worked out from the card).
     if (s.rally_type == 2 && stageIsSector(s.segments)) applySectorRules(s.segments, slot.sector_duration_s);
-    recomputeSegmentCounts(s.segments, s.calibration);
     s.beep_waypoints_m = deriveWaypoints(s.segments);
     slot.segments = s.segments;
     slot.beep_waypoints_m = s.beep_waypoints_m;

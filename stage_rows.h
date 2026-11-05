@@ -86,8 +86,6 @@ std::vector<Segment> stageForDriving(const std::vector<Segment>& roadbook);
 // Assist: every row beeps.
 std::vector<double> deriveWaypoints(const std::vector<Segment>& segs);
 
-// Fills target_speed_counts_per_hour and distance_counts from kph / metres.
-void recomputeSegmentCounts(std::vector<Segment>& segs, long calibration);
 
 // "2:00", "0:58", "62:05" for a number of seconds (rounded).
 std::string formatMmSs(double seconds);

@@ -108,7 +108,7 @@ double rowMetresToLine(const RallyState& s, double stage_m, bool* valid);
 bool hundredMetreBeep(double prev_m, double now_m);
 
 // Navi total: the running count a stage start does not zero.
-int64_t odometerCounts(const RallyState& s, uint64_t c1, uint64_t c2);
+int64_t odometerMm(const RallyState& s, uint64_t c1, uint64_t c2);   // navi, in millimetres
 // True when prev can undo an italian next.
 bool sectorUndoAvailable(const RallyState& s);
 
@@ -116,10 +116,10 @@ bool sectorUndoAvailable(const RallyState& s);
 // False (nothing changed) for a negative distance.
 bool setOdometerMetres(RallyState& s, uint64_t c1, uint64_t c2, double metres);
 
-// The +10 / -10 keys on navi: moves navi total by delta_cm, in every rally type. A -10 cannot take
+// The +10 / -10 keys on navi: moves navi total by delta_mm, in every rally type. A -10 cannot take
 // navi below zero (it stops at 0), and does nothing to a navi that reverse has already put below
 // zero; +10 always adds.
-void adjustOdometerCm(RallyState& s, long delta_cm, uint64_t c1, uint64_t c2);
+void adjustOdometerMm(RallyState& s, long delta_mm, uint64_t c1, uint64_t c2);
 
 // Notes navi total as the sector starts: the roadbook position is navi minus this.
 void markSectorOdometer(RallyState& s, uint64_t c1, uint64_t c2);
@@ -147,9 +147,9 @@ void zeroOdometer(RallyState& s, uint64_t c1, uint64_t c2);
 double italianNeedleSeconds(const RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms, bool* valid);
 // The figure the driver gauge, its tone and the phone all show: on an italian sector
 // italianNeedleSeconds (0 at rest outside a pc / pm; A-B zero is off in italian); otherwise
-// calculateAheadBehindFromStageStart on `corrected_stage_counts` plus the A-B / B-C zero offset.
+// calculateAheadBehindFromStageStart on `stage_mm` (stagePositionMm) plus the A-B / B-C zero offset.
 double gaugeAheadSeconds(const RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms,
-                         int64_t corrected_stage_counts);
+                         int64_t stage_mm);
 // Whole minutes in hand (or behind) for the "+/-" box: |ahead| / 60 rounded, at most 99.
 long minutesInHand(double ahead_s);
 // The three readout keys on Home: row 0 total, 1 trip, 2 countdown; italian (rally_type 2)

@@ -28,9 +28,7 @@ struct HomeUi;  // Nero2.0 Home page widgets and texts (ui_home.h)
 // Segment structure (high precision)
 struct Segment {
     double target_speed_kph = 0.0;               // user-entered speed in KPH (calibration-independent)
-    double target_speed_counts_per_hour = 0.0;   // counts per hour (recalculated on calibration change)
     double distance_m = 0.0;                      // user-entered distance in meters (calibration-independent)
-    double distance_counts = 0.0;                 // distance in counts (recalculated on calibration change)
     bool autoNext = true;
     // Nero2.0: false on a leg that carries the speed above it (the table shows
     // a ditto mark); true where the speed changes. Row 1 always counts as a change.
@@ -108,7 +106,7 @@ struct AppData {
     long runSegIndex = -2;
     uint64_t runStartCntr1 = 0, runStartCntr2 = 0;
     int64_t runStartMs = 0;
-    long runStartAdjustCm = 0;
+    long runStartAdjustMm = 0;
     double driverSubAvgKph = 0.0;
     bool driverSubAvgValid = false;
     double driverRowS = 0.0;        // italian navi row: its duration at its target speed

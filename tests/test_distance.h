@@ -206,10 +206,10 @@ public:
             state.total_start_time_ms = 1; state.trip_start_time_ms = 2; state.segment_start_time_ms = 3;
             state.segment_current_number = 2;
             state.alarm_distance_km = 5;
-            state.alarm_target_counts = 99999;
-            state.total_distance_adjust_cm = 150;
-            state.trip_distance_adjust_cm = -70;
-            state.segment_start_adjust_cm = 40;
+            state.alarm_target_mm = 99999;
+            state.total_distance_adjust_mm = 1500;
+            state.trip_distance_adjust_mm = -700;
+            state.segment_start_adjust_mm = 400;
             state.stage_complete = false;
             state.undo_valid = true;
 
@@ -224,10 +224,10 @@ public:
             ASSERT_EQ(state.segment_start_time_ms, 777000);
             ASSERT_EQ(state.segment_current_number, -1);
             ASSERT_EQ(state.alarm_distance_km, 0);
-            ASSERT_EQ(state.alarm_target_counts, 0);
-            ASSERT_EQ(state.total_distance_adjust_cm, 0);
-            ASSERT_EQ(state.trip_distance_adjust_cm, 0);
-            ASSERT_EQ(state.segment_start_adjust_cm, 0);
+            ASSERT_EQ(state.alarm_target_mm, 0);
+            ASSERT_EQ(state.total_distance_adjust_mm, 0);
+            ASSERT_EQ(state.trip_distance_adjust_mm, 0);
+            ASSERT_EQ(state.segment_start_adjust_mm, 0);
             ASSERT_TRUE(state.stage_complete);
             ASSERT_FALSE(state.undo_valid);
 

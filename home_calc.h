@@ -33,6 +33,10 @@ long metresToNextChange(const std::vector<Segment>& segs, long cur, long remaini
 // roadbook figure. `cur` out of range gives 0.
 long countdownMetres(const std::vector<Segment>& segs, long cur, long total_shown_m);
 
+// Italian: metres left in row `cur` at `stage_mm`: the row end from the sector start minus where the car is.
+// Rounded up while ahead of the end and cut toward zero once past it (the figure goes negative).
+long rowCountdownMetres(const std::vector<Segment>& segs, long cur, int64_t stage_mm);
+
 // "next speed" (greek / surrey): fold the rows that carry the speed on after
 // segment `cur` into it, so the following row is the next speed change. Their
 // lengths add to `cur`, so every later change point stays where it was.

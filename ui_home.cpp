@@ -793,11 +793,11 @@ static void updateItalianHome(AppData* data) {
     // Figures in km, two decimals: sector total (Total), trip, navi total.
     const RallyState& st = *data->state;
     const CounterPoll poll = data->poller->getMostRecent();
-    const long sector_m = countsToCentimeters(stageCountsCorrected(data, poll), st.calibration) / 100;
-    const long trip_m = adjustedDistanceMeters(
-        countsToCentimeters(calculateDistanceCounts(st, poll.cntr1, poll.cntr2, st.trip_start_cntr1, st.trip_start_cntr2), st.calibration),
-        st.trip_distance_adjust_cm);
-    const long navi_m = adjustedDistanceMeters(countsToCentimeters(odometerCounts(st, poll.cntr1, poll.cntr2), st.calibration), 0);
+    const long sector_m = stagePositionMm(st, poll.cntr1, poll.cntr2) / 1000;
+    const long trip_m = adjustedDistanceMetersMm(
+        countsToMm(calculateDistanceCounts(st, poll.cntr1, poll.cntr2, st.trip_start_cntr1, st.trip_start_cntr2), st.calibration),
+        st.trip_distance_adjust_mm);
+    const long navi_m = adjustedDistanceMetersMm(odometerMm(st, poll.cntr1, poll.cntr2), 0);
     const std::string figs[3] = { formatDistance(sector_m, st.distance_km), formatDistance(trip_m, st.distance_km), formatDistance(navi_m, st.distance_km) };
     for (int i = 0; i < 3; i++) {
         if (h->figure[i] != figs[i]) { h->figure[i] = figs[i]; markDirty(h->figureArea[i]); }
@@ -995,10 +995,10 @@ void updateHomeDisplay(AppData* data) {
     const RallyState& st = *data->state;
     if (st.rally_type == 0 && st.segment_current_number >= 0 &&
         st.segment_current_number < static_cast<long>(st.stage_segments.size()) && data->poller) {
-        const Segment& cur_seg = st.stage_segments[st.segment_current_number];
         const CounterPoll poll = data->poller->getMostRecent();
-        const int64_t remaining_counts = static_cast<int64_t>(cur_seg.distance_counts) - segmentCountsCorrected(data, poll);
-        const double remaining_m = countsToCentimeters(remaining_counts, st.calibration) / 100.0;
+        // Left in the row: the row's end from the stage start minus where the car is.
+        const double remaining_m = static_cast<double>(stageRowEndMm(st.stage_segments, st.segment_current_number)
+                                       - stagePositionMm(st, poll.cntr1, poll.cntr2)) / 1000.0;
         bool ok = false;
         const double secs = nextChangeSeconds(st.stage_segments, st.segment_current_number, remaining_m, &ok);
         if (ok) line = formatClockMmSs(secs);
@@ -1021,11 +1021,8 @@ void updateHomeDisplay(AppData* data) {
                 st.segment_current_number < static_cast<long>(st.stage_segments.size())) {
                 running = true;
                 const Segment& cur_seg = st.stage_segments[st.segment_current_number];
-                const int64_t remaining_counts = static_cast<int64_t>(cur_seg.distance_counts) - segmentCountsCorrected(data, poll);
-                const long remaining_cm = countsToCentimeters(remaining_counts, st.calibration);
-                long remaining_m = (remaining_cm >= 0) ? (remaining_cm + 99) / 100 : -((-remaining_cm) / 100);
-                remaining_m = countdownMetres(st.stage_segments, st.segment_current_number,
-                                              totalShownMetres(st, poll.cntr1, poll.cntr2));
+                const long remaining_m = countdownMetres(st.stage_segments, st.segment_current_number,
+                                                         totalShownMetres(st, poll.cntr1, poll.cntr2));
                 cdM = formatDistance(static_cast<double>(remaining_m < 0 ? 0 : remaining_m), st.distance_km);
                 cdT = surreyCountdownTime(static_cast<double>(remaining_m), cur_seg.target_speed_kph);
             }

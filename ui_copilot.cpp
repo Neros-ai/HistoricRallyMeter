@@ -266,13 +266,13 @@ void updateCopilotDisplay(AppData* data) {
     if (data->state->rally_type != 2 &&
         data->state->beep_assist_enabled && !data->state->beep_waypoints_m.empty()) {
         // The corrected Total, not the raw counter: both readouts apply
-        // total_distance_adjust_cm (RB-NAV-03), and a waypoint is a roadbook
+        // total_distance_adjust_mm (RB-NAV-03), and a waypoint is a roadbook
         // distance the operator compares against what the display shows. On
         // the raw value a +40 m correction made a waypoint entered as 12.00
         // fire when the display read 12.04.
-        double travelled_m = static_cast<double>(adjustedDistanceMeters(
-            countsToCentimeters(total_count_diff, data->state->calibration),
-            data->state->total_distance_adjust_cm));
+        double travelled_m = static_cast<double>(adjustedDistanceMetersMm(
+            countsToMm(total_count_diff, data->state->calibration),
+            data->state->total_distance_adjust_mm));
         travelled_m = beepDistanceM(*data->state, current_poll.cntr1, current_poll.cntr2, travelled_m);   // surrey: navi
         bool stage_active = data->state->segment_current_number >= 0;
         double elapsed_stage_s = (current_time_ms - data->state->total_start_time_ms) / 1000.0;
@@ -402,8 +402,7 @@ void updateCopilotDisplay(AppData* data) {
     // persisted alarm still fires its sound and auto-clears.
     if (data->state->alarm_distance_km > 0) {
         if (data->alarmClearBtn) gtk_widget_show(data->alarmClearBtn);
-        int64_t remaining_counts = data->state->alarm_target_counts - total_count_diff;
-        long remaining_m = countsToCentimeters(remaining_counts, data->state->calibration) / 100;
+        long remaining_m = (data->state->alarm_target_mm - countsToMm(total_count_diff, data->state->calibration)) / 1000;
         
         if (remaining_m <= 0) {
             if (data->alarmSoundStartTime == 0) {
@@ -414,7 +413,7 @@ void updateCopilotDisplay(AppData* data) {
             
             if (current_time_ms - data->alarmSoundStartTime > 5000) {
                 data->state->alarm_distance_km = 0;
-                data->state->alarm_target_counts = 0;
+                data->state->alarm_target_mm = 0;
                 data->alarmSoundStartTime = 0;
                 if (data->alarmCountdownLabel) gtk_label_set_text(data->alarmCountdownLabel, "");
                 if (data->alarmClearBtn) gtk_widget_hide(data->alarmClearBtn);
@@ -468,9 +467,9 @@ void updateCopilotDisplay(AppData* data) {
     }
     
     // Total distance
-    long total_m = adjustedDistanceMeters(
-        countsToCentimeters(total_count_diff, data->state->calibration),
-        data->state->total_distance_adjust_cm);
+    long total_m = adjustedDistanceMetersMm(
+        countsToMm(total_count_diff, data->state->calibration),
+        data->state->total_distance_adjust_mm);
     int64_t total_duration_ms = current_time_ms - data->state->total_start_time_ms;
     int64_t total_secs = elapsedForDisplay(total_duration_ms / 1000,
                                            autoStartHoldActive(data));
@@ -488,9 +487,9 @@ void updateCopilotDisplay(AppData* data) {
     int64_t trip_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
         data->state->trip_start_cntr1, data->state->trip_start_cntr2);
-    long trip_m = adjustedDistanceMeters(
-        countsToCentimeters(trip_count_diff, data->state->calibration),
-        data->state->trip_distance_adjust_cm);
+    long trip_m = adjustedDistanceMetersMm(
+        countsToMm(trip_count_diff, data->state->calibration),
+        data->state->trip_distance_adjust_mm);
     int64_t trip_duration_ms = current_time_ms - data->state->trip_start_time_ms;
     int64_t trip_secs = elapsedForDisplay(trip_duration_ms / 1000,
                                           autoStartHoldActive(data));
@@ -539,17 +538,17 @@ void updateCopilotDisplay(AppData* data) {
     // Next segment info: distance remaining in current segment + speed of next segment
     if (data->state->segment_current_number >= 0 &&
         data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
-        const Segment& cur_seg = data->state->stage_segments[data->state->segment_current_number];
-        int64_t seg_count_diff = segmentCountsCorrected(data, current_poll);
-        int64_t remaining_counts = cur_seg.distance_counts - seg_count_diff;
-        long remaining_cm = countsToCentimeters(remaining_counts, data->state->calibration);
-        long remaining_m = (remaining_cm >= 0) ? (remaining_cm + 99) / 100 : -((-remaining_cm) / 100);
         // The countdown runs to the next speed change, on through rows that
         // carry the speed on (Nero2.0 ditto rows); italian counts each row.
         const bool greek_like = data->state->rally_type != 2;
-        if (greek_like)   // row end from the stage start minus Total as shown: the two always sum to the roadbook figure
+        long remaining_m;
+        if (greek_like) {   // row end from the stage start minus Total as shown: the two always sum to the roadbook figure
             remaining_m = countdownMetres(data->state->stage_segments, data->state->segment_current_number,
                                           totalShownMetres(*data->state, current_poll.cntr1, current_poll.cntr2));
+        } else {            // italian: metres left in the row, from the sector start position
+            remaining_m = rowCountdownMetres(data->state->stage_segments, data->state->segment_current_number,
+                                             stagePositionMm(*data->state, current_poll.cntr1, current_poll.cntr2));
+        }
         const char* next_unit = dist_km ? "km" : "m";
         std::string next_str = formatDistance(static_cast<double>(remaining_m), dist_km);
         gtk_label_set_text(data->nextDistLabel, next_str.c_str());

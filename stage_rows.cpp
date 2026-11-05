@@ -185,14 +185,6 @@ std::vector<double> deriveWaypoints(const std::vector<Segment>& segs) {
     return out;
 }
 
-void recomputeSegmentCounts(std::vector<Segment>& segs, long calibration) {
-    if (calibration <= 0) return;
-    for (Segment& s : segs) {
-        s.target_speed_counts_per_hour = kphToCountsPerHour(s.target_speed_kph, calibration);
-        s.distance_counts = (s.distance_m * 1e6) / calibration;
-    }
-}
-
 std::string formatMmSs(double seconds) {
     long t = static_cast<long>(std::lround(seconds));
     if (t < 0) t = 0;

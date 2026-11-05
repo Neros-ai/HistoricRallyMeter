@@ -9,8 +9,9 @@
 // (counts) forms; the stage-start calculations use the counts form.
 static inline void distance_and_speed(Segment& seg, double distance_counts,
                                       double counts_per_hour) {
-    seg.distance_counts = distance_counts;
-    seg.target_speed_counts_per_hour = counts_per_hour;
+    // The time-from-stage-start maths is in metres and km/h: a metre a count, 1 km/h per 1000 counts an hour.
+    seg.distance_m = distance_counts;
+    seg.target_speed_kph = counts_per_hour / 1000.0;
 }
 
 class TestAheadBehind {
@@ -174,7 +175,7 @@ public:
             state.segment_current_number = 2;
 
             bool complete = true;
-            calculateIdealCountsFromStageStart(state, 60000, &complete);
+            calculateIdealMmFromStageStart(state, 60000, &complete);
             ASSERT_FALSE(complete);
             return true;
         });
@@ -187,7 +188,7 @@ public:
             state.segment_current_number = 1;
 
             bool complete = false;
-            calculateIdealCountsFromStageStart(state, 60000, &complete);
+            calculateIdealMmFromStageStart(state, 60000, &complete);
             ASSERT_TRUE(complete);
             return true;
         });
@@ -202,7 +203,7 @@ public:
             state.segment_current_number = 1;
 
             bool complete = false;
-            calculateIdealCountsFromStageStart(state, 60000, &complete);
+            calculateIdealMmFromStageStart(state, 60000, &complete);
             ASSERT_TRUE(complete);
             return true;
         });
@@ -218,7 +219,7 @@ public:
             state.segment_current_number = 1;
             state.total_start_time_ms = 0;
 
-            double seconds = calculateAheadBehindFromStageStart(state, 60000, 5000);
+            double seconds = calculateAheadBehindFromStageStart(state, 60000, 5000000);
             ASSERT_NEAR(seconds, 0.0, 0.001);
             return true;
         });

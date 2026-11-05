@@ -35,7 +35,7 @@ const double SURREY_START_SLACK_M = 300.0;
 bool fitStageToStart(std::vector<Segment>& stage_segs, double first_from_m, double navi_at_press_m, long calibration);
 
 // A surrey stage starts (a `now` press, or the arming of an early departure): fit row 1 of the running
-// copy to navi total at sector_start_odometer_cm and flag a failed fit. The last time taken is kept
+// copy to navi total at sector_start_odometer_mm and flag a failed fit. The last time taken is kept
 // until the next stage finishes.
 void surreyStart(RallyState& s, const RallyState::MemorySlot& slot);
 

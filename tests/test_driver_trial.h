@@ -23,7 +23,6 @@ class TestDriverTrial {
         s.rally_type = 2;
         s.segments = segs;
         applySectorRules(s.segments, 10800);
-        recomputeSegmentCounts(s.segments, s.calibration);
         s.stage_segments = s.segments;
         s.segment_current_number = 0;
         s.stage_complete = false;

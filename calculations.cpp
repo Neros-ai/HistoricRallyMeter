@@ -38,12 +38,12 @@ void restartDistancesAfterPowerLoss(RallyState& state, uint64_t cntr1, uint64_t 
     state.segment_start_time_ms = now_ms;
     state.segment_current_number = -1;
     state.alarm_distance_km = 0;
-    state.alarm_target_counts = 0;
+    state.alarm_target_mm = 0;
     // Box-only state tied to the old baselines: the distance corrections, the
     // running stage and its undo all described counts that no longer exist.
-    state.total_distance_adjust_cm = 0;
-    state.trip_distance_adjust_cm = 0;
-    state.segment_start_adjust_cm = 0;
+    state.total_distance_adjust_mm = 0;
+    state.trip_distance_adjust_mm = 0;
+    state.segment_start_adjust_mm = 0;
     state.stage_complete = true;
     state.undo_valid = false;
     // The chips restarted from zero, so the raw-minus-distance shift described
@@ -161,24 +161,24 @@ double calculateCurrentSpeed(const RallyState& state, const CounterPoll& current
     
     int64_t count_diff = calculateDistanceCounts(state, current.cntr1, current.cntr2,
                                                   tenth.cntr1, tenth.cntr2);
-    long cm_diff = countsToCentimeters(count_diff, state.calibration);
-    
-    // Speed in cm/s
-    double speed_cm_per_s = (cm_diff * 1000.0) / time_diff_ms;
-    
+    const int64_t mm_diff = countsToMm(count_diff, state.calibration);
+
+    // Speed in mm/s
+    const double speed_mm_per_s = (mm_diff * 1000.0) / time_diff_ms;
+
     // Convert to KPH or MPH
     if (state.units) {
-        // MPH: cm/s * 3600 / 160934
-        return (speed_cm_per_s * 3600.0) / 160934.0;
+        // MPH: mm/s * 3600 / 1,609,340
+        return (speed_mm_per_s * 3600.0) / 1609340.0;
     } else {
-        // KPH: cm/s * 3600 / 100000
-        return (speed_cm_per_s * 3600.0) / 100000.0;
+        // KPH: mm/s * 3600 / 1,000,000
+        return (speed_mm_per_s * 3600.0) / 1000000.0;
     }
 }
 
 double calculateAverageSpeed(const RallyState& state, int64_t start_time_ms, 
                             int64_t current_time_ms, int64_t count_diff,
-                            long adjust_cm) {
+                            long adjust_mm) {
     int64_t time_diff_ms = current_time_ms - start_time_ms;
     if (time_diff_ms <= 0) {
         return 0.0;
@@ -186,9 +186,9 @@ double calculateAverageSpeed(const RallyState& state, int64_t start_time_ms,
     
     // Same correction as adjustedDistanceMeters applies to the readout, floored
     // at zero here because an average speed is never negative.
-    long cm_diff = countsToCentimeters(count_diff, state.calibration) + adjust_cm;
-    if (cm_diff < 0) cm_diff = 0;
-    double speed_cm_per_s = (cm_diff * 1000.0) / time_diff_ms;
+    int64_t mm_diff = countsToMm(count_diff, state.calibration) + adjust_mm;
+    if (mm_diff < 0) mm_diff = 0;
+    double speed_cm_per_s = (mm_diff / 10.0 * 1000.0) / time_diff_ms;
     
     if (state.units) {
         return (speed_cm_per_s * 3600.0) / 160934.0;  // MPH
@@ -213,88 +213,89 @@ double calculateAheadBehind(const RallyState& state, int64_t current_time_ms,
     return seconds;
 }
 
-double calculateIdealCountsFromStageStart(const RallyState& state, int64_t elapsed_ms,
-                                          bool* roadbook_complete) {
+int64_t countsToMm(int64_t counts, long calibration) {
+    return (counts * calibration) / 1000;
+}
+
+double calculateIdealMmFromStageStart(const RallyState& state, int64_t elapsed_ms,
+                                      bool* roadbook_complete) {
     if (roadbook_complete) *roadbook_complete = true;
 
     if (state.segment_current_number < 0 || state.stage_segments.empty()) {
         return 0.0;
     }
-    
-    double ideal_counts = 0.0;
+
+    double ideal_mm = 0.0;
     double remaining_time_s = elapsed_ms / 1000.0;
-    
+
     // Go through each segment up to and including current
     for (int i = 0; i <= state.segment_current_number && i < static_cast<int>(state.stage_segments.size()); i++) {
         const Segment& seg = state.stage_segments[i];
-        
-        if (seg.target_speed_counts_per_hour <= 0.0) {
+
+        if (seg.target_speed_kph <= 0.0) {
             // A segment with real distance but no target speed is a hole in
             // the roadbook, not an empty segment: skipping it drops its
             // distance too, so everything computed from here on is measured
             // against a shorter stage than the one being driven. Report that
             // rather than returning a confidently wrong figure. A segment
             // with no distance genuinely contributes nothing and is fine.
-            if (seg.distance_counts > 0.0 && roadbook_complete) *roadbook_complete = false;
+            if (seg.distance_m > 0.0 && roadbook_complete) *roadbook_complete = false;
             continue;  // Skip invalid segments
         }
-        
+
+        // km/h = 1000 mm per 3.6 mm... : millimetres a second at this row's speed.
+        const double mm_per_s = seg.target_speed_kph * 1000.0 / 3.6;
         // Time to complete this segment at target speed (in seconds)
-        // time = distance / speed = distance_counts / (counts_per_hour / 3600)
-        double segment_time_s = seg.distance_counts * 3600.0 / seg.target_speed_counts_per_hour;
-        
+        const double segment_time_s = seg.distance_m * 1000.0 / mm_per_s;
+
         if (i < state.segment_current_number) {
             // Completed segment - add full distance
-            ideal_counts += seg.distance_counts;
+            ideal_mm += seg.distance_m * 1000.0;
             remaining_time_s -= segment_time_s;
         } else {
             // Current segment - use remaining time at this segment's speed
             // remaining_time_s can be negative if ahead (drove earlier segments faster
-            // than target), which correctly reduces ideal_counts
-            double partial_counts = (remaining_time_s / 3600.0) * seg.target_speed_counts_per_hour;
-            ideal_counts += partial_counts;
+            // than target), which correctly reduces ideal_mm
+            ideal_mm += remaining_time_s * mm_per_s;
         }
     }
-    
-    return ideal_counts;
+
+    return ideal_mm;
 }
 
 double calculateAheadBehindFromStageStart(const RallyState& state, int64_t current_time_ms,
-                                          int64_t actual_counts_from_stage_start) {
+                                          int64_t actual_stage_mm) {
     if (state.segment_current_number < 0 || state.stage_segments.empty()) {
         return 0.0;
     }
-    
+
     // Get elapsed time since stage (total) start
     int64_t elapsed_ms = current_time_ms - state.total_start_time_ms;
     if (elapsed_ms <= 0) {
         return 0.0;
     }
-    
+
     // Calculate where we should ideally be. If the roadbook has a hole in it
     // -- a segment with a distance but no target speed -- the ideal position
     // is measured against a stage shorter than the real one, so read as zero
     // rather than showing a wrong figure the crew cannot tell from a right
     // one. Same convention as the zero-speed current-segment guard below.
     bool roadbook_complete = true;
-    double ideal_counts = calculateIdealCountsFromStageStart(state, elapsed_ms, &roadbook_complete);
+    double ideal_mm = calculateIdealMmFromStageStart(state, elapsed_ms, &roadbook_complete);
     if (!roadbook_complete) {
         return 0.0;
     }
-    
+
     // Difference: positive = ahead (traveled more than ideal), negative = behind
-    double diff = static_cast<double>(actual_counts_from_stage_start) - ideal_counts;
-    
+    double diff = static_cast<double>(actual_stage_mm) - ideal_mm;
+
     // Convert to seconds using current segment's target speed
     const Segment& current_seg = state.stage_segments[state.segment_current_number];
-    if (current_seg.target_speed_counts_per_hour <= 0.0) {
+    if (current_seg.target_speed_kph <= 0.0) {
         return 0.0;
     }
 
-    double counts_per_second = current_seg.target_speed_counts_per_hour / 3600.0;
-    double seconds = diff / counts_per_second;
-
-    return seconds;
+    return diff / (current_seg.target_speed_kph * 1000.0 / 3.6);
 }
 
 std::string formatDistanceGrouped(long meters) {
@@ -349,31 +350,14 @@ std::string formatElapsedInterval(int64_t total_secs) {
     return std::string(buf);
 }
 
-long clampDistanceAdjust(long raw_cm, long proposed_adjust_cm) {
-    if (raw_cm + proposed_adjust_cm < 0) return -raw_cm;
-    return proposed_adjust_cm;
+long clampDistanceAdjust(long raw_mm, long proposed_adjust_mm) {
+    if (raw_mm + proposed_adjust_mm < 0) return -raw_mm;
+    return proposed_adjust_mm;
 }
 
-int64_t correctedDistanceCounts(int64_t raw_counts, long adjust_cm, long calibration) {
-    if (calibration <= 0) return raw_counts;
-    // The inverse of countsToCentimeters: counts = cm * 10000 / calibration.
-    int64_t adjust_counts = (static_cast<int64_t>(adjust_cm) * 10000) / calibration;
-    int64_t corrected = raw_counts + adjust_counts;
-    return corrected < 0 ? 0 : corrected;
-}
-
-int64_t signedCorrectedDistanceCounts(int64_t raw_counts, long adjust_cm, long calibration) {
-    if (calibration <= 0) return raw_counts;
-    return raw_counts + (static_cast<int64_t>(adjust_cm) * 10000) / calibration;
-}
-
-// The pulse copy of a row length follows the typed metres (it is derived, and goes away with the last pulse user).
-static void syncSegmentCounts(Segment& seg, long calibration) {
-    if (calibration > 0) seg.distance_counts = seg.distance_m * 1e6 / static_cast<double>(calibration);
-}
 
 bool retimeSegmentBoundaryForward(std::vector<Segment>& segs, long index,
-                                  int64_t driven_mm, long calibration) {
+                                  int64_t driven_mm) {
     if (index < 0 || index + 1 >= static_cast<long>(segs.size())) return false;
     Segment& cur = segs[index];
     Segment& next = segs[index + 1];
@@ -397,13 +381,11 @@ bool retimeSegmentBoundaryForward(std::vector<Segment>& segs, long index,
     if (next.distance_m + surrendered >= 0.0) {
         next.distance_m += surrendered;
     }
-    syncSegmentCounts(cur, calibration);
-    syncSegmentCounts(next, calibration);
     return true;
 }
 
 bool retimeSegmentBoundaryBackward(std::vector<Segment>& segs, long index,
-                                   int64_t driven_mm, long calibration) {
+                                   int64_t driven_mm) {
     if (index <= 0 || index >= static_cast<long>(segs.size())) return false;
     Segment& prev = segs[index - 1];
     Segment& cur = segs[index];
@@ -414,12 +396,10 @@ bool retimeSegmentBoundaryBackward(std::vector<Segment>& segs, long index,
     prev.distance_m += driven_m;
     cur.distance_m -= driven_m;
     if (cur.distance_m < 0.0) cur.distance_m = 0.0;
-    syncSegmentCounts(prev, calibration);
-    syncSegmentCounts(cur, calibration);
     return true;
 }
 
-bool mergeSegmentBack(std::vector<Segment>& segs, long index, long calibration) {
+bool mergeSegmentBack(std::vector<Segment>& segs, long index) {
     if (index <= 0 || index >= static_cast<long>(segs.size())) return false;
     Segment& prev = segs[index - 1];
     Segment& cur = segs[index];
@@ -429,8 +409,6 @@ bool mergeSegmentBack(std::vector<Segment>& segs, long index, long calibration) 
     // segment's auto-advance: an automatic change point stays automatic, and
     // a manual one (a timing point) still waits for "next".
     prev.autoNext = cur.autoNext;
-    syncSegmentCounts(prev, calibration);
-    syncSegmentCounts(cur, calibration);
     return true;
 }
 
@@ -466,7 +444,7 @@ void rebaseSegmentAt(RallyState& state, uint64_t c1, uint64_t c2,
     // either way comes back to `into`.
     state.segment_start_cntr1 = c1 >= into ? c1 - into : 0;
     state.segment_start_cntr2 = c2 >= into ? c2 - into : 0;
-    state.segment_start_adjust_cm = state.total_distance_adjust_cm;
+    state.segment_start_adjust_mm = state.total_distance_adjust_mm;
 }
 
 bool nextAvailable(const RallyState& state) {
@@ -503,13 +481,11 @@ bool undoSegmentChange(RallyState& state, uint64_t c1, uint64_t c2, int64_t stag
     auto& segs = state.stage_segments;
     const long i = state.undo_from_index;
     if (state.undo_automatic) {
-        mergeSegmentBack(segs, i + 1, state.calibration);
+        mergeSegmentBack(segs, i + 1);
         state.segment_current_number = i;
     } else {
         segs[i].distance_m = state.undo_from_m;
         segs[i + 1].distance_m = state.undo_to_m;
-        syncSegmentCounts(segs[i], state.calibration);
-        syncSegmentCounts(segs[i + 1], state.calibration);
         const int64_t point = segmentStartStageMm(segs, i + 1);
         state.segment_current_number = stage_mm < point ? i : i + 1;
     }
@@ -530,25 +506,23 @@ bool undoSegmentChange(RallyState& state, uint64_t c1, uint64_t c2, int64_t stag
     state.trip_start_cntr1 = state.segment_start_cntr1;
     state.trip_start_cntr2 = state.segment_start_cntr2;
     state.trip_start_time_ms = state.segment_start_time_ms;
-    state.trip_distance_adjust_cm = 0;
+    state.trip_distance_adjust_mm = 0;
     state.undo_valid = false;   // once only
     return true;
 }
 
 long totalShownMetres(const RallyState& s, uint64_t c1, uint64_t c2) {
-    return adjustedDistanceMeters(
-        countsToCentimeters(calculateDistanceCounts(s, c1, c2, s.total_start_cntr1, s.total_start_cntr2), s.calibration),
-        s.total_distance_adjust_cm);
+    return adjustedDistanceMetersMm(
+        countsToMm(calculateDistanceCounts(s, c1, c2, s.total_start_cntr1, s.total_start_cntr2), s.calibration),
+        s.total_distance_adjust_mm);
 }
 
-long adjustedDistanceMeters(long raw_cm, long adjust_cm) {
-    // Not floored at zero: reversing past the start counts into negative
-    // metres (-12), and counts back up again when the car goes forward -- what
-    // is shown is what is counted. (A manual -10 still cannot take the reading
-    // below zero: clampDistanceAdjust limits the correction itself.) C++
-    // division truncates toward zero, so -150 cm reads -1 m.
-    return (raw_cm + adjust_cm) / 100;
+long adjustedDistanceMetersMm(int64_t raw_mm, long adjust_mm) {
+    // Millimetres in, whole metres out, cut toward zero: -1.5 m reads -1 (C++ division truncates toward zero).
+    // Not floored at zero: reversing past the start counts into negative metres.
+    return static_cast<long>((raw_mm + static_cast<int64_t>(adjust_mm)) / 1000);
 }
+
 
 std::string segmentRowHeading(double current_speed, bool has_current_segment) {
     if (!has_current_segment) return std::string("--->");
@@ -1036,7 +1010,7 @@ bool stageDistanceComplete(const std::vector<Segment>& segs, int64_t stage_posit
 
 int64_t stagePositionMm(const RallyState& s, uint64_t c1, uint64_t c2) {
     const int64_t counts = calculateDistanceCounts(s, c1, c2, s.total_start_cntr1, s.total_start_cntr2);
-    return (counts * s.calibration) / 1000 + static_cast<int64_t>(s.total_distance_adjust_cm) * 10;
+    return (counts * s.calibration) / 1000 + static_cast<int64_t>(s.total_distance_adjust_mm);
 }
 
 AutoStartArming autoStartArming(int64_t target_ms, int64_t epoch_ms,
@@ -1108,19 +1082,19 @@ void rebaseTotalDistance(RallyState& state, uint64_t c1, uint64_t c2) {
     // reset, instead of firing 25 km later. Beep Assist's waypoints were
     // given the same treatment; the alarm was missed.
     if (state.alarm_distance_km > 0) {
-        const int64_t covered = calculateDistanceCounts(state, c1, c2,
-            state.total_start_cntr1, state.total_start_cntr2);
-        state.alarm_target_counts -= covered;
-        if (state.alarm_target_counts < 0) state.alarm_target_counts = 0;
+        const int64_t covered_mm = countsToMm(calculateDistanceCounts(state, c1, c2,
+            state.total_start_cntr1, state.total_start_cntr2), state.calibration);
+        state.alarm_target_mm -= covered_mm;
+        if (state.alarm_target_mm < 0) state.alarm_target_mm = 0;
     }
     state.total_start_cntr1 = c1;
     state.total_start_cntr2 = c2;
     state.segment_start_cntr1 = c1;
     state.segment_start_cntr2 = c2;
-    state.total_distance_adjust_cm = 0;
+    state.total_distance_adjust_mm = 0;
     // Taken after the clear: the segment restarts against a correction of
     // zero like everything else re-based here.
-    state.segment_start_adjust_cm = state.total_distance_adjust_cm;
+    state.segment_start_adjust_mm = state.total_distance_adjust_mm;
 }
 
 std::vector<long> parseTripHistory(const std::string& history) {
@@ -1158,12 +1132,12 @@ void rebaseTripDistance(RallyState& state, uint64_t c1, uint64_t c2) {
     // zeroed. Taken against the OLD baseline, before it is replaced.
     int64_t trip_counts = calculateDistanceCounts(state, c1, c2,
         state.trip_start_cntr1, state.trip_start_cntr2);
-    long trip_m = adjustedDistanceMeters(
-        countsToCentimeters(trip_counts, state.calibration), state.trip_distance_adjust_cm);
+    long trip_m = adjustedDistanceMetersMm(
+        countsToMm(trip_counts, state.calibration), state.trip_distance_adjust_mm);
     state.trip_history_m = pushTripHistory(state.trip_history_m, trip_m);
     state.trip_start_cntr1 = c1;
     state.trip_start_cntr2 = c2;
-    state.trip_distance_adjust_cm = 0;
+    state.trip_distance_adjust_mm = 0;
 }
 
 void resetTrip(RallyState& state, uint64_t c1, uint64_t c2, int64_t now_ms) {
