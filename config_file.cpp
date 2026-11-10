@@ -6,6 +6,7 @@
 #include <string>
 #include <sstream>
 #include <iomanip>
+#include <limits>
 #include <stdexcept>
 #include <cstdio>
 #include <cstdlib>
@@ -472,7 +473,6 @@ static void writeSegmentArray(std::ofstream& file, const std::string& name,
     file << "  \"" << name << "\": [\n";
     for (size_t i = 0; i < segs.size(); i++) {
         file << "    {\n";
-        file << std::fixed << std::setprecision(6);
         file << "      \"target_speed_kph\": " << segs[i].target_speed_kph << ",\n";
         // Still written (derived from the km/h) so an older build reading this file keeps working.
         file << "      \"target_speed_counts_per_hour\": " << (calibration > 0 ? kphToCountsPerHour(segs[i].target_speed_kph, calibration) : 0.0) << ",\n";
@@ -502,7 +502,10 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     if (!file.is_open()) {
         return;
     }
-    
+    // Every decimal figure is written in full, so a restart reads back exactly what was saved
+    // (a speed worked out from a sector duration was rounded to 6 decimals before, RB-DEV-16).
+    file << std::defaultfloat << std::setprecision(std::numeric_limits<double>::max_digits10);
+
     file << "{\n";
     file << "  \"units\": " << (state.units ? "true" : "false") << ",\n";
     file << "  \"calibration\": " << state.calibration << ",\n";

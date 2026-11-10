@@ -296,6 +296,28 @@ public:
                 && in.trip_distance_adjust_mm == -18000;
         });
 
+        suite->addTest("worked-out speeds and distances survive a save/load round trip exactly", []() {
+            // A navi speed worked out from a sector duration has many decimals; a restart must
+            // read back exactly what was saved, not a rounded copy (RB-DEV-16).
+            const std::string path = "/tmp/rallybox_test_precision.json";
+            RallyState out;
+            Segment sg;
+            sg.target_speed_kph = 96.23 / 3.0 * 1.0210939;   // 32.753259... (many decimals)
+            sg.distance_m = 1234.5678901234;
+            sg.pc_duration_s = 31.25;
+            out.memory_slots[11].segments.push_back(sg);
+            out.memory_slots[11].beep_waypoints_m = {1234.5678901234};
+            out.memory_slots[11].waypoints_recorded = true;
+            ConfigFile::save(out, path);
+            RallyState in;
+            ConfigFile::load(in, path);
+            std::remove(path.c_str());
+            const auto& m = in.memory_slots[11];
+            return m.segments.size() == 1 && m.segments[0].target_speed_kph == sg.target_speed_kph
+                && m.segments[0].distance_m == sg.distance_m && m.segments[0].pc_duration_s == 31.25
+                && m.beep_waypoints_m.size() == 1 && m.beep_waypoints_m[0] == 1234.5678901234;
+        });
+
         suite->addTest("distance corrections default to zero", []() {
             RallyState fresh;
             return fresh.total_distance_adjust_mm == 0
