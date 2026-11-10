@@ -18,29 +18,9 @@ public:
     TestSuite* createSuite() {
         auto* suite = new TestSuite("Stage numbers (RB-NAV-45)");
 
-        suite->addTest("plus skips gaps", []() {
-            RallyState s; program(s, 16); program(s, 18); program(s, 21);
-            return nextProgrammedStage(s, 18, +1) == 21 && nextProgrammedStage(s, 16, +1) == 18;
-        });
-
-        suite->addTest("minus skips gaps", []() {
-            RallyState s; program(s, 16); program(s, 18); program(s, 21);
-            return nextProgrammedStage(s, 21, -1) == 18 && nextProgrammedStage(s, 18, -1) == 16;
-        });
-
-        suite->addTest("minus at the lowest and plus at the highest stay put", []() {
-            RallyState s; program(s, 16); program(s, 21);
-            return nextProgrammedStage(s, 16, -1) == 16 && nextProgrammedStage(s, 21, +1) == 21;
-        });
-
-        suite->addTest("from an empty number the nearest programmed stage in that direction", []() {
-            RallyState s; program(s, 16); program(s, 21);
-            return nextProgrammedStage(s, 18, +1) == 21 && nextProgrammedStage(s, 18, -1) == 16;
-        });
-
-        suite->addTest("no programmed stage at all stays put", []() {
+        suite->addTest("no programmed stage at all lists none", []() {
             RallyState s;
-            return nextProgrammedStage(s, 5, +1) == 5 && programmedStages(s).empty();
+            return programmedStages(s).empty();
         });
 
         suite->addTest("valid stage numbers are 1 to 99", []() {

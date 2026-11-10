@@ -9,13 +9,6 @@ std::vector<int> programmedStages(const RallyState& s) {
     return out;
 }
 
-int nextProgrammedStage(const RallyState& s, int from, int dir) {
-    const int step = dir < 0 ? -1 : 1;
-    for (int n = from + step; validStageNumber(n); n += step)
-        if (!s.memory_slots[n - 1].empty()) return n;
-    return from;
-}
-
 int chosenStageNumber(const std::string& text) {
     if (text.empty() || text.size() > 2) return 0;
     int n = 0;
