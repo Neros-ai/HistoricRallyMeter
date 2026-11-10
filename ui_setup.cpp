@@ -470,7 +470,10 @@ void phoneDisplaysList(AppData* d) {
         j += std::string("{\"name\":\"") + jsonEscape(outputs[i].name) + "\",\"w\":" + std::to_string(outputs[i].logicalW())
             + ",\"h\":" + std::to_string(outputs[i].logicalH()) + ",\"orientation\":\""
             + jsonEscape(outputs[i].orientationName()) + "\",\"keyboard\":"
-            + (keyboardOnOutput(outputs[i].name) ? "true" : "false") + "}";
+            + (keyboardOnOutput(outputs[i].name) ? "true" : "false")
+            // The gap the box writes between two display cards ("12 px"); none before the first.
+            + ",\"gap\":" + (i ? std::to_string(outputs[i].x - (outputs[i - 1].x + outputs[i - 1].logicalW())) : std::string("null"))
+            + "}";
     }
     j += "]";
     d->setupDisplaysJson = j;

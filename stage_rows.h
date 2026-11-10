@@ -95,6 +95,20 @@ std::string formatHMmSs(double seconds);
 // ("1,320") or kilometres to two decimals ("17.43").
 std::string formatDistance(double metres, bool km);
 
+// The Segments page's text for one row, exactly as the box shows it. The box
+// and the phone both use this, so the two can never read differently.
+// rally_type 2 is italian; every other type uses the greek row.
+struct SegRowText {
+    std::string num, ref, from, to, dist, kph, dur, tot;
+};
+SegRowText segRowText(const Segment& seg, const StageRow& row, size_t index, int rally_type, bool km);
+
+// "Average 32.08" under the italian sector duration ("" without a duration or distance).
+std::string sectorAverageText(const std::vector<Segment>& segs, long sector_duration_s);
+
+// The greek "Distance at start" entry: "6,000 m" / "6.00 km" ("" when not set).
+std::string startDistanceText(long start_distance_m, bool km);
+
 // "10:45" or "10:45:30" -> seconds after midnight; -1 for anything else.
 long parseTimeOfDay(const std::string& text);
 // "6,200", "6200 m" -> whole metres; -1 for anything else.

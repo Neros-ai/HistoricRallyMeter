@@ -239,7 +239,7 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         }
         drawText(cr, "Stage arrival", width / 2.0, base + 26, 22, CENTRE);
         if (h->arrivalValid) {
-            line(std::to_string(h->unitsMph ? static_cast<int>(std::lround(h->arrivalKph * 0.621371)) : h->arrivalKph),
+            line(arrivalSpeedText(h->arrivalKph, h->unitsMph),
                  h->unitsMph ? "mph" : "kph", base + 72, 40, true);
             line(std::to_string(h->arrivalMin), "min", base + 118, 40, false);
         } else {

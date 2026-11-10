@@ -281,8 +281,11 @@
 
     const msg = this.last;
     const seconds = Number(msg.ahead_behind_s) || 0;
-    const maxVal = gaugeEffectiveMaxSeconds(seconds, Number(msg.gauge_range) || 3);
-    this.zoneShown = gaugeZoneHysteretic(seconds, this.zoneShown);
+    // The box's dial as it last drew it: its scale, colour band, figures and centre text.
+    // The phone only draws them; the local rules remain for an older box that does not send them.
+    const sh = (msg.drv && msg.drv.shown) || null;
+    const maxVal = sh && Number(sh.max) > 0 ? Number(sh.max) : gaugeEffectiveMaxSeconds(seconds, Number(msg.gauge_range) || 3);
+    this.zoneShown = sh ? Number(sh.zone) || 0 : gaugeZoneHysteretic(seconds, this.zoneShown);
     const zone = this.zoneShown;
     const arc = gaugeArcColor(zone);
     const boxMode = !!this.boxSpace;
@@ -408,7 +411,7 @@
     // at the box's top edge)
 
     // Digital ahead/behind box. Empty when the box hides the needle.
-    const digital = hideNeedle ? '' : formatGaugeDigital(seconds, zone);
+    const digital = hideNeedle ? '' : (sh ? String(sh.digital || '') : formatGaugeDigital(seconds, zone));
     let rightText = '';
     let ahead = true;
     if (drv && drv.page === 1 && drv.box) rightText = String(drv.box);
@@ -620,8 +623,8 @@
 
     // Current (right) / Target (left). Italian figures are the box's km/h strings.
     const italianFig = drv && (drv.page === 1 || drv.page === 2);
-    const cur = italianFig && drv.speed ? String(drv.speed) : Number(msg.cur_kph || 0).toFixed(1);
-    const tgt = italianFig && drv.target ? String(drv.target) : Number(msg.target_kph || 0).toFixed(1);
+    const cur = sh ? String(sh.speed || '') : italianFig && drv.speed ? String(drv.speed) : Number(msg.cur_kph || 0).toFixed(1);
+    const tgt = sh ? String(sh.target || '') : italianFig && drv.target ? String(drv.target) : Number(msg.target_kph || 0).toFixed(1);
     ctx.textBaseline = 'alphabetic';
 
     // Portrait: the dial moved down with the taller canvas. Draw the speeds back
@@ -664,7 +667,10 @@
     const showArrival = !!(!(msg.surrey && stageOn)
       && (drv ? drv.page === 4 : (arrival && Number(msg.rally_type) !== 2 && !stageOn)));
     ctx.fillStyle = '#FFDD00';
-    if (showArrival && !stageOn && !italianFig) {
+    if (sh && sh.cap && sh.cap !== 'Target') {   // the box's between-stages arrival, its own figure and caption
+      const b = drawCorner(tgt, topLeftInk, false, L.curTopSize, figureBase);
+      drawCornerLabel(sh.cap, topLeftInk, false, b);
+    } else if (!sh && showArrival && !stageOn && !italianFig) {
       const ak = !arrival ? '--' : String(msg.units === 'mph' ? Math.round(arrival.kph * 0.621371) : Math.trunc(arrival.kph));
       const b = drawCorner(ak, topLeftInk, false, L.curTopSize, figureBase);
       drawCornerLabel(msg.units === 'mph' ? 'Arrival (mph)' : 'Arrival (kph)', topLeftInk, false, b);

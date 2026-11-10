@@ -208,6 +208,15 @@ bool webHandleCommand(AppData* data, const char* json) {
         refreshSegmentList(data);
         return added > 0 && rest.empty();
     }
+    // The roadbook box number typed on any greek row, as the box's "box" entries.
+    if (strcmp(type, "row_box") == 0) {
+        int row = 0, box = 0;
+        if (!jsonFindInt(json, "row", &row) || !jsonFindInt(json, "box", &box)) return false;
+        if (row < 0 || row >= static_cast<int>(data->state->segments.size()) || box < 0) return false;
+        stageEditSetBox(data, static_cast<size_t>(row), box);
+        refreshSegmentList(data);
+        return true;
+    }
     if (strcmp(type, "row_speed") == 0) {
         int row = 0; double kph = 0;
         if (!jsonFindInt(json, "row", &row) || !jsonFindDouble(json, "kph", &kph)) return false;

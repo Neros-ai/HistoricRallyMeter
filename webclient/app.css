@@ -181,7 +181,7 @@ header { justify-content: flex-end; }
 .uhd { color: #0ff; text-align: center; }
 .upload-bad { color: #f44; }
 .upload-amb { color: #ffa500; }
-#upload-stages button { display: block; width: 100%; text-align: left; margin-top: 0.35rem; background: #111; color: #fff; border: 1px solid #444; padding: 0.45rem; }
+#upload-stages button { display: block; width: 100%; text-align: left; margin-top: 0.35rem; background: #222; color: #fff; border: 1px solid #666; border-radius: 4px; padding: 0.45rem; }
 #upload-stages button.on { border-color: #0ff; }
 .actions button {
   flex: 1;
@@ -191,7 +191,7 @@ header { justify-content: flex-end; }
   font-weight: bold;
   background: #222;
   color: #fff;
-  border: 2px solid #fff;
+  border: 1px solid #666; border-radius: 4px;
 }
 .actions button:disabled { opacity: 0.35; }
 /* Live page: prev/next, the two resets and the -10/+10 line are pressed on
@@ -229,6 +229,9 @@ header { justify-content: flex-end; }
 .log-size { color: #bbb; font-size: 0.9rem; }
 .logs-empty { color: #bbb; }
 .table-wrap { overflow-x: auto; margin-bottom: 0.75rem; }
+/* iPhone Safari enlarges text when the phone is turned to landscape; Chrome's preview does not.
+   Keep the sizes as written so the real phone lays out as tested. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 th, td { border: 1px solid #444; padding: 0.4rem; text-align: left; }
 td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; padding: 0.35rem; }
@@ -256,7 +259,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
   font-weight: bold;
   background: #222;
   color: #fff;
-  border: 2px solid #fff;
+  border: 1px solid #666; border-radius: 4px;
 }
 /* One row per action, its label on the same line as its five slots, so the
    row reads as "Recall: 1 2 3 4 5" -- the action itself, rather than a grid
@@ -275,6 +278,9 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .beep-row { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.5rem; }
 .beep-row label { flex: 0 0 6.5rem; }
 .beep-row label.choice { flex: 0 0 auto; }
+/* Choice labels (tone 1 / 2, gauge range 1 / 2 / 3) may shrink: three of them at 6.5rem ran
+   25px off a 390px portrait screen and let the whole page slide sideways. */
+.beep-row label:has(> input[type=radio]) { flex: 0 1 6.5rem; min-width: 0; white-space: nowrap; }
 .beep-row input[type="number"] { margin-left: auto; width: 5.5rem; background: #000; color: #fff;
                                  border: 1px solid #666; padding: 0.4rem; font-size: 1.2rem; }
 .beep-row input[type="checkbox"], .beep-row input[type="radio"] { width: 1.4rem; height: 1.4rem; }
@@ -337,7 +343,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .modal-actions { display: flex; flex-direction: column; gap: 0.6rem; }
 .modal-actions button {
   padding: 0.9rem; font-size: 1rem; font-weight: bold;
-  background: #222; color: #fff; border: 2px solid #fff;
+  background: #222; color: #fff; border: 1px solid #666; border-radius: 4px;
 }
 
 /* ---- Nero2.0 phone: Navi / Seg / Time / Cal / Set / Drv ---- */
@@ -468,6 +474,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .add-row { flex-direction: column; align-items: stretch; }
 .add-row input { width: 100%; flex: none; height: 3rem; }
 .add-row .key { width: 100%; }
+.add-row input { order: -1; }   /* portrait: the entry box sits above the keys */
 
 #seg-table input.to { width: 4.2rem; background: #111; color: #fff; border: 1px solid #666; text-align: right; }
 
@@ -578,7 +585,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .land-only, .onoff { display: none; }
 #view-navi.rally-greek #row-navi { display: none; }
 .menu-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.6rem; width: min(96vw, 64rem); }
-.menu-grid button { min-height: 4.6rem; background: #111; color: #fff; border: 2px solid #fff; font-size: 1.2rem; font-weight: bold; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem; }
+.menu-grid button { min-height: 4.6rem; background: #222; color: #fff; border: 1px solid #666; border-radius: 4px; font-size: 1.2rem; font-weight: bold; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem; }
 .menu-grid small { font-weight: normal; color: #aaa; font-size: 0.8rem; }
 .navi-ask { display: flex; gap: 0.5rem; align-items: center; justify-content: center; margin-bottom: 0.8rem; color: #0ff; }
 .navi-ask input { width: 8rem; font-size: 1.4rem; background: #111; color: #fff; border: 1px solid #888; text-align: right; padding: 0.2rem 0.4rem; }
@@ -699,7 +706,6 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
   #view-drv .driver-footer { display: none; }
   #view-drv #driver-gauge { max-width: none; }
   .view { padding: 0.25rem 0.35rem 2.8rem; }
-  #btn-spanner.land-only, #setup-back.land-only { display: inline-block; min-height: 2.4rem; margin: 0.3rem 0; }
 
   #view-navi.navi {
     display: grid;
@@ -784,17 +790,21 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 
   #view-seg {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 8.4rem;
-    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
-    height: calc(100dvh - 1.6rem);
-    padding: 0.15rem 0.3rem 4.3rem;
+    /* Right column is exactly the menu key's width (7.2rem) and its right
+       edge sits on the menu's (0.35rem), so the keys stack over the menu.
+       The bottom row (add distance, entry, upload, flag) is the menu's depth
+       and sits level with it; no dead strip under it. */
+    grid-template-columns: minmax(0, 1fr) 7.2rem;
+    grid-template-rows: auto auto minmax(0, 1fr) auto 3.225rem;
+    height: calc(100dvh - 2.1rem);
+    padding: 0.15rem 0.35rem 0.3rem 0.3rem;
     overflow: hidden;
     gap: 0.28rem 0.4rem;
   }
   #view-seg .table-wrap { grid-column: 1; grid-row: 1 / 5; overflow: auto; min-width: 0; }
-  #view-seg .add-row { grid-column: 1; grid-row: 5; flex-direction: row; align-items: center; margin: 0; min-width: 0; overflow: hidden; }
-  #view-seg .add-row input { width: auto; flex: 1 1 auto; min-width: 0; height: 2.2rem; font-size: 1rem; }
-  #view-seg .add-row .key { width: auto; flex: 0 0 auto; height: 2.2rem; min-height: 0; font-size: 1rem; padding: 0 0.6rem; }
+  #view-seg .add-row { grid-column: 1; grid-row: 5; flex-direction: row; align-items: stretch; margin: 0; min-width: 0; height: 100%; padding-right: calc(96px + 0.4rem); box-sizing: border-box; }
+  #view-seg .add-row input { order: 0; width: auto; flex: 1 1 auto; min-width: 0; height: 100%; font-size: 1rem; }
+  #view-seg .add-row .key { width: auto; flex: 0 0 auto; height: 100%; min-height: 0; margin: 0; font-size: 1rem; padding: 0 0.7rem; line-height: 1.1; }
   #view-seg .stage-sel {
     grid-column: 2; grid-row: 1; margin: 0; min-width: 0; max-width: 100%;
     display: grid; grid-template-columns: 1.9rem minmax(0, 1fr) 1.9rem; gap: 0.2rem; height: 2.3rem;
@@ -810,9 +820,10 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
   #view-seg .start-block input[type=text], #view-seg .start-block input[type=number] {
     width: 100%; height: 1.85rem; font-size: 1.05rem; padding: 0.1rem 0.3rem;
   }
+  /* Autostart: the tick box sits to the right of its caption. */
+  #view-seg .start-block label.auto-row { flex-direction: row; align-items: center; justify-content: space-between; }
   #view-seg #seg-duration-avg { font-size: 0.85rem; margin: 0; text-align: right; }
   #view-seg .actions:has(#btn-clear-stage) { grid-column: 2; grid-row: 4; align-self: end; }
-  #view-seg .actions:has(#btn-upload-stage) { grid-column: 2; grid-row: 5; align-self: end; }
   #view-seg .actions {
     flex-direction: column; flex-wrap: nowrap; gap: 0.25rem; margin: 0; min-width: 0; max-width: 100%;
   }
@@ -820,15 +831,23 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
     flex: none; min-width: 0; width: 100%; min-height: 0; height: 2.15rem;
     padding: 0.1rem 0.25rem; font-size: 0.95rem;
   }
-  #view-seg #seg-table th, #view-seg #seg-table td { font-size: 0.95rem; height: 2rem; }
+  #view-seg #seg-table th, #view-seg #seg-table td { font-size: 0.95rem; height: 2rem; padding: 0.1rem 0.2rem; }
+  /* The headings stay put while the rows scroll under them. */
+  #view-seg #seg-table thead th { position: sticky; top: 0; z-index: 1; background: #000; }
+  /* iOS draws its own taller, rounded inputs and buttons: use ours so rows stay compact. */
+  #view-seg #seg-table input:not([type=checkbox]), #view-seg #seg-table button { -webkit-appearance: none; appearance: none; box-sizing: border-box; border-radius: 0; }
+  #view-seg #seg-table button.del { background: #fff; color: #000; border: 0; height: 1.7rem; min-height: 0; }
+  #view-seg #seg-table button.tag { min-height: 1.85rem; padding: 0 0.35rem; font-size: 0.95rem; }
   #view-seg #seg-table input.to, #view-seg #seg-table input.spd,
   #view-seg #seg-table input.first, #view-seg #seg-table input.first-from,
   #view-seg #seg-table input.ref, #view-seg #seg-table input.pc {
-    height: 2rem; font-size: 0.95rem;
+    height: 2rem; font-size: 1rem;   /* 16 px: under that the iPhone zooms the page when a field is tapped */
   }
   #view-seg #seg-table input.to, #view-seg #seg-table input.first-from { width: 4.1rem; }
   #view-seg #seg-table input.ref, #view-seg #seg-table input.pc, #view-seg #seg-table input.spd { width: 3.2rem; }
   #view-seg #seg-table input.first { width: 2.6rem; }
+  /* Greek KPH fills its cell but at the row's height, not the portrait 3.4rem. */
+  #view-seg #seg-table input.spd { min-height: 0; padding: 0.1rem 0.15rem; width: 4.6rem; }   /* room for 32.75 in the iPhone's wider digits */
   #view-seg #seg-table button.del { font-size: 1rem; padding: 0 0.15rem; }
 
   #view-time { height: calc(100dvh - 1.7rem); overflow: auto; }
@@ -850,13 +869,49 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
   #view-set .beep-row .onoff { display: inline-flex; gap: 0; margin-left: auto; }
   #view-set .beep-row .onoff .key { min-height: 1.8rem; padding: 0.15rem 0.7rem; }
   #view-set .beep-row input[type="checkbox"] { display: none; }
-  #setup-sheet { display: none; }
   #view-set.show-setup #setup-sheet {
     display: block; position: fixed; z-index: 30; left: 8vw; right: 8vw; top: 8vh; bottom: 8vh;
     background: #000; border: 2px solid #fff; padding: 1rem; overflow: auto;
   }
 }
 
+/* Setup is its own page in both orientations, as on the box: the setup key on Settings opens
+   it and its settings key comes back. Landscape draws it as a framed sheet (below). */
+#btn-spanner, #setup-back { display: inline-block; min-height: 2.4rem; margin: 0.3rem 0; }
+#setup-sheet { display: none; }
+#setup-sheet .setup-ver { display: block; }
+@media not ((orientation: landscape) and (min-width: 700px)) {
+  #view-set.show-setup #setup-sheet {
+    display: block; position: fixed; z-index: 30; inset: 0; background: #000;
+    padding: 0.8rem 0.6rem 4rem; overflow: auto;
+  }
+}
+/* Seg table as the box's list: one frame round the rows (#444 on #111), no line round each cell. */
+#seg-table th, #seg-table td { border: none; }
+#view-seg .table-wrap { border: 1px solid #444; background: #111; }
+#seg-table thead th { background: #000; }
+/* KPH entries sit at the right of their column, under the right-aligned KPH heading. */
+#seg-table input.spd { margin-left: auto; }
+#seg-table td:has(> input.spd) { padding-right: 0.2rem; }
+/* Landscape Seg: fixed columns, each sized to what it holds (sum 100%), so the spare width
+   is shared evenly instead of piling up in one column. Greek and surrey share one set. */
+@media (orientation: landscape) and (min-width: 700px) {
+  #seg-table { table-layout: fixed; }
+  #seg-table col.c-box { width: 7.5%; }  #seg-table col.c-chg { width: 6%; }   #seg-table col.c-auto { width: 6.5%; }
+  #seg-table col.c-sub { width: 6%; }    #seg-table col.c-type { width: 9%; }  #seg-table col.c-ref { width: 8.5%; }
+  #seg-table.gr col.c-from, #seg-table.gr col.c-to { width: 11.5%; }
+  #seg-table.gr col.c-dist { width: 10.5%; } #seg-table.gr col.c-kph { width: 13.5%; }
+  #seg-table.gr col.c-dur { width: 13%; }    #seg-table.gr col.c-ela { width: 15.5%; }   /* greek: 7.5+6+6.5+11.5+11.5+10.5+13.5+13+15.5+4.5 = 100 */
+  #seg-table.it col.c-from, #seg-table.it col.c-to { width: 11.5%; }
+  #seg-table.it col.c-dist { width: 10.5%; } #seg-table.it col.c-kph { width: 11.5%; }
+  #seg-table.it col.c-dur { width: 12%; }    #seg-table.it col.c-ela { width: 14.5%; }   /* italian: 6+9+8.5+11.5+11.5+10.5+11.5+12+14.5+4.5 = 100 */
+  #seg-table col.c-del { width: 4.5%; }
+  #seg-table th, #seg-table td { overflow: hidden; }
+}
+/* Seg headings aligned as the box's: figures right, tick boxes and type centred, "from - to" centred over both. */
+#seg-table th { text-align: right; }
+#seg-table th.c, #seg-table th.ft { text-align: center; }
+#seg-table td:has(> input[type=checkbox]), #seg-table td:has(> button.tag) { text-align: center; }
 /* Seg: the type tags carry the box's colours (ui_copilot.cpp seg-tag-*). */
 #seg-table button.tag { background: #666; color: #fff; border: 0; font-weight: bold; }
 #seg-table button.tag.t2 { background: #d01010; }
@@ -867,11 +922,15 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .mode-badge { display: block; width: 96px; height: 24px; margin: 0.8rem auto 0.4rem; }
 /* The Setup sheet's headings and the countdown panel. */
 .setup-h { margin: 0.6rem 0 0.3rem; font-size: 1rem; color: #0ff; }
+.setup-ver { text-align: right; font-weight: bold; }
+.setup-bt { flex-wrap: wrap; gap: 0.5rem; }
+.disp-gap { color: #ccc; margin: 0.2rem 0; }
+.setup-line { margin: 0.4rem 0; }
 .card.cdn b { color: #fff; }
 .card.cdn small { color: #888; }
 @media (orientation: landscape) and (min-width: 700px) {
-  #view-seg { grid-template-rows: auto auto minmax(0, 1fr) auto auto auto; }
-  #view-seg .mode-badge { grid-column: 2; grid-row: 6; margin: 0.2rem auto 0; align-self: end; }
+  /* The flag sits at the right end of the bottom row, clear of the menu key. */
+  #view-seg .mode-badge { grid-column: 1; grid-row: 5; margin: 0; justify-self: end; align-self: center; }
   /* Pages other than Navi and Driver keep the header line: the rally clock beside the sound icon. */
   body:not(:has(#view-navi:not(.hidden))):not(:has(#view-drv:not(.hidden))) #hdr-clock {
     display: block; font-weight: bold; font-family: monospace; font-size: 1.3rem; line-height: 1;
@@ -929,6 +988,13 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 /* Landscape Segments: clear and upload keys are 1.5x deeper (2.15rem -> 3.225rem). */
 @media (orientation: landscape) and (min-width: 700px) {
   #view-seg .actions .key { height: 3.225rem; }
+  /* add distance and upload stage are the same size as the clear keys. */
+  #view-seg .add-row .key {
+    flex: 0 0 7.2rem; width: 7.2rem;
+    padding: 0.1rem 0.25rem; font-size: 0.95rem; white-space: normal; line-height: normal;
+  }
+  /* The menu key matches the bottom row: same depth, same right edge as the column above. */
+  body:has(#view-seg:not(.hidden)) #land-menu { height: 3.225rem; width: 7.2rem; right: 0.35rem; bottom: 0.3rem; }
 }
 /* Landscape greek and surrey: the stage go keys are as deep as set / +10 / -10 and level with them (rows 1, 3, 5). */
 @media (orientation: landscape) and (min-width: 700px) {

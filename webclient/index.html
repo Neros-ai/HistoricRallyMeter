@@ -134,12 +134,12 @@
     </section>
     <div class="table-wrap">
       <table id="seg-table">
-        <thead><tr><th>box</th><th id="seg-h-from">from m</th><th id="seg-h-to">to m</th><th id="seg-h-dist">dist m</th><th>chg</th><th>KPH</th><th>auto</th><th>dur</th><th>elapsed</th><th></th></tr></thead>
+        <thead><tr><th>box</th><th class="c">chg</th><th class="c">auto</th><th colspan="2" class="ft">from -m- to</th><th>dist</th><th>KPH</th><th>dur</th><th>elapsed</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
     <section class="start-block">
-      <label>Stage Start time <input id="seg-start-time" type="text" inputmode="numeric" placeholder="hh:mm:ss"></label>
+      <label>Start time <input id="seg-start-time" type="text" inputmode="numeric" placeholder="hh:mm:ss"></label>
       <label id="seg-start-dist-label">Distance at start <input id="seg-start-dist" type="text" inputmode="decimal"></label>
       <label id="seg-duration-label" style="display:none">Duration <input id="seg-duration" type="text" inputmode="numeric" placeholder="h:mm:ss"></label>
       <p id="seg-duration-avg" class="dim" style="display:none"></p>
@@ -148,15 +148,13 @@
       <label class="auto-row" id="seg-auto-row">Autostart <input id="seg-autostart" type="checkbox"></label>
     </section>
     <section class="add-row">
-      <input id="seg-add-text" type="text" placeholder="1,000;1,500;2,300">
       <button id="btn-add-seg" type="button" class="key">add distance</button>
+      <input id="seg-add-text" type="text" placeholder="1,000;1,500;2,300">
+      <button id="btn-upload-stage" type="button" class="key">upload<br>stage</button>
     </section>
     <section class="actions">
       <button id="btn-clear-stage" type="button" class="key">clear<br>stage</button>
       <button id="btn-clear-all" type="button" class="key">clear<br>all</button>
-    </section>
-    <section class="actions">
-      <button id="btn-upload-stage" type="button" class="key">upload<br>stage</button>
     </section>
     <!-- The rally mode's flag with "mode" across it, as on the box's Segments page. -->
     <svg id="mode-badge" class="mode-badge" viewBox="0 0 96 24" aria-label="rally mode"></svg>
@@ -233,22 +231,22 @@
         <label class="choice"><input type="radio" name="measure-type" value="abac"> AB,AC</label></div>
       <div class="beep-row"><label for="set-stage-log">Stage data logging</label><input id="set-stage-log" type="checkbox"><span class="onoff" data-for="set-stage-log"><button type="button" class="key" data-on="0">off</button><button type="button" class="key" data-on="1">on</button></span></div>
       <div class="beep-row"><label for="set-sensor-log">Sensor logging</label><input id="set-sensor-log" type="checkbox"><span class="onoff" data-for="set-sensor-log"><button type="button" class="key" data-on="0">off</button><button type="button" class="key" data-on="1">on</button></span></div>
-      <div class="beep-row"><label for="set-force-single">Force single display</label><input id="set-force-single" type="checkbox"><span class="onoff" data-for="set-force-single"><button type="button" class="key" data-on="0">off</button><button type="button" class="key" data-on="1">on</button></span></div>
       <div class="beep-row"><span>Wi-Fi phone link</span><span id="set-url" class="cyan">-</span></div>
-      <button id="btn-spanner" type="button" class="key land-only">setup</button>
+      <button id="btn-spanner" type="button" class="key">setup</button>
       <div class="beep-row"><span>Screen <b id="set-fps">-</b></span><span><b id="set-cpu">-</b></span></div>
       <div id="setup-sheet">
+      <!-- The box's Setup page, in its order: screens, speaker, Wi-Fi; version and keys as its right column. -->
+      <div class="setup-ver"><span id="setup-version"></span></div>
       <h3 class="setup-h">Screen setup</h3>
       <div id="displays-list"></div>
-      <div class="beep-row"><button id="bt-remember" type="button" class="key">remember playing speaker</button></div>
-      <div class="beep-row"><span>Bluetooth speaker</span><span id="bt-name">no speaker remembered</span></div>
-      <div class="beep-row"><button id="bt-connect" type="button" class="key">connect</button><button id="bt-disconnect" type="button" class="key">disconnect</button></div>
-      <div class="beep-row"><button id="wifi-list" type="button" class="key">saved Wi-Fi</button><button id="reset-layout" type="button" class="key">reset layout</button></div>
+      <div class="beep-row"><button id="reset-layout" type="button" class="key">reset layout</button><label for="set-force-single">Force single display</label><input id="set-force-single" type="checkbox"><span class="onoff" data-for="set-force-single"><button type="button" class="key" data-on="0">off</button><button type="button" class="key" data-on="1">on</button></span></div>
+      <h3 class="setup-h">Bluetooth speaker setup</h3>
+      <div class="beep-row setup-bt"><button id="bt-remember" type="button" class="key">remember playing speaker</button><span id="bt-name"></span><button id="bt-connect" type="button" class="key">connect</button><button id="bt-disconnect" type="button" class="key">disconnect</button></div>
+      <h3 class="setup-h">Wi-Fi setup</h3>
       <div id="wifi-nets"></div>
-      <div class="beep-row"><button id="btn-update" type="button" class="key">check for software updates</button></div>
-      <p id="setup-status" class="dim"></p>
+      <p class="setup-line"><span id="setup-status"></span> <span id="setup-url" class="cyan"></span></p>
       <div class="beep-note">load from home screen to avoid landscape tabs</div>
-      <button id="setup-back" type="button" class="key land-only">settings</button>
+      <div class="beep-row"><button id="btn-update" type="button" class="key">check for<br>software<br>updates</button><button id="setup-back" type="button" class="key">settings</button></div>
       </div>
     </section>
     <section class="logs-panel">
