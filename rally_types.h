@@ -93,6 +93,9 @@ struct AppData {
     DriverTrialView driverTrial;
     std::string driverTrialTargetText;   // km/h, 2 dp
     std::string driverTrialSpeedText;    // km/h, 2 dp
+    // The greek / surrey speed and target as the driver page writes them (the labels and the
+    // phone both take these; nothing reads the text back off a label).
+    std::string driverSpeedText = "--.-", driverTargetText = "--.-";
     // Trip and Total averages in the box's units, unrounded (the driver page writes them at 2 dp).
     double driverTripAvg = 0.0, driverTotalAvg = 0.0;
     // What the driver page last drew, word for word, so the phone shows the same (never recomputes).

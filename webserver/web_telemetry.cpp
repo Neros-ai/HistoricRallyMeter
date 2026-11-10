@@ -54,10 +54,6 @@ static std::string jsonOneLine(const char* s) {
     return o;
 }
 
-static double displayKph(AppData* data, double kph) {
-    if (data->state->units) return kph * 0.621371;
-    return kph;
-}
 
 // The compact driver page the box is drawing, so the phone gauge can follow it.
 // Distances and averages stay out of the dial; the phone footer draws those.
@@ -165,45 +161,15 @@ static std::string stagePanelJson(AppData* data) {
 
 std::string buildTelemetryJson(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
-    auto tenth_poll = data->poller->get10th();
-    // Speed is measured on the raw count so it stays positive in reverse.
+    // Raw count for the prop rpm (positive in reverse).
     auto raw_poll = data->poller->getMostRecentRaw();
     int64_t current_time_ms = getRallyTime_ms(*data->state);
 
-    int64_t trip_count_diff = calculateDistanceCounts(*data->state,
-        current_poll.cntr1, current_poll.cntr2,
-        data->state->trip_start_cntr1, data->state->trip_start_cntr2);
-    long trip_m = adjustedDistanceMetersMm(
-        countsToMm(trip_count_diff, data->state->calibration),
-        data->state->trip_distance_adjust_mm);
     const bool hold_at_zero = autoStartHoldActive(data);
-    double trip_avg = averageSpeedForDisplay(calculateAverageSpeed(*data->state,
-        data->state->trip_start_time_ms, current_time_ms, trip_count_diff,
-        data->state->trip_distance_adjust_mm), hold_at_zero);
 
-    int64_t total_count_diff = calculateDistanceCounts(*data->state,
-        current_poll.cntr1, current_poll.cntr2,
-        data->state->total_start_cntr1, data->state->total_start_cntr2);
-    long total_m = adjustedDistanceMetersMm(
-        countsToMm(total_count_diff, data->state->calibration),
-        data->state->total_distance_adjust_mm);
-    double total_avg = averageSpeedForDisplay(calculateAverageSpeed(*data->state,
-        data->state->total_start_time_ms, current_time_ms, total_count_diff,
-        data->state->total_distance_adjust_mm), hold_at_zero);
-
-    double cur_speed = calculateCurrentSpeed(*data->state, raw_poll, tenth_poll);
-    if (cur_speed < 0) cur_speed = 0.0;
-
-    double target_kph = 0.0;
     double ahead_behind_s = 0.0;
     if (data->state->segment_current_number >= 0 &&
         data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
-        const Segment& seg = data->state->stage_segments[data->state->segment_current_number];
-        target_kph = seg.target_speed_kph;
-        // The corrected stage distance, matching ui_driver: see
-        // stageCountsCorrected. total_count_diff above stays raw because
-        // adjustedDistanceMeters applies the same correction to the odometer
-        // itself, and applying it twice would double it.
         // The driver gauge's own figure (italian: the pc / pm error, at rest elsewhere).
         ahead_behind_s = gaugeAheadSeconds(*data->state, current_poll.cntr1, current_poll.cntr2,
             current_time_ms, stagePositionMm(*data->state, current_poll.cntr1, current_poll.cntr2));
@@ -225,15 +191,7 @@ std::string buildTelemetryJson(AppData* data) {
     snprintf(buf, sizeof(buf),
         "{\"type\":\"telemetry\","
         "\"rally_clock\":\"%s\","
-        "\"trip_m\":%ld,"
-        "\"total_m\":%ld,"
-        "\"cur_kph\":%.1f,"
-        "\"trip_avg_kph\":%.1f,"
-        "\"total_avg_kph\":%.1f,"
-        "\"target_kph\":%.1f,"
         "\"ahead_behind_s\":%.3f,"
-        "\"segment_number\":%ld,"
-        "\"segment_count\":%zu,"
         "\"next_enabled\":%s,"
         "\"prev_enabled\":%s,"
         "\"sector_finish\":%s,"
@@ -246,15 +204,7 @@ std::string buildTelemetryJson(AppData* data) {
         // the waypoints too (RB-WEB-06).
         "\"beep\":%s}",
         rally_clock.c_str(),
-        trip_m,
-        total_m,
-        cur_speed,      // already in the box's units
-        trip_avg,       // already in the box's units
-        total_avg,      // already in the box's units
-        displayKph(data, target_kph),   // stored in KPH; convert
         ahead_behind_s,
-        data->state->segment_current_number >= 0 ? data->state->segment_current_number + 1 : 0,
-        data->state->stage_segments.size(),
         np.next_enabled ? "true" : "false",
         np.prev_enabled ? "true" : "false",
         np.sector_finish ? "true" : "false",
@@ -264,9 +214,6 @@ std::string buildTelemetryJson(AppData* data) {
         beepEventJson(data->lastBeep).c_str());
 
     // Nero2.0: what the Navi, Time and Set tabs show.
-    int64_t total_s = elapsedForDisplay((current_time_ms - data->state->total_start_time_ms) / 1000, hold_at_zero);
-    int64_t trip_s = elapsedForDisplay((current_time_ms - data->state->trip_start_time_ms) / 1000, hold_at_zero);
-    std::string speed_change;
     long next_m = 0;
     bool has_next_m = false;
     const RallyState& st = *data->state;
@@ -275,23 +222,12 @@ std::string buildTelemetryJson(AppData* data) {
         has_next_m = true;
         // Same countdown as the box: greek and surrey count to the next speed change from the stage start,
         // italian counts the row's own distance.
-        const bool greek_like = st.rally_type != 2;
-        double row_left_m;
-        if (greek_like) {
+        if (st.rally_type != 2) {
             next_m = countdownMetres(st.stage_segments, st.segment_current_number,
                                      totalShownMetres(st, current_poll.cntr1, current_poll.cntr2));
-            row_left_m = static_cast<double>(stageRowEndMm(st.stage_segments, st.segment_current_number)
-                             - stagePositionMm(st, current_poll.cntr1, current_poll.cntr2)) / 1000.0;
         } else {
-            const int64_t pos_mm = stagePositionMm(st, current_poll.cntr1, current_poll.cntr2);
-            next_m = rowCountdownMetres(st.stage_segments, st.segment_current_number, pos_mm);
-            row_left_m = static_cast<double>(stageRowEndMm(st.stage_segments, st.segment_current_number) - pos_mm) / 1000.0;
-        }
-        // The box draws mm:ss to the next speed change under the third figure, in greek only.
-        if (st.rally_type == 0) {
-            bool ok = false;
-            const double secs = nextChangeSeconds(st.stage_segments, st.segment_current_number, row_left_m, &ok);
-            if (ok) speed_change = formatClockMmSs(secs);
+            next_m = rowCountdownMetres(st.stage_segments, st.segment_current_number,
+                                        stagePositionMm(st, current_poll.cntr1, current_poll.cntr2));
         }
     }
     // Stage arrival
@@ -343,7 +279,6 @@ std::string buildTelemetryJson(AppData* data) {
     }
     std::ostringstream ex;
     ex << ",\"gauge_range\":" << data->state->gauge_range_s
-       << ",\"reaction_offset_ms\":" << data->state->reaction_offset_ms
        << ",\"reverse\":" << (data->poller->reverse() ? "true" : "false")
        << ",\"navi_m\":" << ((isSurrey(st) || st.rally_type == 2) ? std::to_string(surreyNaviMetres(st, current_poll.cntr1, current_poll.cntr2)) : std::string("null"))
        << ",\"surrey\":" << (isSurrey(st) ? "true" : "false")
@@ -356,12 +291,11 @@ std::string buildTelemetryJson(AppData* data) {
        << ",\"surrey_cd\":" << ((isSurrey(st) && data->home && data->home->surreyRunning)
               ? std::string("{\"m\":\"") + jsonEscape(data->home->cdMetres) + "\",\"min\":\"" + jsonEscape(data->home->cdTime) + "\"}"
               : std::string("null"))
-       << ",\"total_s\":" << total_s << ",\"trip_s\":" << trip_s
        << ",\"it_count\":" << itCount
        << ",\"sector\":" << sectorJson
-       << ",\"next_m\":" << (has_next_m ? std::to_string(next_m) : std::string("null"))
        << ",\"next_text\":\"" << (has_next_m ? formatDistance(static_cast<double>(next_m), st.distance_km) : std::string("---")) << "\""
-       << ",\"speed_change\":\"" << speed_change << "\""
+       // mm:ss to the next speed change, the line the box draws under row 3 (greek only).
+       << ",\"speed_change\":\"" << jsonEscape(data->home ? data->home->speedLine : std::string()) << "\""
        << ",\"key_total\":\"" << jsonOneLine(readoutKeyName(st.rally_type, 0)) << "\""
        << ",\"key_trip\":\"" << jsonOneLine(readoutKeyName(st.rally_type, 1)) << "\""
        << ",\"key_navi\":\"" << jsonOneLine(readoutKeyName(st.rally_type, 2)) << "\""
@@ -372,8 +306,6 @@ std::string buildTelemetryJson(AppData* data) {
             ? "{\"kph\":" + std::to_string(arr.speed_kph) + ",\"min\":" + std::to_string(arr.minutes)
               + ",\"text\":\"" + arrivalSpeedText(arr.speed_kph, st.units) + "\"}"
             : std::string("null"))
-       << ",\"computer_ms\":" << sys_ms
-       << ",\"rally_offset_ms\":" << st.rallyTimeOffset_ms
        // The Time page and the start flag as the box writes them (the phone never reformats).
        << ",\"time_rally\":\"" << formatTimeTenths(current_time_ms) << "\""
        << ",\"time_computer\":\"" << formatTimeTenths(sys_ms) << "\""
@@ -409,23 +341,13 @@ std::string buildStateJson(AppData* data) {
     std::ostringstream ss;
     ss << std::fixed << std::setprecision(1);
     ss << "{\"type\":\"state\","
-       << "\"segment_current_number\":" << data->state->segment_current_number << ","
        // True when Reset Total would be asked about on the box, so the phone
        // asks the same question instead of a plain "Reset total?".
        << "\"frozen\":" << (data->state->freeze_on ? "true" : "false") << ","
        << "\"sub_reset_asks\":" << (subResetInStage(*data->state) ? "true" : "false") << ","
        << "\"total_reset_asks\":"
        << (classifyTotalReset(*data->state) == TotalResetCase::StageRunning ? "true" : "false")
-       << ","
-       << "\"segments\":[";
-    for (size_t i = 0; i < data->state->segments.size(); i++) {
-        const Segment& seg = data->state->segments[i];
-        if (i > 0) ss << ',';
-        ss << "{\"target_speed_kph\":" << seg.target_speed_kph
-           << ",\"distance_m\":" << static_cast<long>(seg.distance_m)
-           << ",\"autoNext\":" << (seg.autoNext ? "true" : "false") << "}";
-    }
-    ss << "],";
+       << ",";
 
     // Nero2.0 Segments table, built by the same model as the box's page.
     {
@@ -434,8 +356,6 @@ std::string buildStateJson(AppData* data) {
         std::vector<StageRow> rows = buildStageRows(data->state->segments, slot.first_number, slot.first_from_m);
         ss << "\"edit_slot\":" << slot_no << ",\"first_number\":" << slot.first_number
            << ",\"first_from_m\":" << static_cast<long>(slot.first_from_m)
-           << ",\"start_distance_m\":" << slot.start_distance_m
-           << ",\"sector_duration_s\":" << slot.sector_duration_s
            << ",\"duration_text\":\"" << (slot.sector_duration_s > 0 ? formatHMmSs(static_cast<double>(slot.sector_duration_s)) : std::string()) << "\""
            << ",\"avg_text\":\"" << jsonEscape(sectorAverageText(data->state->segments, slot.sector_duration_s))
            << "\",\"start_dist_text\":\"" << jsonEscape(startDistanceText(slot.start_distance_m, data->state->distance_km))
@@ -457,16 +377,13 @@ std::string buildStateJson(AppData* data) {
         for (size_t i = 0; i < rows.size(); i++) {
             const StageRow& r = rows[i];
             if (i) ss << ',';
-            ss << "{\"n\":" << r.number << ",\"from\":" << static_cast<long>(r.from_m)
-               << ",\"to\":" << static_cast<long>(r.to_m) << ",\"dist\":" << static_cast<long>(r.dist_m)
-               << ",\"chg\":" << (r.chg ? "true" : "false") << ",\"kph\":" << r.kph
-               << ",\"ms\":" << r.ms << ",\"auto_av\":" << (r.auto_available ? "true" : "false")
-               << ",\"auto_on\":" << (r.auto_on ? "true" : "false")
-               << ",\"time_s\":" << std::lround(r.time_s) << ",\"total_s\":" << std::lround(r.total_s);
+            // The tick boxes and the row type the phone draws; every figure is the box's text (txt).
+            ss << "{\"chg\":" << (r.chg ? "true" : "false")
+               << ",\"auto_av\":" << (r.auto_available ? "true" : "false")
+               << ",\"auto_on\":" << (r.auto_on ? "true" : "false");
             if (i < data->state->segments.size()) {
                 const Segment& sg = data->state->segments[i];
-                ss << ",\"ty\":" << sg.type << ",\"ref\":" << sg.ref
-                   << ",\"pc_s\":" << std::lround(sg.pc_duration_s);
+                ss << ",\"ty\":" << sg.type;
                 // The box's own text for every cell: the phone shows it, never reformats.
                 const SegRowText t = segRowText(sg, r, i, data->state->rally_type, data->state->distance_km);
                 ss << ",\"txt\":{\"num\":\"" << jsonEscape(t.num) << "\",\"ref\":\"" << jsonEscape(t.ref)
@@ -478,12 +395,10 @@ std::string buildStateJson(AppData* data) {
         }
         ss << "],";
     }
-    ss << "\"trip_history\":[";
+    // Trip history as the box writes it (its own four, formatDistance and its grouping).
+    ss << "\"trip_history_text\":[";
     {
-        std::vector<long> hist = homeTripHistory(*data->state);   // the box's own four
-        for (size_t i = 0; i < hist.size(); i++) { if (i) ss << ','; ss << hist[i]; }
-        // The same figures as the box writes them under Trip history (formatDistance, its grouping).
-        ss << "],\"trip_history_text\":[";
+        std::vector<long> hist = homeTripHistory(*data->state);
         for (size_t i = 0; i < hist.size(); i++) {
             if (i) ss << ',';
             ss << '"' << jsonEscape(formatDistance(static_cast<double>(hist[i]), data->state->distance_km)) << '"';
@@ -511,17 +426,14 @@ std::string buildStateJson(AppData* data) {
 
     // Beep Assist and tone, so the phone renders the box's actual settings
     // rather than blank controls that only take effect once touched.
-    ss << "\"beep_assist_enabled\":" << (data->state->beep_assist_enabled ? "true" : "false")
-       << ",\"beep_navigation_mode\":" << (data->state->beep_navigation_mode ? "true" : "false")
+    ss << "\"beep_navigation_mode\":" << (data->state->beep_navigation_mode ? "true" : "false")
        << ",\"beep_timing_mode\":" << (data->state->beep_timing_mode ? "true" : "false")
        << ",\"beep_advance_m\":" << data->state->beep_advance_m
        << ",\"beep_advance_s\":" << data->state->beep_advance_s
        << ",\"tone_enabled\":" << (data->state->tone_enabled ? "true" : "false")
-       << ",\"tone_type\":" << data->state->tone_type_behind
        << ",\"tone_type_behind\":" << data->state->tone_type_behind
        << ",\"tone_type_ahead\":" << data->state->tone_type_ahead
        << ",\"gauge_range\":" << data->state->gauge_range_s
-       << ",\"reaction_offset_ms\":" << data->state->reaction_offset_ms
        << ",\"reaction_text\":\"" << reactionText(data->state->reaction_offset_ms) << "\""
        << ",\"phone_beep_lead_ms\":" << data->state->phone_beep_lead_ms
        << ",\"bt_name\":\"" << jsonEscape(data->state->bluetooth_audio_name) << "\""

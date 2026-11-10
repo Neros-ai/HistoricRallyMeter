@@ -156,12 +156,6 @@
     this.ctx = canvas.getContext('2d');
     this.last = {
       ahead_behind_s: 0,
-      cur_kph: 0,
-      target_kph: 0,
-      total_avg_kph: 0,
-      trip_avg_kph: 0,
-      total_m: 0,
-      trip_m: 0,
       rally_clock: '--:--:--',
       units: 'kph'
     };
