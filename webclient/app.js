@@ -953,14 +953,10 @@
     if (lastState) renderSegments(lastState);
   };
   ['focusin', 'click'].forEach((ev) => $('view-seg').addEventListener(ev, segGuard, true));
-  // - / + step to the next programmed stage, skipping gaps (as the box); the
-  // list itself takes any number 1-99, so a new stage can be started on an empty one.
+  // - / + step one stage at a time, blanks included, as the box's Segments page (RB-SEG-19).
   const segStep = (dir) => {
-    const cur = Number($('seg-pick').value) || 1;
-    const pop = (lastState && lastState.memory_populated) || [];
-    for (let n = cur + dir; n >= 1 && n <= 99; n += dir) {
-      if (pop[n - 1]) { send({ type: 'edit_select', slot: n }); return; }
-    }
+    const n = (Number($('seg-pick').value) || 1) + dir;
+    if (n >= 1 && n <= 99) send({ type: 'edit_select', slot: n });
   };
   $('seg-minus').addEventListener('click', () => segStep(-1));
   $('seg-plus').addEventListener('click', () => segStep(1));
