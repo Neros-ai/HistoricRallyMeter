@@ -390,12 +390,14 @@ void onScheduledStart(GtkWidget* w, gpointer user_data) {
     if (!stageEditSetAutostart(data, true, &err)) flashNotice(w, err);
 }
 
-// Step to the next populated memory in a direction; no wrap, empties skipped.
+void loadStageNumber(AppData* data, int n);
+
+// One stage in a direction, blanks included (RB-NAV-64: as the Segments page's - / +); no wrap.
+// A blank number is selected empty, ready to be programmed, as Choose Stage does.
 void stepStage(AppData* data, int dir) {
     const int cur = data->state->last_memory_slot;   // 0 = none loaded
-    const int from = cur != 0 ? cur : (dir > 0 ? 0 : RallyState::MAX_MEMORY_SLOTS + 1);
-    const int to = nextProgrammedStage(*data->state, from, dir);
-    if (validStageNumber(to) && to != cur) recallMemorySlot(data, to);
+    const int to = cur != 0 ? cur + dir : (dir > 0 ? 1 : RallyState::MAX_MEMORY_SLOTS);
+    if (validStageNumber(to) && to != cur) loadStageNumber(data, to);
 }
 // No new stage can be loaded while one is live: say so and leave everything as it is.
 bool confirmStageChange(GtkWidget* w, AppData* data) {

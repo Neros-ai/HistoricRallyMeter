@@ -294,9 +294,15 @@ bool webHandleCommand(AppData* data, const char* json) {
         int slot = 0;
         if (!jsonFindInt(json, "slot", &slot)) return false;
         if (slot < 1 || slot > RallyState::MAX_MEMORY_SLOTS) return false;
-        if (data->state->memory_slots[slot - 1].empty()) return false;
         if (stageChangeLocked(*data->state)) { notifyWebStateNow(data); return false; }   // as the box: not mid-stage
-        recallMemorySlot(data, slot);
+        // A programmed stage is recalled; a blank number is selected empty, ready to be
+        // programmed -- the box's Choose Stage and Navi - / + (RB-NAV-64).
+        if (!data->state->memory_slots[slot - 1].empty()) {
+            recallMemorySlot(data, slot);
+        } else {
+            stageEditSelect(data, slot);
+            refreshSegmentList(data);
+        }
         return true;
     }
 
