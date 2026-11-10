@@ -15,6 +15,7 @@
 #include "ui_control.h"
 #include "nero_frame.h"
 #include "ui_segments.h"
+#include "stage_edit.h"
 #include "debug_log.h"
 #include "stage_log.h"
 #include "ui_datetime.h"
@@ -1110,13 +1111,20 @@ void applyDriverZero(AppData* data, bool reset) {
 // speed changes here, and what this segment gives up is handed to the next
 // one -- so the next known point stays where the roadbook puts it, measured
 // from the stage start.
-// After an Italian sector has been ended with next on the co: the stage selector steps on to the
-// next programmed stage, as the + key does (none further on, or none loaded: it stays).
+// After an Italian sector has been ended with next on the co: the stage selector steps on by one,
+// as the + key does (RB-NAV-65) -- a programmed stage is recalled, a blank one is selected empty,
+// ready to be programmed. At 99, or with none loaded, it stays.
 static void selectNextSectorAfterFinish(AppData* data) {
     const int cur = data->state->last_memory_slot;
     if (cur == 0) return;
-    const int to = nextProgrammedStage(*data->state, cur, +1);
-    if (validStageNumber(to) && to != cur) recallMemorySlot(data, to);
+    const int to = cur + 1;
+    if (!validStageNumber(to)) return;
+    if (!data->state->memory_slots[to - 1].empty()) {
+        recallMemorySlot(data, to);
+    } else {
+        stageEditSelect(data, to);
+        refreshSegmentList(data);
+    }
 }
 
 void on_next_press(GtkWidget* widget, gpointer user_data) {
