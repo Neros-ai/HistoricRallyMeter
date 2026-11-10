@@ -1211,3 +1211,10 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 #sector-card td.late { color: #ff2626; }
 #sector-card tr.dim td { color: #737373; }
 #sector-card tr.dim td.cyan { color: #008080; }
+/* Upload check: the Segments table's look (no cell grid, figures right, "from - to" centred), and the
+   start / duration / average line keeps its gaps. */
+#upload-summary { white-space: pre-wrap; color: #0ff; margin: 0.4rem 0; }
+#upload-table th, #upload-table td { border: none; padding: 0.15rem 0.3rem; text-align: right; white-space: nowrap; }
+#upload-table th:first-child, #upload-table td:first-child { text-align: left; }
+#upload-table th { color: #0ff; font-weight: normal; }
+#upload-table th.ft { text-align: center; }

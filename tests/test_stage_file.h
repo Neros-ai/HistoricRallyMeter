@@ -69,6 +69,44 @@ public:
             return ok && out == "# \"SS8\"\r\nstage,8";
         });
 
+        // The check shows the box's own text, distances in the file's own units (RB-WEB-30).
+        suite->addTest("check distances read as the file writes them", []() {
+            return uploadDistanceText(17230, true) == "17.23" && uploadDistanceText(17235, true) == "17.235"
+                && uploadDistanceText(380, true) == "0.38" && uploadDistanceText(0, true) == "0.00"
+                && uploadDistanceText(1310, false) == "1,310" && uploadDistanceText(520, false) == "520";
+        });
+
+        suite->addTest("check rows and summary are the box's text", []() {
+            const char* text =
+                "stage,11\nmode,italian\nunits,km\nfrom,0\nstart,8:30\nduration,3:00:00\n"
+                "type,ref,to,kph,time\nnavi,,0.38,,\npc,1,0.56,,0:31\nco,2,96.23,,\n";
+            const StageFile f = parseStageFile(text);
+            RallyState s;
+            const std::string j = uploadStateJson("x", s, f, {});
+            return j.find("\"km\":true") != std::string::npos
+                && j.find("\"start_text\":\"08:30:00\"") != std::string::npos
+                && j.find("\"duration_text\":\"3:00:00\"") != std::string::npos
+                && j.find("\"avg_text\":\"Average 32.08\"") != std::string::npos
+                && j.find("\"to\":\"96.23\"") != std::string::npos
+                && j.find("\"dur\":\"0:31\"") != std::string::npos
+                && j.find("\"tot\":\"3:00:00\"") != std::string::npos
+                && j.find("\"kph\":\"20.90\"") != std::string::npos;
+        });
+
+        suite->addTest("greek check in metres groups thousands and shows distance at start", []() {
+            const char* text =
+                "stage,8\nmode,greek\nunits,m\nfrom,0\nstart,10:42\nstart distance,6000\n"
+                "box,to,kph,auto\n103,520,36,\n104,1310,,\n";
+            const StageFile f = parseStageFile(text);
+            RallyState s;
+            const std::string j = uploadStateJson("x", s, f, {});
+            return j.find("\"km\":false") != std::string::npos
+                && j.find("\"to\":\"1,310\"") != std::string::npos
+                && j.find("\"start_text\":\"10:42:00\"") != std::string::npos
+                && j.find("\"num\":\"103\"") != std::string::npos
+                && j.find("\"start_dist_text\":\"6,000 m\"") != std::string::npos;
+        });
+
         return suite;
     }
 };

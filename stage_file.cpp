@@ -119,6 +119,7 @@ StageFileStage buildStage(const RawStage& raw, bool commaDecimal, const std::vec
     else st.errors.push_back(raw.mode.empty() ? "mode is missing" : "unknown mode");
 
     const bool km = lower(raw.units) == "km";
+    st.km = km;
     if (lower(raw.units) != "m" && !km) st.errors.push_back("units are missing");
 
     if (!raw.from.empty()) {
@@ -416,6 +417,15 @@ std::vector<int> applyStageFile(RallyState& s, const StageFile& f) {
     return written;
 }
 
+std::string uploadDistanceText(double metres, bool km) {
+    if (!km) return formatDistanceGrouped(std::lround(metres));
+    const long m = std::lround(metres);
+    char b[32];
+    if (m % 10 == 0) snprintf(b, sizeof(b), "%.2f", m / 1000.0);
+    else snprintf(b, sizeof(b), "%.3f", m / 1000.0);
+    return b;
+}
+
 std::string uploadStateJson(const std::string& id, const RallyState& s, const StageFile& f,
                             const std::vector<int>& loaded) {
     const std::string refusal = id.empty() ? "" : uploadRefusal(s, f);
@@ -442,7 +452,18 @@ std::string uploadStateJson(const std::string& id, const RallyState& s, const St
               << ",\"from_m\":" << std::lround(from) << ",\"to_m\":" << std::lround(to)
               << ",\"duration_s\":" << std::lround(st.slot.sector_duration_s > 0 ? st.slot.sector_duration_s : dur)
               << ",\"start_s\":" << st.slot.start_time_s
-              << ",\"replaces\":" << (replaces ? "true" : "false") << ",\"errors\":[";
+              << ",\"replaces\":" << (replaces ? "true" : "false");
+            // The side panel as the box's Segments page writes it, in the file's units.
+            char startb[16] = "";
+            if (st.slot.start_time_s >= 0)
+                snprintf(startb, sizeof(startb), "%02ld:%02ld:%02ld", st.slot.start_time_s / 3600,
+                         (st.slot.start_time_s / 60) % 60, st.slot.start_time_s % 60);
+            o << ",\"km\":" << (st.km ? "true" : "false")
+              << ",\"start_text\":\"" << startb << "\""
+              << ",\"duration_text\":\"" << (st.slot.sector_duration_s > 0 ? formatHMmSs(static_cast<double>(st.slot.sector_duration_s)) : std::string()) << "\""
+              << ",\"avg_text\":\"" << jsonEscape(sectorAverageText(st.slot.segments, st.slot.sector_duration_s)) << "\""
+              << ",\"start_dist_text\":\"" << jsonEscape(startDistanceText(st.slot.start_distance_m, st.km)) << "\""
+              << ",\"errors\":[";
             for (size_t i = 0; i < st.errors.size(); i++) {
                 if (i) o << ',';
                 o << '"' << jsonEscape(st.errors[i]) << '"';
@@ -457,10 +478,15 @@ std::string uploadStateJson(const std::string& id, const RallyState& s, const St
                 if (i) o << ',';
                 const StageRow& row = rows[i];
                 const Segment& seg = st.slot.segments[i];
-                o << "{\"box\":" << row.number << ",\"type\":\"" << typeLabel(seg.type) << "\",\"ref\":" << seg.ref
-                  << ",\"from_m\":" << std::lround(row.from_m) << ",\"to_m\":" << std::lround(row.to_m)
-                  << ",\"kph\":" << row.kph << ",\"dur_s\":" << std::lround(row.time_s)
-                  << ",\"elapsed_s\":" << std::lround(row.total_s) << "}";
+                // The Segments page's text for the row; distances in the file's own units.
+                const SegRowText t = segRowText(seg, row, i, st.mode == 2 ? 2 : 0, st.km);
+                o << "{\"type\":\"" << typeLabel(seg.type) << "\",\"num\":\"" << jsonEscape(t.num)
+                  << "\",\"ref\":\"" << jsonEscape(t.ref)
+                  << "\",\"from\":\"" << jsonEscape(uploadDistanceText(row.from_m, st.km))
+                  << "\",\"to\":\"" << jsonEscape(uploadDistanceText(row.to_m, st.km))
+                  << "\",\"dist\":\"" << jsonEscape(uploadDistanceText(row.dist_m, st.km))
+                  << "\",\"kph\":\"" << jsonEscape(t.kph) << "\",\"dur\":\"" << jsonEscape(t.dur)
+                  << "\",\"tot\":\"" << jsonEscape(t.tot) << "\"}";
             }
             o << "]}";
         }
