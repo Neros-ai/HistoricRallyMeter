@@ -502,19 +502,18 @@ void selectSlot(AppData* d, int slot_1) {
     rebuildNow(d);
 }
 
-// - / + step to the next programmed stage, skipping gaps (RB-NAV-45); a new
-// stage is started by typing its number in Choose Stage (tap the number).
+// - / + step one stage at a time, blanks included, so a new stage can be programmed
+// (RB-SEG-19; Navi's - / + still skip blanks, which cannot be run). Choose Stage still
+// takes any number when the number is tapped.
 void onStageMinus(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
     if (editRefused(w, d)) return;
-    const int to = nextProgrammedStage(*d->state, editSlot(d), -1);
-    if (to != editSlot(d)) selectSlot(d, to);
+    if (editSlot(d) > 1) selectSlot(d, editSlot(d) - 1);
 }
 void onStagePlus(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
     if (editRefused(w, d)) return;
-    const int to = nextProgrammedStage(*d->state, editSlot(d), +1);
-    if (to != editSlot(d)) selectSlot(d, to);
+    if (editSlot(d) < RallyState::MAX_MEMORY_SLOTS) selectSlot(d, editSlot(d) + 1);
 }
 void onStageNumber(GtkWidget* w, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
