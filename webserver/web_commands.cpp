@@ -182,7 +182,13 @@ bool webHandleCommand(AppData* data, const char* json) {
         return true;
     }
     if (strcmp(type, "next") == 0 || strcmp(type, "prev") == 0) {
-        if (strcmp(type, "next") == 0) on_next_press(nullptr, data);
+        if (strcmp(type, "next") == 0) {
+            // Ending an italian sector is asked first; the phone sends confirm on yes.
+            bool confirmed = false;
+            jsonFindBool(json, "confirm", &confirmed);
+            if (sectorFinishAvailable(*data->state) && !confirmed) return false;
+            on_next_press(nullptr, data);
+        }
         else on_prev_press(nullptr, data);
         return true;
     }

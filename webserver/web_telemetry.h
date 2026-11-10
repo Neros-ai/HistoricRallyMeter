@@ -10,6 +10,7 @@ struct AppData;
 struct NextPrevState {
     bool next_enabled = false;
     bool prev_enabled = false;
+    bool sector_finish = false;   // next now ends an italian sector: the phone asks first
 };
 
 NextPrevState computeNextPrevState(AppData* data);

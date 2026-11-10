@@ -27,6 +27,7 @@ NextPrevState computeNextPrevState(AppData* data) {
     if (!data || !data->state) return out;
     out.next_enabled = nextAvailable(*data->state) || surreyFinishAvailable(*data->state) || sectorFinishAvailable(*data->state);
     const CounterPoll p = data->poller->getMostRecent();
+    out.sector_finish = sectorFinishAvailable(*data->state);
     out.prev_enabled = prevAvailable(*data->state) || surreyUndoAvailableNow(*data->state, p.cntr1, p.cntr2);
     return out;
 }
@@ -221,6 +222,7 @@ std::string buildTelemetryJson(AppData* data) {
         "\"segment_count\":%zu,"
         "\"next_enabled\":%s,"
         "\"prev_enabled\":%s,"
+        "\"sector_finish\":%s,"
         "\"units\":\"%s\","
         "\"rally_type\":%d,"
         // The ahead/behind tone the box is playing right now, so the phone
@@ -241,6 +243,7 @@ std::string buildTelemetryJson(AppData* data) {
         data->state->stage_segments.size(),
         np.next_enabled ? "true" : "false",
         np.prev_enabled ? "true" : "false",
+        np.sector_finish ? "true" : "false",
         data->state->units ? "mph" : "kph",
         data->state->rally_type,
         toneCadenceJson(data->currentTone).c_str(),

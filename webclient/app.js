@@ -852,7 +852,13 @@
     send({ type: 'navi_set', reset: true });
     $('navi-menu').classList.add('hidden');
   });
-  $('btn-next').addEventListener('click', () => send({ type: 'next' }));
+  $('btn-next').addEventListener('click', () => {
+    if (lastTelemetry && lastTelemetry.sector_finish) {
+      if (confirm('This will end the sector. End the sector?')) send({ type: 'next', confirm: true });
+      return;
+    }
+    send({ type: 'next' });
+  });
   $('btn-prev').addEventListener('click', () => send({ type: 'prev' }));
   $('btn-freeze').addEventListener('click', () => send({ type: 'freeze_toggle' }));
   $('btn-reverse').addEventListener('click', () => send({ type: 'reverse_set', on: !(lastTelemetry && lastTelemetry.reverse) }));
