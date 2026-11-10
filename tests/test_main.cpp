@@ -39,6 +39,7 @@
 #include "test_reaction_offset.h"
 #include "test_driver_trial.h"
 #include "test_stage_file.h"
+#include "test_stage_phase.h"
 
 int main() {
     TestRunner runner;
@@ -81,6 +82,7 @@ int main() {
     TestReactionOffset reactionOffsetTests;
     TestDriverTrial driverTrialTests;
     TestStageFile stageFileTests;
+    TestStagePhase stagePhaseTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -120,6 +122,7 @@ int main() {
     runner.addSuite(reactionOffsetTests.createSuite());
     runner.addSuite(driverTrialTests.createSuite());
     runner.addSuite(stageFileTests.createSuite());
+    runner.addSuite(stagePhaseTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();

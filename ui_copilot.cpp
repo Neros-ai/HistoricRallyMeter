@@ -1,3 +1,4 @@
+#include "stage_phase.h"
 #include "ui_copilot.h"
 #include <cstring>
 #include "ui_driver.h"
@@ -571,9 +572,8 @@ void updateCopilotDisplay(AppData* data) {
 
         // Live at any point in the segment: next while one follows, prev
         // while one precedes.
-        gtk_widget_set_sensitive(data->nextPrevBtn, nextAvailable(*data->state) || surreyFinishAvailable(*data->state) || sectorFinishAvailable(*data->state));
-        gtk_widget_set_sensitive(data->prevBtn, prevAvailable(*data->state) || sectorUndoAvailable(*data->state) ||
-                                 surreyUndoAvailableNow(*data->state, current_poll.cntr1, current_poll.cntr2));
+        gtk_widget_set_sensitive(data->nextPrevBtn, nextKeyEnabled(*data->state));
+        gtk_widget_set_sensitive(data->prevBtn, prevKeyEnabled(*data->state, current_poll.cntr1, current_poll.cntr2));
     } else if (data->state->stage_segments.empty()) {
         gtk_label_set_text(data->nextDistLabel, "---.---");
         gtk_label_set_text(data->nextUnitLabel, "m");

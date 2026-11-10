@@ -1,3 +1,4 @@
+#include "../stage_phase.h"
 #include "../sector.h"
 #include "web_telemetry.h"
 #include "calculations.h"
@@ -27,10 +28,10 @@
 NextPrevState computeNextPrevState(AppData* data) {
     NextPrevState out;
     if (!data || !data->state) return out;
-    out.next_enabled = nextAvailable(*data->state) || surreyFinishAvailable(*data->state) || sectorFinishAvailable(*data->state);
+    out.next_enabled = nextKeyEnabled(*data->state);
     const CounterPoll p = data->poller->getMostRecent();
-    out.sector_finish = sectorFinishAvailable(*data->state);
-    out.prev_enabled = prevAvailable(*data->state) || surreyUndoAvailableNow(*data->state, p.cntr1, p.cntr2);
+    out.sector_finish = out.next_enabled && sectorFinishAvailable(*data->state);
+    out.prev_enabled = prevKeyEnabled(*data->state, p.cntr1, p.cntr2);
     return out;
 }
 
@@ -285,7 +286,7 @@ std::string buildTelemetryJson(AppData* data) {
        << ",\"stage_panel\":" << stagePanelJson(data)
        << ",\"auto_time_past\":" << ((data->home && data->home->autoTimePast) ? "true" : "false")
        << ",\"stage_running\":" << (classifyTotalReset(st) == TotalResetCase::StageRunning ? "true" : "false")
-       << ",\"stage_abort_key\":" << ((stageAbortable(st) && !(st.auto_start_rally_time_s != 0 && !st.auto_start_early_departure && st.segment_current_number < 0)) ? "true" : "false")
+       << ",\"stage_abort_key\":" << (goKeyAborts(st) ? "true" : "false")
        << ",\"time_taken\":\"" << (isSurrey(st) ? surreyTimeTakenText(st.time_taken_ms) : std::string()) << "\""
        << ",\"time_taken_stage\":" << (isSurrey(st) ? st.time_taken_stage : 0)
        << ",\"surrey_cd\":" << ((isSurrey(st) && data->home && data->home->surreyRunning)
@@ -368,11 +369,9 @@ std::string buildStateJson(AppData* data) {
         }
         // As the box's stage-go key: abort only for a live stage, not a scheduled start still waiting.
         const RallyState& rs = *data->state;
-        const bool sched_pending = rs.auto_start_rally_time_s != 0 && !rs.auto_start_early_departure &&
-                                   rs.segment_current_number < 0;
         ss << "\",\"autostart_on\":" << (rs.auto_start_rally_time_s != 0 ? "true" : "false")
            << ",\"stage_locked\":" << (stageLive(rs) ? "true" : "false")
-           << ",\"stage_abortable\":" << (stageAbortable(rs) && !sched_pending ? "true" : "false")
+           << ",\"stage_abortable\":" << (goKeyAborts(rs) ? "true" : "false")
            << ",\"rows\":[";
         for (size_t i = 0; i < rows.size(); i++) {
             const StageRow& r = rows[i];

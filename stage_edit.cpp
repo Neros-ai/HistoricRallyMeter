@@ -140,7 +140,7 @@ void stageEditSetStart(AppData* d, long time_s, long distance_m, std::string* no
     const bool armed_here = d->state->auto_start_rally_time_s != 0
                          && !d->state->auto_start_early_departure
                          && !d->autoStartTriggered
-                         && d->autoSlot == d->state->last_memory_slot;
+                         && d->state->auto_slot == d->state->last_memory_slot;
     const bool retime = armed_here && new_s != slot.start_time_s;
     slot.start_time_s = new_s;
     if (distance_m >= 0) slot.start_distance_m = distance_m;

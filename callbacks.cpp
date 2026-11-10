@@ -1,3 +1,4 @@
+#include "stage_phase.h"
 #include "callbacks.h"
 #include "reaction_offset.h"
 #include "stage_store.h"
@@ -653,7 +654,7 @@ static double reactionSpeedNow(const AppData* data) {
 }
 
 void applyAutoStartArming(AppData* data, const AutoStartArming& arming) {
-    if (arming.rally_time_s != 0) data->autoSlot = data->state->last_memory_slot;
+    if (arming.rally_time_s != 0) data->state->auto_slot = data->state->last_memory_slot;
     // Assignment, not a set of conditional updates: whatever kind of
     // autostart was armed before -- ordinary, on-the-minute, even one already
     // armed for this very same target time -- is completely replaced here.
@@ -703,16 +704,20 @@ void performAutoStart(AppData* data) {
         // which forgets autoStartTriggered -- see it as pending again.
         data->state->auto_start_rally_time_s = 0;
         data->state->auto_start_early_departure = false;
-        data->autoFiredTime_s = armed_time_s;
-        data->startedByAuto = true;
+        data->state->auto_fired_time_s = armed_time_s;
+        data->state->started_by_auto = true;
         ConfigFile::save(*data->state);
         notifyWebState(data);
         return;
     }
     // Ordinary autostart: distance and clock both zero at the appointed time.
     performStageGo(data, false);   // an autostart is the clock, not a press: no reaction offset
-    data->autoFiredTime_s = armed_time_s;   // after performStageGo, which drops it
-    data->startedByAuto = true;
+    data->state->auto_fired_time_s = armed_time_s;   // after performStageGo, which drops it
+    data->state->started_by_auto = true;
+    // Saved again: performStageGo wrote the file before these two were set, and a restart
+    // mid-stage must still read "auto".
+    ConfigFile::save(*data->state);
+    notifyWebState(data);
 }
 
 void performStageGo(AppData* data, bool press) {
@@ -720,16 +725,16 @@ void performStageGo(AppData* data, bool press) {
     const double start_speed_mps = reactionSpeedNow(data);
     // The moment of the press is the stage's start time, shown on Home like an
     // autostart's. (performAutoStart overwrites this with the armed moment.)
-    data->autoFiredTime_s = autoStartSecondsFromTargetMs(getRallyTime_ms(*data->state),
+    data->state->auto_fired_time_s = autoStartSecondsFromTargetMs(getRallyTime_ms(*data->state),
                                                          getAutoStartEpochMs());
-    data->autoSlot = data->state->last_memory_slot;
-    data->startedByAuto = false;   // a start now; performAutoStart sets it after
+    data->state->auto_slot = data->state->last_memory_slot;
+    data->state->started_by_auto = false;   // a start now; performAutoStart sets it after
     // Distance and clock together: this is the ordinary "start now" case.
     zeroDistanceBaselines(data);
     zeroTimeBaselines(data);
     markSectorStart(*data->state);   // italian: the sector clock starts at the second pressed
     if (data->state->rally_type == 2 && stageIsSector(data->state->stage_segments))
-        data->autoFiredTime_s = autoStartSecondsFromTargetMs(data->state->total_start_time_ms,
+        data->state->auto_fired_time_s = autoStartSecondsFromTargetMs(data->state->total_start_time_ms,
                                                              getAutoStartEpochMs());
     {
         const CounterPoll start_poll = data->poller->getMostRecent();
@@ -1129,6 +1134,8 @@ static void selectNextSectorAfterFinish(AppData* data) {
 
 void on_next_press(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    // Dead throughout the early-departure countdown: next never starts a stage.
+    if (!nextKeyEnabled(*data->state)) return;
     // Surrey: next on the last row is the finish landmark.
     // RB-SET-12: the finishing press is at a point; taken back by the reaction offset.
     if (applySurreyFinish(*data->state, pressTimeMs(getRallyTime_ms(*data->state), data->state->reaction_offset_ms))) {
