@@ -490,6 +490,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 #seg-table button.del { font-size: 1.4rem; }
 #seg-table button.tag { min-height: 2.2rem; padding: 0.15rem 0.35rem; font-size: 1rem; }
 #seg-table input.ref, #seg-table input.pc { width: 4.2rem; background: #111; color: #fff; border: 1px solid #666; text-align: right; height: 3.4rem; font-size: 1.4rem; }
+#seg-table input.pc { width: 7.2rem; }   /* portrait: room for 9:59:00 */
 .stage-sel select, #seg-pick { -webkit-appearance: none; appearance: none; border-radius: 4px; min-width: 4rem; text-align: center; text-align-last: center; }
 .stage-sel .key { border-radius: 4px; }
 #seg-table th { font-size: 1.4rem; }
@@ -844,7 +845,9 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
     height: 2rem; font-size: 1rem;   /* 16 px: under that the iPhone zooms the page when a field is tapped */
   }
   #view-seg #seg-table input.to, #view-seg #seg-table input.first-from { width: 4.1rem; }
-  #view-seg #seg-table input.ref, #view-seg #seg-table input.pc, #view-seg #seg-table input.spd { width: 3.2rem; }
+  #view-seg #seg-table input.ref, #view-seg #seg-table input.spd { width: 3.2rem; }
+  /* pc duration: room for 9:59:00 */
+  #view-seg #seg-table input.pc { width: 5rem; padding-left: 0.2rem; padding-right: 0.2rem; }
   #view-seg #seg-table input.first { width: 2.6rem; }
   /* Greek KPH fills its cell but at the row's height, not the portrait 3.4rem. */
   #view-seg #seg-table input.spd { min-height: 0; padding: 0.1rem 0.15rem; width: 4.6rem; }   /* room for 32.75 in the iPhone's wider digits */
@@ -904,7 +907,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
   #seg-table.gr col.c-dur { width: 13%; }    #seg-table.gr col.c-ela { width: 15.5%; }   /* greek: 7.5+6+6.5+11.5+11.5+10.5+13.5+13+15.5+4.5 = 100 */
   #seg-table.it col.c-from, #seg-table.it col.c-to { width: 11.5%; }
   #seg-table.it col.c-dist { width: 10.5%; } #seg-table.it col.c-kph { width: 11.5%; }
-  #seg-table.it col.c-dur { width: 12%; }    #seg-table.it col.c-ela { width: 14.5%; }   /* italian: 6+9+8.5+11.5+11.5+10.5+11.5+12+14.5+4.5 = 100 */
+  #seg-table.it col.c-dur { width: 14%; }    #seg-table.it col.c-ela { width: 13%; }   /* italian: 6+9+8.5+11.5+11.5+10.5+11.5+14+13+4.5 = 100 */
   #seg-table col.c-del { width: 4.5%; }
   #seg-table th, #seg-table td { overflow: hidden; }
 }
