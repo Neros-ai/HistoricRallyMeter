@@ -14,6 +14,7 @@
 #include "surrey.h"
 #include "ui_home.h"
 #include "driver_trial.h"
+#include "nero_frame.h"
 
 #include <chrono>
 #include <cmath>
@@ -27,6 +28,7 @@ NextPrevState computeNextPrevState(AppData* data) {
     if (!data || !data->state) return out;
     out.next_enabled = nextAvailable(*data->state) || surreyFinishAvailable(*data->state) || sectorFinishAvailable(*data->state);
     const CounterPoll p = data->poller->getMostRecent();
+    out.sector_finish = sectorFinishAvailable(*data->state);
     out.prev_enabled = prevAvailable(*data->state) || surreyUndoAvailableNow(*data->state, p.cntr1, p.cntr2);
     return out;
 }
@@ -74,6 +76,17 @@ std::string driverGaugeJson(AppData* data) {
     std::ostringstream o;
     o << "{\"page\":" << page << ",\"tag\":\"" << tag << "\",\"icon\":" << icon
       << ",\"needle\":" << (needle ? "true" : "false");
+    // Every figure the driver dial last drew, word for word, with its colour band and scale.
+    {
+        const AppData::DriverShown& sh = data->driverShown;
+        char mx[24];
+        snprintf(mx, sizeof(mx), "%.3f", sh.maxSeconds);
+        o << ",\"shown\":{\"speed\":\"" << jsonEscape(sh.speed) << "\",\"target\":\"" << jsonEscape(sh.target)
+          << "\",\"cap\":\"" << jsonEscape(sh.targetCap) << "\",\"total_avg\":\"" << jsonEscape(sh.totalAvg)
+          << "\",\"trip_avg\":\"" << jsonEscape(sh.tripAvg) << "\",\"digital\":\"" << jsonEscape(sh.digital)
+          << "\",\"total_dist\":\"" << jsonEscape(sh.totalDist) << "\",\"trip_dist\":\"" << jsonEscape(sh.tripDist)
+          << "\",\"zone\":" << sh.zone << ",\"max\":" << mx << "}";
+    }
     if (page == AppData::DP_ITALIAN_TRIAL || page == AppData::DP_ITALIAN_NAVI) {
         // The countdown to the line, as the box prints it under the target (Home's own text).
         bool cd_ok = false;
@@ -142,7 +155,8 @@ static std::string stagePanelJson(AppData* data) {
     j += "],\"auto\":" + std::string(h.autoArmed ? "true" : "false");
     j += ",\"time\":\"" + jsonEscape(h.autoTime) + "\"";
     j += ",\"arr\":" + (h.arrivalValid
-        ? "{\"kph\":" + std::to_string(h.arrivalKph) + ",\"min\":" + std::to_string(h.arrivalMin) + "}"
+        ? "{\"kph\":" + std::to_string(h.arrivalKph) + ",\"min\":" + std::to_string(h.arrivalMin)
+          + ",\"text\":\"" + arrivalSpeedText(h.arrivalKph, h.unitsMph) + "\"}"
         : std::string("null"));
     j += "}";
     return j;
@@ -221,6 +235,7 @@ std::string buildTelemetryJson(AppData* data) {
         "\"segment_count\":%zu,"
         "\"next_enabled\":%s,"
         "\"prev_enabled\":%s,"
+        "\"sector_finish\":%s,"
         "\"units\":\"%s\","
         "\"rally_type\":%d,"
         // The ahead/behind tone the box is playing right now, so the phone
@@ -241,6 +256,7 @@ std::string buildTelemetryJson(AppData* data) {
         data->state->stage_segments.size(),
         np.next_enabled ? "true" : "false",
         np.prev_enabled ? "true" : "false",
+        np.sector_finish ? "true" : "false",
         data->state->units ? "mph" : "kph",
         data->state->rally_type,
         toneCadenceJson(data->currentTone).c_str(),
@@ -351,10 +367,20 @@ std::string buildTelemetryJson(AppData* data) {
        << ",\"prev_key\":\"" << jsonOneLine(readoutKeyName(st.rally_type, 4)) << "\""
        << ",\"stage_no\":" << st.last_memory_slot
        << ",\"arrival\":" << (arr.valid
-            ? "{\"kph\":" + std::to_string(arr.speed_kph) + ",\"min\":" + std::to_string(arr.minutes) + "}"
+            ? "{\"kph\":" + std::to_string(arr.speed_kph) + ",\"min\":" + std::to_string(arr.minutes)
+              + ",\"text\":\"" + arrivalSpeedText(arr.speed_kph, st.units) + "\"}"
             : std::string("null"))
        << ",\"computer_ms\":" << sys_ms
        << ",\"rally_offset_ms\":" << st.rallyTimeOffset_ms
+       // The Time page and the start flag as the box writes them (the phone never reformats).
+       << ",\"time_rally\":\"" << formatTimeTenths(current_time_ms) << "\""
+       << ",\"time_computer\":\"" << formatTimeTenths(sys_ms) << "\""
+       << ",\"time_offset\":\"" << formatOffsetSeconds(st.rallyTimeOffset_ms) << "\""
+       << ",\"date_text\":\"" << rallyDateText(current_time_ms) << "\""
+       << ",\"next_minute\":\"" << nextMinuteCaption(data) << "\""
+       // The Navi zero question's two figures, as the box's dialog prints them.
+       << ",\"zero_by\":\"" << [&] { char z[24]; snprintf(z, sizeof(z), "%.2f", data->aheadBehindSeconds); return std::string(z); }() << "\""
+       << ",\"zero_now\":\"" << [&] { char z[24]; snprintf(z, sizeof(z), "%.2f", st.ahead_behind_zero_offset_ms / 1000.0); return std::string(z); }() << "\""
        << ",\"phone_known\":" << (phoneClockKnown(data) ? "true" : "false")
        << ",\"tz_min\":" << tz_min
        << ",\"cal\":{\"dist_m\":" << std::fixed << std::setprecision(1)
@@ -365,6 +391,12 @@ std::string buildTelemetryJson(AppData* data) {
        << ",\"cpu\":\"" << gtk_label_get_text(data->cpuTempLabel) << "\""
        << ",\"distance_km\":" << (st.distance_km ? "true" : "false")
        << ",\"measure_ab_bc\":" << (st.measure_ab_bc ? "true" : "false")
+       // The Navi page's three figures and two elapsed times, as the box draws them.
+       << ",\"home\":" << (data->home
+              ? "{\"f\":[\"" + jsonEscape(data->home->figure[0]) + "\",\"" + jsonEscape(data->home->figure[1]) + "\",\""
+                + jsonEscape(data->home->figure[2]) + "\"],\"el\":[\"" + jsonEscape(data->home->elapsed[0]) + "\",\""
+                + jsonEscape(data->home->elapsed[1]) + "\"]}"
+              : std::string("null"))
        << ",\"drv\":" << driverGaugeJson(data) << "}";
     std::string out = buf;
     out.pop_back();   // the closing brace
@@ -402,7 +434,9 @@ std::string buildStateJson(AppData* data) {
            << ",\"first_from_m\":" << static_cast<long>(slot.first_from_m)
            << ",\"start_distance_m\":" << slot.start_distance_m
            << ",\"sector_duration_s\":" << slot.sector_duration_s
-           << ",\"start_time\":\"";
+           << ",\"avg_text\":\"" << jsonEscape(sectorAverageText(data->state->segments, slot.sector_duration_s))
+           << "\",\"start_dist_text\":\"" << jsonEscape(startDistanceText(slot.start_distance_m, data->state->distance_km))
+           << "\",\"start_time\":\"";
         if (slot.start_time_s >= 0) {
             char b[16];
             snprintf(b, sizeof(b), "%02ld:%02ld:%02ld", slot.start_time_s / 3600,
@@ -430,6 +464,12 @@ std::string buildStateJson(AppData* data) {
                 const Segment& sg = data->state->segments[i];
                 ss << ",\"ty\":" << sg.type << ",\"ref\":" << sg.ref
                    << ",\"pc_s\":" << std::lround(sg.pc_duration_s);
+                // The box's own text for every cell: the phone shows it, never reformats.
+                const SegRowText t = segRowText(sg, r, i, data->state->rally_type, data->state->distance_km);
+                ss << ",\"txt\":{\"num\":\"" << jsonEscape(t.num) << "\",\"ref\":\"" << jsonEscape(t.ref)
+                   << "\",\"from\":\"" << jsonEscape(t.from) << "\",\"to\":\"" << jsonEscape(t.to)
+                   << "\",\"dist\":\"" << jsonEscape(t.dist) << "\",\"kph\":\"" << jsonEscape(t.kph)
+                   << "\",\"dur\":\"" << jsonEscape(t.dur) << "\",\"tot\":\"" << jsonEscape(t.tot) << "\"}";
             }
             ss << "}";
         }
@@ -476,7 +516,12 @@ std::string buildStateJson(AppData* data) {
        << ",\"phone_beep_lead_ms\":" << data->state->phone_beep_lead_ms
        << ",\"bt_name\":\"" << jsonEscape(data->state->bluetooth_audio_name) << "\""
        << ",\"bt_known\":" << (data->state->bluetooth_audio_address.empty() ? "false" : "true")
-       << ",\"setup_status\":\"" << jsonEscape(data->setupStatus) << "\""
+       // The Setup page's own status line (box presses and phone presses), speaker text and address.
+       << ",\"setup_status\":\"" << jsonEscape(data->setupStatusLabel ? gtk_label_get_text(data->setupStatusLabel) : data->setupStatus) << "\""
+       << ",\"bt_shown\":\"" << jsonEscape(!data->state->bluetooth_audio_name.empty() ? data->state->bluetooth_audio_name
+                                                                                     : data->state->bluetooth_audio_address) << "\""
+       << ",\"setup_url\":\"" << jsonEscape(data->webUrlLabel ? gtk_label_get_text(data->webUrlLabel) : "") << "\""
+       << ",\"version\":\"" << nero::VERSION << "\""
        << ",\"wifi\":" << (data->setupWifiJson.empty() ? "null" : data->setupWifiJson)
        << ",\"displays\":" << (data->setupDisplaysJson.empty() ? "null" : data->setupDisplaysJson);
 

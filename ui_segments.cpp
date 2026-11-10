@@ -191,30 +191,16 @@ void updateRowText(AppData* d) {
                 gtk_label_set_text(GTK_LABEL(wd), t.c_str());
             }
         };
-        const bool km = d->state->distance_km;
-        if (d->state->rally_type == 2) {
-            const Segment& sg = d->state->segments[i];
-            char kb[24];
-            snprintf(kb, sizeof(kb), "%.2f", sg.target_speed_kph);
-            setText(w.num, std::to_string(i + 1));
-            setText(w.ref, (sg.type == SEG_NAVI || sg.type == SEG_LEG) ? "" : std::to_string(sg.ref));
-            setText(w.from, formatDistance(r.from_m, km));
-            setText(w.to, formatDistance(r.to_m, km));
-            setText(w.dist, formatDistance(r.dist_m, km));
-            setText(w.kph, sg.target_speed_kph > 0 ? kb : "");
-            setText(w.time, sg.type == SEG_PC ? formatMmSs(sg.pc_duration_s) : formatHMmSs(r.time_s));
-            setText(w.total, formatHMmSs(r.total_s));
-            continue;
-        }
-        setText(w.num, std::to_string(r.number));
-        setText(w.from, formatDistance(r.from_m, km));
-        setText(w.to, formatDistance(r.to_m, km));
-        setText(w.dist, formatDistance(r.dist_m, km));
-        char b[24];
-        snprintf(b, sizeof(b), "%g", r.kph);
-        if (r.chg) setText(w.kph, r.kph > 0 ? b : "");
-        setText(w.time, formatHMmSs(r.time_s));
-        setText(w.total, formatHMmSs(r.total_s));
+        // One text source for the box and the phone (segRowText, stage_rows.cpp).
+        const SegRowText t = segRowText(d->state->segments[i], r, i, d->state->rally_type, d->state->distance_km);
+        setText(w.num, t.num);
+        if (d->state->rally_type == 2) setText(w.ref, t.ref);
+        setText(w.from, t.from);
+        setText(w.to, t.to);
+        setText(w.dist, t.dist);
+        if (d->state->rally_type == 2 || r.chg) setText(w.kph, t.kph);   // greek no-change rows keep their ditto label
+        setText(w.time, t.dur);
+        setText(w.total, t.tot);
     }
 }
 
@@ -497,10 +483,7 @@ void loadFields(AppData* d) {
     } else {
         gtk_entry_set_text(GTK_ENTRY(u->timeEntry), "");
     }
-    gtk_entry_set_text(GTK_ENTRY(u->distEntry),
-                       slot.start_distance_m > 0
-                           ? (formatDistance(static_cast<double>(slot.start_distance_m), d->state->distance_km) +
-                              (d->state->distance_km ? " km" : " m")).c_str() : "");
+    gtk_entry_set_text(GTK_ENTRY(u->distEntry), startDistanceText(slot.start_distance_m, d->state->distance_km).c_str());
     // Greek shows the distance at start and the Autostart tick; italian shows the sector duration instead.
     const bool it = d->state->rally_type == 2;
     for (GtkWidget* w : {u->distCaption, u->distEntry, u->autoRow}) gtk_widget_set_visible(w, !it);
@@ -509,15 +492,7 @@ void loadFields(AppData* d) {
         if (slot.sector_duration_s > 0)
             gtk_entry_set_text(GTK_ENTRY(u->durEntry), formatHMmSs(static_cast<double>(slot.sector_duration_s)).c_str());
         else gtk_entry_set_text(GTK_ENTRY(u->durEntry), "");
-        double m = 0.0;
-        for (const Segment& sg : d->state->segments) m += sg.distance_m;
-        if (slot.sector_duration_s > 0 && m > 0.0) {
-            char ab[32];
-            snprintf(ab, sizeof(ab), "Average %.2f", m / 1000.0 / (slot.sector_duration_s / 3600.0));
-            gtk_label_set_text(GTK_LABEL(u->avgLabel), ab);
-        } else {
-            gtk_label_set_text(GTK_LABEL(u->avgLabel), "");
-        }
+        gtk_label_set_text(GTK_LABEL(u->avgLabel), sectorAverageText(d->state->segments, slot.sector_duration_s).c_str());
     }
 }
 
@@ -712,10 +687,26 @@ void updateSegmentsDisplay(AppData* data) {
     SegUi* u = ui(data);
     if (!u) return;
     gtk_label_set_text(u->clock, formatTime(getRallyTime_ms(*data->state)).c_str());
-    // The rally type was changed on Settings: rebuild the rows and the stage column for it.
-    if (u->builtType != data->state->rally_type && !data->activeEntry) {
+    // The rally type was changed on Settings (or from the phone): rebuild the rows and the
+    // stage column for it at once. Waiting while an entry was selected left the new mode's
+    // headings over the old mode's rows for as long as that entry stayed selected.
+    // A half-typed figure in a row belongs to the old mode's rows, so it is dropped, not saved.
+    // Any other entry (the start time / distance / duration, or one on another page such as
+    // Settings) is not a row: it keeps its text and the keypad, if the new mode still shows it.
+    if (u->builtType != data->state->rally_type) {
+        GtkEntry* keep = data->activeEntry;
+        const bool inRows = keep && gtk_widget_is_ancestor(GTK_WIDGET(keep), u->list);
+        const bool notRow = keep && !inRows;
+        const std::string typed = notRow ? gtk_entry_get_text(keep) : "";
         loadFields(data);
-        rebuildNow(data);
+        rebuildNow(data);   // lets go of the active entry
+        if (notRow && gtk_widget_get_visible(GTK_WIDGET(keep))) {
+            gtk_entry_set_text(keep, typed.c_str());
+            data->activeEntry = keep;
+        } else if (u->autoCommitTimer) {
+            g_source_remove(u->autoCommitTimer);
+            u->autoCommitTimer = 0;
+        }
     }
     applyHeadings(data);
     updateRowText(data);   // distance units can change on Settings or the phone

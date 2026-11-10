@@ -3,6 +3,7 @@
 
 #include "test_framework.h"
 #include "../stage_rows.h"
+#include "../sector.h"
 #include "../calculations.h"
 #include "../config_file.h"
 #include "../rally_state.h"
@@ -299,6 +300,62 @@ public:
                 && formatDistance(125, true) == "0.12" && formatDistance(5, true) == "0.00"   // truncated, never rounded up
                 && formatDistance(-5, true) == "0.00" && formatDistance(-12, true) == "-0.01"
                 && formatDistance(127480, false) == "127,480" && formatDistance(127480, true) == "127.48";
+        });
+
+        // RB-WEB: the phone shows the box's own Segments text, made by one function for both.
+        suite->addTest("segment row text: greek as the box shows it", []() {
+            std::vector<Segment> segs(2);
+            segs[0].distance_m = 380; segs[0].target_speed_kph = 32.75;
+            segs[1].distance_m = 17230 - 380; segs[1].target_speed_kph = 32.75; segs[1].changesSpeed = false;   // ditto
+            std::vector<StageRow> rows = buildStageRows(segs, 1, 0);
+            SegRowText a = segRowText(segs[0], rows[0], 0, 0, false);
+            SegRowText b = segRowText(segs[1], rows[1], 1, 0, false);
+            return a.num == "1" && a.from == "0" && a.to == "380" && a.dist == "380"
+                && a.kph == "32.75" && a.dur == formatHMmSs(rows[0].time_s) && a.tot == formatHMmSs(rows[0].total_s)
+                && b.to == "17,230" && b.dist == "16,850" && b.kph == "\"" && b.ref.empty()
+                && a.dur.size() == 7;   // h:mm:ss, as the box
+        });
+
+        suite->addTest("segment row text: italian as the box shows it", []() {
+            std::vector<Segment> segs(3);
+            segs[0].type = SEG_NAVI; segs[0].distance_m = 380; segs[0].target_speed_kph = 32.75;
+            segs[1].type = SEG_PC; segs[1].distance_m = 180; segs[1].ref = 1; segs[1].pc_duration_s = 31;
+            segs[1].target_speed_kph = 20.9032;
+            segs[2].type = SEG_PM; segs[2].distance_m = 500; segs[2].ref = 2; segs[2].target_speed_kph = 30;
+            std::vector<StageRow> rows = buildStageRows(segs, 1, 0);
+            SegRowText n = segRowText(segs[0], rows[0], 0, 2, true);
+            SegRowText p = segRowText(segs[1], rows[1], 1, 2, true);
+            SegRowText m = segRowText(segs[2], rows[2], 2, 2, true);
+            return n.num == "1" && n.ref.empty() && n.kph == "32.75" && n.dur == formatHMmSs(rows[0].time_s)
+                && p.num == "2" && p.ref == "1" && p.kph == "20.90" && p.dur == "0:31"
+                && p.from == "0.38" && p.to == "0.56" && p.dist == "0.18"
+                && m.ref == "2" && m.kph == "30.00" && m.tot == formatHMmSs(rows[2].total_s);
+        });
+
+        suite->addTest("segments side panel text as the box shows it", []() {
+            std::vector<Segment> segs(2);
+            segs[0].distance_m = 50000; segs[1].distance_m = 46240;
+            return sectorAverageText(segs, 3 * 3600) == "Average 32.08"
+                && sectorAverageText(segs, 0).empty() && sectorAverageText({}, 3600).empty()
+                && startDistanceText(6000, false) == "6,000 m" && startDistanceText(6000, true) == "6.00 km"
+                && startDistanceText(0, false).empty();
+        });
+
+        // The box's own texts, sent to the phone as they are (the phone never reformats).
+        suite->addTest("driver averages read two decimals", []() {
+            return averageSpeedText(32.0833) == "32.08" && averageSpeedText(0) == "0.00"
+                && averageSpeedText(9.999) == "10.00";
+        });
+
+        suite->addTest("arrival speed text: kph whole, mph rounded", []() {
+            return arrivalSpeedText(32.9, false) == "32" && arrivalSpeedText(50, true) == "31"
+                && arrivalSpeedText(-1, false) == "--";
+        });
+
+        suite->addTest("rally date reads as the Time page's", []() {
+            const std::string d = rallyDateText(1700000000000LL);   // a Tuesday or Wednesday, Nov 2023, by zone
+            return d.size() == 15 && d[3] == ' ' && d.find(',') == std::string::npos
+                && d.substr(d.size() - 4) == "2023" && d.find("Nov") != std::string::npos;
         });
 
         suite->addTest("offset reads as minutes and hours from 60 s up", []() {

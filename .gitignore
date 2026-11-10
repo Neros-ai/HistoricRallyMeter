@@ -41,3 +41,15 @@ docs/_preview-*.html
 # Sensor / stage logs written to logs/ beside the executable
 logs/
 test_debug_logs/
+
+# More sandbox debris: run-box.sh / reload.sh copy these two wrapper files into
+# /build (their source lives in the wrapper repo's scripts/), the container's
+# home folders, a crash dump, config backups and verification screenshots at
+# the top level (tracked .png files are unaffected).
+box_relaunch.sh
+box_view.html
+.cache/
+.local/
+core
+rally_config.bak-*
+/*.png

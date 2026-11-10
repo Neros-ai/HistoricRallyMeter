@@ -52,6 +52,57 @@ static void formatGaugeDigital(char* buf, size_t bufsize, double seconds, int sc
     }
 }
 
+// Every figure the driver page shows, worked out on each update (not while drawing), so
+// the phone gets them even when the dial is not on screen (single-display mode on another
+// page) and in the wide 1280x400 layout. The dial draws these same strings.
+static void computeDriverShown(AppData* data) {
+    AppData::DriverShown& sh = data->driverShown;
+    const double seconds = data->aheadBehindSeconds;
+    sh.maxSeconds = gaugeEffectiveMaxSeconds(seconds, data->state->gauge_range_s);
+    // Hysteretic: a reading sitting on 10.0 or 30.0 must not flicker the band.
+    sh.zone = gaugeZoneHysteretic(seconds, data->gaugeZoneShown);
+    data->gaugeZoneShown = sh.zone;
+    char digital[24];
+    formatGaugeDigital(digital, sizeof(digital), seconds, sh.zone);
+    sh.digital = digital;
+
+    auto label = [](GtkLabel* l) { return std::string(l ? gtk_label_get_text(l) : ""); };
+    const int page = data->driverPage;
+    const DriverTrialView& v = data->driverTrial;
+    const bool italianFig = (page == AppData::DP_ITALIAN_TRIAL || page == AppData::DP_ITALIAN_NAVI);
+    const bool mph = data->state->units && !italianFig;
+    sh.speed = italianFig ? data->driverTrialSpeedText : label(data->currentSpeedLabel);
+    sh.targetCap = "Target";
+    if (italianFig) sh.target = data->driverTrialTargetText;
+    else if (page == AppData::DP_GREEK_STAGE || !data->driverCompactMode) sh.target = label(data->targetSpeedLabel);
+    else {
+        sh.targetCap = mph ? "Arrival (mph)" : "Arrival (kph)";
+        sh.target = arrivalSpeedText(data->driverArrivalKph, mph);
+    }
+    // Italian speeds are km/h even when the box is set to mph; from the unrounded average.
+    // A label that is not a number ("--.--" before the first reading) stays as it is.
+    auto avgKph = [&](const std::string& text, double x) {
+        if (text.empty() || text[0] < '0' || text[0] > '9') return text;
+        return trialSpeedText(data->state->units ? x / 0.621371 : x);
+    };
+    const std::string totalLabel = label(data->totalSpeedLabel);
+    sh.totalAvg = (page == AppData::DP_ITALIAN_TRIAL)
+        ? (v.avgValid ? trialSpeedText(v.avgKph) : std::string("--.--"))
+        : (page == AppData::DP_ITALIAN_NAVI ? avgKph(totalLabel, data->driverTotalAvg) : totalLabel);
+    if (page == AppData::DP_ITALIAN_TRIAL) {
+        sh.tripAvg.clear();   // a pc / pm has no trip row
+    } else if (page == AppData::DP_GREEK_STAGE) {   // the substage's own average, to match the time error
+        const double sp = data->state->units ? data->driverSubAvgKph * 0.621371 : data->driverSubAvgKph;
+        sh.tripAvg = data->driverSubAvgValid ? averageSpeedText(sp) : std::string("--.--");
+    } else {
+        const std::string raw = label(data->tripSpeedLabel);
+        sh.tripAvg = (page == AppData::DP_ITALIAN_NAVI) ? avgKph(raw, data->driverTripAvg) : raw;
+    }
+    // Total and Trip distances: a pc / pm shows the sector's distance in the Total row.
+    sh.totalDist = formatDistance(page == AppData::DP_ITALIAN_TRIAL ? v.sectorTotalM : data->driverTotalM, data->state->distance_km);
+    sh.tripDist = formatDistance(data->driverTripM, data->state->distance_km);
+}
+
 // Draw the rally gauge (GaugePilot RallyMaster style) with auto-scaling
 gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
@@ -85,12 +136,9 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // recomputed fresh every frame -- there is no discrete "scale" to
     // debounce or switch between any more.
     double seconds = data->aheadBehindSeconds;
-    double max_val = gaugeEffectiveMaxSeconds(seconds, data->state->gauge_range_s);
-    // Hysteretic: gaugeZone() alone is recomputed every frame and drives the
-    // digital format, arc colour, chevron count and tick labels, so a reading
-    // sitting on 10.0 or 30.0 flickered all four on every 10ms redraw.
-    int zone = gaugeZoneHysteretic(seconds, data->gaugeZoneShown);
-    data->gaugeZoneShown = zone;
+    // Scale and band as worked out on the last update (computeDriverShown), the same the phone gets.
+    double max_val = data->driverShown.maxSeconds;
+    int zone = data->driverShown.zone;
     GaugeArcColor arc = gaugeArcColor(zone);
 
     // Needle bar half-width, declared here so the ticks can match it.
@@ -218,7 +266,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     cairo_fill(cr);
 
     char digital[24];
-    formatGaugeDigital(digital, sizeof(digital), seconds, zone);
+    snprintf(digital, sizeof(digital), "%s", data->driverShown.digital.c_str());
     // RB-DRV-19: no needle and an empty error box outside a timed stretch (italian navi rows, between stages).
     const bool hideNeedle = data->driverCompactMode &&
         (data->driverPage == AppData::DP_ITALIAN_NAVI || data->driverPage == AppData::DP_GREEK_IDLE);
@@ -522,8 +570,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
             {
                 const double topRightInk = width - 4.0 * fs;
-                const std::string sp = italianFig ? data->driverTrialSpeedText
-                                                  : std::string(gtk_label_get_text(data->currentSpeedLabel));
+                const std::string& sp = data->driverShown.speed;
                 double baseline = drawTopCorner(sp.c_str(), topRightInk, true);
                 drawTopCornerLabel(speedUnit, topRightInk, true, baseline);
             }
@@ -534,19 +581,8 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             cairo_set_source_rgb(cr, 1.0, 0.867, 0.0);  // #FFDD00
             {
                 const double topLeftInk = 4.0 * fs;
-                std::string big, cap = "Target";
-                if (italianFig) big = data->driverTrialTargetText;
-                else if (page == AppData::DP_GREEK_STAGE) big = gtk_label_get_text(data->targetSpeedLabel);
-                else {
-                    cap = mph ? "Arrival (mph)" : "Arrival (kph)";
-                    if (data->driverArrivalKph < 0) big = "--";
-                    else {
-                        char b[16];
-                        snprintf(b, sizeof(b), "%ld", mph ? std::lround(data->driverArrivalKph * 0.621371)
-                                                          : static_cast<long>(data->driverArrivalKph));
-                        big = b;
-                    }
-                }
+                const std::string& big = data->driverShown.target;
+                const std::string& cap = data->driverShown.targetCap;
                 double baseline = drawTopCorner(big.c_str(), topLeftInk, false);
                 drawTopCornerLabel(cap.c_str(), topLeftInk, false, baseline);
                 // Arrival stays on the between-stages page (the figure above).
@@ -581,46 +617,19 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                 cairo_show_text(cr, text.c_str());
                 smallFace();
             };
-            auto distText = [&](double metres) {
-                return formatDistance(metres, data->state->distance_km);
-            };
-            // Italian speeds are km/h even when the box is set to mph. A label that is
-            // not a number ("--.-" before the first reading) is drawn as it is.
-            auto avgKphText = [&](const char* label) {
-                if (!label || label[0] < '0' || label[0] > '9') return std::string(label ? label : "");
-                const double x = atof(label);
-                return trialSpeedText(data->state->units ? x / 0.621371 : x);
-            };
-            // A pc / pm keeps its own average over the tube. A navi row shows the live
-            // Total average and the live Trip average, the same figures Greek recomputes
-            // every tick. It used to put the Trip average in the Total slot and draw no
-            // Trip average, so Total never moved.
-            const char* totalLabel = gtk_label_get_text(data->totalSpeedLabel);
-            const std::string totalAvg = (page == AppData::DP_ITALIAN_TRIAL)
-                ? (v.avgValid ? trialSpeedText(v.avgKph) : std::string("--.--"))
-                : (page == AppData::DP_ITALIAN_NAVI ? avgKphText(totalLabel)
-                                                    : std::string(totalLabel));
+            // The averages as worked out on the last update (computeDriverShown), the phone's too.
+            // A pc / pm keeps its own average over the tube and has no trip row; a navi row
+            // shows the live Total and Trip averages; a greek stage's cyan figure is the substage's.
+            const std::string& totalAvg = data->driverShown.totalAvg;
             cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
             drawAt(totalAvg, avgAnchor, y2);
-            drawAt(distText(page == AppData::DP_ITALIAN_TRIAL ? v.sectorTotalM : data->driverTotalM), distAnchor, y2);
-            std::string tripAvg;
-            bool haveTripAvg = false;
-            if (page != AppData::DP_ITALIAN_TRIAL) {   // a pc / pm has no trip row
+            drawAt(data->driverShown.totalDist, distAnchor, y2);
+            const std::string& tripAvg = data->driverShown.tripAvg;
+            const bool haveTripAvg = page != AppData::DP_ITALIAN_TRIAL;
+            if (haveTripAvg) {
                 cairo_set_source_rgb(cr, 0.0, 1.0, 1.0);
-                if (page == AppData::DP_GREEK_STAGE) {   // the substage's own average, to match the time error
-                    char sb[24];
-                    const double sp = data->state->units ? data->driverSubAvgKph * 0.621371 : data->driverSubAvgKph;
-                    if (data->driverSubAvgValid) snprintf(sb, sizeof(sb), "%.1f", sp); else snprintf(sb, sizeof(sb), "--.-");
-                    tripAvg = sb;
-                    haveTripAvg = true;
-                    drawAt(tripAvg, avgAnchor, y1);
-                } else {
-                    const char* raw = gtk_label_get_text(data->tripSpeedLabel);
-                    tripAvg = (page == AppData::DP_ITALIAN_NAVI) ? avgKphText(raw) : std::string(raw);
-                    haveTripAvg = true;
-                    drawAt(tripAvg, avgAnchor, y1);
-                }
-                drawAt(distText(data->driverTripM), distAnchor, y1);
+                drawAt(tripAvg, avgAnchor, y1);
+                drawAt(data->driverShown.tripDist, distAnchor, y1);
             }
             // Left edge of the character cells of a figure on avgAnchor.
             // The ink of a 1 sits inside that cell, so the caption does not
@@ -858,9 +867,8 @@ void updateDriverDisplay(AppData* data) {
         data->state->trip_start_time_ms, current_time_ms, trip_count_diff,
         data->state->trip_distance_adjust_mm);
     trip_speed = averageSpeedForDisplay(trip_speed, holdTimeErrorAtZero);
-    ss.str("");
-    ss << std::fixed << std::setprecision(1) << trip_speed;
-    gtk_label_set_text(data->tripSpeedLabel, ss.str().c_str());
+    data->driverTripAvg = trip_speed;
+    gtk_label_set_text(data->tripSpeedLabel, averageSpeedText(trip_speed).c_str());   // 2 dp
     
     // Total average speed
     int64_t total_count_diff = calculateDistanceCounts(*data->state,
@@ -870,9 +878,8 @@ void updateDriverDisplay(AppData* data) {
         data->state->total_start_time_ms, current_time_ms, total_count_diff,
         data->state->total_distance_adjust_mm);
     total_speed = averageSpeedForDisplay(total_speed, holdTimeErrorAtZero);
-    ss.str("");
-    ss << std::fixed << std::setprecision(1) << total_speed;
-    gtk_label_set_text(data->totalSpeedLabel, ss.str().c_str());
+    data->driverTotalAvg = total_speed;
+    gtk_label_set_text(data->totalSpeedLabel, averageSpeedText(total_speed).c_str());   // 2 dp
 
     // Total/Trip distance, reusing the count differences just computed for
     // the average speeds above -- no additional counter reads. Applies the
@@ -1235,6 +1242,8 @@ void updateDriverDisplay(AppData* data) {
             gtk_widget_hide(data->countdownContainer);
         }
     }
+    // Last: every label and figure above is now current.
+    computeDriverShown(data);
 }
 
 // Apply CSS styling for large fonts
@@ -1353,7 +1362,7 @@ GtkWidget* createDriverWindow(AppData* data) {
     gtk_widget_set_halign(totalHeader, GTK_ALIGN_CENTER);
     gtk_box_pack_start(GTK_BOX(rightCol), totalHeader, FALSE, FALSE, 0);
     
-    data->totalSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
+    data->totalSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));   // 2 dp, as the figures
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalSpeedLabel)), "speed-value");
     gtk_label_set_width_chars(data->totalSpeedLabel, 6);
     gtk_label_set_xalign(data->totalSpeedLabel, 1.0);
@@ -1366,7 +1375,7 @@ GtkWidget* createDriverWindow(AppData* data) {
     gtk_widget_set_halign(tripHeader, GTK_ALIGN_CENTER);
     gtk_box_pack_start(GTK_BOX(rightCol), tripHeader, FALSE, FALSE, 0);
     
-    data->tripSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
+    data->tripSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));   // 2 dp, as the figures
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripSpeedLabel)), "speed-value");
     gtk_label_set_width_chars(data->tripSpeedLabel, 6);
     gtk_label_set_xalign(data->tripSpeedLabel, 1.0);

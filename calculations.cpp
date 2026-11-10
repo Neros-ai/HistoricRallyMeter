@@ -1281,3 +1281,23 @@ bool buildSegmentSpeedDistancePairs(const std::vector<double>& speeds,
     }
     return true;
 }
+
+std::string averageSpeedText(double speed) {
+    char b[32];
+    snprintf(b, sizeof(b), "%.2f", speed);
+    return b;
+}
+
+std::string arrivalSpeedText(double kph, bool mph) {
+    if (kph < 0) return "--";
+    char b[24];
+    snprintf(b, sizeof(b), "%ld", mph ? std::lround(kph * 0.621371) : static_cast<long>(kph));
+    return b;
+}
+
+std::string rallyDateText(int64_t rally_ms) {
+    time_t s = static_cast<time_t>(rally_ms / 1000);
+    char b[40] = "";
+    if (struct tm* t = localtime(&s)) strftime(b, sizeof(b), "%a %d %b %Y", t);
+    return b;
+}

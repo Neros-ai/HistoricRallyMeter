@@ -182,7 +182,13 @@ bool webHandleCommand(AppData* data, const char* json) {
         return true;
     }
     if (strcmp(type, "next") == 0 || strcmp(type, "prev") == 0) {
-        if (strcmp(type, "next") == 0) on_next_press(nullptr, data);
+        if (strcmp(type, "next") == 0) {
+            // Ending an italian sector is asked first; the phone sends confirm on yes.
+            bool confirmed = false;
+            jsonFindBool(json, "confirm", &confirmed);
+            if (sectorFinishAvailable(*data->state) && !confirmed) return false;
+            on_next_press(nullptr, data);
+        }
         else on_prev_press(nullptr, data);
         return true;
     }
@@ -201,6 +207,15 @@ bool webHandleCommand(AppData* data, const char* json) {
         int added = stageEditAddDistances(data, text, &rest);
         refreshSegmentList(data);
         return added > 0 && rest.empty();
+    }
+    // The roadbook box number typed on any greek row, as the box's "box" entries.
+    if (strcmp(type, "row_box") == 0) {
+        int row = 0, box = 0;
+        if (!jsonFindInt(json, "row", &row) || !jsonFindInt(json, "box", &box)) return false;
+        if (row < 0 || row >= static_cast<int>(data->state->segments.size()) || box < 0) return false;
+        stageEditSetBox(data, static_cast<size_t>(row), box);
+        refreshSegmentList(data);
+        return true;
     }
     if (strcmp(type, "row_speed") == 0) {
         int row = 0; double kph = 0;

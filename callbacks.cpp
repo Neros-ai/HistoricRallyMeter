@@ -1110,7 +1110,16 @@ void applyDriverZero(AppData* data, bool reset) {
 // speed changes here, and what this segment gives up is handed to the next
 // one -- so the next known point stays where the roadbook puts it, measured
 // from the stage start.
-void on_next_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+// After an Italian sector has been ended with next on the co: the stage selector steps on to the
+// next programmed stage, as the + key does (none further on, or none loaded: it stays).
+static void selectNextSectorAfterFinish(AppData* data) {
+    const int cur = data->state->last_memory_slot;
+    if (cur == 0) return;
+    const int to = nextProgrammedStage(*data->state, cur, +1);
+    if (validStageNumber(to) && to != cur) recallMemorySlot(data, to);
+}
+
+void on_next_press(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     // Surrey: next on the last row is the finish landmark.
     // RB-SET-12: the finishing press is at a point; taken back by the reaction offset.
@@ -1120,7 +1129,12 @@ void on_next_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         return;
     }
     // Italian sector (RB-NAV-52): next on the last row (the co) is what ends the sector.
-    if (applySectorFinish(*data->state)) {
+    // There is no prev to take it back, so the box asks first (the phone has asked already,
+    // and calls this with no widget); on yes the stage selector moves on to the next sector.
+    if (sectorFinishAvailable(*data->state)) {
+        if (widget && !confirmYesNo(widget, "End sector", "This will end the sector.\nEnd the sector?")) return;
+        applySectorFinish(*data->state);
+        selectNextSectorAfterFinish(data);
         ConfigFile::save(*data->state);
         notifyWebState(data);
         return;

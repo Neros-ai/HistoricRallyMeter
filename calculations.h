@@ -64,6 +64,14 @@ std::string formatTimeTenths(int64_t time_ms);
 // "+1:02:03.4" from an hour.
 std::string formatOffsetSeconds(long offset_ms);
 
+// Texts the box shows and sends to the phone unchanged (the phone never reformats them).
+// An average speed on the driver page: two decimals.
+std::string averageSpeedText(double speed);
+// The stage arrival speed: whole kph (truncated), or mph rounded; "--" when there is none (< 0).
+std::string arrivalSpeedText(double kph, bool mph);
+// The date under the Time page's offset: "Tue 10 Nov 2026" (rally time, the box's zone).
+std::string rallyDateText(int64_t rally_ms);
+
 // One press of the rally-clock trim. Returns the new rally/system offset
 // after nudging it by `steps` tenths of a second (+1 makes the rally clock
 // read later, -1 earlier). Deliberately does not round the offset to whole

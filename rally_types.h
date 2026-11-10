@@ -93,6 +93,14 @@ struct AppData {
     DriverTrialView driverTrial;
     std::string driverTrialTargetText;   // km/h, 2 dp
     std::string driverTrialSpeedText;    // km/h, 2 dp
+    // Trip and Total averages in the box's units, unrounded (the driver page writes them at 2 dp).
+    double driverTripAvg = 0.0, driverTotalAvg = 0.0;
+    // What the driver page last drew, word for word, so the phone shows the same (never recomputes).
+    struct DriverShown {
+        std::string speed, target, targetCap, totalAvg, tripAvg, digital, totalDist, tripDist;
+        int zone = 0;
+        double maxSeconds = 3.0;
+    } driverShown;
     // RB-DRV-19: which compact page the driver gauge draws (one set of sizes and positions).
     static constexpr int DP_CLASSIC = 0, DP_ITALIAN_TRIAL = 1, DP_ITALIAN_NAVI = 2,
                          DP_GREEK_STAGE = 3, DP_GREEK_IDLE = 4;
