@@ -12,6 +12,7 @@
 #include <chrono>
 #include <gtk/gtk.h>
 #include <glib-unix.h>
+#include "stage_phase.h"
 #include "freeze.h"
 #include "i2c_counter.h"
 #include "i_counter.h"
@@ -388,6 +389,12 @@ int main(int argc, char* argv[]) {
             ConfigFile::save(state);   // the loss save ran before this zeroing
         }
 
+        // The box was down across an armed autostart: dropped, idle as after an abort. Never a late start.
+        if (dropMissedAutoStart(state, getRallyTime_ms(state), getAutoStartEpochMs())) {
+            std::cerr << "[INFO] Autostart time passed while the box was down: dropped" << std::endl;
+            ConfigFile::save(state);
+        }
+
         if (state.total_start_cntr1 == 0 && state.total_start_cntr2 == 0) {
             state.total_start_cntr1 = counter1->readRegister(REGISTER);
             state.total_start_cntr2 = counter2->readRegister(REGISTER);
@@ -422,7 +429,8 @@ int main(int argc, char* argv[]) {
         if (app_data.simCounter2) app_data.simCounter2->setPaused(true);
         app_data.state = &state;
         // An autostart armed before a restart belongs to the stage that was loaded.
-        app_data.autoSlot = state.auto_start_rally_time_s != 0 ? state.last_memory_slot : 0;
+        // A settings file from before auto_slot was saved: an armed autostart is the loaded stage's.
+        if (state.auto_slot == 0 && state.auto_start_rally_time_s != 0) state.auto_slot = state.last_memory_slot;
         app_data.poller = new CounterPoller();
         // Resume the reverse shift saved with the baselines (zero unless the
         // car was reversed), so distances line up after a restart.

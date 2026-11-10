@@ -377,6 +377,12 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.prop_pulses_per_rev = static_cast<int>(extractLong(line));
         } else if (line.find("\"auto_start_early_departure\"") != std::string::npos) {
             state.auto_start_early_departure = extractBool(line);
+        } else if (line.find("\"auto_fired_time_s\"") != std::string::npos) {
+            state.auto_fired_time_s = static_cast<uint64_t>(extractLong(line));
+        } else if (line.find("\"started_by_auto\"") != std::string::npos) {
+            state.started_by_auto = extractBool(line);
+        } else if (line.find("\"auto_slot\"") != std::string::npos) {
+            state.auto_slot = static_cast<int>(extractLong(line));
         } else if (line.find("\"stage_complete\"") != std::string::npos) {
             state.stage_complete = extractBool(line);
         } else if (line.find("\"last_memory_slot\"") != std::string::npos) {
@@ -599,6 +605,9 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"beep_timing_mode\": " << (state.beep_timing_mode ? "true" : "false") << ",\n";
     file << "  \"auto_start_early_departure\": "
          << (state.auto_start_early_departure ? "true" : "false") << ",\n";
+    file << "  \"auto_fired_time_s\": " << state.auto_fired_time_s << ",\n";
+    file << "  \"started_by_auto\": " << (state.started_by_auto ? "true" : "false") << ",\n";
+    file << "  \"auto_slot\": " << state.auto_slot << ",\n";
     file << "  \"stage_complete\": "
          << (state.stage_complete ? "true" : "false") << ",\n";
     file << "  \"last_memory_slot\": " << state.last_memory_slot << ",\n";

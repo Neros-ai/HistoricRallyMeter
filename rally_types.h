@@ -171,22 +171,8 @@ struct AppData {
     HomeUi* home = nullptr;           // Nero2.0 Home page; null in single-display mode
     // Freeze (Home): the co-pilot readouts hold their figures. The driver
     // display and the phone never see it.
-    // The autostart moment (seconds since 2020) that has just started the stage
-    // that is running, kept so Home goes on showing "auto hh:mm:ss" -- the time
-    // the stage actually began -- instead of reverting to "manual" and the
-    // memory's own start time the moment the target is spent. A start now
-    // (the flag-and-stopwatch key) also records the moment of the press, but
-    // Home no longer labels that one "auto" (startedByAuto is false). 0 = none;
-    // the stage ending drops it. Runtime only.
-    uint64_t autoFiredTime_s = 0;
-    // Which memory (1-5) the armed or just-fired autostart belongs to: Home shows
-    // that time only beside that stage, and every other stage shows its own start
-    // time from the Segments page.
-    int autoSlot = 0;
-    // True only while the running stage was started by an autostart (either
-    // branch); a start now clears it. Home reads "auto" or "manual" from it.
-    // Runtime only: after a restart it is false.
-    bool startedByAuto = false;
+    // How the running stage started (auto or manual, when, for which stage) is in RallyState
+    // (started_by_auto, auto_fired_time_s, auto_slot): it is saved, so a restart keeps it.
     
     // TwinMaster screen
     GtkWidget* twinMasterScreen;

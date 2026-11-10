@@ -771,19 +771,52 @@
     el.classList.toggle('ok', !!ok);
   }
 
-  function connect() {
+  // The link to the box, as one named state. The header reads its label from here.
+  //   connecting   - a socket is being opened
+  //   connected    - open, and the box's figures are arriving (it sends ten a second)
+  //   nodata       - the socket still looks open but nothing has arrived for STALE_LINK_MS:
+  //                  out of Wi-Fi range, or a half-open socket. The figures on screen are stale.
+  //   disconnected - the socket closed; a new one is tried every two seconds
+  const LINK_LABEL = { connecting: 'connecting…', connected: 'connected',
+                       nodata: 'no data', disconnected: 'disconnected' };
+  let linkState = 'connecting';
+  let linkSince = Date.now();   // when the current socket was asked for, or opened
+  function setLink(state) {
+    linkState = state;
+    setConn(LINK_LABEL[state], state === 'connected');
+  }
+
+  // `stale`: the link went quiet, so the header keeps saying "no data" while the new
+  // socket is tried, rather than flicking to "connecting".
+  function connect(stale) {
     if (ws) { ws.onclose = null; ws.close(); }
+    clearTimeout(reconnectTimer);
     ws = new WebSocket(wsUrl());
-    setConn('connecting…', false);
-    ws.onopen = () => { setConn('connected', true); };
+    linkSince = Date.now();
+    setLink(stale === true ? 'nodata' : 'connecting');
+    ws.onopen = () => { linkSince = Date.now(); setLink('connected'); };
     ws.onclose = () => {
       stopTone();
-      setConn('disconnected', false);
+      setLink('disconnected');
       clearTimeout(reconnectTimer);
       reconnectTimer = setTimeout(connect, 2000);
     };
     ws.onmessage = onMessage;
   }
+
+  // Once a second, with the page in view: a link that says "connected" while nothing arrives
+  // is called what it is, and rebuilt. (A page in the background is frozen by the phone; the
+  // visibilitychange handler does the same check when it comes back.)
+  const LINK_RETRY_MS = 8000;   // a socket still opening after this long is tried again
+  setInterval(() => {
+    if (document.hidden) return;
+    const now = Date.now();
+    if (linkState === 'connected') {
+      if (now - Math.max(lastTelemetryAt, linkSince) > STALE_LINK_MS) { stopTone(); connect(true); }
+    } else if (linkState === 'nodata' && now - linkSince > LINK_RETRY_MS) {
+      connect(true);
+    }
+  }, 1000);
 
   TABS.forEach((t) => $('tab-' + t).addEventListener('click', () => showTab(t)));
   // A rotation reports its size in stages on phones: the first resize can still
@@ -1296,7 +1329,7 @@
     clockSample = null;   // the page was frozen; do not read that as a stall
     if (soundOn) wakeAudio();
     showSound();
-    if (Date.now() - lastTelemetryAt > STALE_LINK_MS) connect();
+    if (Date.now() - lastTelemetryAt > STALE_LINK_MS) connect(linkState === 'connected' || linkState === 'nodata');
   });
 
   // The box's button click: 1200 Hz sine, 50 ms, 0.20 -- ToneGenerator::playBeep's defaults.
@@ -1521,6 +1554,22 @@
     return !!audioCtx && audioCtx.state === 'running' && !audioStalled;
   }
 
+  // This phone's sound, as one named state. The button's label and the "why" beside it are
+  // read from here; nothing else decides what the button says.
+  //   off       - the crew muted this phone
+  //   locked    - no audio engine yet: the browser wants a first tap
+  //   stalled   - the engine says it is running but its clock has stopped
+  //   suspended - the engine is not running (screen lock, background, interrupted, closed)
+  //   playing   - able to make a sound
+  function soundState() {
+    if (!soundOn) return 'off';
+    if (!audioCtx) return 'locked';
+    if (audioStalled) return 'stalled';
+    return audioCtx.state === 'running' ? 'playing' : 'suspended';
+  }
+  // A press on the button in these states means "make the sound work", not "mute".
+  const soundBlocked = (st) => st === 'locked' || st === 'stalled' || st === 'suspended';
+
   // Sampled on every telemetry frame; judged once a second, because a shorter
   // window cannot tell a stall from ordinary scheduling jitter.
   const STALL_WINDOW_MS = 1000;
@@ -1556,17 +1605,19 @@
   // something actually changed.
   let shownSound = null;
   function showSound() {
-    const blocked = soundOn && !audioLive();
+    const st = soundState();
+    const blocked = soundBlocked(st);
     // "Sound is on/off" rather than "Sound on/off": the shorter form reads as a
     // button that will DO that when pressed, which had the crew pressing it to
     // turn sound on when it was already on. "Tap for sound" stays an
     // instruction, because in that state pressing it is exactly what is needed.
-    const label = !soundOn ? 'Sound is off' : (blocked ? 'Tap for sound' : 'Sound is on');
+    const label = st === 'off' ? 'Sound is off' : (blocked ? 'Tap for sound' : 'Sound is on');
     // The engine's own word for what it is doing, shown only while it is not
     // playing: "Tap for sound" says what to do about it, this says why. Without
     // it a phone that refuses to start audio is undiagnosable from here.
-    const why = blocked
-      ? (!audioCtx ? 'no engine' : (audioStalled ? 'engine stalled' : audioCtx.state))
+    const why = st === 'locked' ? 'no engine'
+      : st === 'stalled' ? 'engine stalled'
+      : st === 'suspended' ? audioCtx.state
       : '';
     if (shownSound === label + '|' + why) return;
     shownSound = label + '|' + why;
@@ -1574,7 +1625,7 @@
     const lab = btn.querySelector('.snd-label');
     if (lab) lab.textContent = label; else btn.textContent = label;
     btn.title = why ? 'audio engine: ' + why : '';
-    btn.classList.toggle('off', !soundOn);
+    btn.classList.toggle('off', st === 'off');
     btn.classList.toggle('blocked', blocked);
     const note = $('audio-state');
     if (note) note.textContent = why ? 'audio: ' + why : '';
@@ -1584,11 +1635,11 @@
     // mute: a press there means "make the sound work". Toggling as well muted
     // the phone on the very press meant to un-silence it, because the
     // page-wide unlock handler and this one both fired on the same tap.
-    if (soundOn && !audioLive()) {
+    if (soundBlocked(soundState())) {
       // A context that has gone suspended and will not come back is a known
       // phone trap: the cure is a fresh one built inside the gesture that asked
       // for it, which is this tap. Cheap, and only on an explicit press.
-      if (audioCtx && !audioLive()) {
+      if (audioCtx) {
         stopTone();
         try { audioCtx.close(); } catch (e) { /* already closing */ }
         audioCtx = null;

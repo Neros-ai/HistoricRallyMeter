@@ -207,6 +207,26 @@ public:
             surreyDistanceEnd(t, 561000);
             return a && t.time_taken_ms == 560600;
         });
+        suite->addTest("a finish press after the roadbook distance ran out is taken, once", [runningAt, ss1]() {
+            RallyState s = runningAt(ss1(), 0); s.last_memory_slot = 1;
+            s.stage_complete = true;                    // as the distance end leaves it
+            surreyDistanceEnd(s, 561000);
+            const bool live = surreyFinishAvailable(s);
+            const bool took = applySurreyFinish(s, 566200);     // the real finish, 5.2 s on
+            const bool again = applySurreyFinish(s, 570000);    // a second press is not
+            return live && took && !again && s.time_taken_ms == 566200 && s.time_taken_stage == 1
+                && s.stage_complete && s.surrey_finish_at_ms == 566200;
+        });
+        suite->addTest("no late finish press once another stage is loaded or the stage is cleared", [runningAt, ss1]() {
+            RallyState s = runningAt(ss1(), 0); s.last_memory_slot = 1;
+            s.stage_complete = true;
+            surreyDistanceEnd(s, 561000);
+            RallyState other = s; other.last_memory_slot = 2;           // another stage loaded
+            RallyState cleared = s; cleared.segment_current_number = -1; // abort / Reset Total
+            RallyState greek = s; greek.rally_type = 0;
+            return surreyFinishAvailable(s) && !surreyFinishAvailable(other)
+                && !surreyFinishAvailable(cleared) && !surreyFinishAvailable(greek);
+        });
         suite->addTest("greek ignores the surrey finish", [runningAt, ss1]() {
             RallyState s = runningAt(ss1(), 0); s.rally_type = 0;
             const bool a = applySurreyFinish(s, 1000);

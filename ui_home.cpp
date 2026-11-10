@@ -1,3 +1,4 @@
+#include "stage_phase.h"
 #include "ui_home.h"
 #include "stage_store.h"
 #include "home_calc.h"
@@ -77,10 +78,7 @@ void drawWatch(cairo_t* cr, double x, double y, double size, bool filled_white) 
 // A scheduled (on-the-clock) autostart that has not fired is not one: nothing is
 // live until its time, so the key stays "now" (pressing it starts at once).
 bool homeStageAbortable(const RallyState& st) {
-    const bool scheduled_pending = st.auto_start_rally_time_s != 0 &&
-                                   !st.auto_start_early_departure &&
-                                   st.segment_current_number < 0;
-    return stageAbortable(st) && !scheduled_pending;
+    return goKeyAborts(st);
 }
 
 // An on-the-clock autostart (not the early-departure kind) is pending for the
@@ -88,7 +86,7 @@ bool homeStageAbortable(const RallyState& st) {
 bool scheduledAutostartArmed(const AppData& data) {
     return data.state->auto_start_rally_time_s != 0 &&
            !data.state->auto_start_early_departure &&
-           data.autoSlot == data.state->last_memory_slot;
+           data.state->auto_slot == data.state->last_memory_slot;
 }
 
 // Chequered flag on a pole, w wide.
@@ -870,17 +868,17 @@ void updateHomeDisplay(AppData* data) {
         // both read "auto hh:mm:ss" -- but only beside the stage they belong to.
         // Any other stage shows its own start time from the Segments page, with
         // "auto" crossed out as it is not armed for that stage.
-        const bool mine = (data->autoSlot == slot);
+        const bool mine = (data->state->auto_slot == slot);
         if (armed != "none" && !mine) armed = "none";
         const bool armed_pending = (armed != "none");
         bool fired_this_stage = false;
-        if (armed == "none" && mine && data->autoFiredTime_s != 0 && !data->state->stage_complete)
+        if (armed == "none" && mine && data->state->auto_fired_time_s != 0 && !data->state->stage_complete)
         {
-            armed = formatAutoStartStatus(data->autoFiredTime_s, false, getAutoStartEpochMs());
+            armed = formatAutoStartStatus(data->state->auto_fired_time_s, false, getAutoStartEpochMs());
             fired_this_stage = true;
         }
         const bool is_armed = (armed != "none");
-        const bool word_auto = homeStartWord(armed_pending, fired_this_stage, data->startedByAuto) == StartWord::AUTO;
+        const bool word_auto = homeStartWord(armed_pending, fired_this_stage, data->state->started_by_auto) == StartWord::AUTO;
         std::string auto_time = armed;
         if (!is_armed) {
             auto_time.clear();

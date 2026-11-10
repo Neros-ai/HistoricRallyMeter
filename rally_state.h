@@ -68,6 +68,15 @@ public:
     // an app restart between arming and the minute still starts the right way.
     bool auto_start_early_departure = false;
 
+    // How the running stage started, saved so Home still reads "auto hh:mm:ss" (or "manual") after
+    // a restart mid-stage. auto_fired_time_s: the moment the stage began (seconds since 2020,
+    // 0 = none) -- the autostart's appointed time, or the press of a start now. started_by_auto:
+    // true only when an autostart (either kind) began it. auto_slot: the stage number the armed
+    // or just-fired start belongs to (0 = none); Home shows that time only beside that stage.
+    uint64_t auto_fired_time_s = 0;
+    bool started_by_auto = false;
+    int auto_slot = 0;
+
     // The roadbook as EDITED: what the stage-setup screen shows, what a
     // memory slot stores and recalls, what the phone's segment list edits.
     // Nothing here affects a stage that is already running or armed.

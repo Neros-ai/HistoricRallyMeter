@@ -54,7 +54,12 @@ void surreyStart(RallyState& s, const RallyState::MemorySlot& slot) {
 }
 
 bool surreyFinishAvailable(const RallyState& s) {
-    return isSurrey(s) && !s.stage_complete && s.surrey_finish_at_ms == 0 &&
+    // The roadbook's distance ran out before the crew reached the real finish: the stage has
+    // ended on distance (surreyDistanceEnd took a time) but no finish press has been made. The
+    // press is still taken, once, and its time replaces the distance one.
+    const bool ended_on_distance = s.stage_complete && s.time_taken_ms >= 0 &&
+                                   s.time_taken_stage == s.last_memory_slot;
+    return isSurrey(s) && (!s.stage_complete || ended_on_distance) && s.surrey_finish_at_ms == 0 &&
            s.segment_current_number >= 0 &&
            s.segment_current_number == static_cast<long>(s.stage_segments.size()) - 1;
 }
