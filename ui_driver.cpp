@@ -66,37 +66,33 @@ static void computeDriverShown(AppData* data) {
     formatGaugeDigital(digital, sizeof(digital), seconds, sh.zone);
     sh.digital = digital;
 
-    auto label = [](GtkLabel* l) { return std::string(l ? gtk_label_get_text(l) : ""); };
     const int page = data->driverPage;
     const DriverTrialView& v = data->driverTrial;
     const bool italianFig = (page == AppData::DP_ITALIAN_TRIAL || page == AppData::DP_ITALIAN_NAVI);
     const bool mph = data->state->units && !italianFig;
-    sh.speed = italianFig ? data->driverTrialSpeedText : label(data->currentSpeedLabel);
+    sh.speed = italianFig ? data->driverTrialSpeedText : data->driverSpeedText;
     sh.targetCap = "Target";
     if (italianFig) sh.target = data->driverTrialTargetText;
-    else if (page == AppData::DP_GREEK_STAGE || !data->driverCompactMode) sh.target = label(data->targetSpeedLabel);
+    else if (page == AppData::DP_GREEK_STAGE || !data->driverCompactMode) sh.target = data->driverTargetText;
     else {
         sh.targetCap = mph ? "Arrival (mph)" : "Arrival (kph)";
         sh.target = arrivalSpeedText(data->driverArrivalKph, mph);
     }
-    // Italian speeds are km/h even when the box is set to mph; from the unrounded average.
-    // A label that is not a number ("--.--" before the first reading) stays as it is.
-    auto avgKph = [&](const std::string& text, double x) {
-        if (text.empty() || text[0] < '0' || text[0] > '9') return text;
-        return trialSpeedText(data->state->units ? x / 0.621371 : x);
+    // Averages at 2 dp from the unrounded figures; italian speeds are km/h even when the box is set to mph.
+    auto avgText = [&](double x) {
+        return page == AppData::DP_ITALIAN_NAVI ? trialSpeedText(data->state->units ? x / 0.621371 : x)
+                                                 : averageSpeedText(x);
     };
-    const std::string totalLabel = label(data->totalSpeedLabel);
     sh.totalAvg = (page == AppData::DP_ITALIAN_TRIAL)
         ? (v.avgValid ? trialSpeedText(v.avgKph) : std::string("--.--"))
-        : (page == AppData::DP_ITALIAN_NAVI ? avgKph(totalLabel, data->driverTotalAvg) : totalLabel);
+        : avgText(data->driverTotalAvg);
     if (page == AppData::DP_ITALIAN_TRIAL) {
         sh.tripAvg.clear();   // a pc / pm has no trip row
     } else if (page == AppData::DP_GREEK_STAGE) {   // the substage's own average, to match the time error
         const double sp = data->state->units ? data->driverSubAvgKph * 0.621371 : data->driverSubAvgKph;
         sh.tripAvg = data->driverSubAvgValid ? averageSpeedText(sp) : std::string("--.--");
     } else {
-        const std::string raw = label(data->tripSpeedLabel);
-        sh.tripAvg = (page == AppData::DP_ITALIAN_NAVI) ? avgKph(raw, data->driverTripAvg) : raw;
+        sh.tripAvg = avgText(data->driverTripAvg);
     }
     // Total and Trip distances: a pc / pm shows the sector's distance in the Total row.
     sh.totalDist = formatDistance(page == AppData::DP_ITALIAN_TRIAL ? v.sectorTotalM : data->driverTotalM, data->state->distance_km);
@@ -857,7 +853,8 @@ void updateDriverDisplay(AppData* data) {
     } else {
         ss << std::fixed << std::setprecision(1) << data->smoothedSpeed;
     }
-    gtk_label_set_text(data->currentSpeedLabel, ss.str().c_str());
+    data->driverSpeedText = ss.str();
+    gtk_label_set_text(data->currentSpeedLabel, data->driverSpeedText.c_str());
     
     // Trip average speed
     int64_t trip_count_diff = calculateDistanceCounts(*data->state,
@@ -936,6 +933,7 @@ void updateDriverDisplay(AppData* data) {
         }
         ss.str("");
         ss << driverSpeedText(target_kph, data->state->rally_type);   // 2 dp in italian
+        data->driverTargetText = ss.str();
         gtk_label_set_text(data->targetSpeedLabel, ss.str().c_str());
         gtk_label_set_text(data->gaugeTargetLabel, ss.str().c_str());
         // The coming change, in the same units as the value above it.
@@ -1127,6 +1125,7 @@ void updateDriverDisplay(AppData* data) {
         if (data->copilotGaugeArea)
             gtk_widget_queue_draw(data->copilotGaugeArea);
     } else {
+        data->driverTargetText = "--.-";
         gtk_label_set_text(data->targetSpeedLabel, "--.-");
         gtk_label_set_text(data->gaugeTargetLabel, "--.-");
         if (data->nextTargetSpeedLabel) gtk_label_set_text(data->nextTargetSpeedLabel, "");
