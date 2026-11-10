@@ -1004,6 +1004,8 @@
       $('upload-file-name').textContent = '';
       $('upload-ask').classList.add('hidden');
       $('upload-stages').textContent = '';
+      $('upload-summary').textContent = '';
+      $('upload-table').querySelector('thead tr').textContent = '';
       $('upload-table').querySelector('tbody').textContent = '';
     }
   }
@@ -1038,15 +1040,29 @@
     const shown = stages.find((s) => s.stage === uploadShown) || stages[0];
     if (shown) { uploadShown = shown.stage; renderUploadTable(shown); }
   }
+  // The checked stage as the box writes it: the Segments page's text, distances in the file's own units.
   function renderUploadTable(stage) {
+    const italian = stage.mode === 'italian';
+    const unit = stage.km ? 'km' : 'm';
+    $('upload-table').querySelector('thead tr').innerHTML = '<th>' + (italian ? '' : 'box') + '</th>'
+      + '<th colspan="2" class="ft">from -' + unit + '- to</th><th>dist</th><th>KPH</th><th>dur</th><th>elapsed</th>';
+    const parts = [];
+    if (stage.start_text) parts.push('Start time ' + stage.start_text);
+    if (italian) {
+      if (stage.duration_text) parts.push('Duration ' + stage.duration_text);
+      if (stage.avg_text) parts.push(stage.avg_text);
+    } else if (stage.start_dist_text) {
+      parts.push('Distance at start ' + stage.start_dist_text);
+    }
+    $('upload-summary').textContent = parts.join('   ');
     const body = $('upload-table').querySelector('tbody');
     body.textContent = '';
     (stage.table || []).forEach((r) => {
       const tr = document.createElement('tr');
-      const name = r.type ? (r.type + (r.ref ? r.ref : '')) : String(r.box);
-      [name, r.from_m, r.to_m, r.kph, r.dur_s].forEach((v) => {
+      const name = italian ? (r.type === '-' ? r.num : r.type + (r.ref || '')) : r.num;
+      [name, r.from, r.to, r.dist, r.kph, r.dur, r.tot].forEach((v) => {
         const td = document.createElement('td');
-        td.textContent = v;
+        td.textContent = v == null ? '' : v;
         tr.appendChild(td);
       });
       body.appendChild(tr);
@@ -1081,6 +1097,22 @@
   });
   $('upload-replace').addEventListener('click', () => sendLoad(true));
   $('upload-keep').addEventListener('click', () => { $('upload-ask').classList.add('hidden'); sendLoad(false); });
+  // Clear: empty the paste area, the chosen file and the check, ready for a new paste (B).
+  $('upload-clear').addEventListener('click', () => {
+    if (uploadId) send({ type: 'stage_upload_cancel', id: uploadId });
+    uploadId = '';
+    uploadShown = 0;
+    $('upload-text').value = '';
+    $('upload-file').value = '';
+    $('upload-file-name').textContent = '';
+    $('upload-refusal').textContent = '';
+    $('upload-summary').textContent = '';
+    $('upload-ask').classList.add('hidden');
+    $('upload-stages').textContent = '';
+    $('upload-table').querySelector('thead tr').textContent = '';
+    $('upload-table').querySelector('tbody').textContent = '';
+    $('upload-load').disabled = true;
+  });
   $('upload-cancel').addEventListener('click', () => {
     if (uploadId) send({ type: 'stage_upload_cancel', id: uploadId });
     openUpload(false);
