@@ -226,6 +226,11 @@ public:
                    e.reaction_offset_ms == 0 && clampReactionOffsetMs(-900) == -300;
         });
 
+        suite->addTest("reaction offset reads as Settings writes it", []() {
+            return reactionText(250) == "+0.25 s" && reactionText(-100) == "-0.10 s" && reactionText(0) == "0.00 s"
+                && reactionText(-300) == "-0.30 s";
+        });
+
         return suite;
     }
 };

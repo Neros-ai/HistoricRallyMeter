@@ -1,36 +1,12 @@
 /* Phone Driver tab — recognisable twin of the compact box gauge.
-   Maths mirrored from calculations.cpp; draw is canvas, not pixel-Cairo. */
+   Needle geometry mirrored from calculations.cpp; every figure, the colour band and the scale
+   are the box's own (telemetry drv.shown). Draw is canvas, not pixel-Cairo. */
 (function (global) {
   'use strict';
 
-  const GAUGE_ZONE_DEAD_BAND_S = 0.5;
   const REF_RADIUS = 256.0;
   const NEEDLE_HALF_WIDTH = 3.0;   // ticks
   const NEEDLE_BAR_HALF_WIDTH = 5.0;   // Nero2.0: the needle is 10 px thick
-
-  function gaugeEffectiveMaxSeconds(seconds, range) {
-    const base = range || 3;
-    const abs = Math.abs(seconds);
-    if (abs < base) return base;
-    if (abs > 30) return 30;
-    return abs;
-  }
-
-  function gaugeZone(seconds) {
-    const abs = Math.abs(seconds);
-    if (abs < 10) return 0;
-    if (abs < 30) return 1;
-    return 2;
-  }
-
-  function gaugeZoneHysteretic(seconds, previousZone) {
-    const plain = gaugeZone(seconds);
-    if (previousZone < 0 || previousZone > 2) return plain;
-    const abs = Math.abs(seconds);
-    if (previousZone === 2 && abs >= 30.0 - GAUGE_ZONE_DEAD_BAND_S) return 2;
-    if (previousZone === 1 && abs >= 10.0 - GAUGE_ZONE_DEAD_BAND_S && abs < 30.0) return 1;
-    return plain;
-  }
 
   function gaugeArcColor(zone) {
     if (zone === 0) return { r: 0.0, g: 0.7, b: 0.0 };
@@ -171,22 +147,6 @@
     }
   }
 
-  function formatGaugeDigital(seconds, zone) {
-    const abs = Math.abs(seconds);
-    const sign = seconds < 0 ? '-' : '+';
-    if (zone === 2) {
-      const total = Math.round(abs);
-      const h = Math.floor(total / 3600);
-      const m = Math.floor((total % 3600) / 60);
-      const s = total % 60;
-      if (h > 0) {
-        return sign + h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
-      }
-      return sign + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
-    }
-    return sign + abs.toFixed(1);
-  }
-
   function rgb(c) {
     return 'rgb(' + Math.round(c.r * 255) + ',' + Math.round(c.g * 255) + ',' + Math.round(c.b * 255) + ')';
   }
@@ -194,7 +154,6 @@
   function DriverGauge(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
-    this.zoneShown = 0;
     this.last = {
       ahead_behind_s: 0,
       cur_kph: 0,
@@ -282,11 +241,10 @@
     const msg = this.last;
     const seconds = Number(msg.ahead_behind_s) || 0;
     // The box's dial as it last drew it: its scale, colour band, figures and centre text.
-    // The phone only draws them; the local rules remain for an older box that does not send them.
-    const sh = (msg.drv && msg.drv.shown) || null;
-    const maxVal = sh && Number(sh.max) > 0 ? Number(sh.max) : gaugeEffectiveMaxSeconds(seconds, Number(msg.gauge_range) || 3);
-    this.zoneShown = sh ? Number(sh.zone) || 0 : gaugeZoneHysteretic(seconds, this.zoneShown);
-    const zone = this.zoneShown;
+    // The phone page is served by the box, so these always come; the phone only draws them.
+    const sh = (msg.drv && msg.drv.shown) || {};
+    const maxVal = Number(sh.max) > 0 ? Number(sh.max) : (Number(msg.gauge_range) || 3);
+    const zone = Number(sh.zone) || 0;
     const arc = gaugeArcColor(zone);
     const boxMode = !!this.boxSpace;
     const L = computeCompactGaugeLayout(width, height - (boxMode ? 0 : STAGE_STRIP), boxMode);
@@ -411,7 +369,7 @@
     // at the box's top edge)
 
     // Digital ahead/behind box. Empty when the box hides the needle.
-    const digital = hideNeedle ? '' : (sh ? String(sh.digital || '') : formatGaugeDigital(seconds, zone));
+    const digital = hideNeedle ? '' : String(sh.digital || '');
     let rightText = '';
     let ahead = true;
     if (drv && drv.page === 1 && drv.box) rightText = String(drv.box);
@@ -623,8 +581,8 @@
 
     // Current (right) / Target (left). Italian figures are the box's km/h strings.
     const italianFig = drv && (drv.page === 1 || drv.page === 2);
-    const cur = sh ? String(sh.speed || '') : italianFig && drv.speed ? String(drv.speed) : Number(msg.cur_kph || 0).toFixed(1);
-    const tgt = sh ? String(sh.target || '') : italianFig && drv.target ? String(drv.target) : Number(msg.target_kph || 0).toFixed(1);
+    const cur = String(sh.speed || '');
+    const tgt = String(sh.target || '');
     ctx.textBaseline = 'alphabetic';
 
     // Portrait: the dial moved down with the taller canvas. Draw the speeds back
@@ -660,20 +618,10 @@
 
     // Same inset as the box: the arc's top is near the hub, so the yellow
     // stack sits a few pixels in from the panel edge.
-    const stageOn = drv ? drv.page === 3 : Number(msg.segment_number) > 0;
-    const arrival = msg.arrival && msg.arrival.kph != null ? msg.arrival : null;
-    // Between stages only. A Greek stage keeps the target and does not add arrival.
-    // The box shows the Arrival caption on this page even when there is no arrival ("--"); so does the phone.
-    const showArrival = !!(!(msg.surrey && stageOn)
-      && (drv ? drv.page === 4 : (arrival && Number(msg.rally_type) !== 2 && !stageOn)));
     ctx.fillStyle = '#FFDD00';
-    if (sh && sh.cap && sh.cap !== 'Target') {   // the box's between-stages arrival, its own figure and caption
+    if (sh.cap && sh.cap !== 'Target') {   // the box's between-stages arrival, its own figure and caption
       const b = drawCorner(tgt, topLeftInk, false, L.curTopSize, figureBase);
       drawCornerLabel(sh.cap, topLeftInk, false, b);
-    } else if (!sh && showArrival && !stageOn && !italianFig) {
-      const ak = !arrival ? '--' : String(msg.units === 'mph' ? Math.round(arrival.kph * 0.621371) : Math.trunc(arrival.kph));
-      const b = drawCorner(ak, topLeftInk, false, L.curTopSize, figureBase);
-      drawCornerLabel(msg.units === 'mph' ? 'Arrival (mph)' : 'Arrival (kph)', topLeftInk, false, b);
     } else {
       const b = drawCorner(tgt, topLeftInk, false, L.curTopSize, figureBase);
       drawCornerLabel('Target', topLeftInk, false, b);

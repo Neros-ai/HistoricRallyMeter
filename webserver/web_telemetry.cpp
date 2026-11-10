@@ -15,6 +15,7 @@
 #include "ui_home.h"
 #include "driver_trial.h"
 #include "nero_frame.h"
+#include "reaction_offset.h"
 
 #include <chrono>
 #include <cmath>
@@ -359,6 +360,7 @@ std::string buildTelemetryJson(AppData* data) {
        << ",\"it_count\":" << itCount
        << ",\"sector\":" << sectorJson
        << ",\"next_m\":" << (has_next_m ? std::to_string(next_m) : std::string("null"))
+       << ",\"next_text\":\"" << (has_next_m ? formatDistance(static_cast<double>(next_m), st.distance_km) : std::string("---")) << "\""
        << ",\"speed_change\":\"" << speed_change << "\""
        << ",\"key_total\":\"" << jsonOneLine(readoutKeyName(st.rally_type, 0)) << "\""
        << ",\"key_trip\":\"" << jsonOneLine(readoutKeyName(st.rally_type, 1)) << "\""
@@ -434,6 +436,7 @@ std::string buildStateJson(AppData* data) {
            << ",\"first_from_m\":" << static_cast<long>(slot.first_from_m)
            << ",\"start_distance_m\":" << slot.start_distance_m
            << ",\"sector_duration_s\":" << slot.sector_duration_s
+           << ",\"duration_text\":\"" << (slot.sector_duration_s > 0 ? formatHMmSs(static_cast<double>(slot.sector_duration_s)) : std::string()) << "\""
            << ",\"avg_text\":\"" << jsonEscape(sectorAverageText(data->state->segments, slot.sector_duration_s))
            << "\",\"start_dist_text\":\"" << jsonEscape(startDistanceText(slot.start_distance_m, data->state->distance_km))
            << "\",\"start_time\":\"";
@@ -479,6 +482,12 @@ std::string buildStateJson(AppData* data) {
     {
         std::vector<long> hist = homeTripHistory(*data->state);   // the box's own four
         for (size_t i = 0; i < hist.size(); i++) { if (i) ss << ','; ss << hist[i]; }
+        // The same figures as the box writes them under Trip history (formatDistance, its grouping).
+        ss << "],\"trip_history_text\":[";
+        for (size_t i = 0; i < hist.size(); i++) {
+            if (i) ss << ',';
+            ss << '"' << jsonEscape(formatDistance(static_cast<double>(hist[i]), data->state->distance_km)) << '"';
+        }
     }
     ss << "],\"stage_logging\":" << (data->state->stage_logging ? "true" : "false")
        << ",\"sensor_logging\":" << (data->state->debug_logs_enabled ? "true" : "false")
@@ -513,6 +522,7 @@ std::string buildStateJson(AppData* data) {
        << ",\"tone_type_ahead\":" << data->state->tone_type_ahead
        << ",\"gauge_range\":" << data->state->gauge_range_s
        << ",\"reaction_offset_ms\":" << data->state->reaction_offset_ms
+       << ",\"reaction_text\":\"" << reactionText(data->state->reaction_offset_ms) << "\""
        << ",\"phone_beep_lead_ms\":" << data->state->phone_beep_lead_ms
        << ",\"bt_name\":\"" << jsonEscape(data->state->bluetooth_audio_name) << "\""
        << ",\"bt_known\":" << (data->state->bluetooth_audio_address.empty() ? "false" : "true")

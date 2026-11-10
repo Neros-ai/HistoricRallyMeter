@@ -7,12 +7,16 @@
 // the callers to the values they hand on; nothing in calculations.cpp knows about it.
 
 #include <cstdint>
+#include <string>
 #include "rally_state.h"
 
 const int REACTION_OFFSET_MAX_MS = 300;
 
 // Clamp a stored or typed figure to -300..+300.
 int clampReactionOffsetMs(long ms);
+
+// The figure as Settings writes it: "+0.25 s", "-0.10 s", "0.00 s" (box and phone alike).
+std::string reactionText(int ms);
 
 // The time the press is taken to have happened.
 int64_t pressTimeMs(int64_t press_ms, int offset_ms);

@@ -28,6 +28,7 @@
 struct WsClient {
     int fd = -1;
     std::string rx_buf;
+    std::string tx_buf;   // what the socket has not taken yet (it never blocks): sent in order, whole frames
 };
 
 struct WebServerState {
@@ -147,12 +148,22 @@ std::string wsEncodeText(const std::string& payload) {
     return frame;
 }
 
+// Largest frame a phone sends (an uploaded stage file is far smaller). A longer declared
+// length is a corrupt or hostile frame: it never completes, and the caller drops the client
+// once its buffer passes WS_MAX_RX_BUFFER.
+static const size_t WS_MAX_FRAME = 1u << 20;
+static const size_t WS_MAX_RX_BUFFER = 2u << 20;
+
+// One complete frame off the front of `data`. A text frame comes back in `out`; any other
+// complete frame (ping, pong, close, continuation) is consumed with `out` empty, so it can
+// never sit at the front of the buffer and stall every command behind it.
 bool wsDecodeText(const std::string& data, std::string& out, size_t& consumed) {
     consumed = 0;
+    out.clear();
     if (data.size() < 2) return false;
     unsigned char b0 = static_cast<unsigned char>(data[0]);
     unsigned char b1 = static_cast<unsigned char>(data[1]);
-    if ((b0 & 0x0F) != 0x01) return false;
+    const bool text = (b0 & 0x0F) == 0x01;
     bool masked = b1 & 0x80;
     size_t len = b1 & 0x7F;
     size_t pos = 2;
@@ -168,6 +179,7 @@ bool wsDecodeText(const std::string& data, std::string& out, size_t& consumed) {
             len = (len << 8) | static_cast<unsigned char>(data[2 + i]);
         pos = 10;
     }
+    if (len > WS_MAX_FRAME) return false;
     unsigned char mask[4] = {0, 0, 0, 0};
     if (masked) {
         if (data.size() < pos + 4) return false;
@@ -175,13 +187,14 @@ bool wsDecodeText(const std::string& data, std::string& out, size_t& consumed) {
         pos += 4;
     }
     if (data.size() < pos + len) return false;
+    consumed = pos + len;
+    if (!text) return true;
     out.resize(len);
     for (size_t i = 0; i < len; i++) {
         unsigned char c = static_cast<unsigned char>(data[pos + i]);
         if (masked) c ^= mask[i % 4];
         out[i] = static_cast<char>(c);
     }
-    consumed = pos + len;
     return true;
 }
 
@@ -194,13 +207,35 @@ static void closeClient(WsClient& c) {
     }
 }
 
+// A phone that has not read this much is gone or stalled: drop it (it reconnects and gets
+// the whole state again) rather than queue without end.
+static const size_t WS_MAX_TX_BUFFER = 1u << 20;
+
+// Send what the socket will take now and keep the rest for the next poll. A partial send used
+// to drop the rest of the frame, which broke every frame after it, and a full socket buffer
+// (a slow phone link) used to drop the phone.
+static void flushClient(WsClient& c) {
+    while (c.fd >= 0 && !c.tx_buf.empty()) {
+        ssize_t n = send(c.fd, c.tx_buf.data(), c.tx_buf.size(), MSG_NOSIGNAL);
+        if (n > 0) { c.tx_buf.erase(0, static_cast<size_t>(n)); continue; }
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) return;
+        closeClient(c);
+    }
+}
+
+// Queues the frame for every phone. Closed clients are only marked (fd -1) here and removed by
+// removeClosedClients: this runs while serviceWsClients walks the same list.
 static void broadcastAll(WebServerState* impl, const std::string& msg) {
-    std::string frame = wsEncodeText(msg);
+    const std::string frame = wsEncodeText(msg);
     for (auto& c : impl->clients) {
         if (c.fd < 0) continue;
-        ssize_t n = send(c.fd, frame.data(), frame.size(), MSG_NOSIGNAL);
-        if (n < 0) closeClient(c);
+        if (c.tx_buf.size() + frame.size() > WS_MAX_TX_BUFFER) { closeClient(c); continue; }
+        c.tx_buf += frame;
+        flushClient(c);
     }
+}
+
+static void removeClosedClients(WebServerState* impl) {
     impl->clients.erase(
         std::remove_if(impl->clients.begin(), impl->clients.end(),
                        [](const WsClient& c) { return c.fd < 0; }),
@@ -301,7 +336,7 @@ static bool handleHttpRequest(WebServerState* impl, int fd, const std::string& r
                  accept.c_str());
         send(fd, header, strlen(header), MSG_NOSIGNAL);
         setNonBlocking(fd);
-        impl->clients.push_back({fd, {}});
+        impl->clients.push_back(WsClient{fd, {}, {}});
         broadcastAll(impl, buildStateJson(impl->data));
         return true;
     }
@@ -345,6 +380,8 @@ static bool handleHttpRequest(WebServerState* impl, int fd, const std::string& r
 static void serviceWsClients(WebServerState* impl) {
     for (auto& client : impl->clients) {
         if (client.fd < 0) continue;
+        flushClient(client);   // what an earlier poll could not send
+        if (client.fd < 0) continue;
         char buf[4096];
         while (true) {
             ssize_t n = recv(client.fd, buf, sizeof(buf), 0);
@@ -359,22 +396,21 @@ static void serviceWsClients(WebServerState* impl) {
             }
             client.rx_buf.append(buf, static_cast<size_t>(n));
         }
+        if (client.rx_buf.size() > WS_MAX_RX_BUFFER) { closeClient(client); continue; }
 
         while (true) {
             std::string msg;
             size_t consumed = 0;
             if (!wsDecodeText(client.rx_buf, msg, consumed)) break;
             client.rx_buf.erase(0, consumed);
+            if (msg.empty()) continue;   // a control frame: nothing to act on
             if (webHandleCommand(impl->data, msg.c_str())) {
                 g_state_dirty = true;
                 broadcastAll(impl, buildStateJson(impl->data));
             }
         }
     }
-    impl->clients.erase(
-        std::remove_if(impl->clients.begin(), impl->clients.end(),
-                       [](const WsClient& c) { return c.fd < 0; }),
-        impl->clients.end());
+    removeClosedClients(impl);
 }
 
 static gboolean onListen(GIOChannel*, GIOCondition, gpointer user_data) {
@@ -513,6 +549,7 @@ void RallyWebServer::poll(int64_t now_ms) {
         g_state_dirty = false;
         broadcastAll(impl, buildStateJson(data_));
     }
+    removeClosedClients(impl);
 }
 
 std::string RallyWebServer::getWebUrl() const {

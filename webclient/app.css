@@ -280,7 +280,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .beep-row label.choice { flex: 0 0 auto; }
 /* Choice labels (tone 1 / 2, gauge range 1 / 2 / 3) may shrink: three of them at 6.5rem ran
    25px off a 390px portrait screen and let the whole page slide sideways. */
-.beep-row label:has(> input[type=radio]) { flex: 0 1 6.5rem; min-width: 0; white-space: nowrap; }
+.beep-row label:not(.choice):has(> input[type=radio]) { flex: 0 1 6.5rem; min-width: 0; white-space: nowrap; }   /* tone and gauge range rows only */
 .beep-row input[type="number"] { margin-left: auto; width: 5.5rem; background: #000; color: #fff;
                                  border: 1px solid #666; padding: 0.4rem; font-size: 1.2rem; }
 .beep-row input[type="checkbox"], .beep-row input[type="radio"] { width: 1.4rem; height: 1.4rem; }

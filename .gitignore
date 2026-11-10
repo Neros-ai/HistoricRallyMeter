@@ -46,10 +46,10 @@ test_debug_logs/
 # /build (their source lives in the wrapper repo's scripts/), the container's
 # home folders, a crash dump, config backups and verification screenshots at
 # the top level (tracked .png files are unaffected).
-box_relaunch.sh
-box_view.html
-.cache/
-.local/
-core
-rally_config.bak-*
+/box_relaunch.sh
+/box_view.html
+/.cache/
+/.local/
+/core
+/rally_config.bak-*
 /*.png
