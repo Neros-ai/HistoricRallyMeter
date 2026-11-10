@@ -584,8 +584,9 @@ bool webHandleCommand(AppData* data, const char* json) {
             else phoneKeyboard(data, output);
         }
         else if (strcmp(name, "wifi_use") == 0) {
-            char net[128];
-            if (!jsonFindString(json, "net", net, sizeof(net))) return false;
+            // Escape-aware: a network name may hold a quote or a backslash, which the phone sends escaped.
+            std::string net;
+            if (!jsonFindEscapedString(json, "net", &net) || net.empty() || net.size() > 127) return false;
             phoneWifiUse(data, net);
         } else return false;
         return true;

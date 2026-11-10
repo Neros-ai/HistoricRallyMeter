@@ -102,14 +102,6 @@
     }
   }
 
-  // Same figures as the box's segments page. Kilometres are two decimals
-  // (rounded). Metres stay whole, with thousands separators.
-  function formatDist(m) {
-    m = Number(m) || 0;
-    if (distanceKm) return (Math.trunc(m / 10) / 100).toFixed(2);
-    return Math.round(m).toLocaleString();
-  }
-
   // What an entry shows, and the metres to send back. Entries stay plain
   // numbers; the labels carry the thousands separators.
   function stageInput(m) {
@@ -133,12 +125,6 @@
     return Math.round(v);
   }
 
-  function showDist(el, m) {
-    if (!el) return;
-    el.textContent = formatDist(m);
-    el.dataset.unit = distanceKm ? 'km' : 'm';
-  }
-
   // True when the unit changed, so the caller can redraw figures that
   // were painted under the other unit.
   function useDistanceUnit(km) {
@@ -160,28 +146,12 @@
     return changed;
   }
 
-  function mmss(s) {
-    s = Math.max(0, Math.round(Number(s) || 0));
-    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
-  }
-
   // "hh:mm:ss.t" of an epoch time in the box's zone.
   function clockText(ms) {
     const d = new Date(ms + tzMin * 60000);
     const p = (n, w) => String(n).padStart(w || 2, '0');
     return p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()) + ':' + p(d.getUTCSeconds()) + '.' +
            Math.floor(d.getUTCMilliseconds() / 100);
-  }
-
-  // As the box: seconds alone under a minute, then m:ss, then h:mm:ss, with tenths.
-  function offsetText(ms) {
-    const tenths = Math.round(Math.abs(ms) / 100);
-    const total = Math.floor(tenths / 10), t = tenths % 10;
-    const p = (n) => String(n).padStart(2, '0');
-    const sign = ms < 0 ? '-' : '+';
-    if (total < 60) return sign + total + '.' + t;
-    if (total < 3600) return sign + Math.floor(total / 60) + ':' + p(total % 60) + '.' + t;
-    return sign + Math.floor(total / 3600) + ':' + p(Math.floor(total / 60) % 60) + ':' + p(total % 60) + '.' + t;
   }
 
   // The box's own live answers, from the telemetry frame (the state message only
@@ -209,10 +179,11 @@
 
     // Freeze stops the box counting distance, so these figures already hold.
     // The Navi figures are the box's own text (home.f: Total, Trip, row 3).
-    const hf = msg.home && msg.home.f;
+    // The phone page is served by the box itself, so these are always sent: nothing is worked out here.
+    const hf = (msg.home && msg.home.f) || ['', '', ''];
     const boxFig = (el, text) => { if (!el) return; el.textContent = text; el.dataset.unit = distanceKm ? 'km' : 'm'; };
-    if (hf) { boxFig($('trip-m'), hf[1]); boxFig($('total-m'), hf[0]); }
-    else { showDist($('trip-m'), msg.trip_m); showDist($('total-m'), msg.total_m); }
+    boxFig($('trip-m'), hf[1]);
+    boxFig($('total-m'), hf[0]);
     // Surrey: navi total in its own row, and the last time taken under Trip history.
     const sur = !!msg.surrey;
     const italianNow = Number(msg.rally_type) === 2;
@@ -221,7 +192,7 @@
     naviView.classList.toggle('rally-italian', italianNow);
     naviView.classList.toggle('rally-surrey', sur);
     $('time-taken-row').style.display = (sur && msg.time_taken) ? '' : 'none';
-    if (sur || italianNow) { if (hf) boxFig($('navi-m'), hf[2]); else showDist($('navi-m'), msg.navi_m); }
+    if (sur || italianNow) boxFig($('navi-m'), hf[2]);
     if (sur) {
       $('time-taken-label').textContent = 'time taken ss' + (Number(msg.time_taken_stage) >= 1 ? msg.time_taken_stage : '-');
       $('time-taken').textContent = msg.time_taken || '';
@@ -243,14 +214,13 @@
     if (ic) {
       $('next-m').textContent = ic.km;
       delete $('next-m').dataset.unit;
-    } else if (hf && !sur && !italianNow) {
+    } else if (!sur && !italianNow) {
       $('next-m').textContent = hf[2];   // greek row 3: the box's own figure ("---" with no segment)
       if (hf[2] === '---') delete $('next-m').dataset.unit; else $('next-m').dataset.unit = distanceKm ? 'km' : 'm';
-    } else if (msg.next_m === null || msg.next_m === undefined) {
-      $('next-m').textContent = '---';
-      delete $('next-m').dataset.unit;
     } else {
-      showDist($('next-m'), msg.next_m);
+      $('next-m').textContent = msg.next_text || '---';   // the box's own text
+      if (msg.next_text && msg.next_text !== '---') $('next-m').dataset.unit = distanceKm ? 'km' : 'm';
+      else delete $('next-m').dataset.unit;
     }
     // Italian count down: the figure is orange, red once the line has gone by.
     // The next substage key stays as it is.
@@ -258,9 +228,9 @@
     $('next-s').textContent = (ic && ic.s) ? ic.s : '';
     $('next-s').style.display = (ic && ic.s) ? '' : 'none';
     $('next-s').style.color = (ic && ic.s_past) ? '#ff2626' : (ic && ic.s ? '#ffa500' : '');
-    const hel = msg.home && msg.home.el;   // the box's elapsed texts
-    $('total-el').textContent = hel ? hel[0] : mmss(msg.total_s);
-    $('trip-el').textContent = hel ? hel[1] : mmss(msg.trip_s);
+    const hel = (msg.home && msg.home.el) || ['', ''];   // the box's elapsed texts
+    $('total-el').textContent = hel[0];
+    $('trip-el').textContent = hel[1];
     $('speed-change').textContent = msg.speed_change || '';
     // The same words as the box keys (readoutKeyName), including the line break.
     const keyLabel = (id, text) => { if ($(id) && text) $(id).textContent = text; };
@@ -279,24 +249,12 @@
     if (tripAvgWrap) tripAvgWrap.style.display = '';
     if ($('drv-trip-cap')) $('drv-trip-cap').textContent = page === 3 ? 'sub' : 'avg';
     if ($('drv-total-cap')) $('drv-total-cap').innerHTML = page === 1 ? 'sub<br>avg' : 'avg';   // a pc / pm average is the sub's
-    const shownD = drv.shown || null;   // the box's driver page distances
-    if (shownD) { boxFig($('drv-total-m'), shownD.total_dist); if (page !== 1) boxFig($('drv-trip-m'), shownD.trip_dist); }
-    else if (page === 1) showDist($('drv-total-m'), drv.sector_m);
-    else {
-      showDist($('drv-trip-m'), msg.trip_m);
-      showDist($('drv-total-m'), msg.total_m);
-    }
-    // Telemetry averages are already in the box's speed units. Italian navi
-    // shows the live Total and Trip averages in km/h. A pc / pm keeps drv.avg.
-    const avgShown = (v, asKph) => {
-      const n = Number(v || 0);
-      if (asKph) return (units === 'mph' ? n / 0.621371 : n).toFixed(2);
-      return (n * (units === 'mph' ? 0.621371 : 1)).toFixed(1);
-    };
-    // The box's driver page averages, word for word (2 dp; italian in km/h). Never converted here.
-    const shown = drv.shown || null;
-    $('drv-trip-avg').textContent = shown ? shown.trip_avg : (page === 3 && drv.sub ? drv.sub : avgShown(msg.trip_avg_kph, page === 2));
-    $('drv-total-avg').textContent = shown ? shown.total_avg : ((page === 1 && drv.avg) ? drv.avg : avgShown(msg.total_avg_kph, page === 2));
+    // The box's driver page distances and averages, word for word (2 dp; italian in km/h).
+    const shown = drv.shown || {};
+    boxFig($('drv-total-m'), shown.total_dist || '');
+    if (page !== 1) boxFig($('drv-trip-m'), shown.trip_dist || '');
+    $('drv-trip-avg').textContent = shown.trip_avg || '';
+    $('drv-total-avg').textContent = shown.total_avg || '';
     document.querySelectorAll('.avg-unit').forEach((e) => { e.textContent = italianFig ? 'kph' : units; });
     const totalUnit = document.querySelector('#drv-box-total .avg-unit');
     if (totalUnit) totalUnit.style.display = page === 1 ? 'none' : '';   // a pc / pm shows "sub avg" with no unit
@@ -349,14 +307,13 @@
     if (document.activeElement !== sp && msg.stage_no >= 1) sp.value = String(msg.stage_no);
 
     // Time tab
-    const rallyMs = Number(msg.computer_ms) + Number(msg.rally_offset_ms || 0);
-    $('t-rally').textContent = msg.time_rally || clockText(rallyMs);   // the box's own text
+    $('t-rally').textContent = msg.time_rally || '';   // the box's own text
     // The start-at-next-minute key rolls over with the clock, as the box's does (same rally time, same minute).
     if ($('flag-minute-time')) {
       $('flag-minute-time').textContent = msg.next_minute || '';
     }
-    $('t-computer').textContent = msg.time_computer || clockText(Number(msg.computer_ms));
-    $('t-offset').textContent = msg.time_offset || offsetText(Number(msg.rally_offset_ms) || 0);
+    $('t-computer').textContent = msg.time_computer || '';
+    $('t-offset').textContent = msg.time_offset || '';
     $('t-date').textContent = msg.date_text || '';
     const phoneEl = $('t-phone');
     phoneEl.textContent = clockText(Date.now() - 0);   // this phone's clock, in the box's zone
@@ -445,8 +402,7 @@
     }
     if ($('phone-lead')) $('phone-lead').textContent = (Number(state.phone_beep_lead_ms) || 0) + ' ms';
     if ($('reaction-offset')) {   // read-only: set on the box
-      const ro = Number(state.reaction_offset_ms) || 0;
-      $('reaction-offset').textContent = (ro < 0 ? '\u2212' : ro > 0 ? '+' : '') + (Math.abs(ro) / 1000).toFixed(2) + ' s';
+      $('reaction-offset').textContent = state.reaction_text || '';   // the box's own text
     }
     setIf($('set-stage-log'), (el) => { el.checked = !!state.stage_logging; });
     setIf($('set-sensor-log'), (el) => { el.checked = !!state.sensor_logging; });
@@ -477,10 +433,10 @@
     frozen = !!state.frozen;
     $('btn-freeze').classList.toggle('lit', frozen);
     setWhoop(!!(lastTelemetry && lastTelemetry.reverse) || frozen);
-    const hist = (state.trip_history || []);
+    const hist = (state.trip_history_text || []);   // the box's own figures
     // One span per figure: dots between them in portrait, one per line in landscape (as the box lists them).
     $('trip-history').innerHTML = hist.length
-      ? hist.map((m) => '<span class="th">' + formatDist(m) + '</span>').join('<span class="thsep"> \u00b7 </span>') : '';
+      ? hist.map((t) => '<span class="th">' + t + '</span>').join('<span class="thsep"> \u00b7 </span>') : '';
     const sa = state.autostart || 'none';
     const armed = sa !== 'none';
     if (lastTelemetry && lastTelemetry.stage_panel) applyAutoLine();
@@ -491,12 +447,6 @@
       $('auto-time').textContent = armed ? sa : (state.start_time || '');
     }
     $('btn-flag-auto').classList.toggle('lit', !!state.autostart_on);
-  }
-
-  function hms(seconds) {
-    const t = Math.max(0, Math.round(Number(seconds) || 0));
-    const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = t % 60;
-    return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
   }
 
   function renderSector(msg) {
@@ -793,8 +743,7 @@
     setIf($('seg-pick'), String(state.edit_slot || 1));
     setIf($('seg-start-time'), state.start_time || '');
     setIf($('seg-start-dist'), state.start_dist_text || '');
-    const durS = Number(state.sector_duration_s);
-    setIf($('seg-duration'), durS > 0 ? hms(durS) : '');
+    setIf($('seg-duration'), state.duration_text || '');   // the box's own h:mm:ss
     if ($('seg-duration-avg')) $('seg-duration-avg').textContent = state.avg_text || '';
     setIf($('seg-first-n'), state.first_number);
     setIf($('seg-first-from'), state.first_from_m);

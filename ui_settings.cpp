@@ -133,11 +133,6 @@ GtkWidget* seg(AppData* d, Setting id, const char* a, const char* b, int active,
 // RB-SET-12: reaction time offset, - / figure / +, 0.01 s a press, -0.30..+0.30 s.
 GtkWidget* g_reactionEntry = nullptr;
 
-std::string reactionText(int ms) {
-    char b[24];
-    snprintf(b, sizeof(b), "%s%d.%02d s", ms < 0 ? "-" : (ms > 0 ? "+" : ""), std::abs(ms) / 1000, (std::abs(ms) % 1000) / 10);
-    return b;
-}
 
 void onReactionStep(GtkWidget* w, gpointer) {
     AppData* d = static_cast<AppData*>(g_object_get_data(G_OBJECT(w), "data"));

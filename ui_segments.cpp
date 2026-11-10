@@ -160,8 +160,6 @@ RallyState::MemorySlot& slotOf(AppData* d) { return d->state->memory_slots[editS
 
 void markCurrentRow(AppData* d, bool scroll);
 
-void commitStage(AppData* d) { stageEditCommit(d); }
-
 // Column headings follow the rally type: greek box | chg | auto, italian row | type | ref.
 void applyHeadings(AppData* d) {
     SegUi* u = ui(d);

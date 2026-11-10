@@ -2,6 +2,8 @@
 #include "sector.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 
 int clampReactionOffsetMs(long ms) {
     return static_cast<int>(std::max<long>(-REACTION_OFFSET_MAX_MS, std::min<long>(REACTION_OFFSET_MAX_MS, ms)));
@@ -51,4 +53,10 @@ int64_t boundaryMmAtPress(int64_t driven_mm, double speed_mps, int offset_ms) {
     const int64_t back = pressBackMm(speed_mps, offset_ms);
     if (back == 0) return driven_mm;   // offset zero (or standing still): exactly today's figure
     return std::max<int64_t>(0, driven_mm - back);
+}
+
+std::string reactionText(int ms) {
+    char b[24];
+    snprintf(b, sizeof(b), "%s%d.%02d s", ms < 0 ? "-" : (ms > 0 ? "+" : ""), std::abs(ms) / 1000, (std::abs(ms) % 1000) / 10);
+    return b;
 }

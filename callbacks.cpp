@@ -1525,10 +1525,7 @@ void updateCalibrationDisplay(AppData* data) {
         cntr_a = cntr1_diff;
     }
     
-    long total_m = countsToMm(cntr_a, data->state->calibration) / 1000;
-    gtk_label_set_text(data->totalDistCalLabel,
-        calibrationReadoutLine(total_m, cntr_a, cntr1_diff, cntr2_diff).c_str());
-
+    // The page shows the distance alone (its sensor counts have their own line below).
     char buf[160];
     snprintf(buf, sizeof(buf), "%.1f", countsToMeters(cntr_a, data->state->calibration));
     gtk_label_set_text(data->totalDistCalLabel, buf);
