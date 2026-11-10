@@ -881,13 +881,11 @@
     sel.innerHTML = '';
     for (let n = 1; n <= 99; n++) sel.appendChild(new Option(String(n), String(n)));
   });
+  // One stage at a time, blanks included, as the box's Navi - / + (RB-NAV-64).
   function stageStep(dir) {
     if (!okToChangeStage()) return;
-    const cur = Number($('stage-pick').value) || 1;
-    const pop = (lastState && lastState.memory_populated) || [];
-    for (let s = cur + dir; s >= 1 && s <= 99; s += dir) {
-      if (pop[s - 1]) { send({ type: 'memory_recall', slot: s }); return; }
-    }
+    const s = (Number($('stage-pick').value) || 1) + dir;
+    if (s >= 1 && s <= 99) send({ type: 'memory_recall', slot: s });
   }
   $('stage-minus').addEventListener('click', () => stageStep(-1));
   $('stage-plus').addEventListener('click', () => stageStep(1));
