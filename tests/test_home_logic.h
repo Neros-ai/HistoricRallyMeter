@@ -188,6 +188,17 @@ public:
                 && s.trip_start_cntr1 == 1100 && s.trip_start_time_ms == 5000;
         });
 
+        suite->addTest("a trip of 0 is not recorded in the history", []() {
+            RallyState s;
+            s.counters = false;
+            s.calibration = 1000000;
+            s.trip_start_cntr1 = 100;
+            resetTrip(s, 1100, 0, 5000);          // 1000 m: recorded
+            resetTrip(s, 1100, 0, 6000);          // pressed again at 0: not
+            resetTrip(s, 1100, 0, 7000);
+            return s.trip_history_m == "1000" && s.trip_start_time_ms == 7000;
+        });
+
         // The history records what the readout showed, a negative one included
         // (reversing past the start reads below zero).
         suite->addTest("trip history records what the readout showed, a negative one with its sign", []() {

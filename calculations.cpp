@@ -1134,7 +1134,9 @@ void rebaseTripDistance(RallyState& state, uint64_t c1, uint64_t c2) {
         state.trip_start_cntr1, state.trip_start_cntr2);
     long trip_m = adjustedDistanceMetersMm(
         countsToMm(trip_counts, state.calibration), state.trip_distance_adjust_mm);
-    state.trip_history_m = pushTripHistory(state.trip_history_m, trip_m);
+    // A Trip of 0 is not worth a place in the history (a second reset, two rows changing at
+    // the same point).
+    if (trip_m != 0) state.trip_history_m = pushTripHistory(state.trip_history_m, trip_m);
     state.trip_start_cntr1 = c1;
     state.trip_start_cntr2 = c2;
     state.trip_distance_adjust_mm = 0;

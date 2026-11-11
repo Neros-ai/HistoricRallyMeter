@@ -8,6 +8,7 @@
 #include "counter_poller.h"
 #include "tone_generator.h"
 #include "callbacks.h"
+#include "stage_phase.h"
 #include "simple_tone.h"
 #include "arrow_tone.h"
 #include <iomanip>
@@ -95,6 +96,12 @@ static void computeDriverShown(AppData* data) {
         sh.tripAvg = avgText(data->driverTripAvg);
     }
     // Total and Trip distances: a pc / pm shows the sector's distance in the Total row.
+    // An early departure counting down: distance already counts but no stage time has run, so
+    // there is no average to show yet.
+    if (stagePhase(*data->state) == StagePhase::EarlyCountdown) {
+        sh.totalAvg = "--.--";
+        sh.tripAvg = "--.--";
+    }
     sh.totalDist = formatDistance(page == AppData::DP_ITALIAN_TRIAL ? v.sectorTotalM : data->driverTotalM, data->state->distance_km);
     sh.tripDist = formatDistance(data->driverTripM, data->state->distance_km);
 }
@@ -865,7 +872,8 @@ void updateDriverDisplay(AppData* data) {
         data->state->trip_distance_adjust_mm);
     trip_speed = averageSpeedForDisplay(trip_speed, holdTimeErrorAtZero);
     data->driverTripAvg = trip_speed;
-    gtk_label_set_text(data->tripSpeedLabel, averageSpeedText(trip_speed).c_str());   // 2 dp
+    const bool earlyCountdown = stagePhase(*data->state) == StagePhase::EarlyCountdown;
+    gtk_label_set_text(data->tripSpeedLabel, earlyCountdown ? "--.--" : averageSpeedText(trip_speed).c_str());   // 2 dp
     
     // Total average speed
     int64_t total_count_diff = calculateDistanceCounts(*data->state,
@@ -876,7 +884,7 @@ void updateDriverDisplay(AppData* data) {
         data->state->total_distance_adjust_mm);
     total_speed = averageSpeedForDisplay(total_speed, holdTimeErrorAtZero);
     data->driverTotalAvg = total_speed;
-    gtk_label_set_text(data->totalSpeedLabel, averageSpeedText(total_speed).c_str());   // 2 dp
+    gtk_label_set_text(data->totalSpeedLabel, earlyCountdown ? "--.--" : averageSpeedText(total_speed).c_str());   // 2 dp
 
     // Total/Trip distance, reusing the count differences just computed for
     // the average speeds above -- no additional counter reads. Applies the
@@ -923,8 +931,10 @@ void updateDriverDisplay(AppData* data) {
     }
 
     if (data->state->segment_current_number < 0) data->runSegIndex = -2;   // no stage: the next one starts a new run
-    // Target speed and ahead/behind
-    if (data->state->segment_current_number >= 0 && 
+    // Target speed and ahead/behind. A finished stage is no longer on the gauge: the display
+    // goes to the navigation page (no needle, no tone) as it does after an abort, in every rally
+    // type. A surrey stage reopened by prev comes back here.
+    if (data->state->segment_current_number >= 0 && !data->state->stage_complete &&
         data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
         const Segment& seg = data->state->stage_segments[data->state->segment_current_number];
         double target_kph = seg.target_speed_kph;

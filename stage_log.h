@@ -31,6 +31,12 @@ public:
     // when none has been closed since the app started, or when time_taken is empty.
     void amendTimeTaken(const std::string& time_taken);
 
+    // prev reopened a stage whose finish had been pressed (surrey): the log just closed is
+    // carried on in the same file, without the "time taken" line the taken-back press wrote, so
+    // the stage stays in one file that ends with the real finish only. False (and nothing
+    // changes) when a log is running or none has been closed since the app started.
+    bool resume();
+
     bool isRunning() const { return running; }
     const std::string& path() const { return file_path; }
     size_t buffered() const { return buffer.size(); }

@@ -169,7 +169,8 @@ std::string buildTelemetryJson(AppData* data) {
     const bool hold_at_zero = autoStartHoldActive(data);
 
     double ahead_behind_s = 0.0;
-    if (data->state->segment_current_number >= 0 &&
+    // A finished stage is off the gauge (ui_driver.cpp), so it has no figure here either.
+    if (data->state->segment_current_number >= 0 && !data->state->stage_complete &&
         data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
         // The driver gauge's own figure (italian: the pc / pm error, at rest elsewhere).
         ahead_behind_s = gaugeAheadSeconds(*data->state, current_poll.cntr1, current_poll.cntr2,

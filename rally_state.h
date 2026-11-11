@@ -212,8 +212,15 @@ public:
     int64_t time_taken_ms = -1;
     // Surrey: the stage number that result belongs to (0 none), so loading another stage keeps the name.
     int time_taken_stage = 0;
-    // Surrey: rally ms of the finish press, 0 = none. Not persisted.
+    // Surrey: rally ms of the finish press, 0 = none. Saved, so a restart knows it was made.
     int64_t surrey_finish_at_ms = 0;
+    // Surrey: the time taken the stage got when its roadbook distance ran out (ms), -1 = it did
+    // not end on distance. Kept so prev can take a late finish press back to it.
+    int64_t surrey_distance_end_ms = -1;
+    // Surrey: the time taken (and its stage) that was on Home when this stage started, so prev
+    // reopening a pressed finish puts it back. -1 / 0 = none.
+    int64_t prev_time_taken_ms = -1;
+    int prev_time_taken_stage = 0;
     // Distance units: false 0,000 (metres), true 00.00 (km, two decimals).
     bool distance_km = false;
     // Measure type: true AB,BC (the A-B, B-C zero key shows on the greek navi page), false AB,AC.

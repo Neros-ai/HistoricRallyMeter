@@ -863,6 +863,9 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
   #view-cal .crow { flex-wrap: nowrap; margin: 0.35rem 0; }
   #view-cal .brk { display: none; }
   #view-cal .crow > .key, #view-cal .crow > .pair { margin-left: auto; }
+  /* Room under the last line, so everything scrolls clear of the fixed menu key (3.1rem tall
+     with its gap). */
+  #view-set, #view-time, #view-cal { padding-bottom: 4rem; }
 
   #view-set {
     display: grid; grid-template-columns: 1fr 1fr; column-gap: 1.5rem; align-content: start;

@@ -89,6 +89,13 @@ bool scheduledAutostartArmed(const AppData& data) {
            data.state->auto_slot == data.state->last_memory_slot;
 }
 
+// The auto key is lit whenever an autostart is armed for the stage on show, of either kind (the
+// phone lights its key the same way). What a press does is still scheduledAutostartArmed's.
+static bool autoKeyLit(const AppData& data) {
+    return scheduledAutostartArmed(data) ||
+           (data.state->auto_start_rally_time_s != 0 && data.state->auto_start_early_departure);
+}
+
 // Chequered flag on a pole, w wide.
 // `tint`: draw the flag for a lit key (white face): black, with light grey squares.
 void drawFlag(cairo_t* cr, double x, double y, double w, double h, bool tint = false) {
@@ -251,9 +258,9 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
     case FLAG_SCHED: {
         const int ww = width;
         if (kind == FLAG_SCHED) {
-            // Reversed (black on a white key, see setLit) while an autostart at the loaded
-            // stage's Segments start time is armed.
-            const bool armed = scheduledAutostartArmed(*data);
+            // Reversed (black on a white key, see setLit) while an autostart is armed for the
+            // stage on show, of either kind.
+            const bool armed = autoKeyLit(*data);
             drawFlag(cr, ww / 2.0 - 20, 1, 40, 30, armed);
             if (armed) setColour(cr, 0.0, 0.0, 0.0); else white(cr);
             drawText(cr, "auto", ww / 2.0, 50, 24, CENTRE);
@@ -829,10 +836,10 @@ void updateHomeDisplay(AppData* data) {
 
     // The scheduled key redraws when its armed state changes.
     {
-        const std::string cap = scheduledAutostartArmed(*data) ? "armed" : "off";
+        const std::string cap = autoKeyLit(*data) ? "armed" : "off";
         if (cap != h->schedState) {
             h->schedState = cap;
-            setLit(gtk_widget_get_parent(h->schedArea), scheduledAutostartArmed(*data));
+            setLit(gtk_widget_get_parent(h->schedArea), autoKeyLit(*data));
             markDirty(h->schedArea);
         }
     }
