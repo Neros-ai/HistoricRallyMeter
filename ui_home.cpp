@@ -258,9 +258,9 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
     case FLAG_SCHED: {
         const int ww = width;
         if (kind == FLAG_SCHED) {
-            // Reversed (black on a white key, see setLit) while an autostart at the loaded
-            // stage's Segments start time is armed.
-            const bool armed = scheduledAutostartArmed(*data);
+            // Reversed (black on a white key, see setLit) while an autostart is armed for the
+            // stage on show, of either kind.
+            const bool armed = autoKeyLit(*data);
             drawFlag(cr, ww / 2.0 - 20, 1, 40, 30, armed);
             if (armed) setColour(cr, 0.0, 0.0, 0.0); else white(cr);
             drawText(cr, "auto", ww / 2.0, 50, 24, CENTRE);
