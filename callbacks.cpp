@@ -711,24 +711,20 @@ void performAutoStart(AppData* data) {
         return;
     }
     // Ordinary autostart: distance and clock both zero at the appointed time.
-    performStageGo(data, false);   // an autostart is the clock, not a press: no reaction offset
-    data->state->auto_fired_time_s = armed_time_s;   // after performStageGo, which drops it
-    data->state->started_by_auto = true;
-    // Saved again: performStageGo wrote the file before these two were set, and a restart
-    // mid-stage must still read "auto".
-    ConfigFile::save(*data->state);
-    notifyWebState(data);
+    // An autostart is the clock, not a press: no reaction offset. The armed moment goes in with
+    // it, so the one save performStageGo makes already reads "auto" for a restart mid-stage.
+    performStageGo(data, false, armed_time_s);
 }
 
-void performStageGo(AppData* data, bool press) {
+void performStageGo(AppData* data, bool press, uint64_t auto_armed_time_s) {
     // RB-SET-12: read the speed first -- zeroTimeBaselines resets the smoothed speed.
     const double start_speed_mps = reactionSpeedNow(data);
     // The moment of the press is the stage's start time, shown on Home like an
-    // autostart's. (performAutoStart overwrites this with the armed moment.)
+    // autostart's. (An autostart's armed moment replaces this below.)
     data->state->auto_fired_time_s = autoStartSecondsFromTargetMs(getRallyTime_ms(*data->state),
                                                          getAutoStartEpochMs());
     data->state->auto_slot = data->state->last_memory_slot;
-    data->state->started_by_auto = false;   // a start now; performAutoStart sets it after
+    data->state->started_by_auto = false;   // a start now; an autostart sets it below
     // Distance and clock together: this is the ordinary "start now" case.
     zeroDistanceBaselines(data);
     zeroTimeBaselines(data);
@@ -756,6 +752,10 @@ void performStageGo(AppData* data, bool press) {
     // minute after the crew started it by hand.
     data->state->auto_start_rally_time_s = 0;
     data->state->auto_start_early_departure = false;
+    if (auto_armed_time_s != 0) {   // fired by an autostart: its appointed time, not this tick
+        data->state->auto_fired_time_s = auto_armed_time_s;
+        data->state->started_by_auto = true;
+    }
 
     ConfigFile::save(*data->state);
     notifyWebState(data);
@@ -1138,7 +1138,12 @@ void on_next_press(GtkWidget* widget, gpointer user_data) {
     if (!nextKeyEnabled(*data->state)) return;
     // Surrey: next on the last row is the finish landmark.
     // RB-SET-12: the finishing press is at a point; taken back by the reaction offset.
+    const bool ended_on_distance = data->state->stage_complete;
     if (applySurreyFinish(*data->state, pressTimeMs(getRallyTime_ms(*data->state), data->state->reaction_offset_ms))) {
+        // The stage had already ended on distance and its log was closed with that time: the
+        // press is the real finish, so the log's time taken is made to match it.
+        if (ended_on_distance && data->stageLog)
+            data->stageLog->amendTimeTaken(surreyLogTimeTaken(*data->state));
         ConfigFile::save(*data->state);
         notifyWebState(data);
         return;

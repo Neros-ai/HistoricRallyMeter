@@ -28,6 +28,7 @@ static bool exists(const std::string& path) {
 
 bool StageLog::start(const std::string& logs_dir, int64_t now_ms, int stage_number) {
     stop();
+    closed_path.clear();
     mkdir(logs_dir.c_str(), 0755);   // fine if it already exists
     // DebugLog::fileNameFor gives "yyyy-mm-dd_hh-mm-ss.csv".
     const std::string stem = "stage" + std::to_string(stage_number) + "_" + DebugLog::fileNameFor(now_ms);
@@ -72,7 +73,30 @@ void StageLog::stop(const std::string& time_taken) {
         if (out) out << "time taken," << time_taken << '\n';
     }
     running = false;
+    closed_path = file_path;
     file_path.clear();
+}
+
+void StageLog::amendTimeTaken(const std::string& time_taken) {
+    if (running || closed_path.empty() || time_taken.empty()) return;
+    std::vector<std::string> rows;
+    {
+        std::ifstream in(closed_path);
+        if (!in) return;
+        std::string row;
+        while (std::getline(in, row))
+            if (row.compare(0, 11, "time taken,") != 0) rows.push_back(row);
+    }
+    // Written beside the log and renamed over it, so a power cut cannot leave half a file.
+    const std::string tmp = closed_path + ".tmp";
+    {
+        std::ofstream out(tmp, std::ios::out | std::ios::trunc);
+        if (!out) return;
+        for (const std::string& row : rows) out << row << '\n';
+        out << "time taken," << time_taken << '\n';
+        if (!out.flush()) { std::remove(tmp.c_str()); return; }
+    }
+    if (std::rename(tmp.c_str(), closed_path.c_str()) != 0) std::remove(tmp.c_str());
 }
 
 std::string logKind(const std::string& name) {

@@ -74,9 +74,9 @@ void drawWatch(cairo_t* cr, double x, double y, double size, bool filled_white) 
     cairo_fill(cr);
 }
 
-// The stage-go key turns into stage abort only once there is a stage to abort.
-// A scheduled (on-the-clock) autostart that has not fired is not one: nothing is
-// live until its time, so the key stays "now" (pressing it starts at once).
+// The stage-go key reads "stage abort" only while there is a stage to abort: one running, or an
+// early-departure start counting down (see goKeyAborts). A finished stage and a scheduled start
+// still waiting with nothing running both leave it "go" (pressing it starts at once).
 bool homeStageAbortable(const RallyState& st) {
     return goKeyAborts(st);
 }
@@ -361,8 +361,8 @@ void onNextMinute(GtkWidget* w, gpointer user_data) {
     startStageAtNextMinute(data);
 }
 
-// Stage go now -- or, once a stage is armed or running, stage abort. Ending a
-// stage takes a confirm: one stray tap must not do it.
+// Stage go now -- or, while a stage is running or an early departure counts down, stage abort.
+// Ending a stage takes a confirm: one stray tap must not do it.
 void onLateArrival(GtkWidget* w, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     if (homeStageAbortable(*data->state)) {
@@ -837,7 +837,7 @@ void updateHomeDisplay(AppData* data) {
         }
     }
 
-    // The stage-go key turns into stage abort while a stage is armed or running.
+    // The stage-go key turns into stage abort while there is a stage to abort (goKeyAborts).
     {
         const bool abortable = homeStageAbortable(*data->state);
         if (abortable != h->goWasAbort) {

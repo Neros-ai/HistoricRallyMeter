@@ -26,6 +26,11 @@ public:
     // time_taken (surrey): written as a last "time taken,<text>" line when not empty.
     void stop(const std::string& time_taken = "");
 
+    // A finish press after the stage ended on distance (surrey): the "time taken" line of the
+    // log just closed is replaced with the press's figure. Does nothing while a log is running,
+    // when none has been closed since the app started, or when time_taken is empty.
+    void amendTimeTaken(const std::string& time_taken);
+
     bool isRunning() const { return running; }
     const std::string& path() const { return file_path; }
     size_t buffered() const { return buffer.size(); }
@@ -41,6 +46,7 @@ private:
 
     bool running = false;
     std::string file_path;
+    std::string closed_path;   // the last log stopped, for amendTimeTaken
     std::vector<std::string> buffer;
 };
 

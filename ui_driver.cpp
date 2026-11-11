@@ -1232,7 +1232,12 @@ void updateDriverDisplay(AppData* data) {
             // clock starts here.
             performAutoStart(data);
         } else {
+            // The armed time has gone by without firing (the rally clock was set forward past it,
+            // or the display stalled through the trigger window). As at startup: dropped, idle as
+            // after an abort, never a late start -- the crew press stage go.
             if (data->countdownContainer) gtk_widget_hide(data->countdownContainer);
+            fprintf(stderr, "[INFO] Autostart time passed without firing: dropped\n");
+            performAbortStage(data);
         }
     } else {
         // No autostart pending at all: the whole block goes, Early Departure

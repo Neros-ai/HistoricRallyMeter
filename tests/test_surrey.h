@@ -52,6 +52,31 @@ public:
             return ok && c.time_taken_stage == 0 && c.time_taken_ms == -1 && c.surrey_finish_at_ms == 0;
         });
 
+        suite->addTest("a finish press survives a restart: it is not offered again", []() {
+            const char* path = "test_surrey_finish_saved.json";
+            RallyState a;
+            a.rally_type = 1;
+            a.last_memory_slot = 1;
+            a.stage_segments.resize(1);
+            a.segment_current_number = 0;
+            a.stage_complete = false;
+            a.total_start_time_ms = 1000;
+            if (!applySurreyFinish(a, 561600)) return false;
+            ConfigFile::save(a, path);
+            RallyState b;
+            b.rally_type = 1;
+            ConfigFile::load(b, path);
+            std::remove(path);
+            // What a restart restores of the finished stage, as main does from the saved file.
+            b.last_memory_slot = 1;
+            b.stage_segments.resize(1);
+            b.segment_current_number = 0;
+            b.stage_complete = true;
+            return b.surrey_finish_at_ms == 561600 && b.time_taken_ms == 560600
+                && !surreyFinishAvailable(b) && !applySurreyFinish(b, 900000)
+                && b.time_taken_ms == 560600;
+        });
+
         suite->addTest("stage start leaves navi total", []() {
             RallyState s; s.rally_type = 1; s.calibration = 1000000;
             s.odometer_start_cntr1 = s.odometer_start_cntr2 = 0;
