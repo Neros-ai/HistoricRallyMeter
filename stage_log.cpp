@@ -77,26 +77,41 @@ void StageLog::stop(const std::string& time_taken) {
     file_path.clear();
 }
 
-void StageLog::amendTimeTaken(const std::string& time_taken) {
-    if (running || closed_path.empty() || time_taken.empty()) return;
+// The closed log without its "time taken" line, written beside it and renamed over it.
+static bool rewriteWithoutTimeTaken(const std::string& path, const std::string& time_taken) {
     std::vector<std::string> rows;
     {
-        std::ifstream in(closed_path);
-        if (!in) return;
+        std::ifstream in(path);
+        if (!in) return false;
         std::string row;
         while (std::getline(in, row))
             if (row.compare(0, 11, "time taken,") != 0) rows.push_back(row);
     }
-    // Written beside the log and renamed over it, so a power cut cannot leave half a file.
-    const std::string tmp = closed_path + ".tmp";
+    const std::string tmp = path + ".tmp";
     {
         std::ofstream out(tmp, std::ios::out | std::ios::trunc);
-        if (!out) return;
+        if (!out) return false;
         for (const std::string& row : rows) out << row << '\n';
-        out << "time taken," << time_taken << '\n';
-        if (!out.flush()) { std::remove(tmp.c_str()); return; }
+        if (!time_taken.empty()) out << "time taken," << time_taken << '\n';
+        if (!out.flush()) { std::remove(tmp.c_str()); return false; }
     }
-    if (std::rename(tmp.c_str(), closed_path.c_str()) != 0) std::remove(tmp.c_str());
+    if (std::rename(tmp.c_str(), path.c_str()) != 0) { std::remove(tmp.c_str()); return false; }
+    return true;
+}
+
+bool StageLog::resume() {
+    if (running || closed_path.empty()) return false;
+    if (!rewriteWithoutTimeTaken(closed_path, "")) return false;
+    file_path = closed_path;
+    closed_path.clear();
+    buffer.clear();
+    running = true;
+    return true;
+}
+
+void StageLog::amendTimeTaken(const std::string& time_taken) {
+    if (running || closed_path.empty() || time_taken.empty()) return;
+    rewriteWithoutTimeTaken(closed_path, time_taken);
 }
 
 std::string logKind(const std::string& name) {

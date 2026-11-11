@@ -33,7 +33,10 @@ bool nextKeyEnabled(const RallyState& s) {
 }
 
 bool prevKeyEnabled(const RallyState& s, uint64_t c1, uint64_t c2) {
-    return prevAvailable(s) || sectorUndoAvailable(s) || surreyUndoAvailableNow(s, c1, c2);
+    // A speed change is taken back only while the stage runs; a finished stage keeps prev for a
+    // pressed surrey finish alone.
+    return (!s.stage_complete && prevAvailable(s)) || sectorUndoAvailable(s) ||
+           surreyUndoAvailableNow(s, c1, c2);
 }
 
 bool dropMissedAutoStart(RallyState& s, int64_t now_rally_ms, int64_t epoch_ms) {

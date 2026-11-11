@@ -9,7 +9,7 @@
   function renderArrival() {
     $('arr-unit').textContent = units === 'mph' ? 'mph' : 'kph';
     $('arr-kph').textContent = lastArrival
-      ? (lastArrival.text != null ? lastArrival.text : String(lastArrival.kph)) : '--';   // the box's own figure
+      ? (lastArrival.text != null ? lastArrival.text : String(lastArrival.kph)) : '';   // the box's own figure; blank as the box with none
   }
   // The last state message, kept so a units change arriving on telemetry can
   // re-title the stage panel without waiting for the next state broadcast.
@@ -294,7 +294,7 @@
     // Stage arrival
     lastArrival = (msg.stage_panel ? msg.stage_panel.arr : msg.arrival) || null;
     renderArrival();
-    $('arr-min').textContent = lastArrival ? lastArrival.min : '--';
+    $('arr-min').textContent = lastArrival ? lastArrival.min : '';
     $('auto-time').classList.toggle('past', !!msg.auto_time_past);
     // Surrey, stage running: the countdown (metres, minutes) takes the arrival slot, as on the box.
     {

@@ -157,13 +157,15 @@ static const size_t WS_MAX_RX_BUFFER = 2u << 20;
 // One complete frame off the front of `data`. A text frame comes back in `out`; any other
 // complete frame (ping, pong, close, continuation) is consumed with `out` empty, so it can
 // never sit at the front of the buffer and stall every command behind it.
-bool wsDecodeText(const std::string& data, std::string& out, size_t& consumed) {
+// One complete frame of any kind: its opcode and its payload (unmasked).
+static bool wsDecodeFrame(const std::string& data, int& opcode, std::string& out, size_t& consumed) {
     consumed = 0;
     out.clear();
+    opcode = -1;
     if (data.size() < 2) return false;
     unsigned char b0 = static_cast<unsigned char>(data[0]);
     unsigned char b1 = static_cast<unsigned char>(data[1]);
-    const bool text = (b0 & 0x0F) == 0x01;
+    opcode = b0 & 0x0F;
     bool masked = b1 & 0x80;
     size_t len = b1 & 0x7F;
     size_t pos = 2;
@@ -188,7 +190,6 @@ bool wsDecodeText(const std::string& data, std::string& out, size_t& consumed) {
     }
     if (data.size() < pos + len) return false;
     consumed = pos + len;
-    if (!text) return true;
     out.resize(len);
     for (size_t i = 0; i < len; i++) {
         unsigned char c = static_cast<unsigned char>(data[pos + i]);
@@ -196,6 +197,24 @@ bool wsDecodeText(const std::string& data, std::string& out, size_t& consumed) {
         out[i] = static_cast<char>(c);
     }
     return true;
+}
+
+bool wsDecodeText(const std::string& data, std::string& out, size_t& consumed) {
+    int opcode = -1;
+    if (!wsDecodeFrame(data, opcode, out, consumed)) return false;
+    if (opcode != 0x01) out.clear();
+    return true;
+}
+
+// A control frame to send: pong (0xA) carrying the ping's payload back, or close (0x8).
+// Control payloads are at most 125 bytes.
+std::string wsEncodeControl(int opcode, const std::string& payload) {
+    const std::string body = payload.substr(0, 125);
+    std::string frame;
+    frame.push_back(static_cast<char>(0x80 | (opcode & 0x0F)));
+    frame.push_back(static_cast<char>(body.size()));
+    frame += body;
+    return frame;
 }
 
 static WebServerState* g_impl = nullptr;
@@ -401,9 +420,22 @@ static void serviceWsClients(WebServerState* impl) {
         while (true) {
             std::string msg;
             size_t consumed = 0;
-            if (!wsDecodeText(client.rx_buf, msg, consumed)) break;
+            int opcode = -1;
+            if (!wsDecodeFrame(client.rx_buf, opcode, msg, consumed)) break;
             client.rx_buf.erase(0, consumed);
-            if (msg.empty()) continue;   // a control frame: nothing to act on
+            if (opcode == 0x09) {   // ping: answered with its own payload
+                client.tx_buf += wsEncodeControl(0x0A, msg);
+                flushClient(client);
+                if (client.fd < 0) break;
+                continue;
+            }
+            if (opcode == 0x08) {   // close: acknowledged, and the client is dropped at once
+                client.tx_buf += wsEncodeControl(0x08, msg.substr(0, 2));
+                flushClient(client);
+                closeClient(client);
+                break;
+            }
+            if (opcode != 0x01 || msg.empty()) continue;   // pong, binary, continuation: nothing to act on
             if (webHandleCommand(impl->data, msg.c_str())) {
                 g_state_dirty = true;
                 broadcastAll(impl, buildStateJson(impl->data));

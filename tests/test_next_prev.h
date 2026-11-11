@@ -262,6 +262,29 @@ public:
             return true;
         });
 
+        // Driven review 2026-11-11, item 15: an automatic change, then a -50 m correction that
+        // Trip could take only in part (it stops at zero), then prev. Trip must read what Total
+        // reads -- the corrected stage position -- with no left-over correction of its own.
+        suite->addTest("prev after a clamped correction: Trip reads the corrected stage position", []() {
+            RallyState s;
+            s.stage_segments = roadbook();
+            for (auto& seg : s.stage_segments) seg.autoNext = true;
+            s.segment_current_number = 0;
+            recordSegmentChange(s, 0, true);          // auto-advance at 1000
+            s.segment_current_number = 1;
+            s.trip_start_cntr1 = 11000;               // Trip zeroed at the change
+            s.trip_start_cntr2 = 11000;
+            s.total_distance_adjust_mm = -50000;      // five -10 presses on Total
+            s.trip_distance_adjust_mm = -30000;       // Trip stopped at zero after three
+            // The car is 1250 counts in; Total, corrected, reads 1200.
+            ASSERT_TRUE(undoSegmentChange(s, 11250, 11250, M(1200)));
+            ASSERT_EQ(s.segment_current_number, 0);
+            ASSERT_EQ(s.trip_distance_adjust_mm, 0);
+            ASSERT_EQ(s.trip_start_cntr1, s.segment_start_cntr1);
+            ASSERT_EQ(calculateDistanceCounts(s, 11250, 11250, s.trip_start_cntr1, s.trip_start_cntr2), 1200);
+            return true;
+        });
+
         suite->addTest("prev undoes an automatic change: the earlier speed holds", []() {
             RallyState s;
             s.stage_segments = roadbook();

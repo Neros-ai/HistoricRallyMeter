@@ -94,6 +94,19 @@ bool applyTotalReset(AppData* data, TotalResetChoice choice) {
             pressed ? data->totalResetCntr2 : poll.cntr2,
             pressed ? data->totalResetPressMs : now_ms);
         data->totalResetPending = false;
+        // The stage starts again from here, so it runs as programmed: a change point moved by a
+        // next pressed before this zero was measured from the wrong place. Greek and surrey
+        // (surrey keeps the fit its start press gave row 1); an italian sector's rows are not
+        // moved by next.
+        if (state.rally_type != 2 && !state.segments.empty()) {
+            state.stage_segments = stageForDriving(state.segments);
+            if (isSurrey(state)) {
+                const int n = state.last_memory_slot;
+                if (n >= 1 && n <= RallyState::MAX_MEMORY_SLOTS)
+                    fitStageToStart(state.stage_segments, state.memory_slots[n - 1].first_from_m,
+                                    state.sector_start_odometer_mm / 1000.0, state.calibration);
+            }
+        }
         // The car may already be past speed changes by the time the crew
         // confirm. Auto-advance steps one segment at a time and re-bases each
         // at the car, so on its own it would start the next segment at the
@@ -1222,7 +1235,17 @@ static bool undoSurreyFinishFromMemory(AppData* data) {
 
 void on_prev_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
-    if (undoSurreyFinishFromMemory(data)) {   // surrey: prev reopens a pressed finish
+    if (undoSurreyFinishFromMemory(data)) {   // surrey: prev takes a pressed finish back
+        if (data->stageLog) {
+            if (data->state->stage_complete) {
+                // A late press taken back: the stage stays ended on the time its distance gave
+                // it, and the closed log says so again.
+                data->stageLog->amendTimeTaken(surreyLogTimeTaken(*data->state));
+            } else if (data->state->stage_logging) {
+                // The stage runs on: its log carries on in the same file.
+                data->stageLog->resume();
+            }
+        }
         ConfigFile::save(*data->state);
         notifyWebState(data);
         return;
@@ -1232,7 +1255,9 @@ void on_prev_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         notifyWebState(data);
         return;
     }
-    if (!prevAvailable(*data->state)) return;
+    // A finished stage has no speed change left to take back: prev is dead (it used to undo the
+    // last change of a stage that was over, which zeroed Trip).
+    if (data->state->stage_complete || !prevAvailable(*data->state)) return;
 
     auto poll = data->poller->getMostRecent();
     undoSegmentChange(*data->state, poll.cntr1, poll.cntr2, stagePositionMm(*data->state, poll.cntr1, poll.cntr2));

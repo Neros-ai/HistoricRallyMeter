@@ -252,6 +252,46 @@ public:
             return surreyFinishAvailable(s) && !surreyFinishAvailable(other)
                 && !surreyFinishAvailable(cleared) && !surreyFinishAvailable(greek);
         });
+        suite->addTest("prev takes a late finish press back to the distance-end time", [runningAt, ss1]() {
+            RallyState s = runningAt(ss1(), 0); s.last_memory_slot = 1;
+            s.stage_complete = true;
+            surreyDistanceEnd(s, 561000);                        // ended on distance: 9:21.0
+            applySurreyFinish(s, 566200);                        // a press 5.2 s on, by mistake
+            // Past the roadbook's end (navi 9500 against a last "to" of 9418): still taken back.
+            const bool live = surreyUndoAvailable(s, 9500.0, 9418.0);
+            const bool undone = undoSurreyFinish(s, 9500.0, 9418.0);
+            const bool back = s.time_taken_ms == 561000 && s.time_taken_stage == 1 && s.stage_complete
+                && s.surrey_finish_at_ms == 0;
+            // The real finish can still be pressed; with nothing pressed prev has nothing to take back.
+            const bool again = surreyFinishAvailable(s) && !surreyUndoAvailable(s, 9500.0, 9418.0)
+                && !undoSurreyFinish(s, 9500.0, 9418.0);
+            return live && undone && back && again && applySurreyFinish(s, 570000) && s.time_taken_ms == 570000;
+        });
+        suite->addTest("prev reopening a finish puts the previous stage's time taken back", [runningAt, ss1]() {
+            RallyState s = runningAt(ss1(), 0); s.last_memory_slot = 3;
+            s.time_taken_ms = 229200; s.time_taken_stage = 2;    // ss2 3:49.2 on Home
+            RallyState::MemorySlot slot; slot.segments = ss1();
+            surreyStart(s, slot);                                // stage 3 starts
+            const bool kept = s.time_taken_ms == 229200 && s.time_taken_stage == 2;
+            surreyStart(s, slot);                                // an early departure runs it twice
+            applySurreyFinish(s, 254600);                        // pressed by mistake
+            const bool shown = s.time_taken_ms == 254600 && s.time_taken_stage == 3;
+            const bool undone = undoSurreyFinish(s, 100.0, 9418.0);
+            return kept && shown && undone && !s.stage_complete && s.time_taken_ms == 229200
+                && s.time_taken_stage == 2 && s.surrey_finish_at_ms == 0;
+        });
+        suite->addTest("the distance-end time and the previous time taken survive a restart", []() {
+            const char* path = "test_surrey_late_saved.json";
+            RallyState a; a.rally_type = 1;
+            a.surrey_distance_end_ms = 561000; a.prev_time_taken_ms = 229200; a.prev_time_taken_stage = 2;
+            ConfigFile::save(a, path);
+            RallyState b; ConfigFile::load(b, path);
+            { std::ofstream f(path); f << "{\n  \"rally_type\": 1\n}\n"; }
+            RallyState old; ConfigFile::load(old, path);
+            std::remove(path);
+            return b.surrey_distance_end_ms == 561000 && b.prev_time_taken_ms == 229200 && b.prev_time_taken_stage == 2
+                && old.surrey_distance_end_ms == -1 && old.prev_time_taken_ms == -1 && old.prev_time_taken_stage == 0;
+        });
         suite->addTest("greek ignores the surrey finish", [runningAt, ss1]() {
             RallyState s = runningAt(ss1(), 0); s.rally_type = 0;
             const bool a = applySurreyFinish(s, 1000);

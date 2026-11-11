@@ -162,6 +162,23 @@ public:
             return lines(path).back() == "time taken,9:26.2";
         });
 
+        suite->addTest("a reopened stage carries on in the same log, the taken-back time gone", []() {
+            std::string dir = freshDir("resume");
+            StageLog log;
+            if (log.resume()) return false;                // nothing closed yet
+            log.start(dir, 1760000000000LL, 1);
+            log.record(1760000001000LL, 10, 50.0, 0.0);
+            const std::string path = log.path();
+            if (log.resume()) return false;                // running: nothing to resume
+            log.stop("4:14.6");                            // a finish pressed by mistake
+            if (!log.resume() || !log.isRunning() || log.path() != path) return false;
+            log.record(1760000002000LL, 20, 50.0, 0.0);
+            log.stop("9:20.6");                            // the real finish
+            auto l = lines(path);
+            return l.size() == 4 && l[1].find(",10,") != std::string::npos && l[2].find(",20,") != std::string::npos
+                && l.back() == "time taken,9:20.6";
+        });
+
         return suite;
     }
 };

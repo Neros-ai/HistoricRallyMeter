@@ -60,6 +60,16 @@ public:
             return true;
         });
 
+        suite->addTest("prev is dead on a finished stage: no speed change is taken back", []() {
+            RallyState s = running(3, 0);
+            recordSegmentChange(s, 0, true);
+            s.segment_current_number = 1;
+            ASSERT_TRUE(prevKeyEnabled(s, 0, 0));               // running: the change can be undone
+            s.stage_complete = true;                            // driven out
+            ASSERT_FALSE(prevKeyEnabled(s, 0, 0));
+            return true;
+        });
+
         suite->addTest("a finished stage reads go, not abort", []() {
             RallyState s = running(3, 2);
             s.stage_complete = true;                            // driven out, figures still on screen
