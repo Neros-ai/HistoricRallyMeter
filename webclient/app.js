@@ -808,13 +808,22 @@
   // is called what it is, and rebuilt. (A page in the background is frozen by the phone; the
   // visibilitychange handler does the same check when it comes back.)
   const LINK_RETRY_MS = 8000;   // a socket still opening after this long is tried again
+  const LINK_STALL_MS = 2500;   // this check itself ran this late: the page was held up
+  let linkCheckedAt = Date.now();
   setInterval(() => {
-    if (document.hidden) return;
     const now = Date.now();
+    const stalled = now - linkCheckedAt > LINK_STALL_MS;
+    linkCheckedAt = now;
+    if (document.hidden) return;
+    // A confirm box (or a frozen page) stops everything here, the socket's messages included:
+    // the silence was the page's, not the link's. The link is given a fresh STALE_LINK_MS to
+    // deliver its waiting figures before it is judged.
+    if (stalled) { linkSince = now; return; }
     if (linkState === 'connected') {
       if (now - Math.max(lastTelemetryAt, linkSince) > STALE_LINK_MS) { stopTone(); connect(true); }
-    } else if (linkState === 'nodata' && now - linkSince > LINK_RETRY_MS) {
-      connect(true);
+    } else if ((linkState === 'nodata' || linkState === 'connecting') && now - linkSince > LINK_RETRY_MS) {
+      // A socket opened out of range can hang for a minute or more with no event at all.
+      connect(linkState === 'nodata');
     }
   }, 1000);
 
@@ -1329,7 +1338,9 @@
     clockSample = null;   // the page was frozen; do not read that as a stall
     if (soundOn) wakeAudio();
     showSound();
-    if (Date.now() - lastTelemetryAt > STALE_LINK_MS) connect(linkState === 'connected' || linkState === 'nodata');
+    // linkSince as well: a socket asked for a moment ago is still opening, not stale.
+    if (Date.now() - Math.max(lastTelemetryAt, linkSince) > STALE_LINK_MS)
+      connect(linkState === 'connected' || linkState === 'nodata');
   });
 
   // The box's button click: 1200 Hz sine, 50 ms, 0.20 -- ToneGenerator::playBeep's defaults.

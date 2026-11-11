@@ -351,6 +351,8 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.time_taken_stage = static_cast<int>(extractLong(line));
         } else if (line.find("\"time_taken_ms\"") != std::string::npos) {
             state.time_taken_ms = extractLong(line);
+        } else if (line.find("\"surrey_finish_at_ms\"") != std::string::npos) {
+            state.surrey_finish_at_ms = extractLong(line);
         } else if (line.find("\"distance_km\"") != std::string::npos) {
             state.distance_km = extractBool(line);
         } else if (line.find("\"measure_ab_bc\"") != std::string::npos) {
@@ -577,6 +579,8 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"rally_type\": " << state.rally_type << ",\n";
     file << "  \"time_taken_stage\": " << state.time_taken_stage << ",\n";
     file << "  \"time_taken_ms\": " << state.time_taken_ms << ",\n";
+    // Saved so a restart still knows the finish press was made (it is taken once only).
+    file << "  \"surrey_finish_at_ms\": " << state.surrey_finish_at_ms << ",\n";
     file << "  \"odometer_start_cntr1\": " << static_cast<int64_t>(state.odometer_start_cntr1) << ",\n";
     file << "  \"odometer_start_cntr2\": " << static_cast<int64_t>(state.odometer_start_cntr2) << ",\n";
     file << "  \"odometer_adjust_mm\": " << state.odometer_adjust_mm << ",\n";

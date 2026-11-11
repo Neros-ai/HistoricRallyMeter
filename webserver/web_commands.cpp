@@ -2,6 +2,7 @@
 #include "config_file.h"
 #include "calculations.h"
 #include "callbacks.h"
+#include "stage_phase.h"
 #include "sector.h"
 #include "rally_types.h"
 #include "rally_state.h"
@@ -332,7 +333,13 @@ bool webHandleCommand(AppData* data, const char* json) {
         startStageAtNextMinute(data);
         return true;
     }
-    if (strcmp(type, "flag_late_arrival") == 0) { performStageGo(data); return true; }
+    if (strcmp(type, "flag_late_arrival") == 0) {
+        // As the box's own go key: with a stage to abort the key is "stage abort", so a go sent
+        // from a phone whose figures are behind (an autostart has just fired) is refused.
+        if (goKeyAborts(*data->state)) return false;
+        performStageGo(data);
+        return true;
+    }
     if (strcmp(type, "driver_zero") == 0) {
         bool reset = false;
         jsonFindBool(json, "reset", &reset);

@@ -134,6 +134,34 @@ public:
                 && lines(p2).size() == 1;
         });
 
+        suite->addTest("a late finish press replaces the closed log's time taken", []() {
+            std::string dir = freshDir("amend");
+            StageLog log;
+            log.amendTimeTaken("1:00.0");                 // nothing closed yet: nothing happens
+            log.start(dir, 1760000000000LL, 1);
+            log.record(1760000001000LL, 10, 50.0, 0.0);
+            const std::string path = log.path();
+            log.amendTimeTaken("1:00.0");                 // still running: left alone
+            log.stop("9:21.0");                           // ended on distance
+            log.amendTimeTaken("");                       // no figure: left alone
+            if (lines(path).back() != "time taken,9:21.0") return false;
+            log.amendTimeTaken("9:26.2");                 // the real finish press
+            auto l = lines(path);
+            if (l.size() != 3 || l.back() != "time taken,9:26.2" || l[1].find(",10,") == std::string::npos)
+                return false;
+            // A log closed with no time taken gains the line; a new stage's log is never touched.
+            StageLog plain;
+            plain.start(dir, 1760000005000LL, 2);
+            const std::string p2 = plain.path();
+            plain.stop();
+            plain.amendTimeTaken("0:05.0");
+            if (lines(p2).size() != 2 || lines(p2).back() != "time taken,0:05.0") return false;
+            log.start(dir, 1760000009000LL, 3);
+            log.amendTimeTaken("7:77.7");
+            log.stop();
+            return lines(path).back() == "time taken,9:26.2";
+        });
+
         return suite;
     }
 };
