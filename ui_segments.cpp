@@ -169,6 +169,7 @@ void applyHeadings(AppData* d) {
     gtk_label_set_text(GTK_LABEL(u->headLbl[2]), it ? "ref" : "auto");
     gtk_label_set_xalign(GTK_LABEL(u->headLbl[2]), it ? 1.0f : 0.5f);
     gtk_label_set_text(GTK_LABEL(u->fromToHead), d->state->distance_km ? "from -km- to" : "from -m- to");
+    gtk_label_set_text(GTK_LABEL(u->headLbl[6]), d->state->units ? "MPH" : "KPH");
 }
 
 // Text and numbers of every row, in place (no widget is created or destroyed,
@@ -190,7 +191,7 @@ void updateRowText(AppData* d) {
             }
         };
         // One text source for the box and the phone (segRowText, stage_rows.cpp).
-        const SegRowText t = segRowText(d->state->segments[i], r, i, d->state->rally_type, d->state->distance_km);
+        const SegRowText t = segRowText(d->state->segments[i], r, i, d->state->rally_type, d->state->distance_km, d->state->units);
         setText(w.num, t.num);
         if (d->state->rally_type == 2) setText(w.ref, t.ref);
         setText(w.from, t.from);
@@ -490,7 +491,7 @@ void loadFields(AppData* d) {
         if (slot.sector_duration_s > 0)
             gtk_entry_set_text(GTK_ENTRY(u->durEntry), formatHMmSs(static_cast<double>(slot.sector_duration_s)).c_str());
         else gtk_entry_set_text(GTK_ENTRY(u->durEntry), "");
-        gtk_label_set_text(GTK_LABEL(u->avgLabel), sectorAverageText(d->state->segments, slot.sector_duration_s).c_str());
+        gtk_label_set_text(GTK_LABEL(u->avgLabel), sectorAverageText(d->state->segments, slot.sector_duration_s, d->state->units).c_str());
     }
 }
 
@@ -600,7 +601,15 @@ void segmentsCommitImpl(AppData* d, bool quiet) {
     } else if (!strcmp(kind, "kph")) {
         char* stop = nullptr;
         double v = std::strtod(text.c_str(), &stop);
-        if (stop && *stop == '\0' && v >= 0.0 && !text.empty()) stageEditSetSpeed(d, row, v);
+        if (stop && *stop == '\0' && v >= 0.0 && !text.empty()) {
+            // Typed in the Settings speed units; stored in km/h. In mph the field shows the stored
+            // speed rounded to 2 dp, so a field tapped and left as it was must not be written back:
+            // that would nudge the stored km/h (50 -> 31.07 mph -> 50.0023).
+            const bool mph = d->state->units;
+            const bool untouched = mph && row < d->state->segments.size()
+                && std::fabs(v - d->state->segments[row].target_speed_kph * 0.621371) < 0.005;
+            if (!untouched) stageEditSetSpeed(d, row, mph ? v / 0.621371 : v);
+        }
     } else if (!strcmp(kind, "ref")) {
         long n = parseMetres(text);
         if (n >= 0) sectorEditSetRef(d, row, static_cast<int>(n));

@@ -124,8 +124,8 @@
 <div class="toc3"><a href="#datetime">DATE / TIME</a><span class="dots"></span><span class="pn">27</span></div>
 <div class="toc3"><a href="#calibration">CALIBRATION</a><span class="dots"></span><span class="pn">28</span></div>
 <div class="toc3"><a href="#settings">SETTINGS</a><span class="dots"></span><span class="pn">29</span></div>
-<div class="toc3"><a href="#setup">SETUP</a><span class="dots"></span><span class="pn">30</span></div>
-<div class="toc2"><a href="#manual-index">Index</a><span class="dots"></span><span class="pn">31</span></div>
+<div class="toc3"><a href="#setup">SETUP</a><span class="dots"></span><span class="pn">31</span></div>
+<div class="toc2"><a href="#manual-index">Index</a><span class="dots"></span><span class="pn">32</span></div>
 </div>
 <!--TOC-END-->
 
@@ -389,7 +389,7 @@ with nothing armed or running, is crossed out in red. Autostart can be toggled o
 
 <p>What happens with autostart:</p>
 <ul>
-<li>With less than 5 minutes to the start the driver's display will show a countdown clock.</li>
+<li>With less than 5 minutes to the start the driver's display will show a countdown clock, with <b>Early Departure DISABLED</b> beside it.</li>
 <li>The Total and Trip distances will zero at the start time.</li>
 <li>The timer resets at the start time.</li>
 </ul>
@@ -403,13 +403,14 @@ whole minute. Pressing it sets a type of autostart at that minute.</p>
 <li>The Total and Trip distances zero immediately (not at the departure minute). Any distance driven
 between pressing and the start minute will be included in the stage distance.</li>
 <li>The timer resets at the start minute.</li>
+<li>The driver's display shows a countdown clock with <b>Early Departure ENABLED</b> beside it: the distance is already counting, and only the clock waits for the start minute.</li>
 </ul>
 
 <p><b>Start Now:</b> Pressing it starts a stage immediately.</p>
 
 <p>What happens with Start Now:</p>
 <ul>
-<li>Pressing the button overrides any programmed autostart.</li>
+<li>Pressing the button overrides a programmed autostart.</li>
 <li>The Total and Trip distances zero immediately.</li>
 <li>The timer resets immediately.</li>
 <li>On a Greek stage the Trip history clears. Italian and Surrey keep it.</li>
@@ -425,8 +426,7 @@ pre-programmed autostart which resets the distances and timer at the allotted st
 <li>Have autostart start the stage on time (before you have arrived) and press Total to zero the
 distances at the start line and attempt to catch up during the stage. This is the preferred
 method.</li>
-<li>Press Start Now at the line &ndash; if a stage is already running the box will ask you to confirm but will
-measure as of the original button press. Because the timer will have started late the driver will
+<li>Press Start Now at the line if a stage is not running on the box. Because the timer will have started late the driver will
 need to catch up and target a reading where the seconds ahead is equal to the delay in
 starting.</li>
 </ul>
@@ -508,16 +508,16 @@ zeroes them again at its start time. (An autostart cannot be armed during a stag
 <li>If Start on Next Minute has been selected: pressing zeroes Total and Trip without asking; the timer starts at the
 minute.</li>
 <li>During a stage (such as after a missed start) pressing to reset the total requires confirmation, but   then zeroes Total and Trip from the time of the first press; the
-stage clock keeps running.</li>
+stage clock keeps running. The stage goes back to its first row, then moves forward only by the distance driven while the confirmation was open. This applies to greek; during an italian sector or a surrey stage the total cannot be reset (see the italian total key and the surrey section).</li>
 </ul>
 
 <h4>trip</h4>
 <p>Shows intermediate distance and time. Press to zero it. Prior   figures appear in the <b>Trip
-history</b> column. Trip also restarts at every speed change. Starting a Greek stage clears the trip.
+history</b> column. Trip also restarts at every speed change, and at every roadbook box that carries on at the same speed. The cyan <b>sub</b> average on the driver display does not restart at those same-speed boxes; it restarts only at a speed change. Starting a Greek stage clears the trip.
              </p>
 
 <h4>countdown</h4>
-<p>The distance and time to the next speed change are displayed next to the button. The button cannot be pressed.       
+<p>The distance and time to the next speed change are displayed next to the button. The button cannot be pressed. When there is no later speed change, the distance counts down to the finish and the time is left blank.
   </p>
 
 <h4>next speed and prev speed</h4>
@@ -609,8 +609,9 @@ is worked out from the given speed (not the elapsed time).</td></tr>
 <h3 id="italian-programming">Programming Italian Sectors</h3>
 
 <p>Select <b>italian</b> rally from the settings page and then select <code>segments</code> from the
-main menu. The segments page will display an Italian flag. The system defaults to km (two decimals)
-but this can be overridden in settings.</p>
+main menu. The segments page will display an Italian flag. Choosing the
+italian rally type does not change the distance units: for Italian sectors set <b>Distance units</b> to km
+(two decimals) in settings.</p>
 
 <figure class="screen">
   <svg viewBox="0 0 1346 664" style="display: block; width: 100%; height: auto"
@@ -865,11 +866,14 @@ On arrival at the final time control (co) pressing <code>next substage</code> wi
 </figure>
 
 <h4>sector total</h4>
-<p>Distance and elapsed time in the sector, matching the card's <b>progr</b> value. Press to zero.</p>
+<p>Distance and elapsed time in the sector, matching the card's <b>progr</b> value. Press to zero
+it outside a sector.</p>
 <ul>
 <li>Outside a sector, it zeroes the distance and the timer but not sub.</li>
-<li>During a sector, it asks first, then zeroes sector total and sub from the press while the sector
-clock keeps running.</li>
+<li>During a sector the key does not reset: the box shows <b>Use set or next during a sector</b> and
+changes nothing. Sector total is zeroed by the start, and every <code>next</code> pins it to the card's
+figure; correct it by hand with <code>set</code>, and take back a wrong press with <code>prev</code>.
+The phone behaves the same.</li>
 </ul>
 
 <h4>sub</h4>
@@ -917,17 +921,17 @@ undoes the change.</p>
     <use href="#italian-card-torn-edge" fill="none" stroke="#bbb"/>
     <g fill="#111">
       <rect x="132" y="10" width="236" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
-      <text x="146" y="38" font-size="24" font-weight="bold">km</text><text x="146" y="66" font-size="20">length of this substage</text>
+      <text x="146" y="38" font-size="24" font-weight="bold">km (or m)</text><text x="146" y="66" font-size="20">length of this substage</text>
       <rect x="378" y="10" width="236" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
       <text x="392" y="38" font-size="24" font-weight="bold">progr</text><text x="392" y="66" font-size="20">card distance at its end</text>
       <rect x="624" y="10" width="236" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
       <text x="638" y="38" font-size="24" font-weight="bold">mm:ss</text><text x="638" y="66" font-size="20">substage duration</text>
       <rect x="870" y="10" width="236" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
-      <text x="884" y="38" font-size="24" font-weight="bold">km/h</text><text x="884" y="66" font-size="20">target speed</text>
+      <text x="884" y="38" font-size="24" font-weight="bold">km/h (or mph)</text><text x="884" y="66" font-size="20">target speed</text>
       <rect x="8" y="147" width="330" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
       <text x="22" y="175" font-size="24" font-weight="bold">pc1</text><text x="22" y="203" font-size="20">the current substage  </text>
       <rect x="8" y="226" width="330" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
-      <text x="22" y="254" font-size="24" font-weight="bold">count down</text><text x="22" y="282" font-size="20">km and time to end of substage</text>
+      <text x="22" y="254" font-size="24" font-weight="bold">count down</text><text x="22" y="282" font-size="20">distance and time to end of substage</text>
       <rect x="8" y="306" width="330" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
       <text x="22" y="334" font-size="24" font-weight="bold">pc2 (faded)</text><text x="22" y="362" font-size="20">the next substage</text>
       <rect x="592" y="430" width="300" height="66" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
@@ -950,7 +954,7 @@ undoes the change.</p>
   <figcaption>The substage display, inside pc 1.</figcaption>
 </figure>
 
-<p>The count down time to the end of the substage is displayed in large white characters.  Past the end of a substage, the count down km (for example
+<p>The count down time to the end of the substage is displayed in large white characters.  Past the end of a substage, the count down distance (for example
 <code>+0.04</code>) and seconds (for example <code>+0:01.4</code>) turn red and count upwards.  
        </p>
 
@@ -976,8 +980,8 @@ undoes the change.</p>
 
 <table>
 <tr><th style="width: 22%"></th><th>greek</th><th>surrey</th></tr>
-<tr><td>Readouts</td><td><b>total</b> / <b>trip</b> / <b>countdown</b></td><td><b>total</b> (from the
-<code>now</code> press) / <b>trip</b> / <b>navi</b>, the roadbook's running total, set by hand. countdown moves to the stage column.</td></tr>
+<tr><td>Readouts</td><td><b>total</b> / <b>trip</b> / <b>countdown</b></td><td><b>total</b>, the roadbook's running distance, set by hand and not zeroed by a stage start /
+<b>trip</b> / <b>stage</b>, the distance since the <code>now</code> press. countdown moves to the stage column.</td></tr>
 <tr><td>Stage start</td><td>on a time (autostart) or <code>now</code></td><td><code>now</code>
 pressed at the landmark (autostart still works if a start time is entered)</td></tr>
 <tr><td>Speed changes</td><td>at the row distance, <code>auto</code> or <code>next</code></td><td>the
@@ -1012,10 +1016,12 @@ enter the distance at the end of the box instead.</p>
 Autostart still works if a start time is entered.</p>
 
 <h4>Driving a stage</h4>
-<p>Set <b>navi</b> to the roadbook's figure at each box if it has drifted (<code>navi</code> &rsaquo; set), and
-always at the start box; reset it to zero where the roadbook restarts (box 1, box 66). Press <code>now</code>
-as the car passes the start landmark: the stage clock and total start, navi carries on, and row 1 is cut short
-to end at its box so later speed changes keep to the roadbook. Speed changes then happen by themselves at each
+<p>Set <b>total</b> to the roadbook's figure at each box if it has drifted (<code>set</code>), and
+always at the start box; between stages, press <code>total</code> to zero it where the roadbook restarts
+(box 1, box 66). Press <code>now</code> as the car passes the start landmark: the stage clock and
+<b>stage</b> start from zero, total carries on, and row 1 is cut short to end at its box so later speed
+changes keep to the roadbook. While a stage is running, <code>set</code> moves total and the stage distance
+together, and the <code>total</code> key does not reset: the box shows <b>Use set during a stage</b>. Speed changes then happen by themselves at each
 box (<code>next</code> and <code>prev</code> work as in greek). At the finish landmark press <code>next</code>
 on the last row: the stage ends and the <b>time taken</b> stays under Trip history and on the phone.</p>
 
@@ -1024,14 +1030,16 @@ on the last row: the stage ends and the <b>time taken</b> stays under Trip histo
 <h4>The navigation page</h4>
 <figure class="screen">
   <img src="manual-images/surrey-nav.png" alt="The surrey navigation page with a stage running">
-  <figcaption>A Surrey stage running: total from the <code>now</code> press, trip, and navi (cyan) as the roadbook's running total.</figcaption>
+  <figcaption>A Surrey stage running: total (the roadbook's running distance), trip, and stage (cyan), the distance since the <code>now</code> press.</figcaption>
 </figure>
-<p>Rows: <code>total</code> (from the <code>now</code> press) / <code>trip</code> /
-<code>navi</code> (cyan, the roadbook running total; tap to set or reset). During a stage,
+<p>Rows: <code>total</code> (the roadbook's running distance; <code>set</code> pins it, and outside a
+stage the <code>total</code> key zeroes it) / <code>trip</code> /
+<code>stage</code> (cyan, the distance since the <code>now</code> press; dashes when no stage is on
+the gauge; it cannot be set). During a stage,
 <b>countdown</b> (metres and minutes to the next speed change or finish) sits at the foot of the
 stage column; between stages Stage arrival shows there. Under the Trip history (last four),
 <b>time taken</b> (shown as ss and the stage number) for the last stage stays until the next one
-finishes. The phone shows navi and time taken. Beeps follow navi, counted from the start box. The countdown and Stage
+finishes. The phone shows the same three figures and time taken. Beeps follow total, counted from the start box. The countdown and Stage
 arrival figures each sit above their legend. A-B, B-C zero is available as in greek.</p>
 
 <figure class="screen">
@@ -1177,7 +1185,7 @@ it corresponds with the time error; the white average is the average since the t
 
 <h4 id="chevron-greek">The chevron</h4>
 <p>The chevron slides up the needle to visually represent the impending end to the current programmed segment row which has been programmed (and may include navigations, speed changes and the finish line). At the start of each row it sits 20% of the way up the needle; as the row is driven it
-slides up toward the horizontal <b>row end line</b>, arriving as the row ends.</p>
+slides up toward the horizontal <b>row end line</b>, arriving as the row ends. It moves with the row's scheduled time, not the distance driven, so a car that is early or late will reach the end of the row before or after the chevron reaches the line.</p>
 
 <h4>Autostart warnings</h4>
 <p>While an autostart is pending, a <code>T- hh:mm:ss</code> countdown shows mid-display with
@@ -1216,7 +1224,7 @@ or a start on next minute is triggered.</p>
       <text x="20" y="65" font-size="21">Substage target speed.</text>
       <rect x="8" y="212" width="217" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
       <text x="20" y="244" font-size="24" font-weight="bold">Substage time</text>
-      <text x="20" y="270" font-size="21">Time it takes (m:ss).</text>
+      <text x="20" y="270" font-size="21">Time left (m:ss).</text>
       <rect x="8" y="417" width="248" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
       <text x="20" y="449" font-size="24" font-weight="bold">Total average</text>
       <text x="20" y="474" font-size="21">Average since the start.</text>
@@ -1225,10 +1233,10 @@ or a start on next minute is triggered.</p>
       <text x="1180" y="65" font-size="21">Present speed.</text>
       <rect x="1161" y="212" width="177" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
       <text x="1173" y="244" font-size="24" font-weight="bold">Sub distance</text>
-      <text x="1173" y="270" font-size="21">Sub (km).</text>
+      <text x="1173" y="270" font-size="21">Sub (km/m).</text>
       <rect x="1148" y="417" width="190" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
       <text x="1160" y="449" font-size="24" font-weight="bold">Total distance</text>
-      <text x="1160" y="474" font-size="21">Sector total (km).</text>
+      <text x="1160" y="474" font-size="21">Total (km/m).</text>
       <rect x="204" y="524" width="217" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
       <text x="216" y="556" font-size="24" font-weight="bold">Navi substage</text>
       <text x="216" y="581" font-size="21">No pc / pm running.</text>
@@ -1260,6 +1268,8 @@ or a start on next minute is triggered.</p>
 </figure>
 
 <p>The display is similar to those for greek/surrey rallies except the right-hand box shows the <b>minutes</b> in hand to the control arrival minutes: green when ahead, red when behind.</p>
+
+<p>The substage time shows the time still left in the substage. Once past the line it counts up, with a leading <b>+</b>. There is no needle or chevron on these rows.</p>
 
 <h4>In a pc or pm</h4>
 
@@ -1298,7 +1308,7 @@ or a start on next minute is triggered.</p>
       <text x="1106" y="338" font-size="21">Countdown to the line.</text>
       <rect x="1148" y="417" width="190" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
       <text x="1160" y="449" font-size="24" font-weight="bold">Total distance</text>
-      <text x="1160" y="474" font-size="21">Sector total (km).</text>
+      <text x="1160" y="474" font-size="21">Total (km/m).</text>
       <rect x="262" y="524" width="103" height="71" rx="5" fill="#f4f4f4" stroke="#111" stroke-width="2"/>
       <text x="274" y="556" font-size="24" font-weight="bold">pc1</text>
       <text x="274" y="581" font-size="21">This pc.</text>
@@ -1352,9 +1362,10 @@ or a start on next minute is triggered.</p>
 </figure>
 
 <p>With <b>Force single display</b> on, the driver's gauge shares the co-pilot screen. Keys work as
-on the navigation page. Left: Total / Trip / next with <code>+10</code>, <code>set</code> and
-<code>-10</code>; along the foot: <code>prev speed</code>, <code>freeze</code>, <code>reverse</code>
-and <code>A-B, B-C zero</code>; middle: rally clock and <b>&minus; 1 +</b> stage selector above the
+on the navigation page. Left: Total / Trip / countdown (or navi); beside them, in this order,
+<code>set</code>, <code>+10</code> and <code>-10</code>; along the foot: <code>next speed</code>,
+<code>prev speed</code>, <code>freeze</code> and <code>reverse</code>. There is no
+<code>A-B, B-C zero</code> key in single-display mode. Middle: rally clock and <b>&minus; 1 +</b> stage selector above the
 gauge; right: the three flag keys and <code>menu</code>. No Trip history or stage table; other pages
 are reached through <code>menu</code>. A pending start's countdown shows over the gauge.</p>
 
@@ -1539,22 +1550,26 @@ ahead lower and smoother.</li>
 <h4>System</h4>
 <ul>
 <li><b>Rally type</b> &ndash; greek / surrey / italian. See <a href="#rally-types">Rally
-types</a>. The software version (Nero2.1) is shown above it.</li>
+types</a>. Choosing a rally type does not change any other setting: <b>Distance units</b>, <b>Speed units</b> (kph or mph) and <b>Measure type</b> stay as you set them, so check them after changing type. The software version (Nero2.1) is shown above it.</li>
 <li><b>Reaction time offset</b> &ndash; &minus;0.30 to +0.30 s in steps of 0.01 (default 0). A press
 at a point is taken as that much earlier, and the car that much further back. It applies to the
 italian tube <code>next</code>, the greek <code>next</code>, <code>start now</code> when moving at
 5 kph or more, and the surrey start and finish. It does not apply to autostart, <code>&plusmn;10</code>,
 <code>set</code> or <code>prev</code>. Positive means the crew press late. Find your figure by
-comparing the box's pc times with the official results.</li>
+comparing the box's pc times with the official results. The distance goes back only for the greek
+<code>next</code>, the surrey start and a moving <code>start now</code>, and only at 5 kph or more. On
+an italian tube press the pc clock goes back by the offset but the distance does not move: it stays on
+the card figure. An italian <code>start now</code> does the same, and only when the sector opens on a
+pc or pm.</li>
 <li><b>Phone sound lead</b> &ndash; &minus; / figure / + in steps of 10 ms, 0 to 400 (default 100 ms). It
 sets how early the box tells the phone to sound an Italian countdown beep, to cover the phone's audio
 delay. It applies to the countdown beeps only, not the 100&nbsp;m beeps, and the phone shows the same figure.</li>
-<li><b>Speed units</b> &ndash; kph or mph.</li>
+<li><b>Speed units</b> &ndash; kph or mph, for every rally type: the driver display, the Italian sector card, the Segments speed column (its heading reads KPH or MPH, and a speed you type there is in these units) and the phone.</li>
 <li><b>Distance units</b> &ndash; <b>00.00</b> (km, two decimals) or <b>0,000</b> (whole metres) for
 the driving figures and <code>add distance</code>. It does not flip to kilometres at 100 km. The
 <b>set</b> pop-ups (Set Total, Set Navi), <b>Distance at start</b> and Trip history use the same unit, and so
 does the phone. In km a figure is cut to the 10&nbsp;m below, never rounded up, so it never reads ahead of
-the car; a counter that reverse takes behind its start reads negative.</li>
+the car, and that includes the Italian sector card; a counter that reverse takes behind its start reads negative. Italian follows this setting too: the sector card's distance columns and countdown, and the driver display's Total and Sub, read in km or whole metres to match. The box itself counts in millimetres; metres and kilometres are only how a figure is shown on screen, so a displayed figure can be up to 10&nbsp;m different from the box's own count.</li>
 <li><b>Measure type</b> &ndash; <b>AB,BC</b> shows the A-B, B-C zero key on the greek and surrey navigation
 pages; <b>AB,AC</b> hides it.</li>
 <li><b>Stage data logging</b> &ndash; one file per stage, a row a second (distance, speed,
@@ -1594,42 +1609,43 @@ screen, it runs without browser bars.</li>
 <section class="index-page" style="page-break-before: always">
 <h2 id="manual-index" style="margin-top:0">Index</h2>
 <div class="ixcols">
-<div class="ix"><span>Abort stage</span><span class="dots"></span><span class="pn">14, 29</span></div>
-<div class="ix"><span>Ahead / behind</span><span class="dots"></span><span class="pn">14, 17, 19, 20, 21, 27, 29</span></div>
+<div class="ix"><span>Abort stage</span><span class="dots"></span><span class="pn">14, 30</span></div>
+<div class="ix"><span>Ahead / behind</span><span class="dots"></span><span class="pn">14, 17, 19, 20, 21, 27, 29, 30</span></div>
 <div class="ix"><span>Autostart</span><span class="dots"></span><span class="pn">5, 7, 8, 9, 17, 20</span></div>
 <div class="ix"><span>Beep assist</span><span class="dots"></span><span class="pn">5, 26</span></div>
 <div class="ix"><span>Calibration</span><span class="dots"></span><span class="pn">4, 14, 28</span></div>
 <div class="ix"><span>Chevron</span><span class="dots"></span><span class="pn">19, 20, 21</span></div>
 <div class="ix"><span>pc, pm, ct, co</span><span class="dots"></span><span class="pn">3, 12, 13, 14, 15, 21, 26, 29</span></div>
-<div class="ix"><span>Countdown</span><span class="dots"></span><span class="pn">9, 17, 18, 20, 21, 26, 29</span></div>
+<div class="ix"><span>Countdown</span><span class="dots"></span><span class="pn">7, 10, 17, 18, 20, 21, 22, 26, 29</span></div>
 <div class="ix"><span>Date and time</span><span class="dots"></span><span class="pn">4, 27</span></div>
 <div class="ix"><span>Distance +10 / −10</span><span class="dots"></span><span class="pn">9, 10, 15, 16, 22, 26</span></div>
-<div class="ix"><span>Driver display</span><span class="dots"></span><span class="pn">19, 20, 21</span></div>
-<div class="ix"><span>Greek rally type</span><span class="dots"></span><span class="pn">5, 7, 9, 17, 18, 19, 26, 29</span></div>
-<div class="ix"><span>Italian rally type</span><span class="dots"></span><span class="pn">12, 13, 21, 26, 29</span></div>
+<div class="ix"><span>Driver display</span><span class="dots"></span><span class="pn">9, 19, 20, 21, 29</span></div>
+<div class="ix"><span>Greek rally type</span><span class="dots"></span><span class="pn">5, 9, 17, 18, 19, 26, 29</span></div>
+<div class="ix"><span>Italian rally type</span><span class="dots"></span><span class="pn">9, 12, 13, 21, 26, 29</span></div>
 <div class="ix"><span>Late arrival flag</span><span class="dots"></span><span class="pn">5, 8, 12, 22</span></div>
-<div class="ix"><span>Navi</span><span class="dots"></span><span class="pn">12, 13, 14, 15, 16, 18, 21</span></div>
-<div class="ix"><span>Next speed</span><span class="dots"></span><span class="pn">5, 9, 10, 18</span></div>
-<div class="ix"><span>Phone app</span><span class="dots"></span><span class="pn">13, 18, 23, 27, 29, 30</span></div>
+<div class="ix"><span>Navi</span><span class="dots"></span><span class="pn">12, 13, 14, 15, 16, 21</span></div>
+<div class="ix"><span>Next speed</span><span class="dots"></span><span class="pn">5, 9, 10, 18, 22</span></div>
+<div class="ix"><span>Phone app</span><span class="dots"></span><span class="pn">13, 15, 18, 23, 27, 29, 31</span></div>
 <div class="ix"><span>Pulses per km</span><span class="dots"></span><span class="pn">4, 28</span></div>
 <div class="ix"><span>Rally clock</span><span class="dots"></span><span class="pn">14, 22, 27</span></div>
 <div class="ix"><span>Reaction time</span><span class="dots"></span><span class="pn">29</span></div>
-<div class="ix"><span>Reset</span><span class="dots"></span><span class="pn">7, 8, 15, 18, 28</span></div>
+<div class="ix"><span>Reset</span><span class="dots"></span><span class="pn">7, 8, 9, 15, 28</span></div>
 <div class="ix"><span>Reverse</span><span class="dots"></span><span class="pn">9, 10, 15, 16, 22, 29</span></div>
-<div class="ix"><span>Sector</span><span class="dots"></span><span class="pn">3, 12, 13, 14, 15, 16, 21, 29</span></div>
-<div class="ix"><span>Segments</span><span class="dots"></span><span class="pn">4, 5, 7, 11, 12, 13, 17, 26</span></div>
-<div class="ix"><span>Settings</span><span class="dots"></span><span class="pn">4, 5, 12, 26, 29, 30</span></div>
-<div class="ix"><span>Setup</span><span class="dots"></span><span class="pn">4, 29, 30</span></div>
+<div class="ix"><span>Sector</span><span class="dots"></span><span class="pn">3, 9, 12, 13, 14, 15, 16, 29</span></div>
+<div class="ix"><span>Segments</span><span class="dots"></span><span class="pn">5, 12, 17</span></div>
+<div class="ix"><span>Settings</span><span class="dots"></span><span class="pn">4, 5, 12, 26, 29, 31</span></div>
+<div class="ix"><span>Setup</span><span class="dots"></span><span class="pn">4, 30, 31</span></div>
 <div class="ix"><span>Single-display mode</span><span class="dots"></span><span class="pn">22</span></div>
 <div class="ix"><span>Speed change</span><span class="dots"></span><span class="pn">5, 7, 9, 10, 17, 18, 19, 20</span></div>
-<div class="ix"><span>Surrey rally type</span><span class="dots"></span><span class="pn">17, 18, 19, 29</span></div>
+<div class="ix"><span>Stage Go</span><span class="dots"></span><span class="pn">9</span></div>
+<div class="ix"><span>Surrey rally type</span><span class="dots"></span><span class="pn">9, 17, 18, 19, 29</span></div>
 <div class="ix"><span>Tone</span><span class="dots"></span><span class="pn">4, 29</span></div>
 <div class="ix"><span>Total</span><span class="dots"></span><span class="pn">7, 9, 14, 15, 16, 17, 18, 19, 21</span></div>
-<div class="ix"><span>Trip</span><span class="dots"></span><span class="pn">7, 9, 10, 17, 18, 19, 22</span></div>
-<div class="ix"><span>Units (kph / mph)</span><span class="dots"></span><span class="pn">5, 7, 13, 29</span></div>
+<div class="ix"><span>Trip</span><span class="dots"></span><span class="pn">7, 8, 9, 10, 17, 18, 19, 22</span></div>
+<div class="ix"><span>Units (kph / mph)</span><span class="dots"></span><span class="pn">5, 7, 13, 16, 29</span></div>
 <div class="ix"><span>Upload stage</span><span class="dots"></span><span class="pn">6, 13, 17</span></div>
-<div class="ix"><span>Wi-Fi</span><span class="dots"></span><span class="pn">4, 30</span></div>
-<div class="ix"><span>Zero (driver)</span><span class="dots"></span><span class="pn">3, 7, 9, 10, 14, 15, 18, 28</span></div>
+<div class="ix"><span>Wi-Fi</span><span class="dots"></span><span class="pn">4, 31</span></div>
+<div class="ix"><span>Zero (driver)</span><span class="dots"></span><span class="pn">3, 7, 9, 10, 14, 15, 17, 18, 28</span></div>
 </div>
 </section>
 <!--INDEX-END-->

@@ -12,6 +12,33 @@ long surreyNaviMetres(const RallyState& s, uint64_t c1, uint64_t c2) {
     return adjustedDistanceMetersMm(odometerMm(s, c1, c2), 0);
 }
 
+long metresToStageStart(const RallyState& s, uint64_t c1, uint64_t c2, long start_distance_m) {
+    if (start_distance_m <= 0) return 0;   // no "Distance at start" entered: nothing to arrive at, even with Total negative
+    return start_distance_m - (isSurrey(s) ? surreyNaviMetres(s, c1, c2) : totalShownMetres(s, c1, c2));
+}
+
+const char* const SURREY_TOTAL_RESET_NOTICE = "Use set during a stage";
+
+bool surreyStageLive(const RallyState& s) {
+    if (!isSurrey(s)) return false;
+    const bool running = s.segment_current_number >= 0 && !s.stage_complete;
+    const bool early_countdown = s.auto_start_rally_time_s != 0 && s.auto_start_early_departure;
+    return running || early_countdown;
+}
+
+bool surreySetTotal(RallyState& s, uint64_t c1, uint64_t c2, double metres) {
+    if (!isSurrey(s) || metres < 0.0) return false;
+    const int64_t before_mm = odometerMm(s, c1, c2);
+    if (!setOdometerMetres(s, c1, c2, metres)) return false;
+    if (surreyStageLive(s))
+        s.total_distance_adjust_mm += static_cast<long>(odometerMm(s, c1, c2) - before_mm);
+    return true;
+}
+
+bool surreyTotalResetBlocked(const RallyState& s) {
+    return surreyStageLive(s);
+}
+
 int tripHistoryRows(const RallyState&) {
     return static_cast<int>(HOME_HISTORY_ENTRIES);
 }

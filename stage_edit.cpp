@@ -175,6 +175,12 @@ bool stageEditSetAutostart(AppData* d, bool on, std::string* error) {
         applyAutoStartArming(d, autoStartDisarmed());
         return true;
     }
+    // No arming while a stage is running (the Segments tick, Navi's auto key and the phone all come
+    // through here): the loaded stage is the one running, so it would only restart itself.
+    if (classifyTotalReset(*d->state) == TotalResetCase::StageRunning) {
+        if (error) *error = "A stage is running";
+        return false;
+    }
     const long tod = slotOf(d).start_time_s;
     const int64_t now_ms = getRallyTime_ms(*d->state);
     if (tod < 0) {

@@ -4,6 +4,7 @@
 #include "calculations.h"
 #include "rally_types.h"
 #include "sector.h"
+#include "surrey.h"
 #include "rally_state.h"
 #include "counter_poller.h"
 #include "tone_generator.h"
@@ -70,22 +71,24 @@ static void computeDriverShown(AppData* data) {
     const int page = data->driverPage;
     const DriverTrialView& v = data->driverTrial;
     const bool italianFig = (page == AppData::DP_ITALIAN_TRIAL || page == AppData::DP_ITALIAN_NAVI);
-    const bool mph = data->state->units && !italianFig;
+    const bool mph = data->state->units;   // italian follows the setting too
     sh.speed = italianFig ? data->driverTrialSpeedText : data->driverSpeedText;
     sh.targetCap = "Target";
     if (italianFig) sh.target = data->driverTrialTargetText;
     else if (page == AppData::DP_GREEK_STAGE || !data->driverCompactMode) sh.target = data->driverTargetText;
     else {
-        sh.targetCap = mph ? "Arrival (mph)" : "Arrival (kph)";
-        sh.target = arrivalSpeedText(data->driverArrivalKph, mph);
+        if (data->driverStartSpeedKph >= 0) {   // the last minute: the stage speed, as a start on the minute shows it
+            sh.target = driverSpeedText(data->driverStartSpeedKph * (data->state->units ? 0.621371 : 1.0),
+                                        data->state->rally_type);
+        } else {
+            sh.targetCap = mph ? "Arrival (mph)" : "Arrival (kph)";
+            sh.target = arrivalSpeedText(data->driverArrivalKph, mph);
+        }
     }
-    // Averages at 2 dp from the unrounded figures; italian speeds are km/h even when the box is set to mph.
-    auto avgText = [&](double x) {
-        return page == AppData::DP_ITALIAN_NAVI ? trialSpeedText(data->state->units ? x / 0.621371 : x)
-                                                 : averageSpeedText(x);
-    };
+    // Averages at 2 dp from the unrounded figures, in the units chosen in Settings (italian too).
+    auto avgText = [&](double x) { return averageSpeedText(x); };
     sh.totalAvg = (page == AppData::DP_ITALIAN_TRIAL)
-        ? (v.avgValid ? trialSpeedText(v.avgKph) : std::string("--.--"))
+        ? (v.avgValid ? trialSpeedText(data->state->units ? v.avgKph * 0.621371 : v.avgKph) : std::string("--.--"))
         : avgText(data->driverTotalAvg);
     if (page == AppData::DP_ITALIAN_TRIAL) {
         sh.tripAvg.clear();   // a pc / pm has no trip row
@@ -565,7 +568,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             const DriverTrialView& v = data->driverTrial;
             const double fs = L.fscale;
             const bool italianFig = (page == AppData::DP_ITALIAN_TRIAL || page == AppData::DP_ITALIAN_NAVI);
-            const bool mph = data->state->units && !italianFig;
+            const bool mph = data->state->units;
             const char* speedUnit = mph ? "Mph" : "Kph";
 
             // ---- top right: present speed. The arc's top is near the hub, so this
@@ -581,7 +584,11 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             // ---- top left: target (stages), or the speed to arrive at the next stage (between stages).
             // The arc's top is near the hub, so this stack is not tied to bandTargetX
             // (the arc's left end, down by the error box). Ink starts a few pixels in.
-            cairo_set_source_rgb(cr, 1.0, 0.867, 0.0);  // #FFDD00
+            // Blue (figure and legend) while it is the arrival speed; the usual yellow for a target.
+            if (data->driverShown.targetCap.rfind("Arrival", 0) == 0)
+                cairo_set_source_rgb(cr, 0.0, 1.0, 1.0);  // the Trip cyan
+            else
+                cairo_set_source_rgb(cr, 1.0, 0.867, 0.0);  // #FFDD00
             {
                 const double topLeftInk = 4.0 * fs;
                 const std::string& big = data->driverShown.target;
@@ -756,7 +763,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                 if (page == AppData::DP_ITALIAN_TRIAL) {
                     txt = countdownBoxText(v.toLineS);
                 } else {
-                    ahead = data->driverMinutes >= 0;
+                    ahead = !data->driverMinutesBehind;   // red on the true sign, as the co-pilot box
                     txt = (data->driverMinutes > 0 ? "+" : "") + std::to_string(data->driverMinutes);
                 }
                 if (ahead) cairo_set_source_rgb(cr, 0.0, 0.667, 0.0);   // green (#0a0)
@@ -907,11 +914,15 @@ void updateDriverDisplay(AppData* data) {
     std::string trip_dist_str = formatDistance(static_cast<double>(trip_dist_m), dist_km);
     data->driverTripDistText = trip_dist_str;
     data->driverTripUnitText = trip_unit;
-    data->driverTotalM = static_cast<double>(total_dist_m);
+    // Surrey: Total is the roadbook's running distance, as on the co-pilot page.
+    data->driverTotalM = isSurrey(*data->state)
+        ? static_cast<double>(surreyNaviMetres(*data->state, current_poll.cntr1, current_poll.cntr2))
+        : static_cast<double>(total_dist_m);
     data->driverTripM  = static_cast<double>(trip_dist_m);
     data->driverStageNo = data->state->last_memory_slot;
     // Stage arrival: the speed to reach the loaded stage's start with a minute spare (as Home).
     data->driverArrivalKph = -1;
+    data->driverStartSpeedKph = -1;
     {
         const int slot = data->state->last_memory_slot;
         // Distance to the start belongs to greek and surrey only; an italian sector has none.
@@ -923,8 +934,15 @@ void updateDriverDisplay(AppData* data) {
                 struct tm* lt = localtime(&tt);
                 if (lt) {
                     const long tod = lt->tm_hour * 3600L + lt->tm_min * 60L + lt->tm_sec;
-                    StageArrival arr = stageArrival(static_cast<double>(start_dist), (start_s - tod) / 60.0);
+                    // Distance still to go to the start line (Total as shown); past it, nothing.
+                    StageArrival arr = stageArrival(
+                        static_cast<double>(metresToStageStart(*data->state, current_poll.cntr1, current_poll.cntr2, start_dist)),
+                        (start_s - tod) / 60.0);
                     if (arr.valid) data->driverArrivalKph = arr.speed_kph;
+                    const double mins_to_start = (start_s - tod) / 60.0;
+                    // The coming stage is the loaded roadbook (a start adopts it), not the last stage driven.
+                    if (mins_to_start > 0.0 && mins_to_start <= 1.0 && !data->state->segments.empty())
+                        data->driverStartSpeedKph = data->state->segments[0].target_speed_kph;
                 }
             }
         }
@@ -998,14 +1016,14 @@ void updateDriverDisplay(AppData* data) {
                 data->driverMinutesValid = v_ok;
                 const long m = minutesInHand(ahead);
                 data->driverMinutes = ahead >= 0.0 ? m : -m;
+                data->driverMinutesBehind = ahead < 0.0;
             }
         }
         if (data->driverTrial.active || data->driverPage == AppData::DP_ITALIAN_NAVI) {
             data->driverTrialTargetText = trialSpeedText(
-                seg.target_speed_kph);
-            double kph = data->smoothedSpeed;
-            if (kph >= 0.0 && data->state->units) kph *= 1.609344;   // smoothedSpeed is mph then
-            data->driverTrialSpeedText = kph < 0.0 ? "--.--" : trialSpeedText(kph);
+                data->state->units ? seg.target_speed_kph * 0.621371 : seg.target_speed_kph);
+            const double shownSpeed = data->smoothedSpeed;   // already in the chosen units (mph when set)
+            data->driverTrialSpeedText = shownSpeed < 0.0 ? "--.--" : trialSpeedText(shownSpeed);
         }
 
         // Fraction of the current segment driven, for the needle's scale chevrons

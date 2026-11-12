@@ -101,7 +101,7 @@
     const unitEl = document.getElementById('drv-total-m');
     const distUnit = (unitEl && unitEl.dataset.unit) || 'km';
     const showTrip = page !== 1;
-    const unitLow = (!italianFig && msg.units === 'mph') ? 'mph' : 'kph';
+    const unitLow = (msg.units === 'mph') ? 'mph' : 'kph';
     const drawAt = (text, anchor, baseline, color) => {
       ctx.fillStyle = color;
       ctx.font = 'bold ' + L.valSize + 'px monospace';
@@ -368,7 +368,7 @@
     let ahead = true;
     if (drv && drv.page === 1 && drv.box) rightText = String(drv.box);
     else if (drv && drv.page === 2 && drv.min !== undefined && drv.min !== null) {
-      ahead = Number(drv.min) >= 0;
+      ahead = (drv.behind !== undefined) ? !drv.behind : Number(drv.min) >= 0;   // the box's own sign, red even at 0 minutes
       rightText = (Number(drv.min) > 0 ? '+' : '') + drv.min;
     }
     ctx.font = 'bold ' + (boxMode ? L.boxFontSize : L.valSize) + 'px monospace';
@@ -608,11 +608,11 @@
     const figureBase = boxMode ? null : L.speedBase - PORTRAIT_DROP;
     ctx.fillStyle = '#fff';
     const curBase = drawCorner(cur, topRightInk, true, L.curTopSize, figureBase);
-    drawCornerLabel(italianFig ? 'Kph' : (msg.units === 'mph' ? 'Mph' : 'Kph'), topRightInk, true, curBase);
+    drawCornerLabel((msg.units === 'mph' ? 'Mph' : 'Kph'), topRightInk, true, curBase);
 
     // Same inset as the box: the arc's top is near the hub, so the yellow
     // stack sits a few pixels in from the panel edge.
-    ctx.fillStyle = '#FFDD00';
+    ctx.fillStyle = (sh.cap && sh.cap.indexOf('Arrival') === 0) ? '#0ff' : '#FFDD00';   // arrival = the Trip cyan, target = yellow, as the box
     if (sh.cap && sh.cap !== 'Target') {   // the box's between-stages arrival, its own figure and caption
       const b = drawCorner(tgt, topLeftInk, false, L.curTopSize, figureBase);
       drawCornerLabel(sh.cap, topLeftInk, false, b);

@@ -474,8 +474,8 @@ std::string segmentSpeedTransition(double next_speed, bool has_next, bool is_mph
 std::string speedChangeLine(double cur_kph, double next_kph, bool has_next, bool is_mph);
 
 // Home's Stage arrival block: minutes until the stage starts, and the speed
-// that gets the car to the line one minute early -- distance_at_start_m
-// divided by (minutes - 1). Not valid (blank on screen) when there is no
+// that gets the car to the line one minute early -- the distance STILL TO GO
+// to the start (start distance minus Total) divided by (minutes - 1). Not valid (blank on screen) when there is no
 // time to cover the distance or no distance.
 struct StageArrival {
     bool valid = false;

@@ -869,13 +869,43 @@ public:
 
         suite->addTest("RB-WEB-21: past the line the count down km is +0.04 and the seconds +0:01.4, as the box", []() {
             SectorPanel p; p.running = true; p.metresPast = 40; p.metresToGo = 0;
-            return sectorCountdownKmText(p) == "+0.04" && sectorSecondsText(-1.45) == "+0:01.4"
+            return sectorCountdownKmText(p, true) == "+0.04" && sectorSecondsText(-1.45) == "+0:01.4"
                 && sectorSecondsText(75.5) == "1:15.5";
         });
 
         suite->addTest("RB-WEB-21: before the line the count down km has no sign", []() {
             SectorPanel p; p.running = true; p.metresToGo = 1240;
-            return sectorCountdownKmText(p) == "1.24";
+            return sectorCountdownKmText(p, true) == "1.24";
+        });
+
+        suite->addTest("italian card figures follow the distance and speed units, cut down not rounded", []() {
+            SectorPanel p; p.running = true; p.metresToGo = 1245; p.metresPast = 0;
+            SectorPanel q; q.running = true; q.metresPast = 40;
+            return sectorDistText(1245, true) == "1.24" && sectorDistText(1199.9999, true) == "1.20"
+                && sectorDistText(1245, false) == "1245"
+                && sectorCountdownKmText(p, false) == "1245" && sectorCountdownKmText(q, false) == "+40"
+                && sectorSpeedText(50, false) == "50.00" && sectorSpeedText(50, true) == "31.07"
+                && sectorSpeedWhole(50, true) == 31 && sectorSpeedWhole(50, false) == 50;
+        });
+
+        suite->addTest("the phone card carries the box's units: mph and metres", []() {
+            RallyState s = running();
+            s.units = true; s.distance_km = false;
+            const std::string j = sectorCardJson(s, 20000, 0, 0, 0);
+            RallyState k = running();
+            const std::string jk = sectorCardJson(k, 20000, 0, 0, 0);
+            return j != jk && j.find("\"in_km\":\"") != std::string::npos;
+        });
+
+        suite->addTest("italian: the Total reset is blocked for the whole of a running sector, nowhere else", []() {
+            RallyState s = running();
+            const bool first_row = sectorTotalResetBlocked(s);
+            RallyState later = s; later.segment_current_number = 1;
+            RallyState done = s; done.stage_complete = true;
+            RallyState idle = s; idle.segment_current_number = -1;
+            RallyState greek = s; greek.rally_type = 0;
+            return first_row && sectorTotalResetBlocked(later) && !sectorTotalResetBlocked(done)
+                && !sectorTotalResetBlocked(idle) && !sectorTotalResetBlocked(greek);
         });
 
         suite->addTest("phone +/- box is red for a fraction of a minute behind", []() {

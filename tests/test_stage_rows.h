@@ -332,6 +332,17 @@ public:
                 && m.ref == "2" && m.kph == "30.00" && m.tot == formatHMmSs(rows[2].total_s);
         });
 
+        suite->addTest("segment row speeds follow kph / mph (stored in km/h)", []() {
+            std::vector<Segment> segs(2);
+            segs[0].distance_m = 380; segs[0].target_speed_kph = 64.37376;   // 40 mph typed
+            segs[1].type = SEG_PM; segs[1].distance_m = 500; segs[1].ref = 2; segs[1].target_speed_kph = 50;
+            std::vector<StageRow> rows = buildStageRows(segs, 1, 0);
+            SegRowText g = segRowText(segs[0], rows[0], 0, 0, false, true);
+            SegRowText g2 = segRowText(segs[0], rows[0], 0, 0, false, false);
+            SegRowText it = segRowText(segs[1], rows[1], 1, 2, true, true);
+            return g.kph == "40" && g2.kph == "64.3738" && it.kph == "31.07";
+        });
+
         suite->addTest("segments side panel text as the box shows it", []() {
             std::vector<Segment> segs(2);
             segs[0].distance_m = 50000; segs[1].distance_m = 46240;

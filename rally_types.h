@@ -109,6 +109,7 @@ struct AppData {
                          DP_GREEK_STAGE = 3, DP_GREEK_IDLE = 4;
     int driverPage = DP_GREEK_IDLE;
     double driverTotalM = 0.0, driverTripM = 0.0;   // distances with their corrections, metres
+    double driverStartSpeedKph = -1; // final minute before the loaded stage starts: its first target speed (kph), -1 = none
     int driverArrivalKph = -1;      // speed to reach the next stage with a minute spare (kph), -1 = none
     long driverStageNo = 0;         // the loaded stage, 1-99
     // Greek stage page: the average speed over the run being driven -- from the box where the
@@ -122,6 +123,7 @@ struct AppData {
     bool driverSubAvgValid = false;
     double driverRowS = 0.0;        // italian navi row: its duration at its target speed
     bool driverMinutesValid = false;
+    bool driverMinutesBehind = false;   // italian navi: truly behind schedule, even when the rounded minutes read 0 (red)
     long driverMinutes = 0;         // italian navi: minutes ahead (+) / behind (-)
 
     // Runtime latch for the alternative time-error-only tone

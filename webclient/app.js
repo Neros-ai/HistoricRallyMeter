@@ -192,7 +192,10 @@
     naviView.classList.toggle('rally-italian', italianNow);
     naviView.classList.toggle('rally-surrey', sur);
     $('time-taken-row').style.display = (sur && msg.time_taken) ? '' : 'none';
-    if (sur || italianNow) boxFig($('navi-m'), hf[2]);
+    if (sur || italianNow) {
+      boxFig($('navi-m'), hf[2]);
+      if (hf[2] === '---') delete $('navi-m').dataset.unit;   // surrey, no stage on the gauge
+    }
     if (sur) {
       $('time-taken-label').textContent = 'time taken ss' + (Number(msg.time_taken_stage) >= 1 ? msg.time_taken_stage : '-');
       $('time-taken').textContent = msg.time_taken || '';
@@ -255,7 +258,7 @@
     if (page !== 1) boxFig($('drv-trip-m'), shown.trip_dist || '');
     $('drv-trip-avg').textContent = shown.trip_avg || '';
     $('drv-total-avg').textContent = shown.total_avg || '';
-    document.querySelectorAll('.avg-unit').forEach((e) => { e.textContent = italianFig ? 'kph' : units; });
+    document.querySelectorAll('.avg-unit').forEach((e) => { e.textContent = units; });
     const totalUnit = document.querySelector('#drv-box-total .avg-unit');
     if (totalUnit) totalUnit.style.display = page === 1 ? 'none' : '';   // a pc / pm shows "sub avg" with no unit
 
@@ -464,7 +467,7 @@
       const pc = Number(type) === 2;
       return '<b class="tag t' + Number(type) + (pc ? ' pc' : '') + '">' + (name || '') + (pc ? watch : '') + '</b>';
     };
-    let html = '<table><tr><th></th><th>km</th><th>progr</th><th>mm:ss</th><th>km/h</th></tr>';
+    let html = '<table><tr><th></th><th>' + (distanceKm ? 'km' : 'm') + '</th><th>progr</th><th>mm:ss</th><th>' + (units === 'mph' ? 'mph' : 'km/h') + '</th></tr>';
     html += '<tr class="now"><td>' + tag(s.in_tag, s.in_type) + '</td><td>' + (s.in_km || '') + '</td><td class="cyan">'
       + (s.in_progr || '') + '</td><td class="cyan">' + (s.in_mmss || '') + '</td><td>' + (s.in_kph || '') + '</td></tr>';
     html += '<tr class="cdrow"><td class="cd"><span>count</span><span>down</span></td><td class="' + (s.count_past ? 'late' : 'orange') + '">' + (s.count_km || '')
@@ -486,11 +489,11 @@
     if (s.co_hhmm) {
       html += '<div class="it-co"><span class="cyan">co' + (s.co_ref || '') + ' arrival</span><b class="when">'
         + s.co_hhmm + '</b></div>';
-      html += '<div class="it-kph"><span class="cap">kph</span><b class="cyan">' + s.co_kph + '</b></div>';
+      html += '<div class="it-kph"><span class="cap">' + (units === 'mph' ? 'mph' : 'kph') + '</span><b class="cyan">' + s.co_kph + '</b></div>';
       html += '<div class="it-min"><span class="cap">min</span><b>' + s.co_min + '</b></div>';
     } else {
       html += '<div class="it-co ghost"><span>co</span><b class="when">0</b></div>'
-        + '<div class="it-kph ghost"><span class="cap">kph</span><b>0</b></div>'
+        + '<div class="it-kph ghost"><span class="cap">' + (units === 'mph' ? 'mph' : 'kph') + '</span><b>0</b></div>'
         + '<div class="it-min ghost"><span class="cap">min</span><b>0</b></div>';
     }
     if (s.ahead_min !== undefined && s.ahead_min !== null) {
@@ -619,7 +622,8 @@
     const head = $('seg-table').querySelector('thead tr');
     const mode = distanceKm ? 'decimal' : 'numeric';
     // Headings as the box's Segments page: "from -m- to" spans both columns.
-    const headKey = (italian ? 'it' : 'gr') + '|' + unit;
+    const spdHead = units === 'mph' ? 'MPH' : 'KPH';
+    const headKey = (italian ? 'it' : 'gr') + '|' + unit + '|' + spdHead;
     if (head.dataset.k !== headKey) {
       head.dataset.k = headKey;
       // Column widths per rally type (CSS col.c-*): greek and surrey share the greek set.
@@ -632,7 +636,7 @@
       if (!cg) { cg = document.createElement('colgroup'); tbl.insertBefore(cg, tbl.firstChild); }
       cg.innerHTML = cols.map((c) => '<col class="c-' + c + '">').join('');
       head.innerHTML = (italian ? '<th>sub</th><th class="c">type</th><th>ref</th>' : '<th>box</th><th class="c">chg</th><th class="c">auto</th>')
-        + '<th colspan="2" class="ft">from -' + unit + '- to</th><th>dist</th><th>KPH</th><th>dur</th><th>elapsed</th><th></th>';
+        + '<th colspan="2" class="ft">from -' + unit + '- to</th><th>dist</th><th>' + spdHead + '</th><th>dur</th><th>elapsed</th><th></th>';
     }
     const tags = ['-', 'navi', 'pc', 'ct', 'pm', 'co'];
     const rows = state.rows || [];
@@ -857,7 +861,7 @@
     send({ type: 'distance_set', meters: meters });
   });
   $('key-navi').addEventListener('click', () => {
-    if ($('view-navi').classList.contains('rally-greek')) return;
+    if (!$('view-navi').classList.contains('rally-italian')) return;   // italian only: greek's is countdown, surrey's is "stage"
     const now = lastTelemetry && Number(lastTelemetry.navi_m);
     $('navi-label').textContent = distanceKm ? 'Set Navi (km)' : 'Set Navi (m)';
     $('navi-metres').value = Number.isFinite(now) ? stageInput(now) : '';
@@ -944,6 +948,10 @@
   // distance zero is the press, so the box is told at once and the reset
   // applied only if the crew confirm.
   function resetTotal() {
+    if (lastState && lastState.total_reset_blocked) {   // italian, sector running: the box's own notice, no reset
+      alert(lastState.total_reset_notice || 'Use set or next during a sector');
+      return;
+    }
     if (stageRunning()) {
       send({ type: 'reset_total_capture' });
       $('stage-menu').classList.remove('hidden');

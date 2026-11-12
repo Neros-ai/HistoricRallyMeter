@@ -83,20 +83,21 @@ public:
             return s.rally_type == 0;
         });
 
-        suite->addTest("choosing italian lights 00.00; choosing greek lights 0,000 and AB,AC", []() {
+        suite->addTest("choosing a rally type leaves distance units, kph / mph and measure type alone", []() {
             RallyState s;
+            s.distance_km = false; s.units = true; s.measure_ab_bc = true;
             applyRallyTypeDefaults(s, 2);
-            const bool italian_ok = s.rally_type == 2 && s.distance_km;
-            s.measure_ab_bc = true;
+            const bool italian_ok = s.rally_type == 2 && !s.distance_km && s.units && s.measure_ab_bc;
+            s.distance_km = true; s.measure_ab_bc = false;
             applyRallyTypeDefaults(s, 0);
-            return italian_ok && s.rally_type == 0 && !s.distance_km && !s.measure_ab_bc;
+            return italian_ok && s.rally_type == 0 && s.distance_km && s.units && !s.measure_ab_bc;
         });
 
-        suite->addTest("choosing surrey lights 0,000 and AB,AC (RB-NAV-43)", []() {
+        suite->addTest("choosing surrey leaves the units and measure type as they were (RB-NAV-43)", []() {
             RallyState s;
-            applyRallyTypeDefaults(s, 2);
+            s.distance_km = true; s.measure_ab_bc = true;
             applyRallyTypeDefaults(s, 1);
-            return s.rally_type == 1 && !s.distance_km && !s.measure_ab_bc;
+            return s.rally_type == 1 && s.distance_km && s.measure_ab_bc;
         });
 
         suite->addTest("a fresh state starts with greek defaults", []() {

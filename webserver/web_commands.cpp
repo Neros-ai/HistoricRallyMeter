@@ -4,6 +4,7 @@
 #include "callbacks.h"
 #include "stage_phase.h"
 #include "sector.h"
+#include "surrey.h"
 #include "rally_types.h"
 #include "rally_state.h"
 #include "stage_edit.h"
@@ -122,6 +123,7 @@ bool webHandleCommand(AppData* data, const char* json) {
         // press, asks the box's question, and sends choice "confirm" only if
         // the crew confirm. If the stage was driven out meanwhile, the confirm
         // is the plain idle reset, as on the box.
+        if (sectorTotalResetBlocked(*data->state)) return false;   // italian, sector running: as the box
         char choice[16] = "";
         jsonFindString(json, "choice", choice, sizeof(choice));
         return applyTotalReset(data, strcmp(choice, "confirm") == 0
@@ -130,7 +132,8 @@ bool webHandleCommand(AppData* data, const char* json) {
     }
     if (strcmp(type, "reset_total_capture") == 0) {
         // The press itself: the distance zero, if the crew then confirm.
-        if (classifyTotalReset(*data->state) == TotalResetCase::StageRunning) {
+        if (!sectorTotalResetBlocked(*data->state) && !surreyTotalResetBlocked(*data->state) &&
+            classifyTotalReset(*data->state) == TotalResetCase::StageRunning) {
             captureTotalResetPress(data);
         }
         return false;
@@ -162,9 +165,10 @@ bool webHandleCommand(AppData* data, const char* json) {
         if (meters < 0.0 || meters > 999999.0) return false;
         return applyDistanceSet(data, meters);
     }
-    // The navi key (Italian and Surrey). Greek's third key is the countdown label and does nothing.
+    // The navi key (Italian only). Greek's third key is the countdown label and surrey's is "stage",
+    // a figure with nothing to set.
     if (strcmp(type, "navi_set") == 0) {
-        if (!data->state || data->state->rally_type == 0 || !data->poller) return false;
+        if (!data->state || data->state->rally_type != 2 || !data->poller) return false;
         const CounterPoll poll = data->poller->getMostRecent();
         bool reset = false;
         jsonFindBool(json, "reset", &reset);
@@ -221,6 +225,7 @@ bool webHandleCommand(AppData* data, const char* json) {
     if (strcmp(type, "row_speed") == 0) {
         int row = 0; double kph = 0;
         if (!jsonFindInt(json, "row", &row) || !jsonFindDouble(json, "kph", &kph)) return false;
+        if (data->state->units) kph /= 0.621371;   // the phone types in the box's speed units; stored in km/h
         if (row < 0 || row >= static_cast<int>(data->state->segments.size()) || kph < 0 || kph > 400) return false;
         stageEditSetSpeed(data, static_cast<size_t>(row), kph);
         refreshSegmentList(data);

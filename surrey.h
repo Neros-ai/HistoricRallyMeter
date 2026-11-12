@@ -12,9 +12,26 @@
 // rally_type 1.
 bool isSurrey(const RallyState& s);
 
-// Navi total (the italian odometer, which a stage start never zeroes) with its Set Navi
-// correction, whole metres. Total and its corrections are separate and untouched by it.
+// Surrey's Total as the screens show it (owner 2026-11-12): the roadbook's running distance, which
+// a stage start never zeroes -- the count italian calls navi -- with its `set` correction, whole
+// metres. The third figure, "stage", is the distance since the `now` press (the count greek calls
+// Total), which the stage itself runs on exactly as in greek.
 long surreyNaviMetres(const RallyState& s, uint64_t c1, uint64_t c2);
+// Stage arrival: metres still to go to the loaded stage's start (its "Distance at start"), for Home,
+// the driver display and the phone alike. Measured on the Total each rally type shows: surrey's
+// roadbook Total, greek's Total. Zero or less once the start is passed.
+long metresToStageStart(const RallyState& s, uint64_t c1, uint64_t c2, long start_distance_m);
+
+// True while a surrey stage is live: running, or an early departure counting down.
+bool surreyStageLive(const RallyState& s);
+// `set` in surrey: pins Total (the roadbook figure) to `metres`. While a stage is live the stage
+// distance moves by the same amount, so the two always agree about where the car is. False (nothing
+// changed) for a negative figure.
+bool surreySetTotal(RallyState& s, uint64_t c1, uint64_t c2, double metres);
+// The Total key does not reset while a surrey stage is live: Total is the roadbook figure, corrected
+// with `set`. Outside a stage the key zeroes it (where the roadbook restarts).
+bool surreyTotalResetBlocked(const RallyState& s);
+extern const char* const SURREY_TOTAL_RESET_NOTICE;
 
 // Trip history readings shown on Home: four, in every rally type (surrey's foot line is time taken).
 int tripHistoryRows(const RallyState& s);

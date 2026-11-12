@@ -67,6 +67,12 @@ bool applyTotalReset(AppData* data, TotalResetChoice choice) {
     // armed there is no question. If the stage is driven out meanwhile, the
     // confirm is a plain idle reset below -- its clock no longer matters.
 
+    // Not while an italian sector runs or a surrey stage is live (the phone comes through here).
+    if (sectorTotalResetBlocked(state) || surreyTotalResetBlocked(state)) {
+        data->totalResetPending = false;
+        return false;
+    }
+
     switch (classifyTotalReset(state)) {
     case TotalResetCase::AwaitingEarlyDeparture:
         applyTotalResetAwaitingEarlyDeparture(state, poll.cntr1, poll.cntr2, now_ms);
@@ -99,13 +105,7 @@ bool applyTotalReset(AppData* data, TotalResetChoice choice) {
         // (surrey keeps the fit its start press gave row 1); an italian sector's rows are not
         // moved by next.
         if (state.rally_type != 2 && !state.segments.empty()) {
-            state.stage_segments = stageForDriving(state.segments);
-            if (isSurrey(state)) {
-                const int n = state.last_memory_slot;
-                if (n >= 1 && n <= RallyState::MAX_MEMORY_SLOTS)
-                    fitStageToStart(state.stage_segments, state.memory_slots[n - 1].first_from_m,
-                                    state.sector_start_odometer_mm / 1000.0, state.calibration);
-            }
+            state.stage_segments = stageForDriving(state.segments);   // greek only gets here: surrey is refused above
         }
         // The car may already be past speed changes by the time the crew
         // confirm. Auto-advance steps one segment at a time and re-bases each
@@ -128,6 +128,9 @@ bool applyTotalReset(AppData* data, TotalResetChoice choice) {
         // navi is independent (owner 2026-10-31): Total does not zero it.
         break;
     }
+    // Surrey's Total is the roadbook figure (the navi count): the key zeroes that, where the
+    // roadbook restarts. Only outside a live stage -- refused above otherwise.
+    if (isSurrey(state)) setOdometerMetres(state, poll.cntr1, poll.cntr2, 0.0);
 
     // Waypoints are measured from the Total counter's zero, so re-zeroing it
     // puts every waypoint back in front of the car.
@@ -189,6 +192,14 @@ static TotalResetChoice askTotalResetDuringStage(GtkWidget* widget) {
 void on_total_reset(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     TotalResetChoice choice = TotalResetChoice::Cancel;
+    if (sectorTotalResetBlocked(*data->state)) {   // italian, sector running: no reset, no question
+        flashNotice(widget, SECTOR_TOTAL_RESET_NOTICE);
+        return;
+    }
+    if (surreyTotalResetBlocked(*data->state)) {   // surrey, stage live: Total is the roadbook figure
+        flashNotice(widget, SURREY_TOTAL_RESET_NOTICE);
+        return;
+    }
     if (classifyTotalReset(*data->state) == TotalResetCase::StageRunning) {
         // Before asking: the zero is where the button was pressed.
         captureTotalResetPress(data);
@@ -288,6 +299,14 @@ void applyDistanceAdjust(AppData* data, long delta_m) {
 bool applyDistanceSet(AppData* data, double meters) {
     const int64_t wanted_mm = static_cast<int64_t>(std::llround(meters * 1000.0));
     if (wanted_mm < 0) return false;
+    if (isSurrey(*data->state)) {   // surrey's Total is the roadbook figure; a live stage moves with it
+        const CounterPoll poll = data->poller->getMostRecent();
+        if (!surreySetTotal(*data->state, poll.cntr1, poll.cntr2, meters)) return false;
+        data->beepCursorsStale = true;   // the waypoints are measured against it
+        ConfigFile::save(*data->state);
+        updateCopilotDisplay(data);
+        return true;
+    }
     // Solve for the correction that makes the reading equal what the operator
     // entered, to the millimetre.
     const int64_t raw_mm = rawDistanceMm(data, false);
@@ -340,10 +359,15 @@ void on_distance_set(GtkWidget* widget, gpointer user_data) {
     gtk_box_pack_start(GTK_BOX(promptRow), prompt, FALSE, FALSE, 0);
 
     GtkEntry* entry = GTK_ENTRY(gtk_entry_new());
-    gtk_entry_set_text(entry,
-        distanceEntryText(adjustedDistanceMetersMm(rawDistanceMm(data, false),
-                                                 data->state->total_distance_adjust_mm),
-                          data->state->distance_km).c_str());
+    {
+        // Pre-filled with the Total on screen: surrey's is the roadbook figure.
+        long shown_m = adjustedDistanceMetersMm(rawDistanceMm(data, false), data->state->total_distance_adjust_mm);
+        if (isSurrey(*data->state)) {
+            const CounterPoll set_poll = data->poller->getMostRecent();
+            shown_m = surreyNaviMetres(*data->state, set_poll.cntr1, set_poll.cntr2);
+        }
+        gtk_entry_set_text(entry, distanceEntryText(shown_m, data->state->distance_km).c_str());
+    }
     // Capped at 6 digits (999,999 m): past that the display auto-switches
     // to km, which reads as if the entered value got truncated.
     gtk_entry_set_max_length(entry, 6);
@@ -464,7 +488,7 @@ int chooseStageDialog(GtkWidget* widget, AppData* data, int current) {
 
 void on_navi_dialog(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
-    if (data->state->rally_type == 0) return;   // italian and surrey
+    if (data->state->rally_type != 2) return;   // italian only: surrey's third key is "stage", a figure with nothing to set
 
     GtkWidget* dialog = gtk_dialog_new_with_buttons(
         "Set Navi Distance", GTK_WINDOW(gtk_widget_get_toplevel(widget)), GTK_DIALOG_MODAL, nullptr);

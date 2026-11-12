@@ -456,9 +456,10 @@ long minutesInHand(double ahead_s) {
 
 const char* readoutKeyName(int rally_type, int row) {
     // Rows 3 and 4 are the next and prev keys: greek / surrey step by speed, italian by substage.
-    // Surrey's third row is navi (the countdown moves to the stage column).
+    // Surrey's third row is "stage", the distance since the start press (the countdown moves to
+    // the stage column); its Total is the roadbook's running distance.
     static const char* names[3][5] = { {"total", "trip", "countdown", "next\nspeed", "prev\nspeed"},
-                                       {"total", "trip", "navi", "next\nspeed", "prev\nspeed"},
+                                       {"total", "trip", "stage", "next\nspeed", "prev\nspeed"},
                                        {"sector\ntotal", "sub", "navi", "next\nsubstage", "prev\nsubstage"} };
     if (row < 0 || row > 4) return "";
     return names[rally_type == 2 ? 2 : (rally_type == 1 ? 1 : 0)][row];
@@ -488,6 +489,13 @@ void zeroOdometer(RallyState& s, uint64_t c1, uint64_t c2) {
 double subAverageKph(const RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms) {
     const int64_t counts = calculateDistanceCounts(s, c1, c2, s.trip_start_cntr1, s.trip_start_cntr2);
     return calculateAverageSpeed(s, s.trip_start_time_ms, now_ms, counts, s.trip_distance_adjust_mm);
+}
+
+const char* const SECTOR_TOTAL_RESET_NOTICE = "Use set or next during a sector";
+
+bool sectorTotalResetBlocked(const RallyState& s) {
+    return s.rally_type == 2 && stageIsSector(s.stage_segments) && !s.stage_complete &&
+           s.segment_current_number >= 0 && s.auto_start_rally_time_s == 0;
 }
 
 bool subResetInStage(const RallyState& s) {
@@ -536,18 +544,6 @@ SectorPanel sectorPanel(const RallyState& s, int64_t now_ms, long stage_m) {
 
 namespace {
 
-std::string km2(double metres) {
-    char b[24];
-    snprintf(b, sizeof(b), "%.2f", metres / 1000.0);
-    return b;
-}
-
-std::string kph2(double kph) {
-    char b[24];
-    snprintf(b, sizeof(b), "%.2f", kph);
-    return b;
-}
-
 double endSum(const std::vector<Segment>& segs, long i) {
     double m = 0.0;
     for (long k = 0; k <= i && k < static_cast<long>(segs.size()); k++) m += segs[k].distance_m;
@@ -569,13 +565,13 @@ std::string hhmmRally(int64_t rally_ms) {
     return b;
 }
 
-void jsonRow(std::ostringstream& o, const char* prefix, const Segment& row, double progr) {
+void jsonRow(std::ostringstream& o, const char* prefix, const Segment& row, double progr, bool km, bool mph) {
     o << '"' << prefix << "tag\":\"" << sectorTag(row) << '"'
       << ",\"" << prefix << "type\":" << row.type
-      << ",\"" << prefix << "km\":\"" << km2(row.distance_m) << '"'
-      << ",\"" << prefix << "progr\":\"" << km2(progr) << '"'
+      << ",\"" << prefix << "km\":\"" << sectorDistText(row.distance_m, km) << '"'
+      << ",\"" << prefix << "progr\":\"" << sectorDistText(progr, km) << '"'
       << ",\"" << prefix << "mmss\":\"" << rowMmSs(row) << '"'
-      << ",\"" << prefix << "kph\":\"" << kph2(row.target_speed_kph) << '"';
+      << ",\"" << prefix << "kph\":\"" << sectorSpeedText(row.target_speed_kph, mph) << '"';
 }
 
 }  // namespace
@@ -609,8 +605,9 @@ std::string sectorCardJson(const RallyState& live, int64_t now_ms, long stage_m,
     if (cur < 0 || cur >= static_cast<long>(segs.size())) return "{\"loaded\":false}";
     std::ostringstream o;
     o << "{\"loaded\":true,\"preview\":" << (previewing ? "true" : "false") << ',';
-    jsonRow(o, "in_", segs[cur], endSum(segs, cur));
-    o << ",\"count_km\":\"" << sectorCountdownKmText(p) << "\""
+    const bool km = live.distance_km, mph = live.units;
+    jsonRow(o, "in_", segs[cur], endSum(segs, cur), km, mph);
+    o << ",\"count_km\":\"" << sectorCountdownKmText(p, km) << "\""
       << ",\"count_past\":" << (p.metresPast > 0 ? "true" : "false");
     if (p.secondsValid) {
         o << ",\"count_s\":\"" << sectorSecondsText(p.secondsToLine) << "\""
@@ -618,10 +615,10 @@ std::string sectorCardJson(const RallyState& live, int64_t now_ms, long stage_m,
     } else {
         o << ",\"count_s\":\"\",\"count_s_past\":false";
     }
-    o << ",\"avg\":\"" << kph2(p.avgKph) << '"';
+    o << ",\"avg\":\"" << sectorSpeedText(p.avgKph, mph) << '"';
     if (cur + 1 < static_cast<long>(segs.size())) {
         o << ',';
-        jsonRow(o, "next_", segs[cur + 1], endSum(segs, cur + 1));
+        jsonRow(o, "next_", segs[cur + 1], endSum(segs, cur + 1), km, mph);
     } else {
         o << ",\"next_tag\":\"\"";
     }
@@ -634,7 +631,7 @@ std::string sectorCardJson(const RallyState& live, int64_t now_ms, long stage_m,
     if (p.coValid) {
         o << ",\"co_ref\":" << p.coRef
           << ",\"co_hhmm\":\"" << hhmmRally(p.coInTimeMs) << "\""
-          << ",\"co_kph\":" << p.coKph
+          << ",\"co_kph\":" << sectorSpeedWhole(p.coKph, mph)
           << ",\"co_min\":" << p.coMinutes;
     }
     if (!previewing) {
@@ -652,14 +649,42 @@ std::string sectorCardJson(const RallyState& live, int64_t now_ms, long stage_m,
     return o.str();
 }
 
-std::string sectorCountdownKmText(const SectorPanel& p) {
+std::string sectorCountdownKmText(const SectorPanel& p, bool km) {
     char b[32];
+    if (!km) {   // whole metres
+        if (p.metresPast > 0) snprintf(b, sizeof(b), "+%ld", p.metresPast);
+        else snprintf(b, sizeof(b), "%ld", p.metresToGo);
+        return b;
+    }
     // Truncated to the 10 m, never rounded, like every other km figure.
     if (p.metresPast > 0) snprintf(b, sizeof(b), "+%.2f", std::trunc(p.metresPast / 10.0) / 100.0);
     else snprintf(b, sizeof(b), "%.2f", std::trunc(p.metresToGo / 10.0) / 100.0 + 0.0);
     return b;
 }
 
+std::string sectorDistText(double metres, bool km) {
+    const long m = std::lround(metres);
+    char b[24];
+    if (!km) {
+        snprintf(b, sizeof(b), "%ld", m);
+        return b;
+    }
+    // Cut down to the 10 m, never rounded up, like every other distance on the box, so the card
+    // never reads ahead of the car. Whole metres first, so 1199.9999 from a sum reads 1.20.
+    const long hundredths = (m < 0 ? -m : m) / 10;
+    snprintf(b, sizeof(b), "%s%ld.%02ld", m < 0 && hundredths > 0 ? "-" : "", hundredths / 100, hundredths % 100);
+    return b;
+}
+
+std::string sectorSpeedText(double kph, bool mph) {
+    char b[24];
+    snprintf(b, sizeof(b), "%.2f", mph ? kph * 0.621371 : kph);
+    return b;
+}
+
+int sectorSpeedWhole(int kph, bool mph) {
+    return mph ? static_cast<int>(std::lround(kph * 0.621371)) : kph;
+}
 // The same text without the tenths (the whole seconds of sectorSecondsText).
 std::string sectorSecondsWholeText(double s) {
     const bool late = s < 0;
