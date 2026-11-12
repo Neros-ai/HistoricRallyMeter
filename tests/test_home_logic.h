@@ -454,6 +454,12 @@ public:
             return a.valid && a.minutes == 14 && a.speed_kph == 29;
         });
 
+        suite->addTest("stage arrival uses the distance still to go, and blanks once past the line", []() {
+            // Start line at 27,000 m, car at 26,802 m: 198 m to go in 3.2 min, not 27 km.
+            StageArrival a = stageArrival(27000 - 26802, 3.2);
+            // Past the line (27,292 m): nothing to show.
+            return a.valid && a.speed_kph == 5 && !stageArrival(27000 - 27292, 2.6).valid;
+        });
         suite->addTest("stage arrival minutes count down in whole minutes, rounded down", []() {
             return stageArrival(6200, 14.75).minutes == 14      // 14 min 45 s
                 && stageArrival(6200, 14.0).minutes == 14

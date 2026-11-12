@@ -26,12 +26,57 @@ public:
             return b.rally_type == 1 && isSurrey(b) && !isSurrey(RallyState());
         });
 
-        suite->addTest("surrey defaults: metres, AB,AC", []() {
+        suite->addTest("distance to the stage start is measured on the Total each type shows", []() {
+            RallyState g;
+            RallyState s; s.rally_type = 1;
+            s.calibration = g.calibration = 1000000;
+            setOdometerMetres(s, 0, 0, 26800.0);   // surrey's Total: the roadbook figure
+            s.total_distance_adjust_mm = 350000;   // its stage distance is something else
+            return metresToStageStart(g, 0, 0, 27000) == 27000 - totalShownMetres(g, 0, 0)
+                && metresToStageStart(s, 0, 0, 27000) == 200
+                && metresToStageStart(g, 0, 0, 0) == 0
+                && [&] { RallyState n = s; setOdometerMetres(n, 0, 0, 0.0); n.odometer_adjust_mm = -144000;   // Total reads -144 m
+                         return metresToStageStart(n, 0, 0, 0) == 0; }();
+        });
+
+        suite->addTest("surrey set: pins the roadbook Total, and a live stage moves by the same amount", []() {
+            RallyState s; s.rally_type = 1; s.calibration = 1000000;
+            Segment a; a.distance_m = 1000; a.target_speed_kph = 40;
+            s.stage_segments = {a};
+            setOdometerMetres(s, 0, 0, 22960.0);
+            // No stage on the gauge: only Total moves.
+            s.segment_current_number = -1; s.stage_complete = true; s.total_distance_adjust_mm = 0;
+            const bool idle_ok = surreySetTotal(s, 0, 0, 23000.0) && surreyNaviMetres(s, 0, 0) == 23000
+                              && s.total_distance_adjust_mm == 0;
+            // Stage running, 300 m in: a +40 m correction to Total moves the stage distance +40 m.
+            s.segment_current_number = 0; s.stage_complete = false; s.total_distance_adjust_mm = 300000;
+            const bool live_ok = surreySetTotal(s, 0, 0, 23040.0) && surreyNaviMetres(s, 0, 0) == 23040
+                              && s.total_distance_adjust_mm == 340000;
+            RallyState g = s; g.rally_type = 0;
+            return idle_ok && live_ok && !surreySetTotal(s, 0, 0, -1.0) && !surreySetTotal(g, 0, 0, 100.0);
+        });
+
+        suite->addTest("surrey: the Total reset is blocked while a stage is live, not outside one", []() {
+            RallyState s; s.rally_type = 1;
+            Segment a; a.distance_m = 1000; a.target_speed_kph = 40;
+            s.stage_segments = {a};
+            s.segment_current_number = 0; s.stage_complete = false;
+            const bool running = surreyTotalResetBlocked(s);
+            RallyState done = s; done.stage_complete = true;
+            RallyState idle = s; idle.segment_current_number = -1; idle.stage_complete = true;
+            RallyState early = idle; early.auto_start_rally_time_s = 1000; early.auto_start_early_departure = true;
+            RallyState timed = idle; timed.auto_start_rally_time_s = 1000;
+            RallyState greek = s; greek.rally_type = 0;
+            return running && !surreyTotalResetBlocked(done) && !surreyTotalResetBlocked(idle)
+                && surreyTotalResetBlocked(early) && !surreyTotalResetBlocked(timed)
+                && !surreyTotalResetBlocked(greek);
+        });
+
+        suite->addTest("choosing surrey does not change units or measure type", []() {
             RallyState s;
-            applyRallyTypeDefaults(s, 2);
-            s.measure_ab_bc = true;
+            s.distance_km = true; s.measure_ab_bc = true;
             applyRallyTypeDefaults(s, 1);
-            return s.rally_type == 1 && !s.distance_km && !s.measure_ab_bc;
+            return s.rally_type == 1 && s.distance_km && s.measure_ab_bc;
         });
 
         suite->addTest("time taken round-trips; an old config gives -1", []() {
@@ -108,7 +153,7 @@ public:
 
         suite->addTest("surrey readout keys", []() {
             return std::string(readoutKeyName(1, 0)) == "total" && std::string(readoutKeyName(1, 1)) == "trip"
-                && std::string(readoutKeyName(1, 2)) == "navi"
+                && std::string(readoutKeyName(1, 2)) == "stage"
                 && std::string(readoutKeyName(1, 3)) == "next\nspeed" && std::string(readoutKeyName(1, 4)) == "prev\nspeed"
                 && std::string(readoutKeyName(0, 2)) == "countdown"
                 && std::string(readoutKeyName(2, 2)) == "navi";

@@ -98,12 +98,13 @@ std::string driverGaugeJson(AppData* data) {
     if (page == AppData::DP_ITALIAN_TRIAL) {
         o << ",\"box\":\"" << countdownBoxText(v.toLineS) << "\""
           << ",\"sector_m\":" << [&] { char sb[32]; snprintf(sb, sizeof(sb), "%.3f", v.sectorTotalM); return std::string(sb); }()   // unrounded, so the phone rounds as the box does
-          << ",\"avg\":\"" << (v.avgValid ? trialSpeedText(v.avgKph) : std::string("--.--")) << "\"";
+          << ",\"avg\":\"" << (v.avgValid ? trialSpeedText(data->state->units ? v.avgKph * 0.621371 : v.avgKph) : std::string("--.--")) << "\"";
     } else if (page == AppData::DP_ITALIAN_NAVI) {
-        if (data->driverMinutesValid) o << ",\"min\":" << data->driverMinutes;
+        if (data->driverMinutesValid)
+            o << ",\"min\":" << data->driverMinutes << ",\"behind\":" << (data->driverMinutesBehind ? "true" : "false");
         const double shown = data->tripSpeedLabel
             ? std::atof(gtk_label_get_text(data->tripSpeedLabel)) : 0.0;
-        o << ",\"avg\":\"" << trialSpeedText(data->state->units ? shown / 0.621371 : shown) << "\"";
+        o << ",\"avg\":\"" << trialSpeedText(shown) << "\"";
     } else if (page == AppData::DP_GREEK_STAGE) {
         char sb[24];
         if (data->driverSubAvgValid) {
@@ -244,7 +245,8 @@ std::string buildTelemetryJson(AppData* data) {
         struct tm* lt = localtime(&t);
         if (lt) {
             long tod = lt->tm_hour * 3600L + lt->tm_min * 60L + lt->tm_sec;
-            arr = stageArrival(static_cast<double>(start_dist), (start_s - tod) / 60.0);
+            arr = stageArrival(static_cast<double>(metresToStageStart(st, current_poll.cntr1, current_poll.cntr2, start_dist)),
+                               (start_s - tod) / 60.0);   // distance still to go, as the box
         }
     }
     const int64_t sys_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -273,7 +275,7 @@ std::string buildTelemetryJson(AppData* data) {
         const long stage_m = stagePositionMm(st, current_poll.cntr1, current_poll.cntr2) / 1000;
         const SectorPanel sp = sectorPanel(st, current_time_ms, stage_m);
         if (sp.running) {
-            itCount = "{\"km\":\"" + sectorCountdownKmText(sp) + "\",\"past\":" + (sp.metresPast > 0 ? "true" : "false") +
+            itCount = "{\"km\":\"" + sectorCountdownKmText(sp, st.distance_km) + "\",\"past\":" + (sp.metresPast > 0 ? "true" : "false") +
                       ",\"s\":" + (sp.secondsValid ? "\"" + sectorSecondsText(sp.secondsToLine) + "\"" : std::string("null")) +
                       ",\"s_past\":" + (sp.secondsValid && sp.secondsToLine < 0 ? "true" : "false") + "}";
         }
@@ -347,6 +349,10 @@ std::string buildStateJson(AppData* data) {
        // asks the same question instead of a plain "Reset total?".
        << "\"frozen\":" << (data->state->freeze_on ? "true" : "false") << ","
        << "\"sub_reset_asks\":" << (subResetInStage(*data->state) ? "true" : "false") << ","
+       << "\"total_reset_blocked\":"
+       << ((sectorTotalResetBlocked(*data->state) || surreyTotalResetBlocked(*data->state)) ? "true" : "false") << ","
+       << "\"total_reset_notice\":\""
+       << (isSurrey(*data->state) ? SURREY_TOTAL_RESET_NOTICE : SECTOR_TOTAL_RESET_NOTICE) << "\","
        << "\"total_reset_asks\":"
        << (classifyTotalReset(*data->state) == TotalResetCase::StageRunning ? "true" : "false")
        << ",";
@@ -359,7 +365,7 @@ std::string buildStateJson(AppData* data) {
         ss << "\"edit_slot\":" << slot_no << ",\"first_number\":" << slot.first_number
            << ",\"first_from_m\":" << static_cast<long>(slot.first_from_m)
            << ",\"duration_text\":\"" << (slot.sector_duration_s > 0 ? formatHMmSs(static_cast<double>(slot.sector_duration_s)) : std::string()) << "\""
-           << ",\"avg_text\":\"" << jsonEscape(sectorAverageText(data->state->segments, slot.sector_duration_s))
+           << ",\"avg_text\":\"" << jsonEscape(sectorAverageText(data->state->segments, slot.sector_duration_s, data->state->units))
            << "\",\"start_dist_text\":\"" << jsonEscape(startDistanceText(slot.start_distance_m, data->state->distance_km))
            << "\",\"start_time\":\"";
         if (slot.start_time_s >= 0) {
@@ -385,7 +391,7 @@ std::string buildStateJson(AppData* data) {
                 const Segment& sg = data->state->segments[i];
                 ss << ",\"ty\":" << sg.type;
                 // The box's own text for every cell: the phone shows it, never reformats.
-                const SegRowText t = segRowText(sg, r, i, data->state->rally_type, data->state->distance_km);
+                const SegRowText t = segRowText(sg, r, i, data->state->rally_type, data->state->distance_km, data->state->units);
                 ss << ",\"txt\":{\"num\":\"" << jsonEscape(t.num) << "\",\"ref\":\"" << jsonEscape(t.ref)
                    << "\",\"from\":\"" << jsonEscape(t.from) << "\",\"to\":\"" << jsonEscape(t.to)
                    << "\",\"dist\":\"" << jsonEscape(t.dist) << "\",\"kph\":\"" << jsonEscape(t.kph)

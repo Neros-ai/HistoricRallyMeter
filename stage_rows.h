@@ -101,10 +101,11 @@ std::string formatDistance(double metres, bool km);
 struct SegRowText {
     std::string num, ref, from, to, dist, kph, dur, tot;
 };
-SegRowText segRowText(const Segment& seg, const StageRow& row, size_t index, int rally_type, bool km);
+// mph: the speed column follows the Settings speed units (speeds are stored in km/h).
+SegRowText segRowText(const Segment& seg, const StageRow& row, size_t index, int rally_type, bool km, bool mph = false);
 
 // "Average 32.08" under the italian sector duration ("" without a duration or distance).
-std::string sectorAverageText(const std::vector<Segment>& segs, long sector_duration_s);
+std::string sectorAverageText(const std::vector<Segment>& segs, long sector_duration_s, bool mph = false);
 
 // The greek "Distance at start" entry: "6,000 m" / "6.00 km" ("" when not set).
 std::string startDistanceText(long start_distance_m, bool km);

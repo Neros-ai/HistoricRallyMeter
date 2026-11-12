@@ -947,7 +947,13 @@ void updateHomeDisplay(AppData* data) {
             struct tm* lt = localtime(&t);
             if (lt) {
                 long tod = lt->tm_hour * 3600L + lt->tm_min * 60L + lt->tm_sec;
-                arr = stageArrival(static_cast<double>(start_dist), (start_s - tod) / 60.0);
+                // Distance still to go to the start line (Total as shown); past it, nothing.
+                long to_go_m = start_dist;   // no counters yet: the whole distance, as before
+                if (data->poller) {
+                    const CounterPoll arrPoll = data->poller->getMostRecent();
+                    to_go_m = metresToStageStart(*data->state, arrPoll.cntr1, arrPoll.cntr2, start_dist);
+                }
+                arr = stageArrival(static_cast<double>(to_go_m), (start_s - tod) / 60.0);
             }
         }
 
@@ -987,7 +993,7 @@ void updateHomeDisplay(AppData* data) {
     };
     // The three figures are written once per cycle: italian's km figures come from updateItalianHome below.
     if (data->state->rally_type != 2) {
-        mirror(h->figure[0], gtk_label_get_text(data->totalDistLabel), h->figureArea[0]);
+        if (!isSurrey(*data->state)) mirror(h->figure[0], gtk_label_get_text(data->totalDistLabel), h->figureArea[0]);   // surrey: below
         mirror(h->figure[1], gtk_label_get_text(data->tripDistLabel), h->figureArea[1]);
         // "---.---" (no segment) is wider than the 88 px figure column.
         std::string next_fig = gtk_label_get_text(data->nextDistLabel);
@@ -1022,8 +1028,12 @@ void updateHomeDisplay(AppData* data) {
         std::string cdM, cdT;
         if (sur && data->poller) {
             const CounterPoll poll = data->poller->getMostRecent();
+            // Surrey: Total is the roadbook's running distance; "stage" (row 3) is the distance since
+            // the start press, dashes with no stage on the gauge.
             const std::string navi = formatDistance(static_cast<double>(surreyNaviMetres(st, poll.cntr1, poll.cntr2)), st.distance_km);
-            mirror(h->figure[2], navi.c_str(), h->figureArea[2]);
+            mirror(h->figure[0], navi.c_str(), h->figureArea[0]);
+            const std::string stage_fig = st.segment_current_number >= 0 ? gtk_label_get_text(data->totalDistLabel) : "---";
+            mirror(h->figure[2], stage_fig.c_str(), h->figureArea[2]);
             if (st.segment_current_number >= 0 && !st.stage_complete &&
                 st.segment_current_number < static_cast<long>(st.stage_segments.size())) {
                 running = true;

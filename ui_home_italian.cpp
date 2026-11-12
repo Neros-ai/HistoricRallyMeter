@@ -66,18 +66,6 @@ void tag(cairo_t* cr, const std::string& label, int type, double x, double y, do
     }
 }
 
-std::string km2(double metres) {
-    char b[24];
-    snprintf(b, sizeof(b), "%.2f", metres / 1000.0);
-    return b;
-}
-
-std::string kph2(double kph) {
-    char b[24];
-    snprintf(b, sizeof(b), "%.2f", kph);
-    return b;
-}
-
 // m:ss.t, with a "+" and red when the line has gone by.
 std::string tenths(double s) { return sectorSecondsText(s); }
 
@@ -100,6 +88,7 @@ double endOf(const std::vector<Segment>& segs, long i) {
 gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     const RallyState& live = *data->state;
+    const bool km = live.distance_km, mph = live.units;   // Settings: distance and speed units
     const int width = gtk_widget_get_allocated_width(w);
     const int height = gtk_widget_get_allocated_height(w);
     const int64_t now_ms = getRallyTime_ms(live);
@@ -151,10 +140,10 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
             colour(cr, 1, 1, 1);
             text(cr, hhmm(p.coInTimeMs), 174, 68, 40, CENTRE);
             colour(cr, 0.8, 0.8, 0.8);
-            text(cr, "kph", 280, 22, 16, CENTRE);
+            text(cr, mph ? "mph" : "kph", 280, 22, 16, CENTRE);
             text(cr, "min", 352, 22, 16, CENTRE);
             colour(cr, 0.0, 1.0, 1.0);
-            text(cr, std::to_string(p.coKph), 280, 68, 40, CENTRE);
+            text(cr, std::to_string(sectorSpeedWhole(p.coKph, mph)), 280, 68, 40, CENTRE);
             colour(cr, 1, 1, 1);
             text(cr, std::to_string(p.coMinutes), 352, 68, 40, CENTRE);
         }
@@ -186,10 +175,10 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
     const double cKm = 214, cProgr = 350, cTime = 474, cKph = width - 2;
     {   // one layout for every row type: the pc table of the agreed mockup
         colour(cr, 1, 1, 1);
-        text(cr, "km", cKm, 50, 18, RIGHT);
+        text(cr, km ? "km" : "m", cKm, 50, 18, RIGHT);
         text(cr, "progr", cProgr, 50, 18, RIGHT);
         text(cr, "mm:ss", cTime, 50, 18, RIGHT);
-        text(cr, "km/h", cKph, 50, 18, RIGHT);
+        text(cr, mph ? "mph" : "km/h", cKph, 50, 18, RIGHT);
         colour(cr, 0.53, 0.53, 0.53);
         cairo_rectangle(cr, 0, 56, width, 3);
         cairo_fill(cr);
@@ -197,24 +186,24 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         const Segment& row = segs[cur];
         tag(cr, p.inTag, row.type, 0, 82, 86, 40, false);
         colour(cr, 1, 1, 1);
-        text(cr, km2(row.distance_m), cKm, 114, 36, RIGHT);
+        text(cr, sectorDistText(row.distance_m, km), cKm, 114, 36, RIGHT);
         colour(cr, 0.0, 1.0, 1.0);
-        text(cr, km2(endOf(segs, cur)), cProgr, 114, 36, RIGHT);
+        text(cr, sectorDistText(endOf(segs, cur), km), cProgr, 114, 36, RIGHT);
         const double row_s = row.type == SEG_PC ? row.pc_duration_s
                            : (row.target_speed_kph > 0 ? row.distance_m / 1000.0 / row.target_speed_kph * 3600.0 : 0.0);
         if (row_s > 0) text(cr, formatMmSs(row_s), cTime, 114, 36, RIGHT);
         colour(cr, 1, 1, 1);
-        text(cr, kph2(row.target_speed_kph), cKph, 114, 36, RIGHT);
+        text(cr, sectorSpeedText(row.target_speed_kph, mph), cKph, 114, 36, RIGHT);
         // count / down line, amber; red and counting up once the line has gone by
         colour(cr, 0.85, 0.65, 0.0);
         text(cr, "count", 0, 156, 15, LEFT);
         text(cr, "down", 0, 171, 15, LEFT);
         if (p.metresPast > 0) {   // RB-NAV-49: past the line, red, counting up
             colour(cr, 1.0, 0.15, 0.15);
-            text(cr, sectorCountdownKmText(p), cKm, 174, 36, RIGHT);
+            text(cr, sectorCountdownKmText(p, km), cKm, 174, 36, RIGHT);
             colour(cr, 0.85, 0.65, 0.0);
         } else {
-            text(cr, sectorCountdownKmText(p), cKm, 174, 36, RIGHT);
+            text(cr, sectorCountdownKmText(p, km), cKm, 174, 36, RIGHT);
         }
         if (p.secondsValid) {
             // The time to the line: larger, white (red once past the line).
@@ -222,7 +211,7 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
             text(cr, tenths(p.secondsToLine), cTime, 177, 44, RIGHT);
             colour(cr, 0.85, 0.65, 0.0);
         }
-        text(cr, kph2(p.avgKph), cKph, 174, 36, RIGHT);   // 0.00 until a speed has been worked out
+        text(cr, sectorSpeedText(p.avgKph, mph), cKph, 174, 36, RIGHT);   // 0.00 until a speed has been worked out
         colour(cr, 0.53, 0.53, 0.53);
         cairo_rectangle(cr, 0, 186, width, 3);
         cairo_fill(cr);
@@ -231,14 +220,14 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
             const Segment& nx = segs[cur + 1];
             tag(cr, p.nextTag, nx.type, 0, 197, 86, 36, true);
             colour(cr, 0.45, 0.45, 0.45);
-            text(cr, km2(nx.distance_m), cKm, 226, 32, RIGHT);
+            text(cr, sectorDistText(nx.distance_m, km), cKm, 226, 32, RIGHT);
             colour(cr, 0.0, 0.5, 0.5);
-            text(cr, km2(endOf(segs, cur + 1)), cProgr, 226, 32, RIGHT);
+            text(cr, sectorDistText(endOf(segs, cur + 1), km), cProgr, 226, 32, RIGHT);
             const double nx_s = nx.type == SEG_PC ? nx.pc_duration_s
                               : (nx.target_speed_kph > 0 ? nx.distance_m / 1000.0 / nx.target_speed_kph * 3600.0 : 0.0);
             if (nx_s > 0) text(cr, formatMmSs(nx_s), cTime, 226, 32, RIGHT);
             colour(cr, 0.45, 0.45, 0.45);
-            text(cr, kph2(nx.target_speed_kph), cKph, 226, 32, RIGHT);
+            text(cr, sectorSpeedText(nx.target_speed_kph, mph), cKph, 226, 32, RIGHT);
         }
     }
 

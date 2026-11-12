@@ -189,9 +189,20 @@ double subAverageKph(const RallyState& s, uint64_t c1, uint64_t c2, int64_t now_
 // Italian, the row being driven is a pc or a pm: resetting sub now would spoil the measurement,
 // so the reset key asks first.
 bool subResetInStage(const RallyState& s);
+// Italian, a sector running: the Total key does not reset (owner 2026-11-12). Every `next` pins
+// sector total to the card and a start zeroes it at the line, so a zero mid-sector could only
+// throw the sector back to its first row; `set`, `next` and `prev` are the corrections.
+bool sectorTotalResetBlocked(const RallyState& s);
+extern const char* const SECTOR_TOTAL_RESET_NOTICE;
 // RB-WEB-21: the count down figures as the box prints them, so the phone can show the same text.
 // km to the line with two decimals; "+0.04" once the line has gone by.
-std::string sectorCountdownKmText(const SectorPanel& p);
+// In metres (the Settings distance unit) it is whole metres, "+40" once past.
+std::string sectorCountdownKmText(const SectorPanel& p, bool km);
+// The italian card's figures in the units chosen in Settings. km: cut down to the 10 m, "1.24"
+// (never rounded up); metres: whole metres. Speeds: two decimals in kph, or mph when mph is set.
+std::string sectorDistText(double metres, bool km);
+std::string sectorSpeedText(double kph, bool mph);
+int sectorSpeedWhole(int kph, bool mph);
 // m:ss.t; "+m:ss.t" when negative (the line has gone by).
 std::string sectorSecondsText(double s);
 std::string sectorSecondsWholeText(double s);   // the same, no tenths
