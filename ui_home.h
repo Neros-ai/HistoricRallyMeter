@@ -22,7 +22,7 @@ struct HomeUi {
     std::string stageNo = "-";
     bool autoArmed = false;
     bool unitsMph = false;      // speed-table header reads MPH
-    bool distanceKm = false;    // stage table "at km" / "at m" follows Settings
+    int distanceKm = 0;         // the distance unit (DIST_M / DIST_KM / DIST_MI): stage table "at km" / "at m" / "at mi" follows Settings
     std::string autoTime;       // hh:mm:ss, or empty
     bool autoTimePast = false;  // the stage start time has already gone by and no stage is armed or running
     struct Row { std::string kph, at; bool now = false; };
@@ -54,6 +54,8 @@ struct HomeUi {
     GtkWidget* flagKey = nullptr;
     GtkWidget* schedKey = nullptr;
     bool stackSettled = false;           // the stack has been put on its main page once it was on screen
+    GtkWidget* adjKeys[2] = {nullptr, nullptr};   // the + and - distance keys: "+10" / "-10", or "+.01" / "-.01" in miles
+    int adjKeyUnit = -1;                 // distance unit their labels were last set for
     int labelMode = -1;                  // rally type the labels were last set for
     GtkWidget* freezeBtn = nullptr;
     GtkWidget* reverseBtn = nullptr;

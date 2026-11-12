@@ -217,7 +217,7 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         }
         cyan(cr);
         drawText(cr, h->unitsMph ? "MPH" : "KPH", avgLegendRight(79.0, atLeft, 6.0), top + 18, 20, RIGHT);
-        drawText(cr, h->distanceKm ? "at km" : "at m", 193, top + 18, 20, RIGHT);
+        drawText(cr, (std::string("at ") + distUnitName(h->distanceKm)).c_str(), 193, top + 18, 20, RIGHT);
         for (int i = 0; i < 3; i++) {
             if (h->rows[i].kph.empty()) continue;
             if (h->rows[i].now) white(cr); else cyan(cr);   // the current row white, the others blue
@@ -238,7 +238,7 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         cyan(cr);
         if (h->surreyRunning) {
             drawText(cr, "countdown", width / 2.0, base + 26, 22, CENTRE);
-            line(h->cdMetres, "m", base + 72, 34, false);
+            line(h->cdMetres, distUnitName(h->distanceKm), base + 72, 34, false);
             line(h->cdTime, "min", base + 118, 34, false);
             break;
         }
@@ -576,6 +576,7 @@ GtkWidget* createHomeScreen(AppData* data) {
         } else {
             g_object_set_data(G_OBJECT(b), "delta_m", GINT_TO_POINTER(adj[i].delta_m));
             g_signal_connect(b, "clicked", G_CALLBACK(on_distance_adjust), data);
+            h->adjKeys[adj[i].delta_m > 0 ? 0 : 1] = b;
         }
         gtk_box_pack_start(GTK_BOX(c2), b, FALSE, FALSE, 0);
     }
@@ -751,6 +752,13 @@ static void updateItalianHome(AppData* data) {
         const char* want = it ? "italian" : "main";
         if (shown && strcmp(shown, want) != 0) gtk_stack_set_visible_child_name(GTK_STACK(h->stack), want);
     }
+    // The + / - keys step 10 m, or 0.01 mile when the distance unit is miles.
+    if (h->adjKeyUnit != data->state->distance_unit) {
+        h->adjKeyUnit = data->state->distance_unit;
+        const bool miles = distIsMiles(h->adjKeyUnit);
+        if (h->adjKeys[0]) gtk_button_set_label(GTK_BUTTON(h->adjKeys[0]), miles ? "+.01" : "+10");
+        if (h->adjKeys[1]) gtk_button_set_label(GTK_BUTTON(h->adjKeys[1]), miles ? "-.01" : "-10");
+    }
     if (h->labelMode != data->state->rally_type) {
         h->labelMode = data->state->rally_type;
         for (int i = 0; i < 3; i++) {
@@ -805,7 +813,7 @@ static void updateItalianHome(AppData* data) {
         countsToMm(calculateDistanceCounts(st, poll.cntr1, poll.cntr2, st.trip_start_cntr1, st.trip_start_cntr2), st.calibration),
         st.trip_distance_adjust_mm);
     const long navi_m = adjustedDistanceMetersMm(odometerMm(st, poll.cntr1, poll.cntr2), 0);
-    const std::string figs[3] = { formatDistance(sector_m, st.distance_km), formatDistance(trip_m, st.distance_km), formatDistance(navi_m, st.distance_km) };
+    const std::string figs[3] = { formatDistance(sector_m, st.distance_unit), formatDistance(trip_m, st.distance_unit), formatDistance(navi_m, st.distance_unit) };
     for (int i = 0; i < 3; i++) {
         if (h->figure[i] != figs[i]) { h->figure[i] = figs[i]; markDirty(h->figureArea[i]); }
     }
@@ -927,7 +935,7 @@ void updateHomeDisplay(AppData* data) {
             snprintf(b, sizeof(b), "%.1f", changes[c].kph);
             rows[r].kph = b;
             // plain digits: "12,000" with its comma was too wide for the column
-            rows[r].at = formatDistance(changes[c].at_m, data->state->distance_km);
+            rows[r].at = formatDistance(changes[c].at_m, data->state->distance_unit);
             rows[r].now = (cur >= 0 && c == cur_change);
         }
 
@@ -957,7 +965,7 @@ void updateHomeDisplay(AppData* data) {
             }
         }
 
-        bool changed = (data->state->units != h->unitsMph) || (data->state->distance_km != h->distanceKm)
+        bool changed = (data->state->units != h->unitsMph) || (data->state->distance_unit != h->distanceKm)
                     || (word_auto != h->autoArmed) || (auto_time != h->autoTime)
                     || (time_past != h->autoTimePast)
                     || (arr.valid != h->arrivalValid) || (arr.speed_kph != h->arrivalKph)
@@ -968,7 +976,7 @@ void updateHomeDisplay(AppData* data) {
             h->rows[r] = rows[r];
         }
         h->unitsMph = data->state->units;
-        h->distanceKm = data->state->distance_km;
+        h->distanceKm = data->state->distance_unit;
         h->autoArmed = word_auto;
         h->autoTimePast = time_past;
         h->autoTime = auto_time;
@@ -1030,7 +1038,7 @@ void updateHomeDisplay(AppData* data) {
             const CounterPoll poll = data->poller->getMostRecent();
             // Surrey: Total is the roadbook's running distance; "stage" (row 3) is the distance since
             // the start press, dashes with no stage on the gauge.
-            const std::string navi = formatDistance(static_cast<double>(surreyNaviMetres(st, poll.cntr1, poll.cntr2)), st.distance_km);
+            const std::string navi = formatDistance(static_cast<double>(surreyNaviMetres(st, poll.cntr1, poll.cntr2)), st.distance_unit);
             mirror(h->figure[0], navi.c_str(), h->figureArea[0]);
             const std::string stage_fig = st.segment_current_number >= 0 ? gtk_label_get_text(data->totalDistLabel) : "---";
             mirror(h->figure[2], stage_fig.c_str(), h->figureArea[2]);
@@ -1040,7 +1048,7 @@ void updateHomeDisplay(AppData* data) {
                 const Segment& cur_seg = st.stage_segments[st.segment_current_number];
                 const long remaining_m = countdownMetres(st.stage_segments, st.segment_current_number,
                                                          totalShownMetres(st, poll.cntr1, poll.cntr2));
-                cdM = formatDistance(static_cast<double>(remaining_m < 0 ? 0 : remaining_m), st.distance_km);
+                cdM = formatDistance(static_cast<double>(remaining_m < 0 ? 0 : remaining_m), st.distance_unit);
                 cdT = surreyCountdownTime(static_cast<double>(remaining_m), cur_seg.target_speed_kph);
             }
         }
@@ -1060,7 +1068,7 @@ void updateHomeDisplay(AppData* data) {
     std::vector<long> hist = homeTripHistory(st);
     bool hchanged = false;
     for (size_t i = 0; i < HOME_HISTORY_ENTRIES; i++) {
-        std::string v = (i < hist.size()) ? formatDistance(static_cast<double>(hist[i]), st.distance_km) : "";
+        std::string v = (i < hist.size()) ? formatDistance(static_cast<double>(hist[i]), st.distance_unit) : "";
         if (v != h->history[i]) { h->history[i] = v; hchanged = true; }
     }
     if (hchanged) markDirty(h->historyArea);

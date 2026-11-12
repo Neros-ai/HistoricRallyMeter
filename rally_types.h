@@ -109,6 +109,8 @@ struct AppData {
                          DP_GREEK_STAGE = 3, DP_GREEK_IDLE = 4;
     int driverPage = DP_GREEK_IDLE;
     double driverTotalM = 0.0, driverTripM = 0.0;   // distances with their corrections, metres
+    GtkLabel* calDistUnitLabel = nullptr;     // calibration page: "m" or "mi" beside the two distances
+    GtkLabel* calActualUnitLabel = nullptr;
     double driverStartSpeedKph = -1; // final minute before the loaded stage starts: its first target speed (kph), -1 = none
     int driverArrivalKph = -1;      // speed to reach the next stage with a minute spare (kph), -1 = none
     long driverStageNo = 0;         // the loaded stage, 1-99

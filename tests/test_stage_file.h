@@ -27,6 +27,20 @@ public:
                 && end == 5210;
         });
 
+        suite->addTest("a stage file in miles: units,miles, figures kept to the millimetre", []() {
+            const char* text =
+                "stage,4\nmode,greek\nunits,miles\nstart distance,16.777\n"
+                "box,to,kph,auto\n1,0.250,30,\n2,1.234,40,\n";
+            const StageFile f = parseStageFile(text);
+            if (f.stages.size() != 1 || !f.stages[0].loadable()) return false;
+            const auto& s = f.stages[0];
+            return s.unit == DIST_MI && !s.km && s.slot.segments.size() == 2
+                && formatDistance(s.slot.segments[0].distance_m, DIST_MI) == "0.250"
+                && formatDistance(s.slot.segments[0].distance_m + s.slot.segments[1].distance_m, DIST_MI) == "1.234"
+                && s.slot.start_distance_m == 27000 && uploadDistanceText(1609.344 * 1.234, DIST_MI) == "1.234"
+                && uploadDistanceText(17230, DIST_KM) == "17.23";
+        });
+
         suite->addTest("comma inside a number is an error", []() {
             const char* text =
                 "stage,1\nmode,italian\nunits,km\nduration,3:00:00\n"

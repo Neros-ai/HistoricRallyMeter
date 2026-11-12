@@ -4,7 +4,14 @@
   let ws = null;
   let reconnectTimer = null;
   let units = 'kph';
-  let distanceKm = false;   // Settings distance units: 00.00 km, or 0,000 m
+  let distanceKm = false;   // Settings distance units: a decimal figure (km or miles), or whole metres
+  // The box's distance mode, format and unit in one value: 0 whole metres, 1 km 0.00, 2 mi 0.000, 3 km 0.000, 4 mi 0.00
+  let distUnit = 0;
+  const isMiles = () => distUnit === 2 || distUnit === 4;
+  const distDecimals = () => (distUnit === 0 ? 0 : (distUnit === 1 || distUnit === 4) ? 2 : 3);
+  const distModeFrom = (decimals, miles) => (miles ? (decimals === 2 ? 4 : 2) : decimals === 0 ? 0 : decimals === 2 ? 1 : 3);
+  const unitName = () => (isMiles() ? 'mi' : distUnit === 0 ? 'm' : 'km');
+  const MM_PER_MILE = 1609344;
   let lastArrival = null;
   function renderArrival() {
     $('arr-unit').textContent = units === 'mph' ? 'mph' : 'kph';
@@ -106,13 +113,22 @@
   // numbers; the labels carry the thousands separators.
   function stageInput(m) {
     m = Number(m) || 0;
+    if (isMiles() || distUnit === 3) {   // thousandths as the box writes them: cut down; two decimals when asked for and from 100 units
+      const thousandths = distUnit === 3 ? Math.round(m) : Math.floor((Math.round(m * 1000) + 500) / (MM_PER_MILE / 1000));
+      return (distUnit === 4 || thousandths >= 100000) ? (Math.floor(thousandths / 10) / 100).toFixed(2) : (thousandths / 1000).toFixed(3);
+    }
     if (distanceKm) return (Math.trunc(m / 10) / 100).toFixed(2);
     return String(Math.round(m));
   }
 
   function stageMetres(text) {
-    let t = String(text == null ? '' : text).trim().replace(/km/ig, '').replace(/m/ig, '').replace(/\s/g, '');
+    let t = String(text == null ? '' : text).trim().replace(/km/ig, '').replace(/mi/ig, '').replace(/m/ig, '').replace(/\s/g, '');
     if (!t) return null;
+    if (isMiles()) {   // miles, sent to the millimetre so 1.234 reads back 1.234
+      const v = Number(t.replace(',', '.'));
+      if (!Number.isFinite(v) || v < 0) return null;
+      return Math.round(v * MM_PER_MILE) / 1000;
+    }
     if (distanceKm) {
       t = t.replace(',', '.');
       const v = Number(t);
@@ -127,18 +143,29 @@
 
   // True when the unit changed, so the caller can redraw figures that
   // were painted under the other unit.
-  function useDistanceUnit(km) {
-    const next = !!km;
-    const changed = next !== distanceKm;
-    distanceKm = next;
+  function useDistanceUnit(unit) {
+    const next = (typeof unit === 'number' && unit >= 0 && unit <= 4) ? unit : unit === true ? 1 : 0;
+    const changed = next !== distUnit;
+    distUnit = next;
+    distanceKm = next !== 0;
     const active = document.activeElement;
-    if (!choiceHeld('distance-unit', distanceKm ? 'km' : 'm')) {
+    if (!choiceHeld('distance-unit', isMiles() ? 'mi' : 'km')) {
       document.querySelectorAll('input[name="distance-unit"]').forEach((r) => {
-        r.checked = (r.value === 'km') === distanceKm;   // follows the box even when just tapped
+        r.checked = r.value === (isMiles() ? 'mi' : 'km');   // follows the box even when just tapped
       });
     }
+    if (!choiceHeld('distance-format', String(distDecimals()))) {
+      document.querySelectorAll('input[name="distance-format"]').forEach((r) => {
+        r.checked = Number(r.value) === distDecimals();
+      });
+    }
+    // 0,000 (whole metres) is not offered in miles, as on the box.
+    document.querySelectorAll('input[name="distance-format"]').forEach((r) => { if (r.value === '0') r.disabled = isMiles(); });
+    // The + / - keys step 10 m, or 0.01 mile in miles, as on the box.
+    if ($('btn-dist-plus')) $('btn-dist-plus').textContent = isMiles() ? '+.01' : '+10';
+    if ($('btn-dist-minus')) $('btn-dist-minus').textContent = isMiles() ? '\u2212.01' : '\u221210';
     const add = $('seg-add-text');
-    if (add && add !== active) add.placeholder = distanceKm ? '1.00;1.50;2.30' : '1,000;1,500;2,300';
+    if (add && add !== active) add.placeholder = distDecimals() === 3 ? '1.000;1.500;2.300' : distanceKm ? '1.00;1.50;2.30' : '1,000;1,500;2,300';
     if (changed && lastState) {
       renderSegments(lastState);
       renderStagePanel(lastState);
@@ -173,7 +200,7 @@
     if ($('hdr-clock')) $('hdr-clock').textContent = msg.rally_clock || '--:--:--';
     const previousUnits = units;
     units = msg.units || 'kph';
-    if (typeof msg.distance_km === 'boolean') useDistanceUnit(msg.distance_km);
+    if (typeof msg.distance_km === 'boolean') useDistanceUnit(typeof msg.distance_unit === 'number' ? msg.distance_unit : msg.distance_km);
     if (units !== previousUnits && lastState) renderStagePanel(lastState);
     if (units !== previousUnits) renderArrival();
 
@@ -181,7 +208,7 @@
     // The Navi figures are the box's own text (home.f: Total, Trip, row 3).
     // The phone page is served by the box itself, so these are always sent: nothing is worked out here.
     const hf = (msg.home && msg.home.f) || ['', '', ''];
-    const boxFig = (el, text) => { if (!el) return; el.textContent = text; el.dataset.unit = distanceKm ? 'km' : 'm'; };
+    const boxFig = (el, text) => { if (!el) return; el.textContent = text; el.dataset.unit = unitName(); };
     boxFig($('trip-m'), hf[1]);
     boxFig($('total-m'), hf[0]);
     // Surrey: navi total in its own row, and the last time taken under Trip history.
@@ -219,10 +246,10 @@
       delete $('next-m').dataset.unit;
     } else if (!sur && !italianNow) {
       $('next-m').textContent = hf[2];   // greek row 3: the box's own figure ("---" with no segment)
-      if (hf[2] === '---') delete $('next-m').dataset.unit; else $('next-m').dataset.unit = distanceKm ? 'km' : 'm';
+      if (hf[2] === '---') delete $('next-m').dataset.unit; else $('next-m').dataset.unit = unitName();
     } else {
       $('next-m').textContent = msg.next_text || '---';   // the box's own text
-      if (msg.next_text && msg.next_text !== '---') $('next-m').dataset.unit = distanceKm ? 'km' : 'm';
+      if (msg.next_text && msg.next_text !== '---') $('next-m').dataset.unit = unitName();
       else delete $('next-m').dataset.unit;
     }
     // Italian count down: the figure is orange, red once the line has gone by.
@@ -399,8 +426,10 @@
     radios('gauge-range', Number(state.gauge_range) || 3);
     radios('units', units);
     syncSystemChoices(state.rally_type, state.measure_ab_bc, !!state.stage_locked);
-    if (typeof state.distance_km === 'boolean' && useDistanceUnit(state.distance_km) && lastTelemetry) {
-      lastTelemetry.distance_km = distanceKm;
+    if (typeof state.distance_km === 'boolean'
+        && useDistanceUnit(typeof state.distance_unit === 'number' ? state.distance_unit : state.distance_km) && lastTelemetry) {
+      lastTelemetry.distance_km = distUnit === 1 || distUnit === 3;
+      lastTelemetry.distance_unit = distUnit;
       applyTelemetry(lastTelemetry);
     }
     if ($('phone-lead')) $('phone-lead').textContent = (Number(state.phone_beep_lead_ms) || 0) + ' ms';
@@ -467,7 +496,7 @@
       const pc = Number(type) === 2;
       return '<b class="tag t' + Number(type) + (pc ? ' pc' : '') + '">' + (name || '') + (pc ? watch : '') + '</b>';
     };
-    let html = '<table><tr><th></th><th>' + (distanceKm ? 'km' : 'm') + '</th><th>progr</th><th>mm:ss</th><th>' + (units === 'mph' ? 'mph' : 'km/h') + '</th></tr>';
+    let html = '<table><tr><th></th><th>' + (unitName()) + '</th><th>progr</th><th>mm:ss</th><th>' + (units === 'mph' ? 'mph' : 'km/h') + '</th></tr>';
     html += '<tr class="now"><td>' + tag(s.in_tag, s.in_type) + '</td><td>' + (s.in_km || '') + '</td><td class="cyan">'
       + (s.in_progr || '') + '</td><td class="cyan">' + (s.in_mmss || '') + '</td><td>' + (s.in_kph || '') + '</td></tr>';
     html += '<tr class="cdrow"><td class="cd"><span>count</span><span>down</span></td><td class="' + (s.count_past ? 'late' : 'orange') + '">' + (s.count_km || '')
@@ -588,7 +617,7 @@
   // The loaded stage's first rows (the running one's current segment lit), as on Home.
   function renderStagePanel(state) {
     $('stage-speed-head').textContent = units === 'mph' ? 'MPH' : 'KPH';
-    if ($('stage-at-head')) $('stage-at-head').textContent = distanceKm ? 'at km' : 'at m';
+    if ($('stage-at-head')) $('stage-at-head').textContent = 'at ' + unitName();
     const tbody = $('stage-table').querySelector('tbody');
     tbody.innerHTML = '';
     const panel = lastTelemetry && lastTelemetry.stage_panel;
@@ -618,7 +647,7 @@
     // A field is being typed in: do not rebuild under it, but bring every other figure up to
     // date in place (a changed "to m" moves the next row's "from m", the distances and times).
     const italian = Number(state.rally_type) === 2;
-    const unit = distanceKm ? 'km' : 'm';
+    const unit = unitName();
     const head = $('seg-table').querySelector('thead tr');
     const mode = distanceKm ? 'decimal' : 'numeric';
     // Headings as the box's Segments page: "from -m- to" spans both columns.
@@ -854,7 +883,7 @@
   // "set" pins Total to a roadbook figure: it asks for the figure. Cancel or an
   // empty answer is not a request to pin Total to zero -- press total to reset.
   $('btn-dist-set').addEventListener('click', () => {
-    const answer = prompt(distanceKm ? 'Set Total to (km):' : 'Set Total to (metres):', '');
+    const answer = prompt(isMiles() ? 'Set Total to (miles):' : distanceKm ? 'Set Total to (km):' : 'Set Total to (metres):', '');
     if (answer === null || answer.trim() === '') return;
     const meters = stageMetres(answer);
     if (meters == null || meters > 999999) return;
@@ -863,7 +892,7 @@
   $('key-navi').addEventListener('click', () => {
     if (!$('view-navi').classList.contains('rally-italian')) return;   // italian only: greek's is countdown, surrey's is "stage"
     const now = lastTelemetry && Number(lastTelemetry.navi_m);
-    $('navi-label').textContent = distanceKm ? 'Set Navi (km)' : 'Set Navi (m)';
+    $('navi-label').textContent = 'Set Navi (' + unitName() + ')';
     $('navi-metres').value = Number.isFinite(now) ? stageInput(now) : '';
     $('navi-menu').classList.remove('hidden');
     $('navi-metres').focus();
@@ -1087,7 +1116,7 @@
   // The checked stage as the box writes it: the Segments page's text, distances in the file's own units.
   function renderUploadTable(stage) {
     const italian = stage.mode === 'italian';
-    const unit = stage.km ? 'km' : 'm';
+    const unit = stage.unit || (stage.km ? 'km' : 'm');
     $('upload-table').querySelector('thead tr').innerHTML = '<th>' + (italian ? '' : 'box') + '</th>'
       + '<th colspan="2" class="ft">from -' + unit + '- to</th><th>dist</th><th>KPH</th><th>dur</th><th>elapsed</th>';
     const parts = [];
@@ -1202,8 +1231,17 @@
     r.addEventListener('change', () => { if (r.checked) send({ type: 'gauge_range', seconds: Number(r.value) }); }));
   document.querySelectorAll('input[name="units"]').forEach((r) =>
     r.addEventListener('change', () => { if (r.checked) send({ type: 'setting', name: 'units_mph', on: r.value === 'mph' }); }));
-  document.querySelectorAll('input[name="distance-unit"]').forEach((r) =>
-    r.addEventListener('change', () => { if (r.checked) send({ type: 'setting', name: 'distance_km', on: r.value === 'km' }); }));
+  // Distance: the format (0.00 / 0.000 / 0,000) and the unit (km / mi) go to the box as one mode.
+  const sendDistanceMode = () => {
+    const fmt = document.querySelector('input[name="distance-format"]:checked');
+    const un = document.querySelector('input[name="distance-unit"]:checked');
+    const miles = !!un && un.value === 'mi';
+    let decimals = fmt ? Number(fmt.value) : distDecimals();
+    if (miles && decimals === 0) decimals = 3;   // 0,000 does not exist in miles
+    send({ type: 'setting', name: 'distance_mode', on: true, mode: distModeFrom(decimals, miles) });
+  };
+  document.querySelectorAll('input[name="distance-unit"], input[name="distance-format"]').forEach((r) =>
+    r.addEventListener('change', () => { if (r.checked) sendDistanceMode(); }));
   document.querySelectorAll('input[name="rally-type"]').forEach((r) =>
     r.addEventListener('change', () => {
       if (!r.checked) return;

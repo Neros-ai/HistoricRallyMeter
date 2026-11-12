@@ -105,8 +105,8 @@ static void computeDriverShown(AppData* data) {
         sh.totalAvg = "--.--";
         sh.tripAvg = "--.--";
     }
-    sh.totalDist = formatDistance(page == AppData::DP_ITALIAN_TRIAL ? v.sectorTotalM : data->driverTotalM, data->state->distance_km);
-    sh.tripDist = formatDistance(data->driverTripM, data->state->distance_km);
+    sh.totalDist = formatDistance(page == AppData::DP_ITALIAN_TRIAL ? v.sectorTotalM : data->driverTotalM, data->state->distance_unit);
+    sh.tripDist = formatDistance(data->driverTripM, data->state->distance_unit);
 }
 
 // Draw the rally gauge (GaugePilot RallyMaster style) with auto-scaling
@@ -657,7 +657,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             {
                 cairo_set_font_size(cr, 18.0 * fs);
                 const char* unitLow = mph ? "mph" : "kph";
-                const char* distUnit = data->state->distance_km ? "km" : "m";
+                const char* distUnit = distUnitName(data->state->distance_unit);
                 cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
                 // Figures stay on avgAnchor. A long one pushes this caption left.
                 const double legendRight = avgLegendRight(lcx - 288.0 * fs, numberLeft, 6.0 * fs);
@@ -901,8 +901,8 @@ void updateDriverDisplay(AppData* data) {
     long total_dist_m = adjustedDistanceMetersMm(
         countsToMm(total_count_diff, data->state->calibration),
         data->state->total_distance_adjust_mm);
-    const bool dist_km = data->state->distance_km;
-    const char* total_unit = dist_km ? "km" : "m";
+    const int dist_km = data->state->distance_unit;
+    const char* total_unit = distUnitName(dist_km);
     std::string total_dist_str = formatDistance(static_cast<double>(total_dist_m), dist_km);
     data->driverTotalDistText = total_dist_str;
     data->driverTotalUnitText = total_unit;
@@ -910,7 +910,7 @@ void updateDriverDisplay(AppData* data) {
     long trip_dist_m = adjustedDistanceMetersMm(
         countsToMm(trip_count_diff, data->state->calibration),
         data->state->trip_distance_adjust_mm);
-    const char* trip_unit = dist_km ? "km" : "m";
+    const char* trip_unit = distUnitName(dist_km);
     std::string trip_dist_str = formatDistance(static_cast<double>(trip_dist_m), dist_km);
     data->driverTripDistText = trip_dist_str;
     data->driverTripUnitText = trip_unit;

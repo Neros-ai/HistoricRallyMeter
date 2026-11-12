@@ -890,7 +890,7 @@ public:
 
         suite->addTest("the phone card carries the box's units: mph and metres", []() {
             RallyState s = running();
-            s.units = true; s.distance_km = false;
+            s.units = true; s.distance_unit = false;
             const std::string j = sectorCardJson(s, 20000, 0, 0, 0);
             RallyState k = running();
             const std::string jk = sectorCardJson(k, 20000, 0, 0, 0);
@@ -906,6 +906,14 @@ public:
             RallyState greek = s; greek.rally_type = 0;
             return first_row && sectorTotalResetBlocked(later) && !sectorTotalResetBlocked(done)
                 && !sectorTotalResetBlocked(idle) && !sectorTotalResetBlocked(greek);
+        });
+
+        suite->addTest("miles on the italian card: distances and countdown to three decimals", []() {
+            SectorPanel p; p.running = true; p.metresToGo = 1986; p.metresPast = 0;
+            SectorPanel q; q.running = true; q.metresPast = 161;
+            return sectorDistText(1609.344 * 1.234, DIST_MI) == "1.234" && sectorDistText(1245, DIST_KM) == "1.24"
+                && sectorDistText(1245, DIST_M) == "1245"
+                && sectorCountdownKmText(p, DIST_MI) == "1.234" && sectorCountdownKmText(q, DIST_MI) == "+0.100";
         });
 
         suite->addTest("phone +/- box is red for a fraction of a minute behind", []() {

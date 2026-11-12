@@ -12,6 +12,7 @@ struct StageFileStage {
     int stage = 0;                 // 1-99, 0 when the number was unreadable
     int mode = -1;                 // 0 greek, 1 surrey, 2 italian; -1 unknown
     bool km = false;               // the file's own units (units,km), so the check reads as the file does
+    int unit = 0;                  // the same as a distance unit: 0 metres, 1 km, 2 miles (units,miles)
     RallyState::MemorySlot slot;
     std::vector<std::string> errors;
     std::vector<std::string> warnings;
@@ -43,7 +44,7 @@ std::vector<int> applyStageFile(RallyState& s, const StageFile& f);
 
 // A distance as the file writes it: km to 2 decimals (3 when the metres need it, so nothing is
 // hidden), or whole metres with thousands grouped.
-std::string uploadDistanceText(double metres, bool km);
+std::string uploadDistanceText(double metres, int unit);
 // The `upload` object the phone draws. `loaded` is the stages just written.
 std::string uploadStateJson(const std::string& id, const RallyState& s, const StageFile& f,
                             const std::vector<int>& loaded);

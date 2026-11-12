@@ -1,6 +1,7 @@
 #include "stage_rows.h"
 #include "calculations.h"
 #include "sector.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -31,7 +32,8 @@ std::vector<StageRow> buildStageRows(const std::vector<Segment>& segs,
     return rows;
 }
 
-DistanceParse parseStageDistances(const std::string& text, bool km) {
+DistanceParse parseStageDistances(const std::string& text, int unit) {
+    const bool km = unit != DIST_M;   // a decimal figure: the comma is its decimal mark
     DistanceParse out;
     size_t pos = 0;
     while (pos <= text.size()) {
@@ -52,7 +54,9 @@ DistanceParse parseStageDistances(const std::string& text, bool km) {
                 out.rest = text.substr(pos);
                 return out;
             }
-            out.accepted.push_back(std::round(km ? v * 1000.0 : v));   // whole metres
+            // km and metres: whole metres. Miles: to the millimetre, so a typed 1.234 reads back 1.234.
+            out.accepted.push_back(distIsMiles(unit) ? std::round(v * METRES_PER_MILE * 1000.0) / 1000.0
+                                                     : std::round(distIsKm(unit) ? v * 1000.0 : v));
         }
         if (semi == std::string::npos) break;
         pos = semi + 1;
@@ -93,7 +97,7 @@ void appendStageDistances(std::vector<Segment>& segs, double first_from_m,
 }
 
 std::string insertStageDistances(std::vector<Segment>& segs, double first_from_m,
-                                 const std::vector<double>& to_m, bool km) {
+                                 const std::vector<double>& to_m, int km) {
     std::string refused;
     auto refuse = [&](double m) {
         if (!refused.empty()) refused += ", ";
@@ -125,7 +129,7 @@ std::string insertStageDistances(std::vector<Segment>& segs, double first_from_m
     }
     carrySpeeds(segs);
     if (refused.empty()) return "";
-    return "Not added (already a point, or not past the start): " + refused + (km ? " km." : " m.");
+    return "Not added (already a point, or not past the start): " + refused + " " + distUnitName(km) + ".";
 }
 
 void setRowSpeed(std::vector<Segment>& segs, size_t row, double kph) {
@@ -202,17 +206,43 @@ std::string formatHMmSs(double seconds) {
     return buf;
 }
 
-std::string formatDistance(double metres, bool km) {
+const char* distUnitName(int unit) {
+    return distIsMiles(unit) ? "mi" : distIsKm(unit) ? "km" : "m";
+}
+
+double distUnitToMetres(int unit, double figure) {
+    return distIsMiles(unit) ? figure * METRES_PER_MILE : distIsKm(unit) ? figure * 1000.0 : figure;
+}
+
+std::string formatDistance(double metres, int unit) {
     char buf[32];
-    if (km) {
+    if (unit == DIST_KM) {
         // Truncated to the 10 m, never rounded up: the figure must not read ahead of the car.
         snprintf(buf, sizeof(buf), "%.2f", std::trunc(metres / 10.0) / 100.0 + 0.0);   // + 0.0 turns -0 into 0
+        return buf;
+    }
+    if (unit == DIST_MI || unit == DIST_MI2 || unit == DIST_KM3) {
+        // Thousandths of the unit, cut down, never rounded up. Miles get half a metre of allowance,
+        // because a mile figure does not fall on a whole millimetre: without it a typed 1.234 reads
+        // back 1.233. Km to the metre needs none (whole metres first, as the metres figure rounds).
+        const long long mm = std::llround(metres * 1000.0);
+        const bool neg = mm < 0;
+        const long long a = neg ? -mm : mm;
+        long long thousandths = unit == DIST_KM3 ? std::llround(a / 1000.0)
+                                                 : static_cast<long long>(std::floor((a + 500) / METRES_PER_MILE));
+        // Two decimals when asked for (0.00 miles), and from 100 units up: six characters is all the big figures hold.
+        if (unit == DIST_MI2 || thousandths >= 100000) {
+            const long long hundredths = thousandths / 10;
+            snprintf(buf, sizeof(buf), "%s%lld.%02lld", neg && hundredths > 0 ? "-" : "", hundredths / 100, hundredths % 100);
+        } else {
+            snprintf(buf, sizeof(buf), "%s%lld.%03lld", neg && thousandths > 0 ? "-" : "", thousandths / 1000, thousandths % 1000);
+        }
         return buf;
     }
     return formatDistanceGrouped(static_cast<long>(std::lround(metres)));
 }
 
-SegRowText segRowText(const Segment& seg, const StageRow& row, size_t index, int rally_type, bool km, bool mph) {
+SegRowText segRowText(const Segment& seg, const StageRow& row, size_t index, int rally_type, int km, bool mph) {
     SegRowText t;
     t.from = formatDistance(row.from_m, km);
     t.to = formatDistance(row.to_m, km);
@@ -243,9 +273,9 @@ std::string sectorAverageText(const std::vector<Segment>& segs, long sector_dura
     return ab;
 }
 
-std::string startDistanceText(long start_distance_m, bool km) {
+std::string startDistanceText(long start_distance_m, int unit) {
     if (start_distance_m <= 0) return "";
-    return formatDistance(static_cast<double>(start_distance_m), km) + (km ? " km" : " m");
+    return formatDistance(static_cast<double>(start_distance_m), unit) + " " + distUnitName(unit);
 }
 
 long parseTimeOfDay(const std::string& text) {
@@ -262,18 +292,32 @@ long parseTimeOfDay(const std::string& text) {
     return h * 3600L + m * 60L + s;
 }
 
-long parseDistance(const std::string& text, bool km) {
-    if (!km) return parseMetres(text);
+double parseDistanceExact(const std::string& text, int unit) {
+    if (unit == DIST_M) return static_cast<double>(parseMetres(text));
     std::string tok;
     for (char c : text) {
-        if (c == ' ' || c == 'k' || c == 'K' || c == 'm' || c == 'M') continue;
+        if (c == ' ' || c == 'k' || c == 'K' || c == 'm' || c == 'M' || c == 'i' || c == 'I') continue;
         tok += (c == ',') ? '.' : c;
     }
     if (tok.empty()) return -1;
     char* stop = nullptr;
     const double v = std::strtod(tok.c_str(), &stop);
     if (!stop || *stop != '\0' || v < 0) return -1;
-    return static_cast<long>(std::lround(v * 1000.0));
+    if (distIsMiles(unit)) return std::round(v * METRES_PER_MILE * 1000.0) / 1000.0;   // to the millimetre
+    return static_cast<double>(std::lround(v * 1000.0));                              // km: whole metres
+}
+
+bool distanceFieldUntouched(const std::string& text, double stored_m, int unit) {
+    auto plain = [](std::string t) {
+        t.erase(std::remove_if(t.begin(), t.end(), [](char c) { return c == ',' || c == ' ' || c == 'k' || c == 'm' || c == 'i'; }), t.end());
+        return t;
+    };
+    return stored_m >= 0.0 && plain(text) == plain(formatDistance(stored_m, unit));
+}
+
+long parseDistance(const std::string& text, int unit) {
+    const double m = parseDistanceExact(text, unit);
+    return m < 0 ? -1 : static_cast<long>(std::lround(m));
 }
 
 long parseMetres(const std::string& text) {
