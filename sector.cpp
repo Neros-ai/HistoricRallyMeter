@@ -74,7 +74,7 @@ void applySectorRules(std::vector<Segment>& segs, long sector_duration_s) {
 }
 
 std::string insertSectorDistances(std::vector<Segment>& segs, double first_from_m,
-                                  const std::vector<double>& to_m, bool km) {
+                                  const std::vector<double>& to_m, int km) {
     // A distance inside a pc or pm splits it like any other row (owner, 2026-10-31), so a
     // wrongly entered trial can be corrected. Note which trials are about to be split.
     std::vector<std::pair<int, int>> split;   // (type, ref) of each pc / pm a distance falls inside
@@ -565,7 +565,7 @@ std::string hhmmRally(int64_t rally_ms) {
     return b;
 }
 
-void jsonRow(std::ostringstream& o, const char* prefix, const Segment& row, double progr, bool km, bool mph) {
+void jsonRow(std::ostringstream& o, const char* prefix, const Segment& row, double progr, int km, bool mph) {
     o << '"' << prefix << "tag\":\"" << sectorTag(row) << '"'
       << ",\"" << prefix << "type\":" << row.type
       << ",\"" << prefix << "km\":\"" << sectorDistText(row.distance_m, km) << '"'
@@ -605,7 +605,7 @@ std::string sectorCardJson(const RallyState& live, int64_t now_ms, long stage_m,
     if (cur < 0 || cur >= static_cast<long>(segs.size())) return "{\"loaded\":false}";
     std::ostringstream o;
     o << "{\"loaded\":true,\"preview\":" << (previewing ? "true" : "false") << ',';
-    const bool km = live.distance_km, mph = live.units;
+    const int km = live.distance_unit; const bool mph = live.units;
     jsonRow(o, "in_", segs[cur], endSum(segs, cur), km, mph);
     o << ",\"count_km\":\"" << sectorCountdownKmText(p, km) << "\""
       << ",\"count_past\":" << (p.metresPast > 0 ? "true" : "false");
@@ -649,26 +649,30 @@ std::string sectorCardJson(const RallyState& live, int64_t now_ms, long stage_m,
     return o.str();
 }
 
-std::string sectorCountdownKmText(const SectorPanel& p, bool km) {
+std::string sectorCountdownKmText(const SectorPanel& p, int unit) {
     char b[32];
-    if (!km) {   // whole metres
+    if (unit == DIST_M) {   // whole metres
         if (p.metresPast > 0) snprintf(b, sizeof(b), "+%ld", p.metresPast);
         else snprintf(b, sizeof(b), "%ld", p.metresToGo);
         return b;
     }
+    if (unit != DIST_KM)   // miles, or km to three decimals
+        return p.metresPast > 0 ? "+" + formatDistance(static_cast<double>(p.metresPast), unit)
+                                : formatDistance(static_cast<double>(p.metresToGo), unit);
     // Truncated to the 10 m, never rounded, like every other km figure.
     if (p.metresPast > 0) snprintf(b, sizeof(b), "+%.2f", std::trunc(p.metresPast / 10.0) / 100.0);
     else snprintf(b, sizeof(b), "%.2f", std::trunc(p.metresToGo / 10.0) / 100.0 + 0.0);
     return b;
 }
 
-std::string sectorDistText(double metres, bool km) {
+std::string sectorDistText(double metres, int unit) {
     const long m = std::lround(metres);
     char b[24];
-    if (!km) {
+    if (unit == DIST_M) {
         snprintf(b, sizeof(b), "%ld", m);
         return b;
     }
+    if (unit != DIST_KM) return formatDistance(metres, unit);   // miles, or km to three decimals
     // Cut down to the 10 m, never rounded up, like every other distance on the box, so the card
     // never reads ahead of the car. Whole metres first, so 1199.9999 from a sum reads 1.20.
     const long hundredths = (m < 0 ? -m : m) / 10;

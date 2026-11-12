@@ -74,9 +74,9 @@ public:
 
         suite->addTest("choosing surrey does not change units or measure type", []() {
             RallyState s;
-            s.distance_km = true; s.measure_ab_bc = true;
+            s.distance_unit = true; s.measure_ab_bc = true;
             applyRallyTypeDefaults(s, 1);
-            return s.rally_type == 1 && s.distance_km && s.measure_ab_bc;
+            return s.rally_type == 1 && s.distance_unit && s.measure_ab_bc;
         });
 
         suite->addTest("time taken round-trips; an old config gives -1", []() {

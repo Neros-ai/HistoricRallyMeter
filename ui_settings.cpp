@@ -1,3 +1,4 @@
+#include "stage_rows.h"
 #include "ui_settings.h"
 #include "stage_edit.h"
 #include "callbacks.h"
@@ -21,7 +22,7 @@ constexpr int COL_W = 423, ROW_H = 38, HEAD_H = 26, KEY_H = 34, GAP = 5;
 enum Setting {
     BEEP_NAV, BEEP_TIMING, TONE_ON, TONE_BEHIND, TONE_AHEAD,
     UNITS, STAGE_LOG, SENSOR_LOG, GAUGE_RANGE,
-    RALLY_TYPE, DISTANCE_UNITS, MEASURE_TYPE
+    RALLY_TYPE, DISTANCE_UNITS, DISTANCE_FORMAT, MEASURE_TYPE
 };
 
 struct SegCtl {
@@ -67,7 +68,20 @@ void apply(AppData* d, Setting id, int idx) {
         // Keys are italian / greek / surrey.
         applyRallyTypeDefaults(s, idx == 0 ? 2 : idx == 1 ? 0 : 1);
         break;
-    case DISTANCE_UNITS: s.distance_km = (idx == 0); break;   // keys: 00.00 / 0,000
+    case DISTANCE_FORMAT: {   // keys: 0.00 / 0.000 / 0,000 (whole metres: km only, greyed in miles)
+        const bool miles = distIsMiles(s.distance_unit);
+        const int decimals = idx == 0 ? 2 : idx == 1 ? 3 : 0;
+        if (miles && decimals == 0) break;
+        s.distance_unit = distUnitFrom(decimals, miles);
+        break;
+    }
+    case DISTANCE_UNITS: {    // keys: km / mi
+        const bool miles = idx == 1;
+        int decimals = distDecimals(s.distance_unit);
+        if (miles && decimals == 0) decimals = 3;   // 0,000 does not exist in miles: go to 0.000
+        s.distance_unit = distUnitFrom(decimals, miles);
+        break;
+    }
     case MEASURE_TYPE:   s.measure_ab_bc = (idx == 0); break;  // keys: AB,BC / AB,AC
     }
     // Beep Assist is on when either mode is: there is no separate master.
@@ -90,7 +104,8 @@ int stateIndex(const RallyState& s, Setting id) {
     case SENSOR_LOG:   return s.debug_logs_enabled ? 1 : 0;
     case GAUGE_RANGE:  return s.gauge_range_s - 1;
     case RALLY_TYPE:   return s.rally_type == 2 ? 0 : s.rally_type == 1 ? 2 : 1;
-    case DISTANCE_UNITS: return s.distance_km ? 0 : 1;
+    case DISTANCE_FORMAT: { const int dec = distDecimals(s.distance_unit); return dec == 2 ? 0 : dec == 3 ? 1 : 2; }
+    case DISTANCE_UNITS: return distIsMiles(s.distance_unit) ? 1 : 0;
     case MEASURE_TYPE:   return s.measure_ab_bc ? 0 : 1;
     }
     return 0;
@@ -103,7 +118,8 @@ void onSeg(GtkWidget* w, gpointer) {
     for (int i = 0; i < c->n; i++) setLit(c->btn[i], i == idx);
     apply(c->data, c->id, idx);
     // Choosing a rally type moves its linked keys (distance units, measure type).
-    if (c->id == RALLY_TYPE) updateSettingsDisplay(c->data);
+    // The distance format and unit keys move each other (0,000 is greyed in miles).
+    if (c->id == RALLY_TYPE || c->id == DISTANCE_UNITS || c->id == DISTANCE_FORMAT) updateSettingsDisplay(c->data);
 }
 
 // A two-key selector (or three with `c3`); `active` is the lit key's index.
@@ -244,8 +260,10 @@ GtkWidget* createSettingsScreen(AppData* d) {
 
     // ── right: SYSTEM, with the version above the speed-units key ──
     GtkWidget* right = gtk_box_new(GTK_ORIENTATION_VERTICAL, GAP);
-    gtk_widget_set_size_request(right, COL_W, -1);
-    gtk_widget_set_margin_start(right, 100);
+    // The System column sits 50 px further left and is that much wider, so the Distance units row
+    // (100 px wider than the left column) holds its five keys (0.00 / 0.000 / 0,000 and km / mi).
+    gtk_widget_set_size_request(right, COL_W + 100, -1);
+    gtk_widget_set_margin_start(right, 50);
     gtk_box_pack_start(GTK_BOX(screen), right, FALSE, FALSE, 0);
     GtkWidget* head = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_widget_set_size_request(head, COL_W, HEAD_H);
@@ -263,7 +281,16 @@ GtkWidget* createSettingsScreen(AppData* d) {
     // Rally type: italian / greek / surrey.
     gtk_box_pack_end(GTK_BOX(row(right, "Rally type")), seg(d, RALLY_TYPE, "italian", "greek", stateIndex(s, RALLY_TYPE), "surrey", 0, 76), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row(right, "Speed units")), seg(d, UNITS, "kph", "mph", s.units ? 1 : 0), FALSE, FALSE, 0);
-    gtk_box_pack_end(GTK_BOX(row(right, "Distance units")), seg(d, DISTANCE_UNITS, "00.00", "0,000", stateIndex(s, DISTANCE_UNITS)), FALSE, FALSE, 0);
+    {   // Distance: the format (0.00 / 0.000 / 0,000) and the unit (km / mi) on one line; 0,000 is km only.
+        GtkWidget* r = row(right, "Distance units");
+        auto tight = [](GtkWidget* box) {
+            gtk_container_foreach(GTK_CONTAINER(box), [](GtkWidget* k, gpointer) { addClass(k, "key-tight"); }, nullptr);
+            return box;
+        };
+        gtk_box_pack_end(GTK_BOX(r), tight(seg(d, DISTANCE_UNITS, "km", "mi", stateIndex(s, DISTANCE_UNITS), nullptr, 0, 46)), FALSE, FALSE, 0);
+        gtk_box_pack_end(GTK_BOX(r), tight(seg(d, DISTANCE_FORMAT, "0.00", "0.000", stateIndex(s, DISTANCE_FORMAT), "0,000",
+                                               distIsMiles(s.distance_unit) ? 4u : 0u, 74)), FALSE, FALSE, 0);
+    }
     {   // Reaction time offset: name, then - figure + (name 18 px, keys 40, entry 96: 416 <= 423)
         GtkWidget* r = row(right, "Reaction time offset");
         GList* kids = gtk_container_get_children(GTK_CONTAINER(r));
@@ -365,6 +392,10 @@ void updateSettingsDisplay(AppData* d) {
             for (int i = 0; i < c->n; i++) gtk_widget_set_sensitive(c->btn[i], beepOn);
     if (d->beepAdvanceSecondsEntry) gtk_widget_set_sensitive(GTK_WIDGET(d->beepAdvanceSecondsEntry), beepOn);
     if (d->beepAdvanceMetresEntry) gtk_widget_set_sensitive(GTK_WIDGET(d->beepAdvanceMetresEntry), beepOn);
+    // 0,000 (whole metres) is not offered in miles.
+    for (SegCtl* c : allCtls())
+        if (c->id == DISTANCE_FORMAT && c->n == 3)
+            gtk_widget_set_sensitive(c->btn[2], !distIsMiles(d->state->distance_unit));
     // The rally type cannot change while a stage is live.
     const bool typeOpen = !stageEditLocked(*d->state);
     for (SegCtl* c : allCtls())

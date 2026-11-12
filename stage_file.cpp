@@ -118,14 +118,22 @@ StageFileStage buildStage(const RawStage& raw, bool commaDecimal, const std::vec
     else if (mode == "italian") st.mode = 2;
     else st.errors.push_back(raw.mode.empty() ? "mode is missing" : "unknown mode");
 
-    const bool km = lower(raw.units) == "km";
+    const std::string unitsWord = lower(raw.units);
+    const bool km = unitsWord == "km";
+    const bool miles = unitsWord == "miles" || unitsWord == "mile" || unitsWord == "mi";
     st.km = km;
-    if (lower(raw.units) != "m" && !km) st.errors.push_back("units are missing");
+    st.unit = miles ? DIST_MI : km ? DIST_KM : DIST_M;
+    if (unitsWord != "m" && !km && !miles) st.errors.push_back("units are missing");
+    // A figure in the file's units, as metres: miles to the millimetre, km and metres to the metre.
+    auto fileMetres = [&](double v) -> double {
+        if (miles) return std::round(v * METRES_PER_MILE * 1000.0) / 1000.0;
+        return km ? std::lround(v * 1000.0) : std::lround(v);
+    };
 
     if (!raw.from.empty()) {
         double v = 0;
         if (!parseNumber(raw.from, commaDecimal, &v)) st.errors.push_back("unreadable from");
-        else st.slot.first_from_m = km ? std::lround(v * 1000.0) : std::lround(v);
+        else st.slot.first_from_m = fileMetres(v);
     }
     if (!raw.start.empty()) {
         const long clk = parseClock(raw.start);
@@ -137,7 +145,7 @@ StageFileStage buildStage(const RawStage& raw, bool commaDecimal, const std::vec
     if (!raw.startDist.empty()) {
         double v = 0;
         if (!parseNumber(raw.startDist, commaDecimal, &v)) st.errors.push_back("unreadable start distance");
-        else st.slot.start_distance_m = std::lround(v);
+        else st.slot.start_distance_m = miles ? std::lround(v * METRES_PER_MILE) : std::lround(v);
     }
     if (!raw.duration.empty()) {
         const long d = parseDurationSeconds(raw.duration);
@@ -178,7 +186,7 @@ StageFileStage buildStage(const RawStage& raw, bool commaDecimal, const std::vec
             st.errors.push_back(where + ": unreadable (" + toText + ")");
             continue;
         }
-        const double toM = km ? std::lround(toVal * 1000.0) : std::lround(toVal);
+        const double toM = fileMetres(toVal);
         if (!(toM > prevTo)) {
             st.errors.push_back(where + ": distance does not rise");
             continue;
@@ -417,7 +425,9 @@ std::vector<int> applyStageFile(RallyState& s, const StageFile& f) {
     return written;
 }
 
-std::string uploadDistanceText(double metres, bool km) {
+std::string uploadDistanceText(double metres, int unit) {
+    if (distIsMiles(unit)) return formatDistance(metres, unit);
+    const bool km = distIsKm(unit);
     if (!km) return formatDistanceGrouped(std::lround(metres));
     const long m = std::lround(metres);
     char b[32];
@@ -458,11 +468,11 @@ std::string uploadStateJson(const std::string& id, const RallyState& s, const St
             if (st.slot.start_time_s >= 0)
                 snprintf(startb, sizeof(startb), "%02ld:%02ld:%02ld", st.slot.start_time_s / 3600,
                          (st.slot.start_time_s / 60) % 60, st.slot.start_time_s % 60);
-            o << ",\"km\":" << (st.km ? "true" : "false")
+            o << ",\"km\":" << (st.km ? "true" : "false") << ",\"unit\":\"" << distUnitName(st.unit) << "\""
               << ",\"start_text\":\"" << startb << "\""
               << ",\"duration_text\":\"" << (st.slot.sector_duration_s > 0 ? formatHMmSs(static_cast<double>(st.slot.sector_duration_s)) : std::string()) << "\""
               << ",\"avg_text\":\"" << jsonEscape(sectorAverageText(st.slot.segments, st.slot.sector_duration_s)) << "\""
-              << ",\"start_dist_text\":\"" << jsonEscape(startDistanceText(st.slot.start_distance_m, st.km)) << "\""
+              << ",\"start_dist_text\":\"" << jsonEscape(startDistanceText(st.slot.start_distance_m, st.unit)) << "\""
               << ",\"errors\":[";
             for (size_t i = 0; i < st.errors.size(); i++) {
                 if (i) o << ',';
@@ -479,12 +489,12 @@ std::string uploadStateJson(const std::string& id, const RallyState& s, const St
                 const StageRow& row = rows[i];
                 const Segment& seg = st.slot.segments[i];
                 // The Segments page's text for the row; distances in the file's own units.
-                const SegRowText t = segRowText(seg, row, i, st.mode == 2 ? 2 : 0, st.km);
+                const SegRowText t = segRowText(seg, row, i, st.mode == 2 ? 2 : 0, st.unit);
                 o << "{\"type\":\"" << typeLabel(seg.type) << "\",\"num\":\"" << jsonEscape(t.num)
                   << "\",\"ref\":\"" << jsonEscape(t.ref)
-                  << "\",\"from\":\"" << jsonEscape(uploadDistanceText(row.from_m, st.km))
-                  << "\",\"to\":\"" << jsonEscape(uploadDistanceText(row.to_m, st.km))
-                  << "\",\"dist\":\"" << jsonEscape(uploadDistanceText(row.dist_m, st.km))
+                  << "\",\"from\":\"" << jsonEscape(uploadDistanceText(row.from_m, st.unit))
+                  << "\",\"to\":\"" << jsonEscape(uploadDistanceText(row.to_m, st.unit))
+                  << "\",\"dist\":\"" << jsonEscape(uploadDistanceText(row.dist_m, st.unit))
                   << "\",\"kph\":\"" << jsonEscape(t.kph) << "\",\"dur\":\"" << jsonEscape(t.dur)
                   << "\",\"tot\":\"" << jsonEscape(t.tot) << "\"}";
             }

@@ -66,13 +66,13 @@ int stageEditAddDistances(AppData* d, const std::string& text, std::string* rest
     // it at their old end): distances are measured from 0 again. The stage's
     // start time and distance at start are separate and stay.
     if (d->state->segments.empty()) slot.first_from_m = 0.0;
-    DistanceParse pr = parseStageDistances(text, d->state->distance_km);
+    DistanceParse pr = parseStageDistances(text, d->state->distance_unit);
     const size_t before = d->state->segments.size();
     std::string note;
     if (!pr.accepted.empty()) {
         note = d->state->rally_type == 2
-            ? insertSectorDistances(d->state->segments, slot.first_from_m, pr.accepted, d->state->distance_km)
-            : insertStageDistances(d->state->segments, slot.first_from_m, pr.accepted, d->state->distance_km);
+            ? insertSectorDistances(d->state->segments, slot.first_from_m, pr.accepted, d->state->distance_unit)
+            : insertStageDistances(d->state->segments, slot.first_from_m, pr.accepted, d->state->distance_unit);
         stageEditCommit(d);
     }
     if (notice) *notice = note;

@@ -1,3 +1,4 @@
+#include <cmath>
 #include "web_commands.h"
 #include "config_file.h"
 #include "calculations.h"
@@ -261,6 +262,14 @@ bool webHandleCommand(AppData* data, const char* json) {
         int number = -1; double from_m = -1;
         jsonFindInt(json, "number", &number);
         jsonFindDouble(json, "from_m", &from_m);
+        {   // The phone sends the figure its field shows, which is cut to the format in use: when that
+            // is just the stored figure as shown, keep the stored one (changing the box number must
+            // not shorten a programmed 8.345 to 8.34).
+            const int n = stageEditSlot(data);
+            const double stored = data->state->memory_slots[n - 1].first_from_m;
+            const int unit = data->state->distance_unit;
+            if (from_m >= 0.0 && formatDistance(from_m, unit) == formatDistance(stored, unit)) from_m = -1;
+        }
         stageEditSetFirst(data, number, from_m);
         refreshSegmentList(data);
         return true;
@@ -273,7 +282,13 @@ bool webHandleCommand(AppData* data, const char* json) {
             if (tod < 0) return false;
         }
         jsonFindDouble(json, "distance_m", &dist);
-        stageEditSetStart(data, tod, static_cast<long>(dist));
+        {   // As above: a start time changed on the phone re-sends the distance its field shows.
+            const int n = stageEditSlot(data);
+            const double stored = static_cast<double>(data->state->memory_slots[n - 1].start_distance_m);
+            const int unit = data->state->distance_unit;
+            if (dist >= 0.0 && formatDistance(dist, unit) == formatDistance(stored, unit)) dist = -1;
+        }
+        stageEditSetStart(data, tod, dist < 0 ? -1 : std::lround(dist));
         refreshSegmentList(data);
         return true;
     }
@@ -427,10 +442,16 @@ bool webHandleCommand(AppData* data, const char* json) {
         if (!jsonFindString(json, "name", name, sizeof(name)) || !jsonFindBool(json, "on", &on)) return false;
         if (strcmp(name, "units_mph") == 0) {
             if (data->state->units != on && data->unitToggleBtn) gtk_button_clicked(data->unitToggleBtn);
-        } else if (strcmp(name, "distance_km") == 0) {
-            // Same choice as Settings: 00.00 (km) or 0,000 (m). The segments
+        } else if (strcmp(name, "distance_mode") == 0) {
+            // The two Settings choices in one value (format and unit): see DIST_* in stage_rows.h.
+            int mode = -1;
+            if (!jsonFindInt(json, "mode", &mode) || !distUnitValid(mode)) return false;
+            data->state->distance_unit = mode;
+            updateSettingsDisplay(data);
+        } else if (strcmp(name, "distance_km") == 0 || strcmp(name, "distance_miles") == 0) {
+            // Same choice as Settings: 00.00 (km), 0,000 (m) or miles. The segments
             // page reads it on the next tick; light the keys now.
-            data->state->distance_km = on;
+            data->state->distance_unit = !on ? DIST_M : (strcmp(name, "distance_miles") == 0 ? DIST_MI : DIST_KM);
             updateSettingsDisplay(data);
         } else if (strcmp(name, "measure_ab_bc") == 0) {
             // Keys on the box: AB,BC (on) / AB,AC (off).

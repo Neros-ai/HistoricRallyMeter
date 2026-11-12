@@ -88,7 +88,7 @@ double endOf(const std::vector<Segment>& segs, long i) {
 gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     const RallyState& live = *data->state;
-    const bool km = live.distance_km, mph = live.units;   // Settings: distance and speed units
+    const int km = live.distance_unit; const bool mph = live.units;   // Settings: distance and speed units
     const int width = gtk_widget_get_allocated_width(w);
     const int height = gtk_widget_get_allocated_height(w);
     const int64_t now_ms = getRallyTime_ms(live);
@@ -175,7 +175,7 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
     const double cKm = 214, cProgr = 350, cTime = 474, cKph = width - 2;
     {   // one layout for every row type: the pc table of the agreed mockup
         colour(cr, 1, 1, 1);
-        text(cr, km ? "km" : "m", cKm, 50, 18, RIGHT);
+        text(cr, distUnitName(km), cKm, 50, 18, RIGHT);
         text(cr, "progr", cProgr, 50, 18, RIGHT);
         text(cr, "mm:ss", cTime, 50, 18, RIGHT);
         text(cr, mph ? "mph" : "km/h", cKph, 50, 18, RIGHT);

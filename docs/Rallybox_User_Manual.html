@@ -525,7 +525,7 @@ history</b> column. Trip also restarts at every speed change, and at every roadb
 the last speed change and the box recalculates the data as if the speed change had not taken place. Both  buttons      override previous manual and automated speed changes.</p>
 
 <h4>+10, set and &minus;10</h4>
-<p><code>+10</code> / <code>-10</code> increment all the distance counters           10 m per press; <code>-10</code> cannot take a counter below zero; <code>set</code> allows a
+<p><code>+10</code> / <code>-10</code> increment all the distance counters           10 m per press (0.01 mile per press, shown as <code>+.01</code> / <code>-.01</code>, when Distance units is miles); <code>-10</code> cannot take a counter below zero; <code>set</code> allows a
 precise distance to be entered for Total (and Trip remains unchanged). During a stage, corrections apply across
 average speeds and timing errors.</p>
 
@@ -1504,7 +1504,7 @@ repeat. Saved at once.</p>
 <ol>
 <li>Press <code>zero counters</code> (or skip, to use the distance since the last Total reset).</li>
 <li>Drive the measured distance (from 500 m to 100,000 m).</li>
-<li>Type the <b>actual</b> distance driven (not what the box shows) in Actual distance.</li>
+<li>Type the <b>actual</b> distance driven (not what the box shows) in Actual distance: in metres, or in miles when Distance units is set to miles.</li>
 <li>Choose the counter: <code>sensor 1</code> or <code>sensor 1&amp;2</code> (shown in white).</li>
 <li>Press <code>save calibration</code>.</li>
 </ol>
@@ -1565,10 +1565,10 @@ pc or pm.</li>
 sets how early the box tells the phone to sound an Italian countdown beep, to cover the phone's audio
 delay. It applies to the countdown beeps only, not the 100&nbsp;m beeps, and the phone shows the same figure.</li>
 <li><b>Speed units</b> &ndash; kph or mph, for every rally type: the driver display, the Italian sector card, the Segments speed column (its heading reads KPH or MPH, and a speed you type there is in these units) and the phone.</li>
-<li><b>Distance units</b> &ndash; <b>00.00</b> (km, two decimals) or <b>0,000</b> (whole metres) for
+<li><b>Distance units</b> &ndash; five keys on one line: the format, <b>0.00</b> (two decimals), <b>0.000</b> (three decimals) or <b>0,000</b> (whole metres), and the unit, <b>km</b> or <b>mi</b>. Any format goes with either unit, except that <b>0,000</b> is greyed with <b>mi</b> lit. A three-decimal figure drops to two decimals from 100 km or 100 miles. This is for
 the driving figures and <code>add distance</code>. It does not flip to kilometres at 100 km. The
 <b>set</b> pop-ups (Set Total, Set Navi), <b>Distance at start</b> and Trip history use the same unit, and so
-does the phone. In km a figure is cut to the 10&nbsp;m below, never rounded up, so it never reads ahead of
+does the phone. Miles suit UK events, whose roadbooks and average speeds are in miles and mph; choosing <b>mi</b> does not change the speed units, so set mph as well. With <b>mi</b> the <code>+10</code> / <code>-10</code> keys read <code>+.01</code> / <code>-.01</code> and step 0.01 mile, and the calibration page takes its measured distance in miles; Beep assist distances stay in metres. A decimal figure is cut down to its last place (the 10&nbsp;m in km to two decimals, the 0.001 mile in miles to three), never rounded up, so it never reads ahead of
 the car, and that includes the Italian sector card; a counter that reverse takes behind its start reads negative. Italian follows this setting too: the sector card's distance columns and countdown, and the driver display's Total and Sub, read in km or whole metres to match. The box itself counts in millimetres; metres and kilometres are only how a figure is shown on screen, so a displayed figure can be up to 10&nbsp;m different from the box's own count.</li>
 <li><b>Measure type</b> &ndash; <b>AB,BC</b> shows the A-B, B-C zero key on the greek and surrey navigation
 pages; <b>AB,AC</b> hides it.</li>
@@ -1612,14 +1612,14 @@ screen, it runs without browser bars.</li>
 <div class="ix"><span>Abort stage</span><span class="dots"></span><span class="pn">14, 30</span></div>
 <div class="ix"><span>Ahead / behind</span><span class="dots"></span><span class="pn">14, 17, 19, 20, 21, 27, 29, 30</span></div>
 <div class="ix"><span>Autostart</span><span class="dots"></span><span class="pn">5, 7, 8, 9, 17, 20</span></div>
-<div class="ix"><span>Beep assist</span><span class="dots"></span><span class="pn">5, 26</span></div>
-<div class="ix"><span>Calibration</span><span class="dots"></span><span class="pn">4, 14, 28</span></div>
+<div class="ix"><span>Beep assist</span><span class="dots"></span><span class="pn">5, 26, 29</span></div>
+<div class="ix"><span>Calibration</span><span class="dots"></span><span class="pn">4, 14, 28, 29</span></div>
 <div class="ix"><span>Chevron</span><span class="dots"></span><span class="pn">19, 20, 21</span></div>
 <div class="ix"><span>pc, pm, ct, co</span><span class="dots"></span><span class="pn">3, 12, 13, 14, 15, 21, 26, 29</span></div>
 <div class="ix"><span>Countdown</span><span class="dots"></span><span class="pn">7, 10, 17, 18, 20, 21, 22, 26, 29</span></div>
 <div class="ix"><span>Date and time</span><span class="dots"></span><span class="pn">4, 27</span></div>
-<div class="ix"><span>Distance +10 / −10</span><span class="dots"></span><span class="pn">9, 10, 15, 16, 22, 26</span></div>
-<div class="ix"><span>Driver display</span><span class="dots"></span><span class="pn">9, 19, 20, 21, 29</span></div>
+<div class="ix"><span>Distance +10 / −10</span><span class="dots"></span><span class="pn">9, 10, 15, 16, 22, 26, 29</span></div>
+<div class="ix"><span>Driver display</span><span class="dots"></span><span class="pn">9, 19, 20, 21, 29, 30</span></div>
 <div class="ix"><span>Greek rally type</span><span class="dots"></span><span class="pn">5, 9, 17, 18, 19, 26, 29</span></div>
 <div class="ix"><span>Italian rally type</span><span class="dots"></span><span class="pn">9, 12, 13, 21, 26, 29</span></div>
 <div class="ix"><span>Late arrival flag</span><span class="dots"></span><span class="pn">5, 8, 12, 22</span></div>
@@ -1631,7 +1631,7 @@ screen, it runs without browser bars.</li>
 <div class="ix"><span>Reaction time</span><span class="dots"></span><span class="pn">29</span></div>
 <div class="ix"><span>Reset</span><span class="dots"></span><span class="pn">7, 8, 9, 15, 28</span></div>
 <div class="ix"><span>Reverse</span><span class="dots"></span><span class="pn">9, 10, 15, 16, 22, 29</span></div>
-<div class="ix"><span>Sector</span><span class="dots"></span><span class="pn">3, 9, 12, 13, 14, 15, 16, 29</span></div>
+<div class="ix"><span>Sector</span><span class="dots"></span><span class="pn">3, 12, 13, 14, 15, 16, 29</span></div>
 <div class="ix"><span>Segments</span><span class="dots"></span><span class="pn">5, 12, 17</span></div>
 <div class="ix"><span>Settings</span><span class="dots"></span><span class="pn">4, 5, 12, 26, 29, 31</span></div>
 <div class="ix"><span>Setup</span><span class="dots"></span><span class="pn">4, 30, 31</span></div>

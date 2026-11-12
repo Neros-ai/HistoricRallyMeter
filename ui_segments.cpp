@@ -168,7 +168,7 @@ void applyHeadings(AppData* d) {
     gtk_label_set_text(GTK_LABEL(u->headLbl[1]), it ? "type" : "chg");
     gtk_label_set_text(GTK_LABEL(u->headLbl[2]), it ? "ref" : "auto");
     gtk_label_set_xalign(GTK_LABEL(u->headLbl[2]), it ? 1.0f : 0.5f);
-    gtk_label_set_text(GTK_LABEL(u->fromToHead), d->state->distance_km ? "from -km- to" : "from -m- to");
+    gtk_label_set_text(GTK_LABEL(u->fromToHead), (std::string("from -") + distUnitName(d->state->distance_unit) + "- to").c_str());
     gtk_label_set_text(GTK_LABEL(u->headLbl[6]), d->state->units ? "MPH" : "KPH");
 }
 
@@ -191,7 +191,7 @@ void updateRowText(AppData* d) {
             }
         };
         // One text source for the box and the phone (segRowText, stage_rows.cpp).
-        const SegRowText t = segRowText(d->state->segments[i], r, i, d->state->rally_type, d->state->distance_km, d->state->units);
+        const SegRowText t = segRowText(d->state->segments[i], r, i, d->state->rally_type, d->state->distance_unit, d->state->units);
         setText(w.num, t.num);
         if (d->state->rally_type == 2) setText(w.ref, t.ref);
         setText(w.from, t.from);
@@ -482,7 +482,7 @@ void loadFields(AppData* d) {
     } else {
         gtk_entry_set_text(GTK_ENTRY(u->timeEntry), "");
     }
-    gtk_entry_set_text(GTK_ENTRY(u->distEntry), startDistanceText(slot.start_distance_m, d->state->distance_km).c_str());
+    gtk_entry_set_text(GTK_ENTRY(u->distEntry), startDistanceText(slot.start_distance_m, d->state->distance_unit).c_str());
     // Greek shows the distance at start and the Autostart tick; italian shows the sector duration instead.
     const bool it = d->state->rally_type == 2;
     for (GtkWidget* w : {u->distCaption, u->distEntry, u->autoRow}) gtk_widget_set_visible(w, !it);
@@ -587,17 +587,28 @@ void segmentsCommitImpl(AppData* d, bool quiet) {
     RallyState::MemorySlot& slot = slotOf(d);
     const size_t row = static_cast<size_t>(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(e), "row")));
 
-    const bool km = d->state->distance_km;
+    const int km = d->state->distance_unit;
     if (!strcmp(kind, "num")) {
         long n = parseMetres(text);
         if (n >= 0) stageEditSetBox(d, row, n);
-    } else if (!strcmp(kind, "from")) {
-        long m = parseDistance(text, km);
-        if (m >= 0) stageEditSetFirst(d, -1, static_cast<double>(m));
-    } else if (!strcmp(kind, "to")) {
-        long m = parseDistance(text, km);
-        if (m >= 0 && !stageEditSetRowTo(d, row, static_cast<double>(m)) && !quiet)
+    } else if (!strcmp(kind, "from") || !strcmp(kind, "to")) {
+        // A field tapped and left showing what the box put there is not written back: the figure
+        // on screen is cut down (0.001 mile, 10 m in km), so writing it back would move the row.
+        const bool is_from = !strcmp(kind, "from");
+        double stored_m = slot.first_from_m;
+        if (!is_from) {
+            const std::vector<StageRow> rows = buildStageRows(d->state->segments, slot.first_number, slot.first_from_m);
+            stored_m = row < rows.size() ? rows[row].to_m : -1.0;
+        }
+        const bool untouched = distanceFieldUntouched(text, stored_m, km);
+        const double m = parseDistanceExact(text, km);
+        if (untouched || m < 0) {
+            // nothing to change
+        } else if (is_from) {
+            stageEditSetFirst(d, -1, m);
+        } else if (!stageEditSetRowTo(d, row, m) && !quiet) {
             flashNotice(GTK_WIDGET(e), "That end distance must be past this row's start and short of the next row's end.");
+        }
     } else if (!strcmp(kind, "kph")) {
         char* stop = nullptr;
         double v = std::strtod(text.c_str(), &stop);
@@ -627,8 +638,10 @@ void segmentsCommitImpl(AppData* d, bool quiet) {
             if (!notice.empty() && !quiet) flashNotice(GTK_WIDGET(e), notice);
         }
     } else if (!strcmp(kind, "start_dist")) {
-        long m = parseDistance(text, d->state->distance_km);   // in the rally's unit, km or m
-        if (m >= 0) stageEditSetStart(d, slot.start_time_s, m);
+        // In the rally's unit. Left as the box wrote it, it is not written back (it may be cut short).
+        long m = parseDistance(text, d->state->distance_unit);
+        if (m >= 0 && !distanceFieldUntouched(text, static_cast<double>(slot.start_distance_m), d->state->distance_unit))
+            stageEditSetStart(d, slot.start_time_s, m);
     }
     updateRowText(d);
     // Echo the stored form back into the start fields.
@@ -779,7 +792,7 @@ GtkWidget* createStageSetupScreen(AppData* data) {
         gtk_grid_attach(GTK_GRID(head), l, c, 0, 1, 1);
         u->headLbl[c] = l;
     }
-    u->fromToHead = gtk_label_new(data->state->distance_km ? "from -km- to" : "from -m- to");
+    u->fromToHead = gtk_label_new((std::string("from -") + distUnitName(data->state->distance_unit) + "- to").c_str());
     addClass(u->fromToHead, "seg-head");
     gtk_label_set_xalign(GTK_LABEL(u->fromToHead), 0.5f);
     gtk_widget_set_size_request(u->fromToHead, COLS[3] + COL_GAP + COLS[4], -1);

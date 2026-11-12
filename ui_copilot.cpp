@@ -87,6 +87,8 @@ static void applyCopilotCSS() {
         // Nero2.0 menu page: 40 px key name over a 20 px grey caption.
         // Keys that must stay inside a narrow column ("A-B, B-C", +10).
         "button.key-small { font-size: 22px; }"
+        // Settings, Distance units: five keys on one row, so no side padding and a slightly smaller face.
+        "button.key-tight { font-size: 20px; padding: 0; }"
         "button.seg-clr { font-size: 16px; font-weight: bold; padding: 0; }"
         "button.key-clr { padding-left: 2px; padding-right: 2px; }"
         "button.key-24 { font-size: 24px; }"
@@ -476,8 +478,8 @@ void updateCopilotDisplay(AppData* data) {
                                            autoStartHoldActive(data));
     
     std::stringstream ss;
-    const bool dist_km = data->state->distance_km;
-    const char* total_unit = dist_km ? "km" : "m";
+    const int dist_km = data->state->distance_unit;
+    const char* total_unit = distUnitName(dist_km);
     std::string total_str = formatDistance(static_cast<double>(total_m), dist_km);
     gtk_label_set_text(data->totalDistLabel, total_str.c_str());
     gtk_label_set_text(data->totalUnitLabel, total_unit);
@@ -495,7 +497,7 @@ void updateCopilotDisplay(AppData* data) {
     int64_t trip_secs = elapsedForDisplay(trip_duration_ms / 1000,
                                           autoStartHoldActive(data));
     
-    const char* trip_unit = dist_km ? "km" : "m";
+    const char* trip_unit = distUnitName(dist_km);
     std::string trip_str = formatDistance(static_cast<double>(trip_m), dist_km);
     gtk_label_set_text(data->tripDistLabel, trip_str.c_str());
     gtk_label_set_text(data->tripUnitLabel, trip_unit);
@@ -550,7 +552,7 @@ void updateCopilotDisplay(AppData* data) {
             remaining_m = rowCountdownMetres(data->state->stage_segments, data->state->segment_current_number,
                                              stagePositionMm(*data->state, current_poll.cntr1, current_poll.cntr2));
         }
-        const char* next_unit = dist_km ? "km" : "m";
+        const char* next_unit = distUnitName(dist_km);
         std::string next_str = formatDistance(static_cast<double>(remaining_m), dist_km);
         gtk_label_set_text(data->nextDistLabel, next_str.c_str());
         gtk_label_set_text(data->nextUnitLabel, next_unit);

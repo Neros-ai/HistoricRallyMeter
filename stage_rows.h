@@ -39,7 +39,7 @@ struct DistanceParse {
     std::vector<double> accepted;
     std::string rest;
 };
-DistanceParse parseStageDistances(const std::string& text, bool km = false);
+DistanceParse parseStageDistances(const std::string& text, int unit = 0);
 
 // Append one row per distance (each a "to m" measured from the stage's start
 // frame, i.e. absolute roadbook metres). A new row carries the speed above and
@@ -55,7 +55,7 @@ void appendStageDistances(std::vector<Segment>& segs, double first_from_m,
 // start, or on an existing row boundary, is refused. Returns a notice naming
 // the refused distances ("" when every one was placed), in km when `km` is on.
 std::string insertStageDistances(std::vector<Segment>& segs, double first_from_m,
-                                 const std::vector<double>& to_m, bool km = false);
+                                 const std::vector<double>& to_m, int unit = 0);
 
 void setRowSpeed(std::vector<Segment>& segs, size_t row, double kph);
 // Ticks / unticks chg. Row 0 is always a change and ignores this.
@@ -93,7 +93,29 @@ std::string formatMmSs(double seconds);
 std::string formatHMmSs(double seconds);
 // A distance in metres as the Distance units setting shows it: grouped metres
 // ("1,320") or kilometres to two decimals ("17.43").
-std::string formatDistance(double metres, bool km);
+// Distance units (Settings): how a distance is shown and typed. The box itself counts in millimetres.
+// One value holds both Settings choices, the format (0.00 / 0.000 / 0,000) and the unit (km / mi):
+//   DIST_M    km unit, 0,000: whole metres, grouped
+//   DIST_KM   km, 0.00: two decimals, cut down to the 10 m
+//   DIST_KM3  km, 0.000: three decimals, cut down to the metre
+//   DIST_MI   mi, 0.000: three decimals, cut down to the 0.001 mile
+//   DIST_MI2  mi, 0.00: two decimals, cut down to the 0.01 mile
+// (0,000 is not offered in miles.) A three-decimal figure drops to two decimals from 100 km or
+// 100 miles, which is all the big figures hold. A bool still works: false metres, true km.
+enum : int { DIST_M = 0, DIST_KM = 1, DIST_MI = 2, DIST_KM3 = 3, DIST_MI2 = 4 };
+constexpr double METRES_PER_MILE = 1609.344;
+inline bool distIsMiles(int unit) { return unit == DIST_MI || unit == DIST_MI2; }
+inline bool distIsKm(int unit) { return unit == DIST_KM || unit == DIST_KM3; }   // a km figure with decimals
+inline int distDecimals(int unit) { return unit == DIST_M ? 0 : (unit == DIST_KM || unit == DIST_MI2) ? 2 : 3; }
+// Put a format (decimals 2, 3 or 0 = whole) and a unit together; whole is km only (metres).
+inline int distUnitFrom(int decimals, bool miles) {
+    if (miles) return decimals == 2 ? DIST_MI2 : DIST_MI;
+    return decimals == 0 ? DIST_M : decimals == 2 ? DIST_KM : DIST_KM3;
+}
+inline bool distUnitValid(int unit) { return unit >= DIST_M && unit <= DIST_MI2; }
+const char* distUnitName(int unit);                 // "m", "km", "mi"
+double distUnitToMetres(int unit, double figure);   // a typed figure in that unit, as metres
+std::string formatDistance(double metres, int unit);
 
 // The Segments page's text for one row, exactly as the box shows it. The box
 // and the phone both use this, so the two can never read differently.
@@ -102,13 +124,13 @@ struct SegRowText {
     std::string num, ref, from, to, dist, kph, dur, tot;
 };
 // mph: the speed column follows the Settings speed units (speeds are stored in km/h).
-SegRowText segRowText(const Segment& seg, const StageRow& row, size_t index, int rally_type, bool km, bool mph = false);
+SegRowText segRowText(const Segment& seg, const StageRow& row, size_t index, int rally_type, int unit, bool mph = false);
 
 // "Average 32.08" under the italian sector duration ("" without a duration or distance).
 std::string sectorAverageText(const std::vector<Segment>& segs, long sector_duration_s, bool mph = false);
 
 // The greek "Distance at start" entry: "6,000 m" / "6.00 km" ("" when not set).
-std::string startDistanceText(long start_distance_m, bool km);
+std::string startDistanceText(long start_distance_m, int unit);
 
 // "10:45" or "10:45:30" -> seconds after midnight; -1 for anything else.
 long parseTimeOfDay(const std::string& text);
@@ -116,6 +138,13 @@ long parseTimeOfDay(const std::string& text);
 long parseMetres(const std::string& text);
 // A typed distance as whole metres: metres as parseMetres, or with `km` kilometres
 // ("17,43", "17.5 km"); -1 for anything else.
-long parseDistance(const std::string& text, bool km);
+long parseDistance(const std::string& text, int unit);
+// True when an entry still shows exactly what the box wrote for the stored figure. Such a field is
+// never written back: the text on screen is cut to the format in use (8.345 km reads 8.34 in 0.00),
+// so writing it back would shorten the programmed figure. Changing the format or the unit therefore
+// never changes stored data; only a figure the crew actually type does.
+bool distanceFieldUntouched(const std::string& text, double stored_m, int unit);
+// The same figure kept to the millimetre (miles do not fall on whole metres), as metres; -1 unreadable.
+double parseDistanceExact(const std::string& text, int unit);
 
 #endif // STAGE_ROWS_H

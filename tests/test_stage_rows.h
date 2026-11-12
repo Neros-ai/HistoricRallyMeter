@@ -343,6 +343,92 @@ public:
             return g.kph == "40" && g2.kph == "64.3738" && it.kph == "31.07";
         });
 
+        // Miles (RB-SET-14): three decimals cut down, two from 100 miles; the box still counts in mm.
+        suite->addTest("miles: figures as shown, cut down not rounded up", []() {
+            return formatDistance(1609.344, DIST_MI) == "1.000" && formatDistance(0, DIST_MI) == "0.000"
+                && formatDistance(1609.344 * 1.2345, DIST_MI) == "1.234"          // cut down (within the half-metre allowance)
+                && formatDistance(1608.0, DIST_MI) == "0.999"
+                && formatDistance(160934.4, DIST_MI) == "100.00"                  // two decimals from 100 miles
+                && formatDistance(1609.344 * 123.456, DIST_MI) == "123.45"
+                && formatDistance(1609.344 * 99.999, DIST_MI) == "99.999"
+                && formatDistance(-1609.344 * 2.5, DIST_MI) == "-2.500" && formatDistance(-0.4, DIST_MI) == "0.000"
+                && formatDistance(125, true) == "0.12" && formatDistance(1234, false) == "1,234"   // km and metres unchanged
+                && std::string(distUnitName(DIST_MI)) == "mi" && std::string(distUnitName(DIST_KM)) == "km"
+                && std::string(distUnitName(DIST_M)) == "m"
+                && distUnitToMetres(DIST_MI, 2.0) == 3218.688 && distUnitToMetres(DIST_KM, 2.0) == 2000.0;
+        });
+
+        suite->addTest("distance format and unit: all five combinations", []() {
+            // km: 0.00 to the 10 m, 0.000 to the metre, 0,000 whole metres. mi: 0.00 and 0.000. No 0,000 in miles.
+            return formatDistance(12345, DIST_KM) == "12.34" && formatDistance(12345, DIST_KM3) == "12.345"
+                && formatDistance(12345, DIST_M) == "12,345"
+                && formatDistance(1609.344 * 12.345, DIST_MI) == "12.345" && formatDistance(1609.344 * 12.345, DIST_MI2) == "12.34"
+                && formatDistance(123456, DIST_KM3) == "123.45"                   // two decimals from 100 km
+                && formatDistance(-2500, DIST_KM3) == "-2.500" && formatDistance(0.4, DIST_KM3) == "0.000"
+                && formatDistance(1609.344 * 0.019, DIST_MI2) == "0.01"
+                && distUnitFrom(2, false) == DIST_KM && distUnitFrom(3, false) == DIST_KM3 && distUnitFrom(0, false) == DIST_M
+                && distUnitFrom(2, true) == DIST_MI2 && distUnitFrom(3, true) == DIST_MI
+                && distUnitFrom(0, true) == DIST_MI                                // 0,000 does not exist in miles
+                && distDecimals(DIST_M) == 0 && distDecimals(DIST_KM) == 2 && distDecimals(DIST_MI2) == 2
+                && distDecimals(DIST_KM3) == 3 && distDecimals(DIST_MI) == 3
+                && distIsMiles(DIST_MI2) && distIsMiles(DIST_MI) && !distIsMiles(DIST_KM3)
+                && std::string(distUnitName(DIST_KM3)) == "km" && std::string(distUnitName(DIST_MI2)) == "mi"
+                && parseDistanceExact("12.345", DIST_KM3) == 12345.0
+                && formatDistance(parseDistanceExact("1.23", DIST_MI2), DIST_MI2) == "1.23"
+                && startDistanceText(12345, DIST_KM3) == "12.345 km";
+        });
+
+        suite->addTest("changing the distance format or unit never changes programmed figures", []() {
+            // A stage typed in km to three decimals: 8.345, 12.001.
+            DistanceParse pr = parseStageDistances("8.345;12.001", DIST_KM3);
+            std::vector<Segment> segs;
+            insertStageDistances(segs, 0.0, pr.accepted, DIST_KM3);
+            const double a0 = segs[0].distance_m, b0 = segs[1].distance_m;
+            // Shown in every format in turn, each field tapped and left as the box wrote it: nothing is written back.
+            for (int unit : {DIST_KM, DIST_M, DIST_MI, DIST_MI2, DIST_KM3}) {
+                std::vector<StageRow> rows = buildStageRows(segs, 1, 0);
+                for (size_t i = 0; i < rows.size(); i++)
+                    if (!distanceFieldUntouched(formatDistance(rows[i].to_m, unit), rows[i].to_m, unit)) return false;
+            }
+            std::vector<StageRow> rows = buildStageRows(segs, 1, 0);
+            return segs[0].distance_m == a0 && segs[1].distance_m == b0
+                && formatDistance(rows[0].to_m, DIST_KM) == "8.34" && formatDistance(rows[0].to_m, DIST_KM3) == "8.345"
+                && formatDistance(rows[1].to_m, DIST_KM3) == "12.001"
+                // typed text is not "untouched": a real edit still goes through
+                && !distanceFieldUntouched("8.35", rows[0].to_m, DIST_KM) && distanceFieldUntouched("8.34", rows[0].to_m, DIST_KM)
+                && distanceFieldUntouched("8,345", 8345, DIST_M) && distanceFieldUntouched("5.185 mi", 8345, DIST_MI);
+        });
+
+        suite->addTest("miles: every thousandth typed reads back as typed, to the millimetre and to the metre", []() {
+            for (long t = 0; t <= 99999; t++) {
+                char typed[16];
+                snprintf(typed, sizeof(typed), "%ld.%03ld", t / 1000, t % 1000);
+                const double exact_m = parseDistanceExact(typed, DIST_MI);          // rows: kept to the millimetre
+                const long whole_m = parseDistance(typed, DIST_MI);                 // Distance at start: whole metres
+                if (formatDistance(exact_m, DIST_MI) != typed) return false;
+                if (formatDistance(static_cast<double>(whole_m), DIST_MI) != typed) return false;
+            }
+            return parseDistanceExact("1,234 mi", DIST_MI) == parseDistanceExact("1.234", DIST_MI)
+                && parseDistanceExact("x", DIST_MI) < 0 && parseDistanceExact("12.5", DIST_KM) == 12500.0
+                && parseDistance("1,250", DIST_M) == 1250;
+        });
+
+        suite->addTest("miles: a stage typed in miles keeps every to figure and every interval", []() {
+            DistanceParse pr = parseStageDistances("0.250; 1,234; 2.500;10.001", DIST_MI);
+            if (pr.accepted.size() != 4) return false;
+            std::vector<Segment> segs;
+            insertStageDistances(segs, 0.0, pr.accepted, DIST_MI);
+            std::vector<StageRow> rows = buildStageRows(segs, 1, 0);
+            if (rows.size() != 4) return false;
+            const SegRowText a = segRowText(segs[0], rows[0], 0, 0, DIST_MI);
+            const SegRowText b = segRowText(segs[1], rows[1], 1, 0, DIST_MI);
+            const SegRowText c = segRowText(segs[2], rows[2], 2, 0, DIST_MI);
+            const SegRowText d = segRowText(segs[3], rows[3], 3, 0, DIST_MI);
+            return a.to == "0.250" && b.to == "1.234" && c.to == "2.500" && d.to == "10.001"
+                && a.dist == "0.250" && b.dist == "0.984" && c.dist == "1.266" && d.dist == "7.501"
+                && startDistanceText(27000, DIST_MI) == "16.777 mi" && startDistanceText(27000, DIST_KM) == "27.00 km";
+        });
+
         suite->addTest("segments side panel text as the box shows it", []() {
             std::vector<Segment> segs(2);
             segs[0].distance_m = 50000; segs[1].distance_m = 46240;

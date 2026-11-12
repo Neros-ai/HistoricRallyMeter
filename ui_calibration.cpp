@@ -71,13 +71,13 @@ GtkWidget* createCalibrationScreen(AppData* d) {
     text(r1, "Calculated distance:", LABEL_W);
     d->totalDistCalLabel = GTK_LABEL(text(r1, "0.0", VALUE_W, true));
     addClass(GTK_WIDGET(d->totalDistCalLabel), "cal-fig");
-    text(r1, "m");
+    d->calDistUnitLabel = GTK_LABEL(text(r1, "m"));
 
     // 2. actual distance
     GtkWidget* r2 = hrow(content);
     text(r2, "Actual distance:", LABEL_W);
     d->rallyDistEntry = GTK_ENTRY(entry(d, r2, VALUE_W, 1));
-    text(r2, "m");
+    d->calActualUnitLabel = GTK_LABEL(text(r2, "m"));
 
     // 3. sensor counts
     GtkWidget* r3 = hrow(content);

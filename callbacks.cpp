@@ -272,7 +272,8 @@ static int64_t rawDistanceMm(AppData* data, bool is_trip) {
 // and the phone client apply exactly the same arithmetic rather than two
 // implementations that can drift apart.
 void applyDistanceAdjust(AppData* data, long delta_m) {
-    long delta_mm = delta_m * 1000L;
+    // The keys step 10 m; in miles the same keys step 0.01 mile (16.093 m).
+    long delta_mm = distIsMiles(data->state->distance_unit) ? (delta_m / 10) * 16093L : delta_m * 1000L;
 
     // All counters share the same underlying wheel measurement, so a
     // wheel-slip correction has to apply to both -- otherwise Trip would
@@ -329,12 +330,14 @@ static void on_dialog_response_button(GtkWidget* button, gpointer user_data) {
 }
 
 // The set dialogs read and show distances in the rally's own unit: km to two decimals, or whole metres.
-static std::string distanceEntryText(long metres, bool km) {
-    return km ? formatDistance(static_cast<double>(metres), true) : std::to_string(metres);
+static std::string distanceEntryText(long metres, int unit) {
+    return unit == DIST_M ? std::to_string(metres) : formatDistance(static_cast<double>(metres), unit);
 }
-static double distanceEntryMetres(const char* text, bool km) {
-    const double v = std::stod(text);
-    return km ? v * 1000.0 : v;
+static double distanceEntryMetres(const char* text, int unit) {
+    return distUnitToMetres(unit, std::stod(text));
+}
+static std::string setPrompt(const char* what, int unit) {   // "Set Total (mi)"
+    return std::string("Set ") + what + " (" + distUnitName(unit) + ")";
 }
 
 void on_distance_set(GtkWidget* widget, gpointer user_data) {
@@ -355,7 +358,7 @@ void on_distance_set(GtkWidget* widget, gpointer user_data) {
     GtkWidget* promptRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_box_pack_start(GTK_BOX(content), promptRow, FALSE, FALSE, 3);
 
-    GtkWidget* prompt = gtk_label_new(data->state->distance_km ? "Set Total (km)" : "Set Total (m)");
+    GtkWidget* prompt = gtk_label_new(setPrompt("Total", data->state->distance_unit).c_str());
     gtk_box_pack_start(GTK_BOX(promptRow), prompt, FALSE, FALSE, 0);
 
     GtkEntry* entry = GTK_ENTRY(gtk_entry_new());
@@ -366,7 +369,7 @@ void on_distance_set(GtkWidget* widget, gpointer user_data) {
             const CounterPoll set_poll = data->poller->getMostRecent();
             shown_m = surreyNaviMetres(*data->state, set_poll.cntr1, set_poll.cntr2);
         }
-        gtk_entry_set_text(entry, distanceEntryText(shown_m, data->state->distance_km).c_str());
+        gtk_entry_set_text(entry, distanceEntryText(shown_m, data->state->distance_unit).c_str());
     }
     // Capped at 6 digits (999,999 m): past that the display auto-switches
     // to km, which reads as if the entered value got truncated.
@@ -418,7 +421,7 @@ void on_distance_set(GtkWidget* widget, gpointer user_data) {
     if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_OK) {
         const char* text = gtk_entry_get_text(entry);
         try {
-            applyDistanceSet(data, distanceEntryMetres(text, data->state->distance_km));
+            applyDistanceSet(data, distanceEntryMetres(text, data->state->distance_unit));
         } catch (const std::exception&) {
             // Unparseable entry: leave the correction as it was rather than
             // zeroing a good one on a typo.
@@ -497,13 +500,13 @@ void on_navi_dialog(GtkWidget* widget, gpointer user_data) {
 
     GtkWidget* promptRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_box_pack_start(GTK_BOX(content), promptRow, FALSE, FALSE, 3);
-    gtk_box_pack_start(GTK_BOX(promptRow), gtk_label_new(data->state->distance_km ? "Set Navi (km)" : "Set Navi (m)"), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(promptRow), gtk_label_new(setPrompt("Navi", data->state->distance_unit).c_str()), FALSE, FALSE, 0);
 
     auto poll = data->poller->getMostRecent();
     GtkEntry* entry = GTK_ENTRY(gtk_entry_new());
     gtk_entry_set_text(entry, distanceEntryText(adjustedDistanceMetersMm(
         odometerMm(*data->state, poll.cntr1, poll.cntr2), 0),
-        data->state->distance_km).c_str());
+        data->state->distance_unit).c_str());
     gtk_entry_set_max_length(entry, 6);
     gtk_editable_select_region(GTK_EDITABLE(entry), 0, -1);
     gtk_box_pack_start(GTK_BOX(promptRow), GTK_WIDGET(entry), TRUE, TRUE, 0);
@@ -542,7 +545,7 @@ void on_navi_dialog(GtkWidget* widget, gpointer user_data) {
     poll = data->poller->getMostRecent();
     if (response == GTK_RESPONSE_OK) {
         try {
-            setOdometerMetres(*data->state, poll.cntr1, poll.cntr2, distanceEntryMetres(gtk_entry_get_text(entry), data->state->distance_km));
+            setOdometerMetres(*data->state, poll.cntr1, poll.cntr2, distanceEntryMetres(gtk_entry_get_text(entry), data->state->distance_unit));
         } catch (const std::exception&) {
             // Unparseable entry: leave navi as it was.
         }
@@ -1596,8 +1599,13 @@ void updateCalibrationDisplay(AppData* data) {
     
     // The page shows the distance alone (its sensor counts have their own line below).
     char buf[160];
-    snprintf(buf, sizeof(buf), "%.1f", countsToMeters(cntr_a, data->state->calibration));
+    // Metres, or miles to three decimals when the distance unit is miles (km keeps metres here).
+    const bool cal_miles = distIsMiles(data->state->distance_unit);
+    if (cal_miles) snprintf(buf, sizeof(buf), "%.3f", countsToMeters(cntr_a, data->state->calibration) / METRES_PER_MILE);
+    else snprintf(buf, sizeof(buf), "%.1f", countsToMeters(cntr_a, data->state->calibration));
     gtk_label_set_text(data->totalDistCalLabel, buf);
+    if (data->calDistUnitLabel) gtk_label_set_text(data->calDistUnitLabel, cal_miles ? "mi" : "m");
+    if (data->calActualUnitLabel) gtk_label_set_text(data->calActualUnitLabel, cal_miles ? "mi" : "m");
 
     char counts[200];
     snprintf(counts, sizeof(counts),
@@ -1689,8 +1697,18 @@ void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     
     const char* dist_str = gtk_entry_get_text(data->rallyDistEntry);
     if (dist_str && strlen(dist_str) > 0) {
-        long rally_distance_m = std::stol(dist_str);
-        
+        // The measured distance, in metres -- or in miles when the distance unit is miles, kept to the
+        // millimetre: a mile is 1609.344 m, and whole metres would put 0.02% on the calibration.
+        long long rally_distance_mm = 0;
+        if (distIsMiles(data->state->distance_unit)) {
+            char* stop = nullptr;
+            const double miles = std::strtod(dist_str, &stop);
+            if (stop && *stop == '\0' && miles > 0.0) rally_distance_mm = std::llround(miles * METRES_PER_MILE * 1000.0);
+        } else {
+            rally_distance_mm = std::stol(dist_str) * 1000LL;
+        }
+        const long rally_distance_m = static_cast<long>(rally_distance_mm / 1000);
+
         if (rally_distance_m >= 500 && rally_distance_m <= 100000) {
             auto current_poll = data->poller->getMostRecent();
             
@@ -1704,7 +1722,7 @@ void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 
             if (total_count_diff > 0) {
                 // new_cal = (input_meters * 1000 * 1000) / total_count_diff
-                data->state->calibration = (rally_distance_m * 1000000) / total_count_diff;
+                data->state->calibration = (rally_distance_mm * 1000) / total_count_diff;
                 data->state->typed_pulses_per_km = 0.0;   // a measured figure now
                 
                 // The sim counters were given a counts-per-second derived from

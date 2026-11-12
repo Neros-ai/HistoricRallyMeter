@@ -60,18 +60,42 @@ public:
             RallyState s;
             ConfigFile::load(s, path);
             std::remove(path);
-            return s.rally_type == 0 && !s.distance_km && !s.measure_ab_bc;
+            return s.rally_type == 0 && !s.distance_unit && !s.measure_ab_bc;
+        });
+
+        suite->addTest("miles survives a round trip; a file from before miles still reads km or metres", []() {
+            const char* path = "test_settings_miles.json";
+            RallyState a; a.distance_unit = DIST_MI;
+            ConfigFile::save(a, path);
+            RallyState b; ConfigFile::load(b, path);
+            std::remove(path);
+            { std::ofstream f(path); f << "{\n  \"distance_km\": true\n}\n"; }
+            RallyState c; ConfigFile::load(c, path);
+            std::remove(path);
+            { std::ofstream f(path); f << "{\n  \"distance_unit\": 2,\n  \"distance_km\": false\n}\n"; }   // either order
+            RallyState d; ConfigFile::load(d, path);
+            std::remove(path);
+            RallyState e; e.distance_unit = DIST_KM3;
+            ConfigFile::save(e, path);
+            RallyState f2; ConfigFile::load(f2, path);
+            std::remove(path);
+            RallyState g; g.distance_unit = DIST_MI2;
+            ConfigFile::save(g, path);
+            RallyState h; ConfigFile::load(h, path);
+            std::remove(path);
+            return b.distance_unit == DIST_MI && c.distance_unit == DIST_KM && d.distance_unit == DIST_MI
+                && f2.distance_unit == DIST_KM3 && h.distance_unit == DIST_MI2;
         });
 
         suite->addTest("rally type, distance units and measure type survive a round trip", []() {
             const char* path = "test_settings_rally.json";
             RallyState a;
-            a.rally_type = 2; a.distance_km = true; a.measure_ab_bc = true;
+            a.rally_type = 2; a.distance_unit = true; a.measure_ab_bc = true;
             ConfigFile::save(a, path);
             RallyState b;
             ConfigFile::load(b, path);
             std::remove(path);
-            return b.rally_type == 2 && b.distance_km && b.measure_ab_bc;
+            return b.rally_type == 2 && b.distance_unit && b.measure_ab_bc;
         });
 
         suite->addTest("an unknown rally type in a file falls back to greek", []() {
@@ -85,24 +109,24 @@ public:
 
         suite->addTest("choosing a rally type leaves distance units, kph / mph and measure type alone", []() {
             RallyState s;
-            s.distance_km = false; s.units = true; s.measure_ab_bc = true;
+            s.distance_unit = false; s.units = true; s.measure_ab_bc = true;
             applyRallyTypeDefaults(s, 2);
-            const bool italian_ok = s.rally_type == 2 && !s.distance_km && s.units && s.measure_ab_bc;
-            s.distance_km = true; s.measure_ab_bc = false;
+            const bool italian_ok = s.rally_type == 2 && !s.distance_unit && s.units && s.measure_ab_bc;
+            s.distance_unit = true; s.measure_ab_bc = false;
             applyRallyTypeDefaults(s, 0);
-            return italian_ok && s.rally_type == 0 && s.distance_km && s.units && !s.measure_ab_bc;
+            return italian_ok && s.rally_type == 0 && s.distance_unit && s.units && !s.measure_ab_bc;
         });
 
         suite->addTest("choosing surrey leaves the units and measure type as they were (RB-NAV-43)", []() {
             RallyState s;
-            s.distance_km = true; s.measure_ab_bc = true;
+            s.distance_unit = true; s.measure_ab_bc = true;
             applyRallyTypeDefaults(s, 1);
-            return s.rally_type == 1 && s.distance_km && s.measure_ab_bc;
+            return s.rally_type == 1 && s.distance_unit && s.measure_ab_bc;
         });
 
         suite->addTest("a fresh state starts with greek defaults", []() {
             RallyState s;
-            return s.rally_type == 0 && !s.distance_km && !s.measure_ab_bc;
+            return s.rally_type == 0 && !s.distance_unit && !s.measure_ab_bc;
         });
 
         // RB-DRV-13

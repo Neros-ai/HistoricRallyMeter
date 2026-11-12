@@ -37,7 +37,7 @@ double rowSeconds(const Segment& s);
 // takes the type of the row above (navi at the top) and, for a timed or controlled
 // row, the next ref of that type. Returns the notice ("" when every distance was placed).
 std::string insertSectorDistances(std::vector<Segment>& segs, double first_from_m,
-                                  const std::vector<double>& to_m, bool km = false);
+                                  const std::vector<double>& to_m, int km = 0);
 
 // A typed duration as whole seconds: "31", "0:31", "2:12", "1:02:03"; -1 for anything else.
 long parseDurationSeconds(const std::string& text);
@@ -197,10 +197,10 @@ extern const char* const SECTOR_TOTAL_RESET_NOTICE;
 // RB-WEB-21: the count down figures as the box prints them, so the phone can show the same text.
 // km to the line with two decimals; "+0.04" once the line has gone by.
 // In metres (the Settings distance unit) it is whole metres, "+40" once past.
-std::string sectorCountdownKmText(const SectorPanel& p, bool km);
+std::string sectorCountdownKmText(const SectorPanel& p, int unit);
 // The italian card's figures in the units chosen in Settings. km: cut down to the 10 m, "1.24"
 // (never rounded up); metres: whole metres. Speeds: two decimals in kph, or mph when mph is set.
-std::string sectorDistText(double metres, bool km);
+std::string sectorDistText(double metres, int unit);
 std::string sectorSpeedText(double kph, bool mph);
 int sectorSpeedWhole(int kph, bool mph);
 // m:ss.t; "+m:ss.t" when negative (the line has gone by).

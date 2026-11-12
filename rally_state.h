@@ -222,7 +222,7 @@ public:
     int64_t prev_time_taken_ms = -1;
     int prev_time_taken_stage = 0;
     // Distance units: false 0,000 (metres), true 00.00 (km, two decimals).
-    bool distance_km = false;
+    int distance_unit = 0;   // Settings distance units: 0 metres, 1 km, 2 miles (DIST_M / DIST_KM / DIST_MI, stage_rows.h)
     // Measure type: true AB,BC (the A-B, B-C zero key shows on the greek navi page), false AB,AC.
     bool measure_ab_bc = false;
 

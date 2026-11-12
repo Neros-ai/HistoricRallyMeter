@@ -275,7 +275,7 @@ std::string buildTelemetryJson(AppData* data) {
         const long stage_m = stagePositionMm(st, current_poll.cntr1, current_poll.cntr2) / 1000;
         const SectorPanel sp = sectorPanel(st, current_time_ms, stage_m);
         if (sp.running) {
-            itCount = "{\"km\":\"" + sectorCountdownKmText(sp, st.distance_km) + "\",\"past\":" + (sp.metresPast > 0 ? "true" : "false") +
+            itCount = "{\"km\":\"" + sectorCountdownKmText(sp, st.distance_unit) + "\",\"past\":" + (sp.metresPast > 0 ? "true" : "false") +
                       ",\"s\":" + (sp.secondsValid ? "\"" + sectorSecondsText(sp.secondsToLine) + "\"" : std::string("null")) +
                       ",\"s_past\":" + (sp.secondsValid && sp.secondsToLine < 0 ? "true" : "false") + "}";
         }
@@ -297,7 +297,7 @@ std::string buildTelemetryJson(AppData* data) {
               : std::string("null"))
        << ",\"it_count\":" << itCount
        << ",\"sector\":" << sectorJson
-       << ",\"next_text\":\"" << (has_next_m ? formatDistance(static_cast<double>(next_m), st.distance_km) : std::string("---")) << "\""
+       << ",\"next_text\":\"" << (has_next_m ? formatDistance(static_cast<double>(next_m), st.distance_unit) : std::string("---")) << "\""
        // mm:ss to the next speed change, the line the box draws under row 3 (greek only).
        << ",\"speed_change\":\"" << jsonEscape(data->home ? data->home->speedLine : std::string()) << "\""
        << ",\"key_total\":\"" << jsonOneLine(readoutKeyName(st.rally_type, 0)) << "\""
@@ -327,7 +327,8 @@ std::string buildTelemetryJson(AppData* data) {
        << ",\"rpm\":" << (rpm < 0 ? -1L : std::lround(rpm)) << "}"
        << ",\"fps\":\"" << gtk_label_get_text(data->updatesPerSecLabel) << "\""
        << ",\"cpu\":\"" << gtk_label_get_text(data->cpuTempLabel) << "\""
-       << ",\"distance_km\":" << (st.distance_km ? "true" : "false")
+       << ",\"distance_km\":" << (distIsKm(st.distance_unit) ? "true" : "false")
+       << ",\"distance_unit\":" << st.distance_unit
        << ",\"measure_ab_bc\":" << (st.measure_ab_bc ? "true" : "false")
        // The Navi page's three figures and two elapsed times, as the box draws them.
        << ",\"home\":" << (data->home
@@ -366,7 +367,7 @@ std::string buildStateJson(AppData* data) {
            << ",\"first_from_m\":" << static_cast<long>(slot.first_from_m)
            << ",\"duration_text\":\"" << (slot.sector_duration_s > 0 ? formatHMmSs(static_cast<double>(slot.sector_duration_s)) : std::string()) << "\""
            << ",\"avg_text\":\"" << jsonEscape(sectorAverageText(data->state->segments, slot.sector_duration_s, data->state->units))
-           << "\",\"start_dist_text\":\"" << jsonEscape(startDistanceText(slot.start_distance_m, data->state->distance_km))
+           << "\",\"start_dist_text\":\"" << jsonEscape(startDistanceText(slot.start_distance_m, data->state->distance_unit))
            << "\",\"start_time\":\"";
         if (slot.start_time_s >= 0) {
             char b[16];
@@ -391,7 +392,7 @@ std::string buildStateJson(AppData* data) {
                 const Segment& sg = data->state->segments[i];
                 ss << ",\"ty\":" << sg.type;
                 // The box's own text for every cell: the phone shows it, never reformats.
-                const SegRowText t = segRowText(sg, r, i, data->state->rally_type, data->state->distance_km, data->state->units);
+                const SegRowText t = segRowText(sg, r, i, data->state->rally_type, data->state->distance_unit, data->state->units);
                 ss << ",\"txt\":{\"num\":\"" << jsonEscape(t.num) << "\",\"ref\":\"" << jsonEscape(t.ref)
                    << "\",\"from\":\"" << jsonEscape(t.from) << "\",\"to\":\"" << jsonEscape(t.to)
                    << "\",\"dist\":\"" << jsonEscape(t.dist) << "\",\"kph\":\"" << jsonEscape(t.kph)
@@ -407,13 +408,14 @@ std::string buildStateJson(AppData* data) {
         std::vector<long> hist = homeTripHistory(*data->state);
         for (size_t i = 0; i < hist.size(); i++) {
             if (i) ss << ',';
-            ss << '"' << jsonEscape(formatDistance(static_cast<double>(hist[i]), data->state->distance_km)) << '"';
+            ss << '"' << jsonEscape(formatDistance(static_cast<double>(hist[i]), data->state->distance_unit)) << '"';
         }
     }
     ss << "],\"stage_logging\":" << (data->state->stage_logging ? "true" : "false")
        << ",\"sensor_logging\":" << (data->state->debug_logs_enabled ? "true" : "false")
        << ",\"force_single\":" << (data->state->force_single_display ? "true" : "false")
-       << ",\"distance_km\":" << (data->state->distance_km ? "true" : "false")
+       << ",\"distance_km\":" << (distIsKm(data->state->distance_unit) ? "true" : "false")
+       << ",\"distance_unit\":" << data->state->distance_unit
        << ",\"rally_type\":" << data->state->rally_type
        << ",\"measure_ab_bc\":" << (data->state->measure_ab_bc ? "true" : "false")
        << ",\"calibration_pulses\":" << displayPulsesPerKm(data->state->typed_pulses_per_km, data->state->calibration)

@@ -2,6 +2,7 @@
 #include "reaction_offset.h"
 #include "rally_state.h"
 #include "calculations.h"
+#include "stage_rows.h"
 #include <fstream>
 #include <string>
 #include <sstream>
@@ -166,6 +167,7 @@ static void parseSegmentArray(std::istringstream& stream, std::vector<Segment>& 
 }
 
 void ConfigFile::load(RallyState& state, const std::string& path) {
+    bool unit_key_seen = false;   // "distance_unit" wins over the older "distance_km", whichever comes first
     std::ifstream file(path);
     if (!file.is_open()) {
         return;  // Use defaults
@@ -360,7 +362,11 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
         } else if (line.find("\"prev_time_taken_ms\"") != std::string::npos) {
             state.prev_time_taken_ms = extractLong(line);
         } else if (line.find("\"distance_km\"") != std::string::npos) {
-            state.distance_km = extractBool(line);
+            if (!unit_key_seen) state.distance_unit = extractBool(line) ? DIST_KM : DIST_M;   // files from before miles
+        } else if (line.find("\"distance_unit\"") != std::string::npos) {
+            const long u = extractLong(line);
+            state.distance_unit = distUnitValid(static_cast<int>(u)) ? static_cast<int>(u) : DIST_M;
+            unit_key_seen = true;
         } else if (line.find("\"measure_ab_bc\"") != std::string::npos) {
             state.measure_ab_bc = extractBool(line);
         } else if (line.find("\"tone_type_ahead\"") != std::string::npos) {
@@ -600,7 +606,9 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"sector_card_ms\": " << state.sector_card_ms << ",\n";
     file << "  \"trial_start_ms\": " << state.trial_start_ms << ",\n";
     file << "  \"trial_start_m\": " << std::to_string(state.trial_start_m) << ",\n";
-    file << "  \"distance_km\": " << (state.distance_km ? "true" : "false") << ",\n";
+    // Both keys: an older build reads distance_km (miles reads as metres there); this one reads distance_unit.
+    file << "  \"distance_km\": " << (distIsKm(state.distance_unit) ? "true" : "false") << ",\n";
+    file << "  \"distance_unit\": " << state.distance_unit << ",\n";
     file << "  \"measure_ab_bc\": " << (state.measure_ab_bc ? "true" : "false") << ",\n";
     file << "  \"stage_logging\": " << (state.stage_logging ? "true" : "false") << ",\n";
     file << "  \"bluetooth_audio_name\": \"" << jsonEscape(state.bluetooth_audio_name) << "\",\n";
