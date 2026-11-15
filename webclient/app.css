@@ -980,7 +980,10 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 /* Landscape greek and surrey: the trip history box ends level with the bottom of -10, and time taken sits at its foot. */
 @media (orientation: landscape) and (min-width: 700px) {
   #view-navi.rally-greek #greek-cards > .card.hist, #view-navi.rally-surrey #greek-cards > .card.hist { grid-row: 2 / 6; }
-  #view-navi.rally-surrey #time-taken-row { grid-row: 5; align-self: end; }
+  /* The result figure's foot is level with the foot of the -10 key: no card margin or padding under it, and no
+     line space under the digits (0.75 puts the line's foot on the digits' baseline). */
+  #view-navi.rally-surrey #time-taken-row { grid-row: 5; align-self: end; margin-bottom: 0; padding-bottom: 0; }
+  #view-navi.rally-surrey #time-taken { line-height: 0.75; margin-top: 0.2em; }   /* the gap the tight line took from under the label */
 }
 /* A start time that has gone by, with nothing armed or running, is crossed out in red (as the box draws it). */
 #auto-time.past {

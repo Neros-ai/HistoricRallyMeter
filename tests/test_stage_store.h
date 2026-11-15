@@ -60,6 +60,25 @@ public:
                 && s.memory_slots[0].segments[0].distance_m == 5000.0;
         });
 
+        suite->addTest("italian: km to miles re-works a pc's speed from its new distance", []() {
+            RallyState s;
+            s.rally_type = 2;
+            s.distance_unit = DIST_KM;
+            Segment pc; pc.type = SEG_PC; pc.ref = 1; pc.distance_m = 560.0; pc.pc_duration_s = 31.0;
+            pc.target_speed_kph = 560.0 / 31.0 * 3.6;
+            s.memory_slots[0].segments.push_back(pc);
+            s.memory_slots[3].segments.push_back(pc);
+            s.last_memory_slot = 1;
+            s.segments = s.memory_slots[0].segments;
+            s.segment_current_number = -1;
+            s.stage_complete = true;
+            if (!changeDistanceUnit(s, DIST_MI)) return false;
+            const double want = 0.56 * 1609.344 / 31.0 * 3.6;   // 0.56 mile in 31 s
+            return std::fabs(s.segments[0].target_speed_kph - want) < 1e-6
+                && std::fabs(s.memory_slots[0].segments[0].target_speed_kph - want) < 1e-6
+                && std::fabs(s.memory_slots[3].segments[0].target_speed_kph - want) < 1e-6;
+        });
+
         suite->addTest("valid stage numbers are 1 to 99", []() {
             return !validStageNumber(0) && validStageNumber(1) && validStageNumber(99) && !validStageNumber(100)
                 && !validStageNumber(-3);

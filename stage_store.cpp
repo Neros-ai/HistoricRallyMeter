@@ -1,6 +1,7 @@
 #include "stage_store.h"
 #include "calculations.h"
 #include "stage_rows.h"
+#include "sector.h"
 
 bool validStageNumber(int n) { return n >= 1 && n <= RallyState::MAX_MEMORY_SLOTS; }
 
@@ -40,6 +41,17 @@ bool changeDistanceUnit(RallyState& s, int new_unit) {
         if (slot.empty() && slot.start_distance_m == 0 && slot.first_from_m == 0.0) continue;
         reinterpretStageForUnit(slot.segments, slot.first_from_m, slot.start_distance_m, old_unit, new_unit);
         if (!slot.segments.empty()) slot.beep_waypoints_m = deriveWaypoints(slot.segments);
+    }
+    // Italian: a pc's speed is its distance over its duration, and the navi speed comes from the sector duration, so
+    // both follow the new distances -- the same row rules every stage edit applies (stageEditCommit).
+    if (s.rally_type == 2) {
+        for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
+            RallyState::MemorySlot& slot = s.memory_slots[i];
+            if (stageIsSector(slot.segments)) applySectorRules(slot.segments, slot.sector_duration_s);
+        }
+        if (stageIsSector(s.segments))
+            applySectorRules(s.segments, (s.last_memory_slot >= 1 && s.last_memory_slot <= RallyState::MAX_MEMORY_SLOTS)
+                                             ? s.memory_slots[s.last_memory_slot - 1].sector_duration_s : 0);
     }
     s.beep_waypoints_m = deriveWaypoints(s.segments);
     s.distance_unit = new_unit;

@@ -39,6 +39,15 @@ public:
             return g.size() == 3 && g[0].autoNext && g[1].autoNext && !g[2].autoNext;
         });
 
+        suite->addTest("start distance follows the file's unit: 6 in a km file is 6 km", []() {
+            const StageFile km = parseStageFile("stage,6\nmode,greek\nunits,km\nfrom,0\nstart,10:00\nstart distance,6\n"
+                                                "box,to,kph,auto\n1,0.52,36,\n");
+            const StageFile m = parseStageFile("stage,6\nmode,greek\nunits,m\nfrom,0\nstart,10:00\nstart distance,6\n"
+                                               "box,to,kph,auto\n1,520,36,\n");
+            return km.stages.size() == 1 && km.stages[0].loadable() && km.stages[0].slot.start_distance_m == 6000
+                && m.stages.size() == 1 && m.stages[0].loadable() && m.stages[0].slot.start_distance_m == 6;
+        });
+
         suite->addTest("a stage file in miles: units,miles, figures kept to the millimetre", []() {
             const char* text =
                 "stage,4\nmode,greek\nunits,miles\nstart distance,16.777\n"

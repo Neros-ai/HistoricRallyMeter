@@ -158,7 +158,7 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         const double right = (width + 6 * 24) / 2.0;
         const int pitch = h->surrey ? SURREY_HISTORY_PITCH : 46;   // Surrey: 6 px tighter so the time taken and the A-B zero key fit
         for (size_t i = 0; i < HOME_HISTORY_ENTRIES; i++)
-            drawText(cr, h->history[i], right, 24 + (i + 1) * pitch - 10, 40, RIGHT);
+            drawText(cr, h->history[i], right, 24 + (i + 1) * pitch - 10, 30, RIGHT);   // the speed-change rows' size (owner, 2026-11-15)
         if (h->surrey && !h->timeTaken.empty()) {
             // The last stage's time taken at the foot of the column (mockup surrey-mode.html).
             const int height = gtk_widget_get_allocated_height(w);

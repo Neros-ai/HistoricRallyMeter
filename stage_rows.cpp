@@ -288,7 +288,6 @@ std::string formatDistance(double metres, int unit, bool nearest) {
     if (unit == DIST_MI || unit == DIST_MI2 || unit == DIST_KM3) {
         // Thousandths of the unit, cut down, never rounded up. Miles get one millimetre of allowance, for
         // rounding dust only: a stored 1.234 mi is a hair under in floating point and would read 1.233.
-        // (It was half a metre until 2026-11-15, which let a figure read up to 0.5 m ahead of the car.)
         const long long mm = std::llround(metres * 1000.0);
         const bool neg = mm < 0;
         const long long a = neg ? -mm : mm;
