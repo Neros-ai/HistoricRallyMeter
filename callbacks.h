@@ -95,8 +95,6 @@ void refreshBeepWaypointView(AppData* data);
 // every screen switch -- the keypad target is shared process-wide.
 void releaseKeypadTarget(AppData* data);
 void on_beep_advance_changed(GtkWidget* widget, gpointer user_data);
-void on_alarm_set(GtkWidget* widget, gpointer user_data);
-void on_alarm_clear(GtkWidget* widget, gpointer user_data);
 void on_adj_driver_zero(GtkWidget* widget, gpointer user_data);
 void on_set_sensor_1(GtkWidget* widget, gpointer user_data);
 void on_set_sensor_both(GtkWidget* widget, gpointer user_data);
@@ -160,6 +158,7 @@ void zeroTimeBaselines(AppData* data);
 void adoptRoadbookAsStage(AppData* data);
 // The opposite: no stage running, so the gauge rests and the roadbook is free.
 void endStageAsIdle(AppData* data);
+void endEarlyDepartureIfArmed(AppData* data);   // before replacing or cancelling an early departure
 
 
 // Adopts the edited roadbook as the stage roadbook, but only when no stage

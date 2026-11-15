@@ -25,6 +25,28 @@ int64_t calculateDistanceCounts(const RallyState& state, uint64_t cntr1, uint64_
     }
 }
 
+bool recordStartReadingsIfNew(RallyState& state, uint64_t cntr1, uint64_t cntr2) {
+    if (state.start_readings_recorded) return false;
+    if (state.total_start_cntr1 == 0 && state.total_start_cntr2 == 0) {
+        state.total_start_cntr1 = cntr1;
+        state.total_start_cntr2 = cntr2;
+    }
+    if (state.trip_start_cntr1 == 0 && state.trip_start_cntr2 == 0) {
+        state.trip_start_cntr1 = cntr1;
+        state.trip_start_cntr2 = cntr2;
+    }
+    if (state.segment_start_cntr1 == 0 && state.segment_start_cntr2 == 0) {
+        state.segment_start_cntr1 = cntr1;
+        state.segment_start_cntr2 = cntr2;
+    }
+    if (state.odometer_start_cntr1 == 0 && state.odometer_start_cntr2 == 0) {   // fresh box: navi starts here too
+        state.odometer_start_cntr1 = cntr1;
+        state.odometer_start_cntr2 = cntr2;
+    }
+    state.start_readings_recorded = true;
+    return true;
+}
+
 void restartDistancesAfterPowerLoss(RallyState& state, uint64_t cntr1, uint64_t cntr2,
                                     int64_t now_ms) {
     state.total_start_cntr1 = cntr1;
@@ -36,9 +58,8 @@ void restartDistancesAfterPowerLoss(RallyState& state, uint64_t cntr1, uint64_t 
     state.segment_start_cntr1 = cntr1;
     state.segment_start_cntr2 = cntr2;
     state.segment_start_time_ms = now_ms;
+    state.start_readings_recorded = true;   // the live counts just saved are the real baselines
     state.segment_current_number = -1;
-    state.alarm_distance_km = 0;
-    state.alarm_target_mm = 0;
     // Box-only state tied to the old baselines: the distance corrections, the
     // running stage and its undo all described counts that no longer exist.
     state.total_distance_adjust_mm = 0;
@@ -449,6 +470,7 @@ void rebaseSegmentAt(RallyState& state, uint64_t c1, uint64_t c2,
 
 bool nextAvailable(const RallyState& state) {
     long i = state.segment_current_number;
+    if (state.stage_complete) return false;   // a finished stage steps no more rows (as prev)
     return i >= 0 && i + 1 < static_cast<long>(state.stage_segments.size());
 }
 
@@ -1088,18 +1110,6 @@ bool stageLive(const RallyState& state) {
 }
 
 void rebaseTotalDistance(RallyState& state, uint64_t c1, uint64_t c2) {
-    // The alarm stores the odometer reading it fires at, measured from the
-    // Total counter's zero -- and that zero is about to move. Take the
-    // distance already covered off the target so what is LEFT to run is
-    // unchanged: a 20 km alarm set at 5 km still has 20 km to go after a
-    // reset, instead of firing 25 km later. Beep Assist's waypoints were
-    // given the same treatment; the alarm was missed.
-    if (state.alarm_distance_km > 0) {
-        const int64_t covered_mm = countsToMm(calculateDistanceCounts(state, c1, c2,
-            state.total_start_cntr1, state.total_start_cntr2), state.calibration);
-        state.alarm_target_mm -= covered_mm;
-        if (state.alarm_target_mm < 0) state.alarm_target_mm = 0;
-    }
     state.total_start_cntr1 = c1;
     state.total_start_cntr2 = c2;
     state.segment_start_cntr1 = c1;

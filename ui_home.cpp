@@ -497,8 +497,6 @@ GtkWidget* createHomeScreen(AppData* data) {
     data->nextUnitLabel = GTK_LABEL(gtk_label_new("m"));
     data->nextSpeedLabel = GTK_LABEL(gtk_label_new("---"));
     data->stageStatusLabel = nullptr;
-    data->alarmCountdownLabel = nullptr;   // the Alarm KM grid is gone
-    data->alarmClearBtn = nullptr;
 
     // Single-display mode (one 1280 x 400 screen): the same left block, then the
     // clock and stage selector over the driver gauge, then the right-hand keys.

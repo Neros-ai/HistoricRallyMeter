@@ -302,13 +302,6 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.driver_window_height = static_cast<int>(extractLong(line));
         } else if (line.find("\"driver_window_monitor\"") != std::string::npos) {
             state.driver_window_monitor = static_cast<int>(extractLong(line));
-        } else if (line.find("\"alarm_distance_km\"") != std::string::npos) {
-            state.alarm_distance_km = static_cast<int>(extractLong(line));
-        } else if (line.find("\"alarm_target_mm\"") != std::string::npos) {
-            state.alarm_target_mm = extractLong(line);
-        } else if (line.find("\"alarm_target_counts\"") != std::string::npos) {
-            // an older file: pulses, turned into mm once here (an _mm key wins if present)
-            if (state.alarm_target_mm == 0) state.alarm_target_mm = countsToMm(extractLong(line), state.calibration);
         } else if (line.find("\"force_single_display\"") != std::string::npos) {
             state.force_single_display = extractBool(line);
         } else if (line.find("\"tone_enabled\"") != std::string::npos) {
@@ -325,6 +318,8 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
         } else if (line.find("\"gauge_range_s\"") != std::string::npos) {
             const long r = extractLong(line);
             state.gauge_range_s = (r >= 1 && r <= 3) ? static_cast<int>(r) : 3;
+        } else if (line.find("\"start_readings_recorded\"") != std::string::npos) {
+            state.start_readings_recorded = extractLong(line) != 0;
         } else if (line.find("\"odometer_start_cntr1\"") != std::string::npos) {
             state.odometer_start_cntr1 = extractCounter(line);
             state.odometer_recorded = true;
@@ -355,8 +350,6 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.time_taken_ms = extractLong(line);
         } else if (line.find("\"surrey_finish_at_ms\"") != std::string::npos) {
             state.surrey_finish_at_ms = extractLong(line);
-        } else if (line.find("\"surrey_distance_end_ms\"") != std::string::npos) {
-            state.surrey_distance_end_ms = extractLong(line);
         } else if (line.find("\"prev_time_taken_stage\"") != std::string::npos) {
             state.prev_time_taken_stage = static_cast<int>(extractLong(line));
         } else if (line.find("\"prev_time_taken_ms\"") != std::string::npos) {
@@ -578,9 +571,6 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"driver_window_width\": " << state.driver_window_width << ",\n";
     file << "  \"driver_window_height\": " << state.driver_window_height << ",\n";
     file << "  \"driver_window_monitor\": " << state.driver_window_monitor << ",\n";
-    file << "  \"alarm_distance_km\": " << state.alarm_distance_km << ",\n";
-    file << "  \"alarm_target_mm\": " << state.alarm_target_mm << ",\n";
-    file << "  \"alarm_target_counts\": " << (state.calibration > 0 ? state.alarm_target_mm * 1000 / state.calibration : 0) << ",\n";
     file << "  \"force_single_display\": " << (state.force_single_display ? "true" : "false") << ",\n";
     file << "  \"tone_enabled\": " << (state.tone_enabled ? "true" : "false") << ",\n";
     file << "  \"tone_type_behind\": " << state.tone_type_behind << ",\n";
@@ -593,9 +583,9 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"time_taken_ms\": " << state.time_taken_ms << ",\n";
     // Saved so a restart still knows the finish press was made (it is taken once only).
     file << "  \"surrey_finish_at_ms\": " << state.surrey_finish_at_ms << ",\n";
-    file << "  \"surrey_distance_end_ms\": " << state.surrey_distance_end_ms << ",\n";
     file << "  \"prev_time_taken_stage\": " << state.prev_time_taken_stage << ",\n";
     file << "  \"prev_time_taken_ms\": " << state.prev_time_taken_ms << ",\n";
+    file << "  \"start_readings_recorded\": " << (state.start_readings_recorded ? 1 : 0) << ",\n";
     file << "  \"odometer_start_cntr1\": " << static_cast<int64_t>(state.odometer_start_cntr1) << ",\n";
     file << "  \"odometer_start_cntr2\": " << static_cast<int64_t>(state.odometer_start_cntr2) << ",\n";
     file << "  \"odometer_adjust_mm\": " << state.odometer_adjust_mm << ",\n";

@@ -1,5 +1,6 @@
 #include <cmath>
 #include "web_commands.h"
+#include "../ui_copilot.h"
 #include "config_file.h"
 #include "calculations.h"
 #include "callbacks.h"
@@ -352,6 +353,12 @@ bool webHandleCommand(AppData* data, const char* json) {
         setReverse(data, on);
         return true;
     }
+    if (strcmp(type, "counter_fault_clear") == 0) {
+        if (data->poller) data->poller->clearCounterFault();
+        updateCounterFaultWidgets(data);
+        notifyWebStateNow(data);
+        return true;
+    }
     if (strcmp(type, "freeze_toggle") == 0) { toggleHomeFreeze(data); return true; }
     if (strcmp(type, "abort_stage") == 0) {
         // The phone asks the crew first; the box only acts if a stage can end.
@@ -360,6 +367,7 @@ bool webHandleCommand(AppData* data, const char* json) {
         return true;
     }
     if (strcmp(type, "flag_next_minute") == 0) {
+        if (!nextMinuteAllowed(*data->state)) return false;   // italian hides the key; refuse it here too
         // With a stage running the phone has already asked "abort the current
         // stage?" and sends abort=true on yes; without it the press is refused.
         bool abort_first = false;

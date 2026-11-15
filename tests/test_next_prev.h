@@ -207,6 +207,7 @@ public:
         suite->addTest("next is live anywhere; prev only right after a change, once", []() {
             RallyState s;
             s.stage_segments = roadbook();
+            s.stage_complete = false;                // a running stage: next is dead on a finished one
             s.segment_current_number = -1;
             ASSERT_FALSE(nextAvailable(s));
             ASSERT_FALSE(prevAvailable(s));

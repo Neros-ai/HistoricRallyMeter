@@ -4,6 +4,7 @@
 #include "config_file.h"
 #include "rally_state.h"
 #include "sector.h"
+#include "stage_phase.h"
 #include "stage_rows.h"
 
 int stageEditSlot(AppData* d) {
@@ -156,8 +157,14 @@ void stageEditSetStart(AppData* d, long time_s, long distance_m, std::string* no
     }
 }
 
+// A timed start belongs to its stage: clearing that stage (or all of them) cancels it.
+static void cancelTimedStartIfStageGone(AppData* d, bool all) {
+    if (timedStartDiesWithStage(*d->state, all)) applyAutoStartArming(d, autoStartDisarmed());
+}
+
 void stageEditClearStage(AppData* d) {
     STAGE_EDIT_GUARD(d, );
+    cancelTimedStartIfStageGone(d, false);
     slotOf(d).clear();
     d->state->segments.clear();
     stageEditCommit(d);
@@ -165,6 +172,7 @@ void stageEditClearStage(AppData* d) {
 
 void stageEditClearAll(AppData* d) {
     STAGE_EDIT_GUARD(d, );
+    cancelTimedStartIfStageGone(d, true);
     for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) d->state->memory_slots[i].clear();
     d->state->segments.clear();
     d->state->last_memory_slot = 1;
@@ -173,6 +181,7 @@ void stageEditClearAll(AppData* d) {
 
 bool stageEditSetAutostart(AppData* d, bool on, std::string* error) {
     if (!on) {
+        endEarlyDepartureIfArmed(d);
         applyAutoStartArming(d, autoStartDisarmed());
         return true;
     }
@@ -188,11 +197,9 @@ bool stageEditSetAutostart(AppData* d, bool on, std::string* error) {
         if (error) *error = "Set the stage start time first.";
         return false;
     }
-    const int64_t target = autoStartTargetForTimeOfDay(d, tod);
-    if (target <= now_ms) {
-        if (error) *error = "That start time has already passed.";
-        return false;
-    }
+    int64_t target = autoStartTargetForTimeOfDay(d, tod);
+    target = timedStartTarget(target, now_ms);   // a time earlier than now means tomorrow
+    endEarlyDepartureIfArmed(d);
     applyAutoStartArming(d, autoStartArming(target, getAutoStartEpochMs(), false));
     return true;
 }

@@ -201,14 +201,11 @@ struct AppData {
     uint64_t totalResetCntr2 = 0;
     int64_t totalResetPressMs = 0;
     GtkWidget* adjZeroBtn;
-    GtkLabel* alarmCountdownLabel;
     // Read-only stage panel on the main navigator screen, and the text it is
     // currently showing -- compared each tick so the label is only touched
     // when something actually changed, rather than 100 times a second.
     GtkLabel* stageStatusLabel = nullptr;
     std::string stageStatusShown;
-    GtkWidget* alarmClearBtn;
-    int64_t alarmSoundStartTime = 0;    // when doorbell started (0 = not ringing)
 
     GtkLabel* webUrlLabel = nullptr;
     GtkWidget* setupForceBtn[2] = {nullptr, nullptr};   // Setup page: Force single display off / on
@@ -325,6 +322,8 @@ struct AppData {
     
     // Driver countdown overlay
     GtkWidget* countdownOverlay;
+    GtkWidget* faultCopilot = nullptr;   // "counter fault" warning, centre screen; a tap clears it
+    GtkWidget* faultDriver = nullptr;
     // Next segment's target speed, smaller, under the Target value in the
     // wide driver layout. The compact layout draws its own with cairo.
     GtkLabel* nextTargetSpeedLabel = nullptr;

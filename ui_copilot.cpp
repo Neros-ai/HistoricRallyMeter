@@ -53,13 +53,11 @@ static void applyCopilotCSS() {
         ".dist-value { font-size: 64px; font-weight: bold; font-family: monospace; }"
         ".dist-unit { font-size: 20px; font-weight: bold; font-family: monospace; }"
         ".time-label { font-size: 22px; font-family: monospace; color: #CCCCCC; }"
-        ".alarm-label { font-size: 20px; min-width: 90px; }"
         // Monospace: the panel is a fixed-width table of speeds and
         // distances, and a proportional font makes its columns ragged.
         ".stage-status { font-size: 22px; font-family: monospace; }"
-        ".alarm-button { font-size: 22px; }"
+        ".counter-fault { background: #C00000; color: #FFFFFF; font-size: 44px; font-weight: bold; padding: 12px 40px; }"
         ".reset-button { font-size: 36px; }"
-        ".alarm-countdown { font-size: 28px; color: #FFFFFF; font-family: monospace; }"
         ".nav-button { font-size: 20px; }"
         ".segment-label { font-size: 18px; }"
         // The Navigation/Timing lead-in values are read at a glance while
@@ -240,7 +238,36 @@ static void fireBeepAssist(AppData* data, double waypoint_m, double travelled_m,
     }
 }
 
+static gboolean on_counter_fault_tap(G_GNUC_UNUSED GtkWidget* w, G_GNUC_UNUSED GdkEventButton* e, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->poller->clearCounterFault();
+    updateCounterFaultWidgets(data);
+    notifyWebStateNow(data);
+    return TRUE;
+}
+
+GtkWidget* makeCounterFaultWidget(AppData* data) {
+    GtkWidget* box = gtk_event_box_new();
+    GtkWidget* label = gtk_label_new("counter fault");
+    gtk_style_context_add_class(gtk_widget_get_style_context(label), "counter-fault");
+    gtk_container_add(GTK_CONTAINER(box), label);
+    gtk_widget_set_halign(box, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(box, GTK_ALIGN_CENTER);
+    g_signal_connect(box, "button-press-event", G_CALLBACK(on_counter_fault_tap), data);
+    gtk_widget_show_all(box);
+    gtk_widget_set_no_show_all(box, TRUE);
+    gtk_widget_hide(box);
+    return box;
+}
+
+void updateCounterFaultWidgets(AppData* data) {
+    const bool fault = data->poller && data->poller->counterFault();
+    if (data->faultCopilot) gtk_widget_set_visible(data->faultCopilot, fault);
+    if (data->faultDriver) gtk_widget_set_visible(data->faultDriver, fault);
+}
+
 void updateCopilotDisplay(AppData* data) {
+    updateCounterFaultWidgets(data);
     auto current_poll = data->poller->getMostRecent();
     auto current_time_ms = getRallyTime_ms(*data->state);
     
@@ -404,36 +431,6 @@ void updateCopilotDisplay(AppData* data) {
         }
     }
 
-    // In single-display mode the countdown/clear widgets do not exist, but a
-    // persisted alarm still fires its sound and auto-clears.
-    if (data->state->alarm_distance_km > 0) {
-        if (data->alarmClearBtn) gtk_widget_show(data->alarmClearBtn);
-        long remaining_m = (data->state->alarm_target_mm - countsToMm(total_count_diff, data->state->calibration)) / 1000;
-        
-        if (remaining_m <= 0) {
-            if (data->alarmSoundStartTime == 0) {
-                data->alarmSoundStartTime = current_time_ms;
-                system("aplay alarm.wav &");
-            }
-            if (data->alarmCountdownLabel) gtk_label_set_text(data->alarmCountdownLabel, "ALARM!");
-            
-            if (current_time_ms - data->alarmSoundStartTime > 5000) {
-                data->state->alarm_distance_km = 0;
-                data->state->alarm_target_mm = 0;
-                data->alarmSoundStartTime = 0;
-                if (data->alarmCountdownLabel) gtk_label_set_text(data->alarmCountdownLabel, "");
-                if (data->alarmClearBtn) gtk_widget_hide(data->alarmClearBtn);
-                ConfigFile::save(*data->state);
-            }
-        } else if (data->alarmCountdownLabel) {
-            std::stringstream alarmSs;
-            alarmSs << formatDistanceGrouped(remaining_m) << " to alarm";
-            gtk_label_set_text(data->alarmCountdownLabel, alarmSs.str().c_str());
-        }
-    } else {
-        if (data->alarmCountdownLabel) gtk_label_set_text(data->alarmCountdownLabel, "");
-        if (data->alarmClearBtn) gtk_widget_hide(data->alarmClearBtn);
-    }
     
     // Check which screen is visible
     GtkWidget* visible_child = gtk_stack_get_visible_child(data->copilotStack);
@@ -846,9 +843,9 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
         gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->nextSpeedLabel), 3, 2, 1, 1);
     
     // ── RIGHT PANEL (30%) ──
-    // Normal: clock, alarm buttons, countdown.
+    // Normal: clock.
     // Single-display mode: embedded compact driver gauge instead (the rally
-    // clock is drawn inside the gauge, alarms cannot be set).
+    // clock is drawn inside the gauge).
     GtkWidget* rightPanel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     // Single-display mode: wider panel (times/next-speed column is hidden) so
     // the gauge can grow until it is height-limited. The gauge area's hexpand
@@ -860,8 +857,6 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     if (data->singleDisplayMode) {
         gtk_box_pack_start(GTK_BOX(rightPanel), createEmbeddedGauge(data), TRUE, TRUE, 0);
 
-        data->alarmCountdownLabel = nullptr;
-        data->alarmClearBtn = nullptr;
     } else {
     // Top row: rally clock
     GtkWidget* topRightRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
@@ -871,58 +866,6 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_label_set_xalign(data->copilotRallyClockLabel, 1.0);
     gtk_box_pack_end(GTK_BOX(topRightRow), GTK_WIDGET(data->copilotRallyClockLabel), FALSE, FALSE, 0);
     
-    // Alarm buttons: label on its own row, then a flush-left 4x3 grid --
-    // no per-row indent, so every column lines up squarely under the label
-    // rather than being pushed right by a label-width spacer.
-    GtkWidget* alarmBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
-    gtk_widget_set_margin_top(alarmBox, 10);
-    gtk_widget_set_halign(alarmBox, GTK_ALIGN_END);
-    gtk_box_pack_start(GTK_BOX(rightPanel), alarmBox, FALSE, FALSE, 0);
-
-    // "KM", not "in": the buttons are kilometre distances, and
-    // "Alarm in 2" reads as two minutes.
-    GtkWidget* alarmLabel = gtk_label_new("Alarm KM");
-    gtk_style_context_add_class(gtk_widget_get_style_context(alarmLabel), "alarm-label");
-    gtk_label_set_xalign(GTK_LABEL(alarmLabel), 0.0);
-    gtk_box_pack_start(GTK_BOX(alarmBox), alarmLabel, FALSE, FALSE, 0);
-
-    // Alarm buttons: 4 rows of 3, 30% larger (62x47)
-    auto addAlarmRow = [&](GtkWidget* parent, int from, int to) {
-        GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
-        gtk_box_pack_start(GTK_BOX(parent), row, FALSE, FALSE, 0);
-        for (int km = from; km <= to; km++) {
-            GtkWidget* btn = gtk_button_new_with_label(std::to_string(km).c_str());
-            gtk_style_context_add_class(gtk_widget_get_style_context(btn), "alarm-button");
-            gtk_widget_set_size_request(btn, 68, 47);
-            g_object_set_data(G_OBJECT(btn), "km", GINT_TO_POINTER(km));
-            g_signal_connect(btn, "clicked", G_CALLBACK(on_alarm_set), data);
-            gtk_box_pack_start(GTK_BOX(row), btn, FALSE, FALSE, 2);
-        }
-    };
-
-    addAlarmRow(alarmBox, 2, 4);
-    addAlarmRow(alarmBox, 5, 7);
-    addAlarmRow(alarmBox, 8, 10);
-    addAlarmRow(alarmBox, 11, 13);
-    
-    // Alarm countdown + clear button, right-aligned under the alarm grid so
-    // the countdown ends level with the buttons above it rather than
-    // floating at the panel's left edge.
-    GtkWidget* countdownRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    gtk_widget_set_margin_top(countdownRow, 8);
-    gtk_widget_set_halign(countdownRow, GTK_ALIGN_END);
-    gtk_box_pack_start(GTK_BOX(rightPanel), countdownRow, FALSE, FALSE, 0);
-
-    data->alarmCountdownLabel = GTK_LABEL(gtk_label_new(""));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->alarmCountdownLabel)), "alarm-countdown");
-    gtk_label_set_xalign(data->alarmCountdownLabel, 1.0);
-    gtk_box_pack_start(GTK_BOX(countdownRow), GTK_WIDGET(data->alarmCountdownLabel), FALSE, FALSE, 0);
-
-    data->alarmClearBtn = gtk_button_new_with_label("clear");
-    gtk_style_context_add_class(gtk_widget_get_style_context(data->alarmClearBtn), "alarm-button");
-    g_signal_connect(data->alarmClearBtn, "clicked", G_CALLBACK(on_alarm_clear), data);
-    gtk_box_pack_start(GTK_BOX(countdownRow), data->alarmClearBtn, FALSE, FALSE, 5);
-    gtk_widget_set_no_show_all(data->alarmClearBtn, TRUE);
     }
     
     // ── BOTTOM ROW: Navigation buttons (20% taller) ──
@@ -1054,7 +997,13 @@ GtkWidget* createCopilotWindow(AppData* data) {
     // height and push the TwinMaster nav bar off the bottom of the display.
     gtk_stack_set_vhomogeneous(data->copilotStack, FALSE);
     gtk_stack_set_hhomogeneous(data->copilotStack, FALSE);
-    gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(data->copilotStack));
+    {   // the stack sits under an overlay so the counter-fault warning can float over every screen
+        GtkWidget* faultOverlay = gtk_overlay_new();
+        gtk_container_add(GTK_CONTAINER(faultOverlay), GTK_WIDGET(data->copilotStack));
+        data->faultCopilot = makeCounterFaultWidget(data);
+        gtk_overlay_add_overlay(GTK_OVERLAY(faultOverlay), data->faultCopilot);
+        gtk_container_add(GTK_CONTAINER(window), faultOverlay);
+    }
     
     // Create all screens
     // Two displays get the Nero2.0 Home page; the single-display box keeps the

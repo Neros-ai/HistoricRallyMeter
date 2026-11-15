@@ -44,10 +44,20 @@ private:
     // rejecting that once freezes last_good forever and the harness looks dead.
     bool spurious_check_enabled = true;
     
+    int rejected_run = 0;
+    bool fault_latched = false;
+
 public:
     CounterPoller();
 
     void setSpuriousCheckEnabled(bool enabled) { spurious_check_enabled = enabled; }
+
+    // Counter fault (warning only): 100 rejected or failed reads in a row (about a second) latch
+    // it. A good read does not clear it; a tap does (clearCounterFault), and 100 more bad reads
+    // latch it again.
+    static constexpr int FAULT_REJECTS = 100;
+    bool counterFault() const { return fault_latched; }
+    void clearCounterFault() { fault_latched = false; rejected_run = 0; }
     
     bool poll(ICounter* cntr1, ICounter* cntr2, uint8_t reg);
     

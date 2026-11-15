@@ -5,6 +5,9 @@
 #include "rally_types.h"
 
 void updateCopilotDisplay(AppData* data);
+// The counter-fault warning (red, centre screen). A tap clears it, here and on the phone.
+GtkWidget* makeCounterFaultWidget(AppData* data);
+void updateCounterFaultWidgets(AppData* data);
 GtkWidget* createCopilotWindow(AppData* data);
 
 // The embedded driver gauge (single-display mode) in an overlay with its countdown.

@@ -40,6 +40,7 @@
 #include "test_driver_trial.h"
 #include "test_stage_file.h"
 #include "test_stage_phase.h"
+#include "test_start_readings.h"
 
 int main() {
     TestRunner runner;
@@ -83,6 +84,7 @@ int main() {
     TestDriverTrial driverTrialTests;
     TestStageFile stageFileTests;
     TestStagePhase stagePhaseTests;
+    TestStartReadings startReadingsTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -123,6 +125,7 @@ int main() {
     runner.addSuite(driverTrialTests.createSuite());
     runner.addSuite(stageFileTests.createSuite());
     runner.addSuite(stagePhaseTests.createSuite());
+    runner.addSuite(startReadingsTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();

@@ -90,7 +90,7 @@ public:
             ConfigFile::save(a2, path);
             RallyState b2; ConfigFile::load(b2, path);
             if (b2.time_taken_stage != 3) { std::remove(path); return false; }
-            { std::ofstream f(path); f << "{\n  \"rally_type\": 1\n}\n"; }
+            { std::ofstream f(path); f << "{\n  \"rally_type\": 1,\n  \"surrey_distance_end_ms\": 561000\n}\n"; }
             RallyState c;
             ConfigFile::load(c, path);
             std::remove(path);
@@ -268,50 +268,6 @@ public:
             RallyState s = runningAt(ss1(), 0);
             return !undoSurreyFinish(s, 100.0, 53897.0);
         });
-        suite->addTest("no press: ends on distance as greek", [runningAt, ss1]() {
-            RallyState s = runningAt(ss1(), 0); s.last_memory_slot = 1;
-            surreyDistanceEnd(s, 561000);
-            const bool a = s.time_taken_ms == 561000 && s.time_taken_stage == 1;
-            RallyState t = runningAt(ss1(), 0);
-            applySurreyFinish(t, 560600);
-            surreyDistanceEnd(t, 561000);
-            return a && t.time_taken_ms == 560600;
-        });
-        suite->addTest("a finish press after the roadbook distance ran out is taken, once", [runningAt, ss1]() {
-            RallyState s = runningAt(ss1(), 0); s.last_memory_slot = 1;
-            s.stage_complete = true;                    // as the distance end leaves it
-            surreyDistanceEnd(s, 561000);
-            const bool live = surreyFinishAvailable(s);
-            const bool took = applySurreyFinish(s, 566200);     // the real finish, 5.2 s on
-            const bool again = applySurreyFinish(s, 570000);    // a second press is not
-            return live && took && !again && s.time_taken_ms == 566200 && s.time_taken_stage == 1
-                && s.stage_complete && s.surrey_finish_at_ms == 566200;
-        });
-        suite->addTest("no late finish press once another stage is loaded or the stage is cleared", [runningAt, ss1]() {
-            RallyState s = runningAt(ss1(), 0); s.last_memory_slot = 1;
-            s.stage_complete = true;
-            surreyDistanceEnd(s, 561000);
-            RallyState other = s; other.last_memory_slot = 2;           // another stage loaded
-            RallyState cleared = s; cleared.segment_current_number = -1; // abort / Reset Total
-            RallyState greek = s; greek.rally_type = 0;
-            return surreyFinishAvailable(s) && !surreyFinishAvailable(other)
-                && !surreyFinishAvailable(cleared) && !surreyFinishAvailable(greek);
-        });
-        suite->addTest("prev takes a late finish press back to the distance-end time", [runningAt, ss1]() {
-            RallyState s = runningAt(ss1(), 0); s.last_memory_slot = 1;
-            s.stage_complete = true;
-            surreyDistanceEnd(s, 561000);                        // ended on distance: 9:21.0
-            applySurreyFinish(s, 566200);                        // a press 5.2 s on, by mistake
-            // Past the roadbook's end (navi 9500 against a last "to" of 9418): still taken back.
-            const bool live = surreyUndoAvailable(s, 9500.0, 9418.0);
-            const bool undone = undoSurreyFinish(s, 9500.0, 9418.0);
-            const bool back = s.time_taken_ms == 561000 && s.time_taken_stage == 1 && s.stage_complete
-                && s.surrey_finish_at_ms == 0;
-            // The real finish can still be pressed; with nothing pressed prev has nothing to take back.
-            const bool again = surreyFinishAvailable(s) && !surreyUndoAvailable(s, 9500.0, 9418.0)
-                && !undoSurreyFinish(s, 9500.0, 9418.0);
-            return live && undone && back && again && applySurreyFinish(s, 570000) && s.time_taken_ms == 570000;
-        });
         suite->addTest("prev reopening a finish puts the previous stage's time taken back", [runningAt, ss1]() {
             RallyState s = runningAt(ss1(), 0); s.last_memory_slot = 3;
             s.time_taken_ms = 229200; s.time_taken_stage = 2;    // ss2 3:49.2 on Home
@@ -325,23 +281,22 @@ public:
             return kept && shown && undone && !s.stage_complete && s.time_taken_ms == 229200
                 && s.time_taken_stage == 2 && s.surrey_finish_at_ms == 0;
         });
-        suite->addTest("the distance-end time and the previous time taken survive a restart", []() {
+        suite->addTest("the previous time taken survives a restart, and an old file with the removed distance-end key loads", []() {
             const char* path = "test_surrey_late_saved.json";
             RallyState a; a.rally_type = 1;
-            a.surrey_distance_end_ms = 561000; a.prev_time_taken_ms = 229200; a.prev_time_taken_stage = 2;
+            a.prev_time_taken_ms = 229200; a.prev_time_taken_stage = 2;
             ConfigFile::save(a, path);
             RallyState b; ConfigFile::load(b, path);
-            { std::ofstream f(path); f << "{\n  \"rally_type\": 1\n}\n"; }
+            { std::ofstream f(path); f << "{\n  \"rally_type\": 1,\n  \"surrey_distance_end_ms\": 561000\n}\n"; }
             RallyState old; ConfigFile::load(old, path);
             std::remove(path);
-            return b.surrey_distance_end_ms == 561000 && b.prev_time_taken_ms == 229200 && b.prev_time_taken_stage == 2
-                && old.surrey_distance_end_ms == -1 && old.prev_time_taken_ms == -1 && old.prev_time_taken_stage == 0;
+            return b.prev_time_taken_ms == 229200 && b.prev_time_taken_stage == 2
+                && old.prev_time_taken_ms == -1 && old.prev_time_taken_stage == 0;
         });
         suite->addTest("greek ignores the surrey finish", [runningAt, ss1]() {
             RallyState s = runningAt(ss1(), 0); s.rally_type = 0;
             const bool a = applySurreyFinish(s, 1000);
             s.stage_complete = true; s.surrey_finish_at_ms = 5;
-            surreyDistanceEnd(s, 2000);
             return !a && !undoSurreyFinish(s, 0.0, 100.0) && s.time_taken_ms == -1;
         });
         suite->addTest("key helpers: finish live on the last row only", [runningAt, ss1, ss2]() {

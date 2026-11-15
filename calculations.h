@@ -18,6 +18,10 @@ int64_t calculateDistanceCounts(const RallyState& state, uint64_t cntr1, uint64_
 // counts restarted from zero. Start total, trip and segment again from the live
 // counts and the given time, and drop everything measured against the old
 // baselines (alarm, distance corrections, the running stage).
+// Start-up: while the start readings are not yet recorded, any that are 0/0 take the live counts;
+// then they are marked recorded and never re-derived (0/0 is a real reading). True if it ran.
+bool recordStartReadingsIfNew(RallyState& state, uint64_t cntr1, uint64_t cntr2);
+
 void restartDistancesAfterPowerLoss(RallyState& state, uint64_t cntr1, uint64_t cntr2,
                                     int64_t now_ms);
 
