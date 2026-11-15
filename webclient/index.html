@@ -115,7 +115,7 @@
     <div class="card hist"><span id="trip-history-label">Trip history</span>&nbsp; <span id="trip-history"></span></div>
     </div>
     <div class="card sector" id="sector-card" style="display:none">no sector loaded</div>
-    <div class="card hist" id="time-taken-row" style="display:none"><span id="time-taken-label">time taken</span>&nbsp; <span id="time-taken">-</span></div>
+    <div class="card hist" id="time-taken-row" style="display:none"><span id="time-taken-label">result</span><span id="time-taken">-</span></div>
 
     <svg width="0" height="0" style="position:absolute" aria-hidden="true">
       <defs>
@@ -139,9 +139,9 @@
       </table>
     </div>
     <section class="start-block">
-      <label>Start time <input id="seg-start-time" type="text" inputmode="numeric" placeholder="hh:mm:ss"></label>
+      <label>Start time <input id="seg-start-time" type="text" inputmode="numeric"></label>
       <label id="seg-start-dist-label">Distance at start <input id="seg-start-dist" type="text" inputmode="decimal"></label>
-      <label id="seg-duration-label" style="display:none">Duration <input id="seg-duration" type="text" inputmode="numeric" placeholder="h:mm:ss"></label>
+      <label id="seg-duration-label" style="display:none">Duration <input id="seg-duration" type="text" inputmode="numeric"></label>
       <p id="seg-duration-avg" class="dim" style="display:none"></p>
       <input id="seg-first-n" type="hidden">
       <input id="seg-first-from" type="hidden">
@@ -149,7 +149,8 @@
     </section>
     <section class="add-row">
       <button id="btn-add-seg" type="button" class="key">add distance</button>
-      <input id="seg-add-text" type="text" placeholder="1,000;1,500;2,300">
+      <input id="seg-add-text" type="text" placeholder="1000;1500;2300">
+      <span id="seg-add-note" class="seg-add-note" role="status"></span>
       <button id="btn-upload-stage" type="button" class="key">upload<br>stage</button>
     </section>
     <section class="actions">
@@ -178,10 +179,10 @@
 
   <!-- CAL: the box's Calibration page -->
   <main id="view-cal" class="view hidden">
-    <section class="crow"><span class="cl">Calculated distance:</span><span class="brk"></span><strong id="cal-dist">0.0</strong> m
+    <section class="crow"><span class="cl">Calculated distance:</span><span class="brk"></span><strong id="cal-dist">0.0</strong> <span id="cal-dist-unit">m</span>
       <button id="cal-zero" type="button" class="key">zero counters</button></section>
     <section class="crow"><span class="cl">Actual distance:</span><span class="brk"></span>
-      <input id="cal-actual" type="number" min="500" max="99999" step="1" inputmode="numeric"> m
+      <input id="cal-actual" type="number" min="0" step="any" inputmode="decimal"> <span id="cal-actual-unit">m</span>
       <button id="cal-save" type="button" class="key">save<br>calibration</button></section>
     <section class="crow"><span class="cl">Sensor Count:</span> 1: <b id="cal-c1">0</b> 2: <b id="cal-c2">0</b> Avg: <b id="cal-avg">0</b>
       <span class="pair"><button id="cal-s1" type="button" class="key">sensor 1</button>
@@ -204,8 +205,6 @@
       <div class="beep-row"><label for="beep-timing">Beep timing</label><input id="beep-timing" type="checkbox"><span class="onoff" data-for="beep-timing"><button type="button" class="key" data-on="0">off</button><button type="button" class="key" data-on="1">on</button></span></div>
       <div class="beep-row"><label for="beep-advance-s">Timing advance</label>
         <span class="unit"><input id="beep-advance-s" type="number" min="0" step="1" inputmode="numeric"> s</span></div>
-      <div class="beep-row"><span>Phone sound lead</span>
-        <span class="unit"><button id="phone-lead-minus" type="button" class="key">−</button><span id="phone-lead">100 ms</span><button id="phone-lead-plus" type="button" class="key">+</button></span></div>
       <div class="beep-row"><label for="tone-enabled">Ahead/Behind Tone</label><input id="tone-enabled" type="checkbox"><span class="onoff" data-for="tone-enabled"><button type="button" class="key" data-on="0">off</button><button type="button" class="key" data-on="1">on</button></span></div>
       <div class="beep-row"><span>Tone when behind</span>
         <label><input type="radio" name="tone-behind" value="1"> 1</label><label><input type="radio" name="tone-behind" value="2"> 2</label></div>
@@ -226,6 +225,8 @@
         <label class="choice"><input type="radio" name="distance-format" value="2"> 0.00</label><label class="choice"><input type="radio" name="distance-format" value="3"> 0.000</label><label class="choice"><input type="radio" name="distance-format" value="0"> 0,000</label><label class="choice"><input type="radio" name="distance-unit" value="km"> km</label><label class="choice"><input type="radio" name="distance-unit" value="mi"> mi</label></div>
       <div class="beep-row"><span>Reaction time offset</span>
         <span class="unit"><button id="reaction-minus" type="button" class="key">−</button><span id="reaction-offset">0.00 s</span><button id="reaction-plus" type="button" class="key">+</button></span></div>
+      <div class="beep-row"><span>Phone sound lead</span>
+        <span class="unit"><button id="phone-lead-minus" type="button" class="key">−</button><span id="phone-lead">100 ms</span><button id="phone-lead-plus" type="button" class="key">+</button></span></div>
       <div class="beep-row"><span>Measure type</span>
         <label class="choice"><input type="radio" name="measure-type" value="abbc"> AB,BC</label>
         <label class="choice"><input type="radio" name="measure-type" value="abac"> AB,AC</label></div>
@@ -264,6 +265,7 @@
   <!-- DRV: the Nero2.0 driver display -->
   <main id="view-drv" class="view view-driver hidden">
     <canvas id="driver-gauge" width="390" height="360" aria-label="Driver gauge"></canvas>
+    <div id="drv-autostart" class="drv-autostart" style="display:none"><div id="drv-autostart-t"></div><div id="drv-autostart-e"></div></div>
     <div class="driver-footer">
       <section class="dist-box" id="drv-box-trip"><span class="dl">Trip</span><strong id="drv-trip-m">0</strong>
         <span class="rt"><span class="avg"><span id="drv-trip-cap">avg</span> <b id="drv-trip-avg">0.0</b> <small class="avg-unit">kph</small></span></span></section>
@@ -319,6 +321,16 @@
     </div>
   </div>
 
+  <!-- The box's words when it refuses something typed here (closes by itself, as on the box). -->
+  <div id="box-notice" class="box-notice hidden" role="alert"></div>
+  <!-- The question window the box has open, shown here too; a press answers it on the box (item 11). -->
+  <div id="box-dialog" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="box-dialog-title">
+    <div class="modal-box">
+      <p id="box-dialog-title" class="modal-title"></p>
+      <p id="box-dialog-text" class="modal-note box-dialog-text"></p>
+      <div id="box-dialog-buttons" class="box-dialog-buttons"></div>
+    </div>
+  </div>
   <div id="upload-window" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="upload-title">
     <div class="modal-box upload-box">
       <p id="upload-title" class="modal-title">upload stage</p>
@@ -334,7 +346,7 @@ box,to,kph,auto
 103,520,36,
 104,1310,,
 106,2450,49,y</pre>
-        <p>box is the roadbook box. to is where the row ends. A blank kph keeps the speed above. auto y changes speed by itself; a blank waits for next.</p>
+        <p>units is m, km or miles, the unit of every distance in the file (from and to). box is the roadbook box. to is where the row ends. A blank kph keeps the speed above. auto y on a row with a new kph changes to that speed by itself when the row starts; a blank waits for next.</p>
       </section>
       <section class="fmt" data-rally="surrey">
         <h3>Surrey <span class="fit-mark">this box</span></h3>
@@ -346,7 +358,7 @@ start,11:05
 box,to,kph,auto
 27,24024,65,
 30,26752,50,y</pre>
-        <p>Same columns as Greek. from is the roadbook total of the box the start lies in. Every speed change after the first row is auto y.</p>
+        <p>Same columns and rules as Greek. from is the roadbook total of the box the start lies in. Every speed change after the first row needs auto y.</p>
       </section>
       <section class="fmt" data-rally="italian">
         <h3>Italian <span class="fit-mark">this box</span></h3>
@@ -362,7 +374,7 @@ pc,1,0.56,,0:31
 co,2,98.26,,</pre>
         <p>type is navi, pc, ct, pm or co. time is the pc duration, as m:ss. duration is the sector time, co to co. A pm needs kph or time. A navi, ct or co needs kph when duration is left out.</p>
       </section>
-      <p class="modal-note">Use a full stop for decimals, and no comma inside a number. units is m or km. Distances in the rows are where each row ends.</p>
+      <p class="modal-note">Use a full stop for decimals, and no comma inside a number. units is m, km or miles, the unit of every distance in the file. Distances in the rows are where each row ends.</p>
       <label class="file-pick">choose csv <input id="upload-file" type="file" accept=".csv,text/csv,text/plain"></label>
       <span id="upload-file-name" class="dim"></span>
       <textarea id="upload-text" rows="8" spellcheck="false" placeholder="or paste the CSV here"></textarea>

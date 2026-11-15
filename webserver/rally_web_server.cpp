@@ -4,6 +4,7 @@
 #include "rally_types.h"
 #include "debug_log.h"
 #include "stage_log.h"
+#include "stage_file.h"   // jsonEscape
 
 #include <gio/gio.h>
 
@@ -436,9 +437,16 @@ static void serviceWsClients(WebServerState* impl) {
                 break;
             }
             if (opcode != 0x01 || msg.empty()) continue;   // pong, binary, continuation: nothing to act on
+            impl->data->webNotice.clear();
             if (webHandleCommand(impl->data, msg.c_str())) {
                 g_state_dirty = true;
                 broadcastAll(impl, buildStateJson(impl->data));
+            }
+            // A refusal in the box's own words, to the phone that sent the command only.
+            if (!impl->data->webNotice.empty() && client.fd >= 0) {
+                client.tx_buf += wsEncodeText("{\"type\":\"notice\",\"text\":\"" + jsonEscape(impl->data->webNotice) + "\"}");
+                impl->data->webNotice.clear();
+                flushClient(client);
             }
         }
     }

@@ -364,6 +364,9 @@ void updateCopilotDisplay(AppData* data) {
         }
     };
     {
+        // next pressed within 2 s of the zero: the zero beep for the row just left, on each device that has not had it
+        if (data->pcZeroBeepPendingBox) { data->pcZeroBeepPendingBox = false; playMark(PcBeep::Zero, true, false); }
+        if (data->pcZeroBeepPendingPhone) { data->pcZeroBeepPendingPhone = false; playMark(PcBeep::Zero, false, true); }
         bool pc_ok = false;
         const double pc_s = data->state->rally_type == 2
             ? pcCountdownSeconds(*data->state, current_time_ms, &pc_ok) : 0.0;
@@ -435,40 +438,15 @@ void updateCopilotDisplay(AppData* data) {
     // Check which screen is visible
     GtkWidget* visible_child = gtk_stack_get_visible_child(data->copilotStack);
     
-    // Update calibration screen if visible (continuous updates per design)
-    if (visible_child == data->calibrationScreen) {
-        updateCalibrationDisplay(data);
-        return;
-    }
-    
-    // Update date/time screen if visible (for live clock display)
-    if (visible_child == data->dateTimeScreen) {
-        updateDateTimeDisplay(data);
-        return;
-    }
-    
-    if (visible_child == data->settingsScreen) {
-        updateSettingsDisplay(data);
-        return;
-    }
+    // Each other page keeps its own live display. It no longer ends the update here: the Navigation figures below are
+    // the text the phone shows, so they must keep running whatever page the box is on (item 26: the phone's Total and
+    // Trip froze while the box sat on Calibration, and showed the old unit's figure after a unit change).
+    if (visible_child == data->calibrationScreen) updateCalibrationDisplay(data);
+    else if (visible_child == data->dateTimeScreen) updateDateTimeDisplay(data);   // live clock
+    else if (visible_child == data->settingsScreen) updateSettingsDisplay(data);
+    else if (visible_child == data->stageSetupScreen) updateSegmentsDisplay(data);   // Nero2.0 Segments: clock and the Autostart tick
+    else if (visible_child == data->autoStartScreen) updateAutoStartDisplay(data);
 
-    // Nero2.0 Segments: clock and the Autostart tick
-    if (visible_child == data->stageSetupScreen) {
-        updateSegmentsDisplay(data);
-        return;
-    }
-
-    // Update auto-start screen if visible
-    if (visible_child == data->autoStartScreen) {
-        updateAutoStartDisplay(data);
-        return;
-    }
-    
-    // Only update TwinMaster if it's visible
-    if (visible_child != data->twinMasterScreen) {
-        return;
-    }
-    
     // Total distance
     long total_m = adjustedDistanceMetersMm(
         countsToMm(total_count_diff, data->state->calibration),

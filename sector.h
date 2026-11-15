@@ -97,6 +97,12 @@ double pcCountdownSeconds(const RallyState& s, int64_t now_ms, bool* valid);
 // a mark is crossed between them. Marks already gone when the row starts are never heard.
 enum class PcBeep { None, Tick, Five, Zero };
 PcBeep pcCountdownBeep(double prev_s, double now_s);
+// Owner, 2026-11-15: pressing next up to this many seconds before a row's countdown reaches zero still sounds the
+// zero beep for the row being left (a press earlier than that is a plain skip, with no beep).
+const double EARLY_NEXT_BEEP_S = 2.0;
+// lead_s: how early that device fires its marks (PC_BEEP_LEAD_S on the box, the phone sound lead on the phone). Inside
+// the lead the zero has already sounded there, so it is not owed again.
+bool earlyNextSoundsZero(double seconds_to_line, bool valid, double lead_s = 0.0);
 // The sound card and the tone thread delay a beep by roughly this long, so the countdown marks are
 // fired this much early and are heard on the second. Tune on the Pi by recording the beep.
 const double PC_BEEP_LEAD_S = 0.10;

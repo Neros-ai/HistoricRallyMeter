@@ -229,6 +229,10 @@ constexpr int64_t AUTO_START_POPUP_WINDOW_MS = 5LL * 60 * 1000;
 // always shows; a preprogrammed start shows only inside the window above.
 bool autoStartCountdownVisible(bool early_departure, int64_t diff_ms);
 
+// The T- countdown text and the Early Departure caption, as the box driver draws them; the phone shows the same.
+std::string autoStartCountdownText(int64_t diff_ms);                       // "T- 00:00:12"
+std::string earlyDepartureCaption(bool early_departure);                  // "Early\nDeparture\nENABLED" / "...DISABLED"
+
 bool autoStartHoldsTimeError(uint64_t auto_start_rally_time_s,
                              bool auto_start_early_departure,
                              bool auto_start_triggered,

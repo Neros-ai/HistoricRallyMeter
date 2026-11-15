@@ -126,7 +126,7 @@ StageFileStage buildStage(const RawStage& raw, bool commaDecimal, const std::vec
     if (unitsWord != "m" && !km && !miles) st.errors.push_back("units are missing");
     // A figure in the file's units, as metres: miles to the millimetre, km and metres to the metre.
     auto fileMetres = [&](double v) -> double {
-        if (miles) return std::round(v * METRES_PER_MILE * 1000.0) / 1000.0;
+        if (miles) return milesToMetres(v);
         return km ? std::lround(v * 1000.0) : std::lround(v);
     };
 
@@ -251,7 +251,12 @@ StageFileStage buildStage(const RawStage& raw, bool commaDecimal, const std::vec
             }
             const std::string autoText = lower(fieldAt(row, iAuto));
             if (r == 0 && !autoText.empty()) st.warnings.push_back(where + ": auto is ignored");
-            else if (autoText == "y") seg.autoNext = true;
+            else if (autoText == "y") {
+                // auto y on a speed-change row means "switch to this row's speed by itself", which is the
+                // row before moving on at its end: the box keeps that flag on the row above, and draws the tick
+                // on the row below it.
+                if (!st.slot.segments.empty()) st.slot.segments.back().autoNext = true;
+            }
             else if (!autoText.empty() && autoText != "n") st.warnings.push_back(where + ": auto is ignored");
             if (st.mode == 1 && r > 0 && seg.changesSpeed && autoText != "y")
                 st.warnings.push_back(where + ": surrey speed change is not automatic");

@@ -7,6 +7,7 @@
 #include "sector.h"
 #include "surrey.h"
 #include "rally_types.h"
+#include "stage_store.h"
 #include "rally_state.h"
 #include "stage_edit.h"
 #include "stage_rows.h"
@@ -209,9 +210,15 @@ bool webHandleCommand(AppData* data, const char* json) {
     if (strcmp(type, "rows_add") == 0) {
         std::string text;
         if (!jsonFindStringValue(json, "text", &text)) return false;
-        std::string rest;
-        int added = stageEditAddDistances(data, text, &rest);
+        if (stageEditLocked(*data->state)) { data->webNotice = STAGE_EDIT_LOCKED_NOTICE; return false; }
+        std::string rest, notice;
+        int added = stageEditAddDistances(data, text, &rest, &notice);
         refreshSegmentList(data);
+        // The box's words for what was not taken, as its add distance key flashes them.
+        if (!rest.empty())
+            data->webNotice = !notice.empty() ? notice + ": " + rest : "Not a distance (it must be more than 0): " + rest;
+        else if (!notice.empty())
+            data->webNotice = notice;
         return added > 0 && rest.empty();
     }
     // The roadbook box number typed on any greek row, as the box's "box" entries.
@@ -246,6 +253,8 @@ bool webHandleCommand(AppData* data, const char* json) {
         if (!jsonFindInt(json, "row", &row) || !jsonFindDouble(json, "to_m", &to_m)) return false;
         if (row < 0 || row >= static_cast<int>(data->state->segments.size())) return false;
         bool ok = stageEditSetRowTo(data, static_cast<size_t>(row), to_m);
+        if (!ok) data->webNotice = stageEditLocked(*data->state) ? STAGE_EDIT_LOCKED_NOTICE
+                                 : "That end distance must be past this row's start and short of the next row's end.";
         refreshSegmentList(data);
         notifyWebStateNow(data);   // put the old figure back on a refusal
         return ok;
@@ -270,9 +279,15 @@ bool webHandleCommand(AppData* data, const char* json) {
             const int unit = data->state->distance_unit;
             if (from_m >= 0.0 && formatDistance(from_m, unit) == formatDistance(stored, unit)) from_m = -1;
         }
-        stageEditSetFirst(data, number, from_m);
+        // A start not before the first end is refused (the roadbook ends win): put the old figure back, as row_to does.
+        const bool ok = stageEditSetFirst(data, number, from_m);
         refreshSegmentList(data);
-        return true;
+        if (!ok) {
+            data->webNotice = stageEditLocked(*data->state) ? STAGE_EDIT_LOCKED_NOTICE
+                                                            : "The start must be before the first end distance.";
+            notifyWebStateNow(data);
+        }
+        return ok;
     }
     if (strcmp(type, "stage_start") == 0) {
         std::string time; double dist = -1;
@@ -286,9 +301,11 @@ bool webHandleCommand(AppData* data, const char* json) {
             const int n = stageEditSlot(data);
             const double stored = static_cast<double>(data->state->memory_slots[n - 1].start_distance_m);
             const int unit = data->state->distance_unit;
-            if (dist >= 0.0 && formatDistance(dist, unit) == formatDistance(stored, unit)) dist = -1;
+            if (dist >= 0.0 && formatDistance(dist, unit, true) == formatDistance(stored, unit, true)) dist = -1;   // shown to the nearest
         }
-        stageEditSetStart(data, tod, dist < 0 ? -1 : std::lround(dist));
+        std::string notice;
+        stageEditSetStart(data, tod, dist < 0 ? -1 : std::lround(dist), &notice);
+        data->webNotice = notice;   // as the box's start time field flashes it
         refreshSegmentList(data);
         return true;
     }
@@ -302,6 +319,7 @@ bool webHandleCommand(AppData* data, const char* json) {
         }
         std::string err;
         bool ok = stageEditSetAutostart(data, on, &err);
+        if (!ok) data->webNotice = err;   // as the box's auto key flashes it
         notifyWebStateNow(data);
         return ok;
     }
@@ -408,7 +426,22 @@ bool webHandleCommand(AppData* data, const char* json) {
         if (both) on_set_sensor_both(nullptr, data); else on_set_sensor_1(nullptr, data);
         return true;
     }
+    // A press of a button of the question window the box has open (item 11): either device can answer it.
+    if (strcmp(type, "box_dialog_answer") == 0) {
+        int index = -1;
+        if (!jsonFindInt(json, "index", &index)) return false;
+        return answerOpenDialog(index);
+    }
     if (strcmp(type, "cal_save") == 0) {
+        // The measured distance as typed, in the unit the box shows (metres, or miles in miles): the same entry text
+        // the box's own key reads, so box and phone convert it in one place (item 10).
+        std::string typed;
+        if (jsonFindStringValue(json, "text", &typed)) {
+            if (typed.empty() || typed.size() > 20) return false;
+            gtk_entry_set_text(data->rallyDistEntry, typed.c_str());
+            on_save_calibration(nullptr, data);
+            return true;
+        }
         double meters = 0;
         if (!jsonFindDouble(json, "meters", &meters)) return false;
         if (meters < 500 || meters > 100000) return false;
@@ -446,12 +479,16 @@ bool webHandleCommand(AppData* data, const char* json) {
             // The two Settings choices in one value (format and unit): see DIST_* in stage_rows.h.
             int mode = -1;
             if (!jsonFindInt(json, "mode", &mode) || !distUnitValid(mode)) return false;
-            data->state->distance_unit = mode;
+            if (!changeDistanceUnit(*data->state, mode)) return false;   // km/m <-> miles is refused while a stage is live
+            data->beepCursorsStale = true;   // the waypoints may have been rebuilt; an idle Navigation page re-adopts them
+            adoptRoadbookIfIdle(data);
             updateSettingsDisplay(data);
         } else if (strcmp(name, "distance_km") == 0 || strcmp(name, "distance_miles") == 0) {
             // Same choice as Settings: 00.00 (km), 0,000 (m) or miles. The segments
             // page reads it on the next tick; light the keys now.
-            data->state->distance_unit = !on ? DIST_M : (strcmp(name, "distance_miles") == 0 ? DIST_MI : DIST_KM);
+            if (!changeDistanceUnit(*data->state, !on ? DIST_M : (strcmp(name, "distance_miles") == 0 ? DIST_MI : DIST_KM))) return false;
+            data->beepCursorsStale = true;
+            adoptRoadbookIfIdle(data);
             updateSettingsDisplay(data);
         } else if (strcmp(name, "measure_ab_bc") == 0) {
             // Keys on the box: AB,BC (on) / AB,AC (off).

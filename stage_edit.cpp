@@ -62,10 +62,8 @@ void stageEditSelect(AppData* d, int slot_1) {
 int stageEditAddDistances(AppData* d, const std::string& text, std::string* rest, std::string* notice) {
     STAGE_EDIT_GUARD(d, 0);
     RallyState::MemorySlot& slot = slotOf(d);
-    // An empty table has no frame to keep (rows deleted one by one can leave
-    // it at their old end): distances are measured from 0 again. The stage's
-    // start time and distance at start are separate and stay.
-    if (d->state->segments.empty()) slot.first_from_m = 0.0;
+    // The start figure already set stays (owner, 2026-11-15): the first end typed is a row from it.
+    // Deleting the last row already puts it back to 0 (deleteRow).
     DistanceParse pr = parseStageDistances(text, d->state->distance_unit);
     const size_t before = d->state->segments.size();
     std::string note;
@@ -75,7 +73,7 @@ int stageEditAddDistances(AppData* d, const std::string& text, std::string* rest
             : insertStageDistances(d->state->segments, slot.first_from_m, pr.accepted, d->state->distance_unit);
         stageEditCommit(d);
     }
-    if (notice) *notice = note;
+    if (notice) *notice = pr.problem.empty() ? note : pr.problem;
     if (rest) *rest = pr.rest;
     // Rows made = distances that were placed (a split adds a row too).
     return static_cast<int>(d->state->segments.size() - before);
@@ -90,7 +88,7 @@ void stageEditSetSpeed(AppData* d, size_t row, double kph) {
 
 void stageEditSetChange(AppData* d, size_t row, bool chg) {
     STAGE_EDIT_GUARD(d, );
-    setRowChange(d->state->segments, row, chg);
+    setRowChange(d->state->segments, row, chg, d->state->rally_type != 2);   // greek and surrey: new speed change defaults to automatic
     stageEditCommit(d);
 }
 
@@ -122,12 +120,15 @@ void stageEditSetBox(AppData* d, size_t row, long box) {
     stageEditCommit(d);
 }
 
-void stageEditSetFirst(AppData* d, long number, double from_m) {
-    STAGE_EDIT_GUARD(d, );
+bool stageEditSetFirst(AppData* d, long number, double from_m) {
+    STAGE_EDIT_GUARD(d, false);
     RallyState::MemorySlot& slot = slotOf(d);
     if (number >= 0) slot.first_number = number;
-    if (from_m >= 0.0) slot.first_from_m = from_m;
+    // The roadbook ends win: a new start only shortens (or lengthens) the first row. A start that would
+    // not lie before the first end is refused and the figure is left as it was.
+    const bool ok = from_m < 0.0 || setFirstFrom(d->state->segments, slot.first_from_m, from_m);
     stageEditCommit(d);
+    return ok;
 }
 
 void stageEditSetStart(AppData* d, long time_s, long distance_m, std::string* notice) {

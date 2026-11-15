@@ -140,6 +140,15 @@ std::string driverGaugeJson(AppData* data) {
 // The Navigation stage panel exactly as the box has drawn it: the speed rows, the auto / manual word and
 // time, and the arrival. The phone shows these strings and calculates nothing of its own, so the two can
 // never disagree.
+// The driver's T- countdown and its Early Departure caption, null when the box shows none (item 9).
+static std::string autostartCdJson(AppData* data) {
+    if (!(data->state->auto_start_rally_time_s > 0 && !data->autoStartTriggered)) return "null";
+    const int64_t diff_ms = autoStartRemaining_ms(data);
+    if (!autoStartCountdownVisible(data->state->auto_start_early_departure, diff_ms)) return "null";
+    return std::string("{\"text\":\"") + jsonEscape(autoStartCountdownText(diff_ms)) + "\",\"early\":\""
+        + jsonEscape(earlyDepartureCaption(data->state->auto_start_early_departure)) + "\"}";
+}
+
 static std::string stagePanelJson(AppData* data) {
     if (!data->home) return "null";
     const HomeUi& h = *data->home;
@@ -292,6 +301,9 @@ std::string buildTelemetryJson(AppData* data) {
        << ",\"stage_abort_key\":" << (goKeyAborts(st) ? "true" : "false")
        << ",\"time_taken\":\"" << (isSurrey(st) ? surreyTimeTakenText(st.time_taken_ms) : std::string()) << "\""
        << ",\"time_taken_stage\":" << (isSurrey(st) ? st.time_taken_stage : 0)
+       << ",\"box_dialog\":" << openDialogJson()
+       // The driver's T- countdown and Early Departure caption, as the box draws them (item 9).
+       << ",\"autostart_cd\":" << autostartCdJson(data)
        << ",\"surrey_cd\":" << ((isSurrey(st) && data->home && data->home->surreyRunning)
               ? std::string("{\"m\":\"") + jsonEscape(data->home->cdMetres) + "\",\"min\":\"" + jsonEscape(data->home->cdTime) + "\"}"
               : std::string("null"))
@@ -319,10 +331,18 @@ std::string buildTelemetryJson(AppData* data) {
        // The Navi zero question's two figures, as the box's dialog prints them.
        << ",\"zero_by\":\"" << [&] { char z[24]; snprintf(z, sizeof(z), "%.2f", data->aheadBehindSeconds); return std::string(z); }() << "\""
        << ",\"zero_now\":\"" << [&] { char z[24]; snprintf(z, sizeof(z), "%.2f", st.ahead_behind_zero_offset_ms / 1000.0); return std::string(z); }() << "\""
+       // What is typed in the box's own Enter rally time field, so the phone's field follows it (item 47).
+       << ",\"dt_enter\":\"" << jsonEscape(data->timeEntry ? gtk_entry_get_text(data->timeEntry) : "") << "\""
        << ",\"phone_known\":" << (phoneClockKnown(data) ? "true" : "false")
        << ",\"tz_min\":" << tz_min
        << ",\"cal\":{\"dist_m\":" << std::fixed << std::setprecision(1)
        << countsToMeters(cavg, st.calibration) << std::defaultfloat
+       // The box's own figure and unit: metres (km keeps metres), or miles to three decimals in miles.
+       << ",\"dist_text\":\"" << [&] { char z[32];
+              if (distIsMiles(st.distance_unit)) snprintf(z, sizeof(z), "%.3f", countsToMeters(cavg, st.calibration) / METRES_PER_MILE);
+              else snprintf(z, sizeof(z), "%.1f", countsToMeters(cavg, st.calibration));
+              return std::string(z); }() << "\""
+       << ",\"unit\":\"" << (distIsMiles(st.distance_unit) ? "mi" : "m") << "\""
        << ",\"c1\":" << c1 << ",\"c2\":" << c2 << ",\"avg\":" << cavg
        << ",\"rpm\":" << (rpm < 0 ? -1L : std::lround(rpm)) << "}"
        << ",\"fps\":\"" << gtk_label_get_text(data->updatesPerSecLabel) << "\""

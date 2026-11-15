@@ -8,6 +8,7 @@
 //
 // Nothing in this file touches GTK.
 
+#include <cmath>
 #include <string>
 #include <vector>
 #include "rally_types.h"
@@ -38,6 +39,7 @@ std::vector<StageRow> buildStageRows(const std::vector<Segment>& segs,
 struct DistanceParse {
     std::vector<double> accepted;
     std::string rest;
+    std::string problem;   // why `rest` was refused, in words for the crew (empty when nothing was refused)
 };
 DistanceParse parseStageDistances(const std::string& text, int unit = 0);
 
@@ -59,7 +61,12 @@ std::string insertStageDistances(std::vector<Segment>& segs, double first_from_m
 
 void setRowSpeed(std::vector<Segment>& segs, size_t row, double kph);
 // Ticks / unticks chg. Row 0 is always a change and ignores this.
-void setRowChange(std::vector<Segment>& segs, size_t row, bool chg);
+// Move the stage's start figure (the first row's "from") and keep every roadbook end where it was:
+// only the first row's length changes (owner, 2026-11-15: the ends win). Refused (false, nothing changed)
+// when the first end would no longer lie beyond the new start. With no rows it simply sets the start.
+bool setFirstFrom(std::vector<Segment>& segs, double& first_from_m, double new_from_m);
+// autoDefault: greek and surrey -- a row made a speed change comes with automatic ticked (it can be unticked).
+void setRowChange(std::vector<Segment>& segs, size_t row, bool chg, bool autoDefault = false);
 // The auto box of `row` (only meaningful where chg and row >= 1): the speed
 // change happens by itself when this row begins.
 void setRowAuto(std::vector<Segment>& segs, size_t row, bool on);
@@ -104,6 +111,8 @@ std::string formatHMmSs(double seconds);
 // 100 miles, which is all the big figures hold. A bool still works: false metres, true km.
 enum : int { DIST_M = 0, DIST_KM = 1, DIST_MI = 2, DIST_KM3 = 3, DIST_MI2 = 4 };
 constexpr double METRES_PER_MILE = 1609.344;
+// A typed mile figure as metres: kept to the nearest 1/1000 mile (owner, 2026-11-15), so 1.234 is exactly 1.234.
+inline double milesToMetres(double miles) { return std::round(miles * 1000.0) / 1000.0 * METRES_PER_MILE; }
 inline bool distIsMiles(int unit) { return unit == DIST_MI || unit == DIST_MI2; }
 inline bool distIsKm(int unit) { return unit == DIST_KM || unit == DIST_KM3; }   // a km figure with decimals
 inline int distDecimals(int unit) { return unit == DIST_M ? 0 : (unit == DIST_KM || unit == DIST_MI2) ? 2 : 3; }
@@ -115,7 +124,21 @@ inline int distUnitFrom(int decimals, bool miles) {
 inline bool distUnitValid(int unit) { return unit >= DIST_M && unit <= DIST_MI2; }
 const char* distUnitName(int unit);                 // "m", "km", "mi"
 double distUnitToMetres(int unit, double figure);   // a typed figure in that unit, as metres
-std::string formatDistance(double metres, int unit);
+// km (or metres) <-> miles (owner, 2026-11-15): a programmed stage keeps its FIGURES and changes unit, so a 5.000 km
+// (5000 m) stage becomes a 5.000 mile stage and back. Applies to the row ends, the start figure and the distance at
+// start. Other changes of format (km 0.00 / km 0.000 / metres) only change how the same distance is drawn: nothing is touched and false
+// is returned. Ends are converted, then the row lengths rebuilt from them, so no rounding drifts.
+bool reinterpretStageForUnit(std::vector<Segment>& segs, double& first_from_m, long& start_distance_m,
+                             int old_unit, int new_unit);
+// How many characters the Set Total / Trip / Navi entries take: 6 digits of metres, and 7 characters
+// (up to 100.000) when the unit shows 3 decimals, so a digit can still be added in front (owner, 2026-11-15).
+int distEntryMaxChars(int unit);
+// The unit as the add-distance key shows it (second line) and a grey example in that unit (owner, 2026-11-15).
+std::string distUnitKeyText(int unit);       // "km 0.00", "km 0.000", "m", "mi 0.00", "mi 0.000"
+std::string distAddExample(int unit);        // "1.00;1.50;2.30", "1000;1500;2300", ...
+// nearest: round to the nearest figure instead of cutting down -- for a programmed figure held in whole metres
+// (the start distance), never for a car position, which must not read ahead.
+std::string formatDistance(double metres, int unit, bool nearest = false);
 
 // The Segments page's text for one row, exactly as the box shows it. The box
 // and the phone both use this, so the two can never read differently.
@@ -143,7 +166,8 @@ long parseDistance(const std::string& text, int unit);
 // never written back: the text on screen is cut to the format in use (8.345 km reads 8.34 in 0.00),
 // so writing it back would shorten the programmed figure. Changing the format or the unit therefore
 // never changes stored data; only a figure the crew actually type does.
-bool distanceFieldUntouched(const std::string& text, double stored_m, int unit);
+// nearest: the field was drawn with formatDistance(..., nearest=true) (the distance at start).
+bool distanceFieldUntouched(const std::string& text, double stored_m, int unit, bool nearest = false);
 // The same figure kept to the millimetre (miles do not fall on whole metres), as metres; -1 unreadable.
 double parseDistanceExact(const std::string& text, int unit);
 

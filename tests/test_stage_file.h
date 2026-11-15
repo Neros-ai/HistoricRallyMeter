@@ -23,8 +23,20 @@ public:
             return s.stage == 8 && s.mode == 0 && s.slot.segments.size() == 7
                 && s.slot.first_number == 103 && s.slot.start_time_s == 38520
                 && !s.slot.segments[1].changesSpeed && s.slot.segments[1].target_speed_kph == 36
-                && s.slot.segments[3].target_speed_kph == 49 && s.slot.segments[3].autoNext
+                && s.slot.segments[3].target_speed_kph == 49
+                && s.slot.segments[2].autoNext
+                && s.slot.segments[4].autoNext && s.slot.segments[5].target_speed_kph == 43
                 && end == 5210;
+        });
+
+        suite->addTest("auto y on a speed-change row switches the speed at the end of the row before", []() {
+            const char* text =
+                "stage,3\nmode,greek\nunits,m\nfrom,0\nstart,10:00\n"
+                "box,to,kph,auto\n1,100,30,\n2,200,40,y\n3,300,50,y\n";
+            const StageFile f = parseStageFile(text);
+            if (f.stages.size() != 1 || !f.stages[0].loadable()) return false;
+            const auto& g = f.stages[0].slot.segments;
+            return g.size() == 3 && g[0].autoNext && g[1].autoNext && !g[2].autoNext;
         });
 
         suite->addTest("a stage file in miles: units,miles, figures kept to the millimetre", []() {
