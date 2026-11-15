@@ -1,6 +1,7 @@
 #include "stage_rows.h"
 #include "ui_settings.h"
 #include "stage_edit.h"
+#include "stage_store.h"
 #include "callbacks.h"
 #include "calculations.h"
 #include "config_file.h"
@@ -72,14 +73,19 @@ void apply(AppData* d, Setting id, int idx) {
         const bool miles = distIsMiles(s.distance_unit);
         const int decimals = idx == 0 ? 2 : idx == 1 ? 3 : 0;
         if (miles && decimals == 0) break;
-        s.distance_unit = distUnitFrom(decimals, miles);
+        changeDistanceUnit(s, distUnitFrom(decimals, miles));   // a format change inside km or miles: nothing is rescaled
         break;
     }
     case DISTANCE_UNITS: {    // keys: km / mi
         const bool miles = idx == 1;
         int decimals = distDecimals(s.distance_unit);
         if (miles && decimals == 0) decimals = 3;   // 0,000 does not exist in miles: go to 0.000
-        s.distance_unit = distUnitFrom(decimals, miles);
+        // km/m <-> miles reinterprets the stages (confirmed in onSeg). The beep cursors index the rebuilt waypoints,
+        // and an idle Navigation page shows the roadbook it adopted: both are refreshed, as after any stage edit.
+        if (changeDistanceUnit(s, distUnitFrom(decimals, miles))) {
+            d->beepCursorsStale = true;
+            adoptRoadbookIfIdle(d);
+        }
         break;
     }
     case MEASURE_TYPE:   s.measure_ab_bc = (idx == 0); break;  // keys: AB,BC / AB,AC
@@ -115,6 +121,28 @@ void onSeg(GtkWidget* w, gpointer) {
     SegCtl* c = static_cast<SegCtl*>(g_object_get_data(G_OBJECT(w), "ctl"));
     int idx = 0;
     for (int i = 0; i < c->n; i++) if (w == c->btn[i]) idx = i;
+    if (c->id == DISTANCE_UNITS) {
+        // km <-> miles reinterprets every programmed stage (the figures stay, the unit changes): warn and confirm,
+        // and never while a stage is live. Declined or refused: the keys go back to the state as it is.
+        RallyState& st = *c->data->state;
+        const bool to_miles = idx == 1;
+        int decimals = distDecimals(st.distance_unit);
+        if (to_miles && decimals == 0) decimals = 3;
+        const int new_unit = distUnitFrom(decimals, to_miles);
+        if (unitChangeRescalesStages(st.distance_unit, new_unit)) {
+            bool go = false;
+            if (stageEditLocked(st)) {
+                // The box's self-closing notice: a plain GTK message box here was unstyled and, being modal with
+                // no copy on the phone, held the box until someone at the box pressed OK.
+                flashNotice(w, "A stage is running: the distance unit cannot be changed now.");
+            } else {
+                go = confirmYesNo(w, "Change distance unit",
+                    std::string("Change to ") + (to_miles ? "miles" : "km") + "?\n\nEvery programmed stage keeps its figures and changes unit:\n"
+                    "a 5.000 km (5000 m) stage becomes a 5.000 mile stage.\nTotal, Trip and the calibration are not changed.");
+            }
+            if (!go) { updateSettingsDisplay(c->data); return; }
+        }
+    }
     for (int i = 0; i < c->n; i++) setLit(c->btn[i], i == idx);
     apply(c->data, c->id, idx);
     // Choosing a rally type moves its linked keys (distance units, measure type).

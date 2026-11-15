@@ -486,8 +486,9 @@ bool undoSegmentChange(RallyState& state, uint64_t c1, uint64_t c2, int64_t stag
     } else {
         segs[i].distance_m = state.undo_from_m;
         segs[i + 1].distance_m = state.undo_to_m;
-        const int64_t point = segmentStartStageMm(segs, i + 1);
-        state.segment_current_number = stage_mm < point ? i : i + 1;
+        // As if next had never been pressed (owner, 2026-11-15): the earlier speed comes back and the box waits
+        // for next again, even when the undo is noticed past the roadbook point.
+        state.segment_current_number = i;
     }
     const long cur = state.segment_current_number;
     rebaseSegmentAt(state, c1, c2, stage_mm - segmentStartStageMm(segs, cur));
@@ -1025,6 +1026,18 @@ AutoStartArming autoStartArming(int64_t target_ms, int64_t epoch_ms,
 
 AutoStartArming autoStartDisarmed() {
     return AutoStartArming{};
+}
+
+std::string autoStartCountdownText(int64_t diff_ms) {
+    const int total_secs = static_cast<int>(diff_ms / 1000);
+    char buf[32];
+    snprintf(buf, sizeof(buf), "T- %02d:%02d:%02d", total_secs / 3600, (total_secs % 3600) / 60, total_secs % 60);
+    return buf;
+}
+
+// One word to a line: on one line the caption is wider than the countdown box above it.
+std::string earlyDepartureCaption(bool early_departure) {
+    return early_departure ? "Early\nDeparture\nENABLED" : "Early\nDeparture\nDISABLED";
 }
 
 bool autoStartCountdownVisible(bool early_departure, int64_t diff_ms) {

@@ -245,20 +245,22 @@ public:
             return true;
         });
 
-        suite->addTest("prev after the roadbook point keeps the later speed, change at the point", []() {
+        // Owner, 2026-11-15 (Greek 25): prev behaves as if next was never pressed -- even noticed past the
+        // roadbook point, the earlier speed comes back and the box waits for next again.
+        suite->addTest("prev after the roadbook point still puts the earlier speed back", []() {
             RallyState s;
             s.stage_segments = roadbook();
             s.segment_current_number = 0;
             recordSegmentChange(s, 0, false);
             ASSERT_TRUE(retimeSegmentBoundaryForward(s.stage_segments, 0, M(500)));
             s.segment_current_number = 1;
-            // Noticed only at 1100: past 1000, so it stays in segment 1,
-            // counted from 1000.
+            // Noticed only at 1100: past the roadbook point at 1000, but a manual change waits for next.
             ASSERT_TRUE(undoSegmentChange(s, 11100, 11100, M(1100)));
-            ASSERT_EQ(s.segment_current_number, 1);
+            ASSERT_EQ(s.segment_current_number, 0);
             ASSERT_NEAR(s.stage_segments[0].distance_m, Mm(1000.0), 0.001);
+            ASSERT_NEAR(s.stage_segments[1].distance_m, Mm(2000.0), 0.001);
             ASSERT_EQ(calculateDistanceCounts(s, 11100, 11100,
-                s.segment_start_cntr1, s.segment_start_cntr2), 100);
+                s.segment_start_cntr1, s.segment_start_cntr2), 1100);
             return true;
         });
 

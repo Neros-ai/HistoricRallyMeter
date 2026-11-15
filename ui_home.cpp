@@ -32,6 +32,7 @@ constexpr int KEY_W = 130;            // Total / Trip / next / prev and right-ha
 constexpr int FIGURE_W = COL1_W - KEY_W;   // 356
 constexpr int CELL_H = KEY_H + ROW_GAP;    // 106: a key and the strip under it
 constexpr int CLOCK_H = 54, CLOCK_GAP = 26;
+constexpr int SURREY_HISTORY_PITCH = 40, SURREY_TIME_TAKEN_H = 64;   // item 13 mockup, 2026-11-15
 constexpr int HIST_H = 388 - CLOCK_H - CLOCK_GAP;   // 308
 constexpr int STAGE_ROW_H = 54;
 constexpr int STAGE_AREA_H = 388 - STAGE_ROW_H;     // 334
@@ -155,15 +156,16 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         // Figures right-aligned inside a block sized for "99,999" (6 x 24 px),
         // and that block centred in the column.
         const double right = (width + 6 * 24) / 2.0;
+        const int pitch = h->surrey ? SURREY_HISTORY_PITCH : 46;   // Surrey: 6 px tighter so the time taken and the A-B zero key fit
         for (size_t i = 0; i < HOME_HISTORY_ENTRIES; i++)
-            drawText(cr, h->history[i], right, 24 + (i + 1) * 46 - 10, 40, RIGHT);
+            drawText(cr, h->history[i], right, 24 + (i + 1) * pitch - 10, 40, RIGHT);
         if (h->surrey && !h->timeTaken.empty()) {
             // The last stage's time taken at the foot of the column (mockup surrey-mode.html).
             const int height = gtk_widget_get_allocated_height(w);
             cyan(cr);
-            drawText(cr, h->timeTakenLabel, width / 2.0, height - 46 - 6, 18, CENTRE);
+            drawText(cr, h->timeTakenLabel, width / 2.0, height - 44 - 6, 18, CENTRE);
             white(cr);
-            drawText(cr, h->timeTaken, width / 2.0, height - 10, 40, CENTRE);
+            drawText(cr, h->timeTaken, width / 2.0, height - 8, 40, CENTRE);
         }
         break;
     }
@@ -642,7 +644,7 @@ GtkWidget* createHomeScreen(AppData* data) {
     gtk_stack_add_named(GTK_STACK(h->stack), mainPage, "main");
 
     // column 3: clock over Trip history
-    GtkWidget* c3 = gtk_box_new(GTK_ORIENTATION_VERTICAL, CLOCK_GAP);
+    GtkWidget* c3 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);   // no gap under the clock: Trip history rides level with "manual" (item 13)
     gtk_widget_set_size_request(c3, HIST_W, -1);
     gtk_box_pack_start(GTK_BOX(mainPage), c3, FALSE, FALSE, 0);
     gtk_label_set_xalign(data->copilotRallyClockLabel, 0.5);
@@ -758,6 +760,13 @@ static void updateItalianHome(AppData* data) {
         const bool miles = distIsMiles(h->adjKeyUnit);
         if (h->adjKeys[0]) gtk_button_set_label(GTK_BUTTON(h->adjKeys[0]), miles ? "+.01" : "+10");
         if (h->adjKeys[1]) gtk_button_set_label(GTK_BUTTON(h->adjKeys[1]), miles ? "-.01" : "-10");
+        // "+.01" is a character wider than "+10": at the keys' usual size it outgrows its 90 px column and pushes
+        // the right-hand keys off the screen. The smaller font (as Freeze / Reverse) keeps it inside.
+        for (GtkWidget* k : {h->adjKeys[0], h->adjKeys[1]}) {
+            if (!k) continue;
+            GtkStyleContext* sc = gtk_widget_get_style_context(k);
+            if (miles) gtk_style_context_add_class(sc, "key-24"); else gtk_style_context_remove_class(sc, "key-24");
+        }
     }
     if (h->labelMode != data->state->rally_type) {
         h->labelMode = data->state->rally_type;
@@ -790,8 +799,9 @@ static void updateItalianHome(AppData* data) {
         // Surrey keeps a time-taken foot under Trip history, so its area is taller.
         if (h->historyArea) {
             const int rows = tripHistoryRows(*data->state);
+            const bool sur = data->state->rally_type == 1;
             gtk_widget_set_size_request(h->historyArea, HIST_W,
-                                        24 + 46 * rows + (data->state->rally_type == 1 ? 82 : 0));
+                                        24 + (sur ? SURREY_HISTORY_PITCH : 46) * rows + (sur ? SURREY_TIME_TAKEN_H : 0));
         }
     }
     if (!h->italianCard) return;   // single-display has no italian card
@@ -1054,7 +1064,7 @@ void updateHomeDisplay(AppData* data) {
         }
         std::string tt_label, tt;
         if (sur && st.time_taken_ms >= 0) {
-            tt_label = "time taken ss" + (st.time_taken_stage >= 1 ? std::to_string(st.time_taken_stage) : std::string("-"));
+            tt_label = st.time_taken_stage >= 1 ? "s" + std::to_string(st.time_taken_stage) + " result" : std::string("result");   // the box only knows S2, not SS2
             tt = surreyTimeTakenText(st.time_taken_ms);
         }
         if (running != h->surreyRunning || cdM != h->cdMetres || cdT != h->cdTime) stage_dirty = true;

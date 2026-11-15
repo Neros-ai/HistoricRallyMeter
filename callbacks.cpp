@@ -1,5 +1,7 @@
+#include <algorithm>
 #include "stage_phase.h"
 #include "callbacks.h"
+#include "stage_file.h"
 #include "reaction_offset.h"
 #include "stage_store.h"
 #include "webserver/rally_web_server.h"
@@ -223,7 +225,73 @@ void applyTripReset(AppData* data) {
     notifyWebState(data);
 }
 
+// The question window the box has open, so the phone can show it and answer it (item 11).
+// A stack, not one pointer: a question can open over another window (a confirm over a Set dialog), and closing the
+// top one must leave the one underneath known, not forget both.
+static std::vector<GtkWidget*> g_openDialogs;
+static void onOpenDialogDestroyed(GtkWidget* w, gpointer) {
+    g_openDialogs.erase(std::remove(g_openDialogs.begin(), g_openDialogs.end(), w), g_openDialogs.end());
+}
+static GtkWidget* topOpenDialog() {
+    for (auto it = g_openDialogs.rbegin(); it != g_openDialogs.rend(); ++it)
+        if (gtk_widget_get_visible(*it)) return *it;
+    return nullptr;
+}
+
+// The text and buttons of a question window, found by walking it; buttons are not entered (their label is the button's).
+static void collectDialog(GtkWidget* w, std::vector<std::string>* texts, std::vector<GtkWidget*>* buttons, bool* has_entry) {
+    if (GTK_IS_ENTRY(w)) { *has_entry = true; return; }
+    if (GTK_IS_BUTTON(w)) { buttons->push_back(w); return; }
+    if (GTK_IS_LABEL(w)) {
+        const char* t = gtk_label_get_text(GTK_LABEL(w));
+        if (t && *t) texts->push_back(t);
+        return;
+    }
+    if (!GTK_IS_CONTAINER(w)) return;
+    struct Ctx { std::vector<std::string>* t; std::vector<GtkWidget*>* b; bool* e; } ctx{texts, buttons, has_entry};
+    gtk_container_forall(GTK_CONTAINER(w), [](GtkWidget* c, gpointer p) {
+        Ctx* x = static_cast<Ctx*>(p);
+        collectDialog(c, x->t, x->b, x->e);
+    }, &ctx);
+}
+
+std::string openDialogJson() {
+    GtkWidget* dlg = topOpenDialog();
+    if (!dlg) return "null";
+    std::vector<std::string> texts;
+    std::vector<GtkWidget*> buttons;
+    bool has_entry = false;
+    collectDialog(dlg, &texts, &buttons, &has_entry);
+    if (has_entry || buttons.empty()) return "null";   // the Set dialogs with a keypad are not mirrored
+    std::string text;
+    for (const std::string& t : texts) text += (text.empty() ? "" : "\n") + t;
+    const char* title = gtk_window_get_title(GTK_WINDOW(dlg));
+    std::string out = "{\"title\":\"" + jsonEscape(title ? title : "")
+        + "\",\"text\":\"" + jsonEscape(text) + "\",\"buttons\":[";
+    for (size_t i = 0; i < buttons.size(); i++) {
+        const char* l = gtk_button_get_label(GTK_BUTTON(buttons[i]));
+        out += (i ? ",\"" : "\"") + jsonEscape(l ? l : "") + "\"";
+    }
+    return out + "]}";
+}
+
+bool answerOpenDialog(int index) {
+    GtkWidget* dlg = topOpenDialog();
+    if (!dlg) return false;
+    std::vector<std::string> texts;
+    std::vector<GtkWidget*> buttons;
+    bool has_entry = false;
+    collectDialog(dlg, &texts, &buttons, &has_entry);
+    if (has_entry || index < 0 || index >= static_cast<int>(buttons.size())) return false;
+    gtk_button_clicked(GTK_BUTTON(buttons[index]));
+    return true;
+}
+
 static void applyDialogStyle(GtkWidget* dialog) {
+    if (std::find(g_openDialogs.begin(), g_openDialogs.end(), dialog) == g_openDialogs.end()) {
+        g_openDialogs.push_back(dialog);
+        g_signal_connect(dialog, "destroy", G_CALLBACK(onOpenDialogDestroyed), nullptr);
+    }
     GtkCssProvider* provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(provider,
         "* { font-size: 30px; }"
@@ -372,8 +440,8 @@ void on_distance_set(GtkWidget* widget, gpointer user_data) {
         gtk_entry_set_text(entry, distanceEntryText(shown_m, data->state->distance_unit).c_str());
     }
     // Capped at 6 digits (999,999 m): past that the display auto-switches
-    // to km, which reads as if the entered value got truncated.
-    gtk_entry_set_max_length(entry, 6);
+    // to km, which reads as if the entered value got truncated. 7 characters in the 3-decimal units.
+    gtk_entry_set_max_length(entry, distEntryMaxChars(data->state->distance_unit));
     // Pre-filled with the current value; select it so the first digit typed
     // replaces it instead of appending onto it.
     gtk_editable_select_region(GTK_EDITABLE(entry), 0, -1);
@@ -507,7 +575,7 @@ void on_navi_dialog(GtkWidget* widget, gpointer user_data) {
     gtk_entry_set_text(entry, distanceEntryText(adjustedDistanceMetersMm(
         odometerMm(*data->state, poll.cntr1, poll.cntr2), 0),
         data->state->distance_unit).c_str());
-    gtk_entry_set_max_length(entry, 6);
+    gtk_entry_set_max_length(entry, distEntryMaxChars(data->state->distance_unit));
     gtk_editable_select_region(GTK_EDITABLE(entry), 0, -1);
     gtk_box_pack_start(GTK_BOX(promptRow), GTK_WIDGET(entry), TRUE, TRUE, 0);
 
@@ -1206,6 +1274,12 @@ void on_next_press(GtkWidget* widget, gpointer user_data) {
         auto p = data->poller->getMostRecent();
         // RB-SET-12: a tube press is a press at a point: start and end of a pc both taken back.
         const int64_t press_ms = pressTimeMs(getRallyTime_ms(*data->state), data->state->reaction_offset_ms);
+        {   // A press within 2 s of the row's zero still sounds that zero (owner, 2026-11-15): the update loop plays it.
+            bool pc_ok = false;
+            const double secs = pcCountdownSeconds(*data->state, getRallyTime_ms(*data->state), &pc_ok);
+            if (earlyNextSoundsZero(secs, pc_ok, PC_BEEP_LEAD_S)) data->pcZeroBeepPendingBox = true;
+            if (earlyNextSoundsZero(secs, pc_ok, data->state->phone_beep_lead_ms / 1000.0)) data->pcZeroBeepPendingPhone = true;
+        }
         if (applySectorNext(*data->state, p.cntr1, p.cntr2, press_ms)) {
             ConfigFile::save(*data->state);
             notifyWebState(data);

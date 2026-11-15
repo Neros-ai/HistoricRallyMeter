@@ -16,4 +16,13 @@ std::vector<int> programmedStages(const RallyState& s);
 // when it is empty, not a number, or out of range.
 int chosenStageNumber(const std::string& text);
 
+// True when going from one distance unit to the other rescales programmed stages (km or metres <-> miles).
+bool unitChangeRescalesStages(int old_unit, int new_unit);
+
+// Switch the distance unit (owner, 2026-11-15). km or metres <-> miles reinterprets every programmed stage -- the
+// figures stay, the unit changes (a 5 km / 5000 m stage becomes 5 miles); Total, Trip and the calibration keep their
+// real values. Refused (false, nothing changed) when that would rescale a stage while one is live. A change of format
+// inside km/metres or inside miles just changes the unit.
+bool changeDistanceUnit(RallyState& s, int new_unit);
+
 #endif

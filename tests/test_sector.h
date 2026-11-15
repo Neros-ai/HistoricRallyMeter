@@ -52,6 +52,18 @@ public:
     TestSuite* createSuite() {
         auto* suite = new TestSuite("Italian sector (RB-NAV-44)");
 
+        suite->addTest("next pressed up to 2 s before the countdown reaches zero still sounds the zero beep", []() {
+            return earlyNextSoundsZero(0.1, true) && earlyNextSoundsZero(2.0, true) && earlyNextSoundsZero(0.0001, true)
+                && !earlyNextSoundsZero(2.01, true) && !earlyNextSoundsZero(5.0, true)
+                && !earlyNextSoundsZero(0.0, true) && !earlyNextSoundsZero(-0.5, true)   // zero already sounded
+                && !earlyNextSoundsZero(1.0, false);                                      // no countdown on this row
+        });
+
+        suite->addTest("inside a device's beep lead the zero has already sounded there and is not owed again", []() {
+            return !earlyNextSoundsZero(0.05, true, 0.10) && earlyNextSoundsZero(0.15, true, 0.10)
+                && !earlyNextSoundsZero(0.4, true, 0.5) && earlyNextSoundsZero(1.9, true, 0.5);
+        });
+
         suite->addTest("a legs-only stage is not a sector and no tube applies", []() {
             RallyState s;
             s.calibration = 1000000; s.counters = true;
@@ -857,6 +869,14 @@ public:
             s.rally_type = 0;
             s.segment_current_number = 6;
             return sectorEndsOnDistance(s);
+        });
+
+        // Owner, 2026-11-15: a surrey stage ends only on the finish press (next on the last row) or an abort.
+        suite->addTest("a surrey stage never ends on distance, even a roadbook with several rows", []() {
+            RallyState s = running();
+            s.rally_type = 1;
+            s.segment_current_number = 6;
+            return !sectorEndsOnDistance(s);
         });
 
         suite->addTest("RB-NAV-52: an italian roadbook that is not a sector still ends on distance", []() {

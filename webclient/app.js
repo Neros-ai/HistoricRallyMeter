@@ -13,6 +13,7 @@
   const unitName = () => (isMiles() ? 'mi' : distUnit === 0 ? 'm' : 'km');
   const MM_PER_MILE = 1609344;
   let lastArrival = null;
+  let lastDtEnter = '';
   function renderArrival() {
     $('arr-unit').textContent = units === 'mph' ? 'mph' : 'kph';
     $('arr-kph').textContent = lastArrival
@@ -165,7 +166,7 @@
     if ($('btn-dist-plus')) $('btn-dist-plus').textContent = isMiles() ? '+.01' : '+10';
     if ($('btn-dist-minus')) $('btn-dist-minus').textContent = isMiles() ? '\u2212.01' : '\u221210';
     const add = $('seg-add-text');
-    if (add && add !== active) add.placeholder = distDecimals() === 3 ? '1.000;1.500;2.300' : distanceKm ? '1.00;1.50;2.30' : '1,000;1,500;2,300';
+    if (add && add !== active) add.placeholder = (!isMiles() && !distanceKm) ? '1000;1500;2300' : distDecimals() === 3 ? '1.000;1.500;2.300' : '1.00;1.50;2.30';
     if (changed && lastState) {
       renderSegments(lastState);
       renderStagePanel(lastState);
@@ -204,6 +205,39 @@
     if (units !== previousUnits && lastState) renderStagePanel(lastState);
     if (units !== previousUnits) renderArrival();
 
+    // The question window the box has open (abort, reset, end sector ...): shown here, either device can answer (item 11).
+    {
+      const bd = msg.box_dialog;
+      const win = $('box-dialog');
+      if (win) {
+        if (!bd) { win.classList.add('hidden'); win.dataset.k = ''; }
+        else {
+          const key = bd.title + '|' + bd.text + '|' + bd.buttons.join('|');
+          if (win.dataset.k !== key) {   // rebuilt only when the question changes, so a press is never lost to a redraw
+            win.dataset.k = key;
+            $('box-dialog-title').textContent = bd.title;
+            $('box-dialog-text').textContent = bd.text;
+            const bx = $('box-dialog-buttons');
+            bx.textContent = '';
+            bd.buttons.forEach((label, i) => {
+              const b = document.createElement('button');
+              b.type = 'button'; b.className = 'key'; b.textContent = label;
+              b.addEventListener('click', () => send({ type: 'box_dialog_answer', index: i }));
+              bx.appendChild(b);
+            });
+          }
+          win.classList.remove('hidden');
+        }
+      }
+    }
+    // The driver's T- countdown and Early Departure caption, as the box draws them (item 9).
+    const acd = msg.autostart_cd;
+    const acdBox = $('drv-autostart');
+    if (acdBox) {
+      acdBox.style.display = acd ? '' : 'none';
+      if (acd) { $('drv-autostart-t').textContent = acd.text; $('drv-autostart-e').textContent = acd.early; }
+    }
+
     // Freeze stops the box counting distance, so these figures already hold.
     // The Navi figures are the box's own text (home.f: Total, Trip, row 3).
     // The phone page is served by the box itself, so these are always sent: nothing is worked out here.
@@ -224,7 +258,8 @@
       if (hf[2] === '---') delete $('navi-m').dataset.unit;   // surrey, no stage on the gauge
     }
     if (sur) {
-      $('time-taken-label').textContent = 'time taken ss' + (Number(msg.time_taken_stage) >= 1 ? msg.time_taken_stage : '-');
+      // as the box: "s2 result" (the box only knows S2, not SS2), and just "result" with no stage on record
+      $('time-taken-label').textContent = Number(msg.time_taken_stage) >= 1 ? 's' + msg.time_taken_stage + ' result' : 'result';
       $('time-taken').textContent = msg.time_taken || '';
     }
     renderSector(msg);
@@ -331,7 +366,11 @@
       const cd = msg.surrey_cd;
       $('card-arr').style.display = cd ? 'none' : '';
       $('card-cd').style.display = cd ? '' : 'none';
-      if (cd) { $('cd-m').textContent = cd.m || '--'; $('cd-min').textContent = cd.min || '--'; }
+      if (cd) {
+        $('cd-m').textContent = cd.m || '--'; $('cd-min').textContent = cd.min || '--';
+        const cdUnit = $('cd-m').previousElementSibling;   // the unit label follows the box's unit (km, mi or m), not a fixed 'm'
+        if (cdUnit) cdUnit.textContent = unitName();
+      }
     }
     const sp = $('stage-pick');
     if (document.activeElement !== sp && msg.stage_no >= 1) sp.value = String(msg.stage_no);
@@ -348,10 +387,20 @@
     const phoneEl = $('t-phone');
     phoneEl.textContent = clockText(Date.now() - 0);   // this phone's clock, in the box's zone
     $('btn-computer-phone').disabled = !msg.phone_known;
+    // A time typed on the box shows in the phone's field too (item 47), unless the phone's own field is being typed in.
+    // Only when the box's text CHANGES, so a time the phone is part-way through typing is never wiped by an unchanged blank.
+    if (typeof msg.dt_enter === 'string' && msg.dt_enter !== lastDtEnter) {
+      lastDtEnter = msg.dt_enter;
+      if (document.activeElement !== $('t-enter')) $('t-enter').value = msg.dt_enter;
+    }
 
     // Cal tab
     if (msg.cal) {
-      $('cal-dist').textContent = Number(msg.cal.dist_m).toFixed(1);
+      // The box's own text and unit: metres (km keeps metres) or miles to three decimals in miles (item 10).
+      $('cal-dist').textContent = msg.cal.dist_text != null ? msg.cal.dist_text : Number(msg.cal.dist_m).toFixed(1);
+      const calUnit = msg.cal.unit || 'm';
+      $('cal-dist-unit').textContent = calUnit;
+      $('cal-actual-unit').textContent = calUnit;
       $('cal-c1').textContent = msg.cal.c1;
       $('cal-c2').textContent = msg.cal.c2;
       $('cal-avg').textContent = msg.cal.avg;
@@ -407,6 +456,8 @@
       const el = $(id);
       if (el) el.disabled = beepLocked;
     });
+    // The visible off / on keys are drawn grey too in italian, as the box dims them (item 46).
+    document.querySelectorAll('.onoff[data-for="beep-nav"], .onoff[data-for="beep-timing"]').forEach((k) => k.classList.toggle('locked', beepLocked));
   }
 
   function applySetState(state) {
@@ -510,7 +561,7 @@
     if (!s.pc_ref) html += '<div class="it-err ghost"><span>error</span><b>0</b><b>0</b></div>';   // same size, unseen: keeps the arrival block where it is
     if (s.pc_ref) {
       const metres = Number(s.pc_m);
-      const mtxt = (metres > 0 ? '+' : '') + metres + ' m';
+      const mtxt = (metres >= 0 ? '+' : '') + metres + ' m';   // a sign on zero too, as the box's "%+ld m" (items 12, 31)
       html += '<div class="it-err"><span class="cyan">error pc' + s.pc_ref + '</span><b>'
         + s.pc_s + ' s</b><b>' + mtxt + '</b></div>';
     }
@@ -721,7 +772,9 @@
         // box | chg | auto | from | to | dist | KPH | dur | elapsed, as the box's greek row.
         // Row 1 has no auto: a greyed box keeps the column, as on the box.
         tr.innerHTML = entry('first', t.num, 'numeric')
-          + '<td><input type="checkbox" class="chg"' + (r.chg ? ' checked' : '') + (i === 0 ? ' disabled' : '') + '></td>'
+          + '<td><input type="checkbox" class="chg"' + (r.chg ? ' checked' : '')
+          // The first row's tick is fixed (it sets the starting speed): drawn blue like the box's, but not pressable (item 36).
+          + (i === 0 ? ' style="pointer-events:none" tabindex="-1" aria-disabled="true"' : '') + '></td>'
           + '<td><input type="checkbox" class="auto"' + (i >= 1 && r.auto_av && r.auto_on ? ' checked' : '')
           + (i >= 1 && r.auto_av ? '' : ' disabled') + '></td>'
           + fromCell + tail
@@ -783,11 +836,23 @@
     $('seg-autostart').checked = !!state.autostart_on;   // a tick box follows the box even when just tapped
   }
 
+  // The box's own words when it refuses something sent from this phone; it closes by itself after 2.5 s, as the box's does.
+  let boxNoticeTimer = 0;
+  function showBoxNotice(text) {
+    const el = $('box-notice');
+    if (!el || !text) return;
+    el.textContent = text;
+    el.classList.remove('hidden');
+    clearTimeout(boxNoticeTimer);
+    boxNoticeTimer = setTimeout(() => el.classList.add('hidden'), 2500);
+  }
+
   function onMessage(ev) {
     let msg;
     try { msg = JSON.parse(ev.data); } catch { return; }
     if (msg.type === 'telemetry') { applyTelemetry(msg); renderModeBadge(msg.rally_type); }   // flag follows a mode change made on the box too
     if (msg.type === 'beep') beepHeard(msg.beep);
+    if (msg.type === 'notice') showBoxNotice(msg.text);
     if (msg.type === 'state') {
       lastState = msg;
       renderSegments(msg);
@@ -1041,6 +1106,13 @@
   $('btn-add-seg').addEventListener('click', () => {
     const text = $('seg-add-text').value.trim();
     if (!text) return;
+    // The box's own refusals, said in the same words: a comma is never accepted, and metres are whole.
+    const note = $('seg-add-note');
+    const metresMode = !isMiles() && !distanceKm;
+    const problem = text.indexOf(',') >= 0 ? 'commas not accepted: separate distances with ;'
+      : (metresMode && text.indexOf('.') >= 0) ? 'whole metres only' : '';
+    if (note) note.textContent = problem;
+    if (problem) return;   // the text stays in the field to be corrected
     send({ type: 'rows_add', text: text });
     $('seg-add-text').value = '';
   });
@@ -1204,8 +1276,11 @@
   // ---- Cal ----
   $('cal-zero').addEventListener('click', () => send({ type: 'cal_zero' }));
   $('cal-save').addEventListener('click', () => {
-    const m = Number($('cal-actual').value);
-    if (Number.isFinite(m) && m >= 500 && m <= 100000) { send({ type: 'cal_save', meters: m }); $('cal-actual').value = ''; }
+    // The figure is sent as typed, in the unit the box shows (metres, or miles in miles) -- the box converts it.
+    const typed = $('cal-actual').value.trim();
+    const v = Number(typed);
+    const m = isMiles() ? v * 1609.344 : v;
+    if (typed && Number.isFinite(v) && m >= 500 && m <= 100000) { send({ type: 'cal_save', text: typed }); $('cal-actual').value = ''; }
   });
   $('cal-s1').addEventListener('click', () => send({ type: 'cal_sensor', both: false }));
   $('cal-s12').addEventListener('click', () => send({ type: 'cal_sensor', both: true }));
@@ -1238,7 +1313,23 @@
     const miles = !!un && un.value === 'mi';
     let decimals = fmt ? Number(fmt.value) : distDecimals();
     if (miles && decimals === 0) decimals = 3;   // 0,000 does not exist in miles
-    send({ type: 'setting', name: 'distance_mode', on: true, mode: distModeFrom(decimals, miles) });
+    const newMode = distModeFrom(decimals, miles);
+    // km <-> miles reinterprets every programmed stage: warn and confirm, as the box does. A decline puts the keys back.
+    // Metres counts as km: 5000 m becomes 5.000 miles, the figures never convert (owner, 2026-11-15).
+    const fam = (u) => (u === 2 || u === 4) ? 'mi' : 'km';
+    const oldFam = fam(distUnit), newFam = fam(newMode);
+    if (oldFam !== newFam) {
+      const putBack = () => {
+        const back = document.querySelector('input[name="distance-unit"][value="' + (oldFam === 'mi' ? 'mi' : 'km') + '"]');
+        if (back) back.checked = true;
+      };
+      // The box refuses this while a stage is live: say so here, as the box does, instead of asking and then nothing happening.
+      if (segLocked()) { alert('A stage is running: the distance unit cannot be changed now.'); putBack(); return; }
+      const msg = 'Change to ' + (miles ? 'miles' : 'km') + '?\n\nEvery programmed stage keeps its figures and changes unit:\n'
+        + 'a 5.000 km (5000 m) stage becomes a 5.000 mile stage.\nTotal, Trip and the calibration are not changed.';
+      if (!confirm(msg)) { putBack(); return; }
+    }
+    send({ type: 'setting', name: 'distance_mode', on: true, mode: newMode });
   };
   document.querySelectorAll('input[name="distance-unit"], input[name="distance-format"]').forEach((r) =>
     r.addEventListener('change', () => { if (r.checked) sendDistanceMode(); }));

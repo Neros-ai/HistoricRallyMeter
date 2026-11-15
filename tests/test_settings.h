@@ -140,6 +140,13 @@ public:
                 && !autoStartCountdownVisible(false, -1000);
         });
 
+        suite->addTest("the T- countdown text and the early departure caption are one thing for box and phone", []() {
+            return autoStartCountdownText(12000) == "T- 00:00:12" && autoStartCountdownText(3723000) == "T- 01:02:03"
+                && autoStartCountdownText(0) == "T- 00:00:00"
+                && earlyDepartureCaption(true) == "Early\nDeparture\nENABLED"
+                && earlyDepartureCaption(false) == "Early\nDeparture\nDISABLED";
+        });
+
         suite->addTest("the next-minute flag's countdown always shows", []() {
             const int64_t min = 60 * 1000;
             return autoStartCountdownVisible(true, 59 * 1000)

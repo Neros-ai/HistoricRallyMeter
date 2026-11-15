@@ -263,6 +263,10 @@ struct AppData {
     long pcBeepRow = -1;
     int64_t pcBeepTrialMs = -1;
     double pcBeepPrevS = 0.0;
+    // next pressed within 2 s of zero: the zero beep for the row just left is still owed -- for the box's speaker and
+    // the phone separately, as each fires its marks early by its own lead and may already have sounded it.
+    bool pcZeroBeepPendingBox = false;
+    bool pcZeroBeepPendingPhone = false;
     // 100 m beep on a non-pc row: the row, and the last metres-to-go reading.
     long distBeepRow = -1;
     double distBeepPrevM = 0.0;
@@ -344,6 +348,10 @@ struct AppData {
     // only: seq 0 at every app start, so a phone connecting before the first
     // waypoint has nothing to replay.
     BeepEvent lastBeep;
+    // The box's own words for a phone command it has just refused (a figure out of place, a start in the past ...):
+    // set by webHandleCommand, sent to that phone alone and cleared by the web server, so the phone says what the
+    // box would have said (owner, 2026-11-15).
+    std::string webNotice;
     
     int updateCount = 0;
     int64_t lastUpdateCountTime_ms = 0;

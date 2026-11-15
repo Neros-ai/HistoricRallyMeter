@@ -418,6 +418,8 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .start-block input[type=text], .start-block input[type=number] { width: 9rem; font-size: 1.1rem; background: #111; color: #fff; border: 1px solid #666; padding: 0.3rem; text-align: right; }
 .add-row { display: flex; gap: 0.5rem; margin: 0.5rem 0; }
 .add-row input { flex: 1; min-width: 0; font-size: 1.1rem; background: #111; color: #fff; border: 1px solid #666; padding: 0.4rem; }
+.seg-add-note { color: #f88; font-size: 0.9rem; align-self: center; }
+.seg-add-note:empty { display: none; }
 #seg-table { width: 100%; font-size: 0.85rem; border-collapse: collapse; }
 #seg-table th { color: #0ff; font-weight: normal; }
 #seg-table td { text-align: right; padding: 0.15rem 0.2rem; }
@@ -863,6 +865,18 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
   #view-cal .crow { flex-wrap: nowrap; margin: 0.35rem 0; }
   #view-cal .brk { display: none; }
   #view-cal .crow > .key, #view-cal .crow > .pair { margin-left: auto; }
+  /* Item 16: one spacing between every line (the smaller), and the buttons' writing the same size as the menu key's. */
+  #view-cal .crow { margin: 0.25rem 0; min-height: 2.6rem; font-size: 1.15rem; }
+  #view-cal .crow .key { font-size: 0.95rem; min-height: 2.4rem; padding-top: 0.15rem; padding-bottom: 0.15rem; }
+  #view-cal #cal-dist, #view-cal #cal-actual { font-size: 1.6rem; }
+  #view-cal #cal-rpm { font-size: 2rem; }
+  #view-cal .ins { font-size: 0.9rem; line-height: 1.25; margin: 0.2rem 0; }
+  #view-cal .crow input { flex: 0 0 auto; }
+  /* Item 44: Date/Time fits the landscape height without scrolling to the last line. */
+  #view-time .trow { margin-bottom: 0.15rem; padding: 0; gap: 0.1rem; }
+  #view-time .trow .big { font-size: 1.9rem; line-height: 1.1; }
+  #view-time .trow > .tl { font-size: 1.05rem; line-height: 1.1; }
+  #view-time .trow .key { min-height: 2.4rem; font-size: 0.95rem; padding-top: 0.1rem; padding-bottom: 0.1rem; }
   /* Room under the last line, so everything scrolls clear of the fixed menu key (3.1rem tall
      with its gap). */
   #view-set, #view-time, #view-cal { padding-bottom: 4rem; }
@@ -1224,3 +1238,46 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 #upload-table th:first-child, #upload-table td:first-child { text-align: left; }
 #upload-table th { color: #0ff; font-weight: normal; }
 #upload-table th.ft { text-align: center; }
+
+/* Item 46: the beep off / on keys look as dimmed as the box's in italian. */
+.onoff.locked .key { color: #666; border-color: #444; opacity: 0.55; }
+/* Item 35: the countdown key is bright white in every view (it does nothing, as on the box, but grey is hard to see). */
+#btn-countdown:disabled { color: #fff; }
+
+/* Item 13: time taken as on the box -- the label ("s2 result") above the time, larger, centred; Trip history on one line. */
+#time-taken-row { text-align: center; }
+#time-taken-label { display: block; color: #0ff; }
+#time-taken { display: block; font-size: 1.8em; }
+#trip-history-label { white-space: nowrap; }
+
+/* Item 9: the driver's T- countdown and Early Departure caption, centred over the gauge as on the box. */
+.view-driver { position: relative; }
+.drv-autostart { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 5; text-align: center;
+  background: #000; border: 2px solid #fff; padding: 0.3rem 0.8rem; font-family: monospace; }
+#drv-autostart-t { font-size: 2.2rem; line-height: 1.1; }
+#drv-autostart-e { font-size: 0.95rem; line-height: 1.15; white-space: pre-line; color: #0ff; }
+
+/* Item 11: the box's open question, shown on the phone. */
+.box-dialog-text { white-space: pre-line; text-align: center; }
+.box-dialog-buttons { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; }
+.box-dialog-buttons .key { min-width: 6rem; }
+
+/* Item 23: every Settings row fits the phone's width -- the choices wrap to a second line instead of running off the edge. */
+#view-set .beep-row { flex-wrap: wrap; row-gap: 0.2rem; }
+
+/* Item 44: Surrey portrait -- tighter cards, so the bottom row of keys is not pushed off the screen. */
+@media not ((orientation: landscape) and (min-width: 700px)) {
+  #view-navi.rally-surrey .card { padding-top: 0.2rem; padding-bottom: 0.2rem; margin-bottom: 0.25rem; }
+  #view-navi.rally-surrey #time-taken { font-size: 1.5em; line-height: 1.1; }
+  #view-navi.rally-surrey .kcol .key, #view-navi.rally-surrey > .key { min-height: 2.6rem; }
+}
+
+/* Item 44: Greek portrait -- Trip history stays on one line (the heading and the figures). */
+@media not ((orientation: landscape) and (min-width: 700px)) {
+  #view-navi.rally-greek .card.hist { white-space: nowrap; overflow: hidden; font-size: 0.95rem; }
+}
+
+/* The box's refusal notice, shown on the phone: a self-closing message over the page, as the box's flash. */
+.box-notice { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); z-index: 50; max-width: 90vw;
+  background: #000; color: #fff; border: 3px solid #fff; padding: 0.8rem 1.2rem; font-size: 1.1rem; text-align: center; }
+.box-notice.hidden { display: none; }

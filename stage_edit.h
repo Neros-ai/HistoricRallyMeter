@@ -15,6 +15,8 @@
 // True while a stage is live (see stageLive): no stage may be edited or loaded then. Every setter below
 // does nothing while this holds; the Segments page and the phone say so.
 bool stageEditLocked(const RallyState& state);
+// What the box says when a stage edit is refused because a stage is running (box and phone).
+constexpr const char* STAGE_EDIT_LOCKED_NOTICE = "Stages cannot be edited while a stage is running";
 
 // The memory being edited (1-5): the one on show, creating a home for a stage
 // loaded from an older config in the first empty slot.
@@ -39,7 +41,7 @@ void stageEditSetAuto(AppData* data, size_t row, bool on);
 void stageEditDeleteRow(AppData* data, size_t row);
 // New end distance for a row (see setRowTo). False if it was refused.
 bool stageEditSetRowTo(AppData* data, size_t row, double new_to_m);
-void stageEditSetFirst(AppData* data, long number, double from_m);
+bool stageEditSetFirst(AppData* data, long number, double from_m);   // false: the start was refused (not before the first end)
 // time_s < 0 clears the time.
 void stageEditSetStart(AppData* data, long time_s, long distance_m, std::string* notice = nullptr);
 void stageEditClearStage(AppData* data);

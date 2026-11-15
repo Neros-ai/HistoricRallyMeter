@@ -250,6 +250,7 @@ bool applySectorNext(RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms) {
 }
 
 bool sectorEndsOnDistance(const RallyState& s) {
+    if (s.rally_type == 1) return false;   // surrey ends only on the finish press (next on the last row) or an abort
     return !(s.rally_type == 2 && stageIsSector(s.stage_segments));
 }
 
@@ -352,6 +353,10 @@ double rowMetresToLine(const RallyState& s, double stage_m, bool* valid) {
 
 bool hundredMetreBeep(double prev_m, double now_m) {
     return prev_m > 100.0 && now_m <= 100.0;
+}
+
+bool earlyNextSoundsZero(double seconds_to_line, bool valid, double lead_s) {
+    return valid && seconds_to_line > lead_s && seconds_to_line <= EARLY_NEXT_BEEP_S;
 }
 
 PcBeep pcCountdownBeep(double prev_s, double now_s) {

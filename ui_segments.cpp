@@ -59,6 +59,8 @@ struct SegUi {
     GtkWidget* distEntry = nullptr;
     GtkWidget* autoCheck = nullptr;
     GtkWidget* addEntry = nullptr;
+    GtkWidget* addKey = nullptr;     // "add distance", with the unit in use on its second line
+    int addHintUnit = -1;
     std::vector<RowW> rows;
     guint rebuildIdle = 0;
     guint autoCommitTimer = 0;   // saves the entry being typed in after a pause
@@ -169,6 +171,15 @@ void applyHeadings(AppData* d) {
     gtk_label_set_text(GTK_LABEL(u->headLbl[2]), it ? "ref" : "auto");
     gtk_label_set_xalign(GTK_LABEL(u->headLbl[2]), it ? 1.0f : 0.5f);
     gtk_label_set_text(GTK_LABEL(u->fromToHead), (std::string("from -") + distUnitName(d->state->distance_unit) + "- to").c_str());
+    // The add distance key names the unit in use, and the field shows a grey example in it (owner, 2026-11-15).
+    if (u->addKey && u->addEntry && u->addHintUnit != d->state->distance_unit) {
+        u->addHintUnit = d->state->distance_unit;
+        gtk_button_set_label(GTK_BUTTON(u->addKey),
+                             (std::string("add distance\n") + distUnitKeyText(d->state->distance_unit)).c_str());
+        GtkWidget* lbl = gtk_bin_get_child(GTK_BIN(u->addKey));
+        if (GTK_IS_LABEL(lbl)) gtk_label_set_justify(GTK_LABEL(lbl), GTK_JUSTIFY_CENTER);
+        gtk_entry_set_placeholder_text(GTK_ENTRY(u->addEntry), distAddExample(d->state->distance_unit).c_str());
+    }
     gtk_label_set_text(GTK_LABEL(u->headLbl[6]), d->state->units ? "MPH" : "KPH");
 }
 
@@ -240,7 +251,7 @@ void scheduleRebuild(AppData* d) {
 // No stage can be edited while one is live: say so, and let nothing change.
 bool editRefused(GtkWidget* w, AppData* d) {
     if (!stageEditLocked(*d->state)) return false;
-    flashNotice(w, "Stages cannot be edited while a stage is running");
+    flashNotice(w, STAGE_EDIT_LOCKED_NOTICE);
     return true;
 }
 
@@ -528,14 +539,13 @@ void onAddDistance(GtkWidget* w, gpointer p) {
     if (editRefused(w, d)) return;
     SegUi* u = ui(d);
     segmentsCommitImpl(d);
-    RallyState::MemorySlot& slot = slotOf(d);
-    if (d->state->segments.empty()) slot.first_from_m = 0.0;   // as stageEditAddDistances does
     std::string rest, notice;
     const int added = stageEditAddDistances(d, gtk_entry_get_text(GTK_ENTRY(u->addEntry)), &rest, &notice);
     if (added > 0) rebuildNow(d);
     gtk_entry_set_text(GTK_ENTRY(u->addEntry), rest.c_str());
     if (!rest.empty())
-        flashNotice(u->addEntry, "Not a distance (it must be more than 0): " + rest);
+        flashNotice(u->addEntry, !notice.empty() ? notice + ": " + rest
+                                                 : "Not a distance (it must be more than 0): " + rest);
     else if (!notice.empty())
         flashNotice(u->addEntry, notice);
 }
@@ -605,7 +615,8 @@ void segmentsCommitImpl(AppData* d, bool quiet) {
         if (untouched || m < 0) {
             // nothing to change
         } else if (is_from) {
-            stageEditSetFirst(d, -1, m);
+            if (!stageEditSetFirst(d, -1, m) && !quiet)
+                flashNotice(GTK_WIDGET(e), "The start must be before the first end distance.");
         } else if (!stageEditSetRowTo(d, row, m) && !quiet) {
             flashNotice(GTK_WIDGET(e), "That end distance must be past this row's start and short of the next row's end.");
         }
@@ -640,7 +651,7 @@ void segmentsCommitImpl(AppData* d, bool quiet) {
     } else if (!strcmp(kind, "start_dist")) {
         // In the rally's unit. Left as the box wrote it, it is not written back (it may be cut short).
         long m = parseDistance(text, d->state->distance_unit);
-        if (m >= 0 && !distanceFieldUntouched(text, static_cast<double>(slot.start_distance_m), d->state->distance_unit))
+        if (m >= 0 && !distanceFieldUntouched(text, static_cast<double>(slot.start_distance_m), d->state->distance_unit, true))   // drawn to the nearest
             stageEditSetStart(d, slot.start_time_s, m);
     }
     updateRowText(d);
@@ -699,7 +710,11 @@ void onUploadStage(GtkWidget* w, gpointer p) {
     if (!why.empty()) { flashNotice(w, why); return; }
     const std::vector<int> over = uploadOverwrites(*d->state, file);
     if (!over.empty() && !confirmYesNo(w, "Upload stage", overwriteQuestion(over))) return;
-    stageUploadCommit(d, file);
+    // The page then shows the first stage just loaded (owner, 2026-11-15), not the one it was on before.
+    if (!stageUploadCommit(d, file).empty()) {
+        loadFields(d);
+        rebuildNow(d);
+    }
 }
 
 void updateSegmentsDisplay(AppData* data) {
@@ -913,6 +928,7 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_widget_set_size_request(newPt, LIST_W, NEWPT_H);
     gtk_box_pack_start(GTK_BOX(top), newPt, FALSE, FALSE, 0);
     GtkWidget* add = key("add distance", 200, NEWPT_H, G_CALLBACK(onAddDistance));
+    u->addKey = add;
     addClass(add, "key-small");
     gtk_box_pack_start(GTK_BOX(newPt), add, FALSE, FALSE, 0);
     u->addEntry = gtk_entry_new();

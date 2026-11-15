@@ -26,6 +26,127 @@ public:
     TestSuite* createSuite() {
         auto* suite = new TestSuite("Stage Rows (RB-SEG-08)");
 
+        // Owner, 2026-11-15: in greek and surrey a new speed change defaults to automatic (first row has none).
+        suite->addTest("a row made a speed change defaults to automatic, and can be unticked", []() {
+            std::vector<Segment> v;
+            appendStageDistances(v, 0, {1000, 1500, 2300});
+            setRowSpeed(v, 0, 30);
+            v[1].autoNext = false;   // e.g. an uploaded stage that left it off
+            setRowChange(v, 2, true, true);
+            setRowSpeed(v, 2, 50);
+            auto on = buildStageRows(v, 1, 0);
+            if (!on[2].auto_available || !on[2].auto_on) return false;
+            setRowAuto(v, 2, false);
+            return !buildStageRows(v, 1, 0)[2].auto_on;
+        });
+
+        // Owner, 2026-11-15: the roadbook ends win. Setting the start afterwards only shortens the first row.
+        suite->addTest("setting the start after typing the ends keeps every end", []() {
+            std::vector<Segment> v;
+            appendStageDistances(v, 0, {520, 1310, 2450});
+            double from = 0;
+            if (!setFirstFrom(v, from, 100)) return false;
+            auto rows = buildStageRows(v, 1, from);
+            return from == 100 && rows.size() == 3 && rows[0].dist_m == 420
+                && rows[0].to_m == 520 && rows[1].to_m == 1310 && rows[2].to_m == 2450;
+        });
+
+        suite->addTest("a start at or beyond the first end is refused and changes nothing", []() {
+            std::vector<Segment> v;
+            appendStageDistances(v, 0, {520, 1310});
+            double from = 0;
+            return !setFirstFrom(v, from, 520) && !setFirstFrom(v, from, 600)
+                && from == 0 && v[0].distance_m == 520 && v[1].distance_m == 790;
+        });
+
+        suite->addTest("a start set before the first end is typed is kept, and the first row runs from it", []() {
+            std::vector<Segment> v;
+            double from = 0;
+            if (!setFirstFrom(v, from, 100)) return false;
+            appendStageDistances(v, from, {520, 1310});
+            return from == 100 && v[0].distance_m == 420 && v[1].distance_m == 790;
+        });
+
+        // Owner, 2026-11-15: miles are stored to the nearest 1/1000 mile; no half-metre allowance on display.
+        suite->addTest("a typed mile figure is stored as exactly that many thousandths of a mile", []() {
+            auto p = parseStageDistances("1.234;0.0004", DIST_MI);
+            // 0.0004 mi is under half a thousandth: a distance that rounds to 0 is not a distance
+            return p.accepted.size() == 1 && std::fabs(p.accepted[0] - 1.234 * 1609.344) < 1e-9;
+        });
+
+        suite->addTest("a mile figure never reads ahead of the car by more than a millimetre", []() {
+            const double typed = 1.234 * 1609.344;
+            return formatDistance(typed, DIST_MI) == "1.234"
+                && formatDistance(typed - 0.4, DIST_MI) == "1.233"
+                && formatDistance(typed + 0.4, DIST_MI) == "1.234";
+        });
+
+        suite->addTest("the add distance key and its example name the unit in use", []() {
+            return distUnitKeyText(DIST_KM) == "km 0.00" && distUnitKeyText(DIST_KM3) == "km 0.000"
+                && distUnitKeyText(DIST_M) == "m" && distUnitKeyText(DIST_MI2) == "mi 0.00"
+                && distUnitKeyText(DIST_MI) == "mi 0.000"
+                && distAddExample(DIST_KM) == "1.00;1.50;2.30" && distAddExample(DIST_KM3) == "1.000;1.500;2.300"
+                && distAddExample(DIST_M) == "1000;1500;2300" && distAddExample(DIST_MI2) == "1.00;1.50;2.30"
+                && distAddExample(DIST_MI) == "1.000;1.500;2.300";
+        });
+
+        // Owner, 2026-11-15: km -> miles keeps the figures and changes the unit.
+        suite->addTest("km to miles keeps the figures: a 5 km stage becomes a 5 mile stage, and back again", []() {
+            std::vector<Segment> v;
+            appendStageDistances(v, 1000, {5000, 12345});
+            double from = 1000;
+            long start = 2000;
+            if (!reinterpretStageForUnit(v, from, start, DIST_KM3, DIST_MI)) return false;
+            auto rows = buildStageRows(v, 1, from);
+            if (std::fabs(from - 1.0 * 1609.344) > 1e-9 || start != std::lround(2.0 * 1609.344)) return false;
+            if (std::fabs(rows[0].to_m - 5.0 * 1609.344) > 1e-9 || std::fabs(rows[1].to_m - 12.345 * 1609.344) > 1e-9) return false;
+            if (formatDistance(rows[0].to_m, DIST_MI) != "5.000" || formatDistance(rows[1].to_m, DIST_MI) != "12.345") return false;
+            if (!reinterpretStageForUnit(v, from, start, DIST_MI, DIST_KM3)) return false;
+            auto back = buildStageRows(v, 1, from);
+            return from == 1000 && start == 2000 && back[0].to_m == 5000 && back[1].to_m == 12345
+                && back[0].dist_m == 4000 && back[1].dist_m == 7345;
+        });
+
+        // Owner, 2026-11-15: "5000 always stays 5000" -- metres to miles is 5.000 miles, and back to metres 5000.
+        suite->addTest("metres to miles keeps the figures: 5000 m becomes 5.000 miles, and back again", []() {
+            std::vector<Segment> v;
+            appendStageDistances(v, 0, {5000, 12345});
+            double from = 0; long start = 2000;
+            if (!reinterpretStageForUnit(v, from, start, DIST_M, DIST_MI)) return false;
+            auto rows = buildStageRows(v, 1, from);
+            if (formatDistance(rows[0].to_m, DIST_MI) != "5.000" || formatDistance(rows[1].to_m, DIST_MI) != "12.345") return false;
+            if (!reinterpretStageForUnit(v, from, start, DIST_MI, DIST_M)) return false;
+            auto back = buildStageRows(v, 1, from);
+            return start == 2000 && back[0].to_m == 5000 && back[1].to_m == 12345;
+        });
+
+        suite->addTest("a change of format inside km or metres touches nothing", []() {
+            std::vector<Segment> v;
+            appendStageDistances(v, 0, {5000, 12345});
+            double from = 0; long start = 2000;
+            return !reinterpretStageForUnit(v, from, start, DIST_KM, DIST_KM3)
+                && !reinterpretStageForUnit(v, from, start, DIST_KM3, DIST_M)
+                && !reinterpretStageForUnit(v, from, start, DIST_MI, DIST_MI2)
+                && v[0].distance_m == 5000 && v[1].distance_m == 7345 && start == 2000;
+        });
+
+        suite->addTest("set entries take 7 characters when the unit shows 3 decimals, else 6", []() {
+            return distEntryMaxChars(DIST_KM3) == 7 && distEntryMaxChars(DIST_MI) == 7
+                && distEntryMaxChars(DIST_KM) == 6 && distEntryMaxChars(DIST_MI2) == 6 && distEntryMaxChars(DIST_M) == 6;
+        });
+
+        // Owner, 2026-11-15: a calculated speed is kept in full but shown to two decimals, wherever it is shown.
+        suite->addTest("a greek or surrey segment speed is shown to two decimals, never the full calculated figure", []() {
+            Segment seg;
+            StageRow row;
+            row.kph = 32.7533; row.chg = true;
+            const SegRowText g = segRowText(seg, row, 0, 0, DIST_KM3, false);
+            const SegRowText m = segRowText(seg, row, 0, 1, DIST_MI, true);
+            row.kph = 36; row.chg = true;
+            const SegRowText whole = segRowText(seg, row, 0, 0, DIST_KM3, false);
+            return g.kph == "32.75" && m.kph == "20.35" && whole.kph == "36";
+        });
+
         suite->addTest("a stage taken for driving steps into ditto rows by itself; speed-change auto untouched", []() {
             // Stage 8 as stored: every auto off. 36 kph rows 0-2 (1, 2 ditto), 49 kph row 3, row 4 ditto.
             std::vector<Segment> v(5);
@@ -97,10 +218,28 @@ public:
             return v[1].autoNext;
         });
 
-        suite->addTest("distances: thousands commas ignored, ; separates, whole metres", []() {
-            auto p = parseStageDistances("1,000;1,500; 2,300");
+        suite->addTest("distances: ; separates, whole metres", []() {
+            auto p = parseStageDistances("1000;1500; 2300");
             return p.accepted.size() == 3 && p.accepted[0] == 1000 && p.accepted[2] == 2300
-                && p.rest.empty();
+                && p.rest.empty() && p.problem.empty();
+        });
+
+        // Owner, 2026-11-15: a comma is never accepted (550,1000 was stored as one end).
+        suite->addTest("distances: a comma is refused in every unit, nothing after it is taken", []() {
+            for (int unit : {DIST_M, DIST_KM, DIST_KM3, DIST_MI, DIST_MI2}) {
+                auto p = parseStageDistances("550,1000;2000", unit);
+                if (!p.accepted.empty() || p.rest != "550,1000;2000"
+                    || p.problem.find("commas not accepted") == std::string::npos) return false;
+            }
+            return true;
+        });
+
+        suite->addTest("distances: a decimal point is refused in metres mode, kept in km and miles", []() {
+            auto m = parseStageDistances("1000;10.5", DIST_M);
+            auto k = parseStageDistances("10.5", DIST_KM3);
+            return m.accepted.size() == 1 && m.rest == "10.5"
+                && m.problem.find("whole metres only") != std::string::npos
+                && k.accepted.size() == 1 && k.accepted[0] == 10500 && k.problem.empty();
         });
 
         suite->addTest("distances: stops at the first bad token and keeps the rest", []() {
@@ -120,7 +259,7 @@ public:
         });
 
         suite->addTest("km distances: ',' or '.' is the decimal, two decimals, metres out", []() {
-            auto p = parseStageDistances("17,23;17.5", true);
+            auto p = parseStageDistances("17.23;17.5", true);
             return p.accepted.size() == 2 && p.accepted[0] == 17230 && p.accepted[1] == 17500;
         });
 
@@ -340,7 +479,7 @@ public:
             SegRowText g = segRowText(segs[0], rows[0], 0, 0, false, true);
             SegRowText g2 = segRowText(segs[0], rows[0], 0, 0, false, false);
             SegRowText it = segRowText(segs[1], rows[1], 1, 2, true, true);
-            return g.kph == "40" && g2.kph == "64.3738" && it.kph == "31.07";
+            return g.kph == "40" && g2.kph == "64.37"   /* two decimals at most (owner, 2026-11-15) */ && it.kph == "31.07";
         });
 
         // Miles (RB-SET-14): three decimals cut down, two from 100 miles; the box still counts in mm.
@@ -399,6 +538,14 @@ public:
                 && distanceFieldUntouched("8,345", 8345, DIST_M) && distanceFieldUntouched("5.185 mi", 8345, DIST_MI);
         });
 
+        // The distance at start is held in whole metres and drawn to the nearest: 1.236 mi is stored as 1989 m, which a
+        // cut-down figure would read as 1.235. Left as drawn, the field is untouched.
+        suite->addTest("distance at start drawn to the nearest reads back untouched", []() {
+            return startDistanceText(1989, DIST_MI) == "1.236 mi"
+                && distanceFieldUntouched("1.236 mi", 1989, DIST_MI, true)
+                && !distanceFieldUntouched("1.237 mi", 1989, DIST_MI, true);
+        });
+
         suite->addTest("miles: every thousandth typed reads back as typed, to the millimetre and to the metre", []() {
             for (long t = 0; t <= 99999; t++) {
                 char typed[16];
@@ -406,7 +553,7 @@ public:
                 const double exact_m = parseDistanceExact(typed, DIST_MI);          // rows: kept to the millimetre
                 const long whole_m = parseDistance(typed, DIST_MI);                 // Distance at start: whole metres
                 if (formatDistance(exact_m, DIST_MI) != typed) return false;
-                if (formatDistance(static_cast<double>(whole_m), DIST_MI) != typed) return false;
+                if (formatDistance(static_cast<double>(whole_m), DIST_MI, true) != typed) return false;   // start distance: shown to the nearest
             }
             return parseDistanceExact("1,234 mi", DIST_MI) == parseDistanceExact("1.234", DIST_MI)
                 && parseDistanceExact("x", DIST_MI) < 0 && parseDistanceExact("12.5", DIST_KM) == 12500.0
@@ -414,7 +561,7 @@ public:
         });
 
         suite->addTest("miles: a stage typed in miles keeps every to figure and every interval", []() {
-            DistanceParse pr = parseStageDistances("0.250; 1,234; 2.500;10.001", DIST_MI);
+            DistanceParse pr = parseStageDistances("0.250; 1.234; 2.500;10.001", DIST_MI);
             if (pr.accepted.size() != 4) return false;
             std::vector<Segment> segs;
             insertStageDistances(segs, 0.0, pr.accepted, DIST_MI);

@@ -5,6 +5,7 @@
 #include "../stage_store.h"
 #include "../config_file.h"
 #include "../rally_state.h"
+#include <cmath>
 #include <cstdio>
 
 // RB-NAV-45: stages numbered 1-99 (the organiser's own numbers).
@@ -21,6 +22,42 @@ public:
         suite->addTest("no programmed stage at all lists none", []() {
             RallyState s;
             return programmedStages(s).empty();
+        });
+
+        suite->addTest("km to miles reinterprets every programmed stage and the live rows; format changes do not", []() {
+            RallyState s;
+            s.distance_unit = DIST_KM3;
+            for (int stage : {1, 7}) {
+                Segment sg; sg.distance_m = 5000.0; sg.target_speed_kph = 40.0;
+                s.memory_slots[stage - 1].segments.push_back(sg);
+                s.memory_slots[stage - 1].start_distance_m = 2000;
+            }
+            s.last_memory_slot = 1;
+            s.segments = s.memory_slots[0].segments;
+            s.segment_current_number = -1;
+            s.stage_complete = true;   // nothing live
+            if (!changeDistanceUnit(s, DIST_KM)) return false;                       // format only
+            if (s.distance_unit != DIST_KM || s.memory_slots[0].segments[0].distance_m != 5000.0) return false;
+            if (!changeDistanceUnit(s, DIST_MI)) return false;                       // km -> miles
+            const double five_mi = 5.0 * 1609.344;
+            return s.distance_unit == DIST_MI
+                && std::fabs(s.memory_slots[0].segments[0].distance_m - five_mi) < 1e-9
+                && std::fabs(s.memory_slots[6].segments[0].distance_m - five_mi) < 1e-9
+                && std::fabs(s.segments[0].distance_m - five_mi) < 1e-9
+                && s.memory_slots[6].start_distance_m == std::lround(2.0 * 1609.344);
+        });
+
+        suite->addTest("km to miles is refused while a stage is live", []() {
+            RallyState s;
+            s.distance_unit = DIST_KM3;
+            Segment sg; sg.distance_m = 5000.0;
+            s.memory_slots[0].segments.push_back(sg);
+            s.segments = s.memory_slots[0].segments;
+            s.last_memory_slot = 1;
+            s.stage_complete = false;
+            s.segment_current_number = 1;   // running
+            return !changeDistanceUnit(s, DIST_MI) && s.distance_unit == DIST_KM3
+                && s.memory_slots[0].segments[0].distance_m == 5000.0;
         });
 
         suite->addTest("valid stage numbers are 1 to 99", []() {

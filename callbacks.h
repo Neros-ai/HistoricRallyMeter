@@ -171,6 +171,11 @@ void adoptRoadbookIfIdle(AppData* data);
 // currently holding the stage readouts at zero. Both derived from state, so
 // the driver display, the phone telemetry and anything else agree.
 int64_t autoStartRemaining_ms(const AppData* data);
+
+// The box's open question window as JSON for the phone (null when none, or when it holds a keypad entry),
+// and a press of its n-th button from the phone (item 11).
+std::string openDialogJson();
+bool answerOpenDialog(int index);
 bool autoStartHoldActive(const AppData* data);
 int64_t getAutoStartEpochMs();
 GtkWidget* createNumericKeypad(AppData* data);
