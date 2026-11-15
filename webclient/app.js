@@ -115,7 +115,7 @@
   function stageInput(m) {
     m = Number(m) || 0;
     if (isMiles() || distUnit === 3) {   // thousandths as the box writes them: cut down; two decimals when asked for and from 100 units
-      const thousandths = distUnit === 3 ? Math.round(m) : Math.floor((Math.round(m * 1000) + 500) / (MM_PER_MILE / 1000));
+      const thousandths = distUnit === 3 ? Math.round(m) : Math.floor((Math.round(m * 1000) + 1) / (MM_PER_MILE / 1000));
       return (distUnit === 4 || thousandths >= 100000) ? (Math.floor(thousandths / 10) / 100).toFixed(2) : (thousandths / 1000).toFixed(3);
     }
     if (distanceKm) return (Math.trunc(m / 10) / 100).toFixed(2);

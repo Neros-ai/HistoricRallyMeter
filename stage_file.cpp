@@ -145,7 +145,7 @@ StageFileStage buildStage(const RawStage& raw, bool commaDecimal, const std::vec
     if (!raw.startDist.empty()) {
         double v = 0;
         if (!parseNumber(raw.startDist, commaDecimal, &v)) st.errors.push_back("unreadable start distance");
-        else st.slot.start_distance_m = miles ? std::lround(v * METRES_PER_MILE) : std::lround(v);
+        else st.slot.start_distance_m = std::lround(fileMetres(v));   // in the file's own unit, like every other distance
     }
     if (!raw.duration.empty()) {
         const long d = parseDurationSeconds(raw.duration);

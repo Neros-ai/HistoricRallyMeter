@@ -67,7 +67,7 @@ public:
             return from == 100 && v[0].distance_m == 420 && v[1].distance_m == 790;
         });
 
-        // Owner, 2026-11-15: miles are stored to the nearest 1/1000 mile; no half-metre allowance on display.
+        // Owner, 2026-11-15: miles are stored to the nearest 1/1000 mile and shown cut down.
         suite->addTest("a typed mile figure is stored as exactly that many thousandths of a mile", []() {
             auto p = parseStageDistances("1.234;0.0004", DIST_MI);
             // 0.0004 mi is under half a thousandth: a distance that rounds to 0 is not a distance
@@ -485,7 +485,7 @@ public:
         // Miles (RB-SET-14): three decimals cut down, two from 100 miles; the box still counts in mm.
         suite->addTest("miles: figures as shown, cut down not rounded up", []() {
             return formatDistance(1609.344, DIST_MI) == "1.000" && formatDistance(0, DIST_MI) == "0.000"
-                && formatDistance(1609.344 * 1.2345, DIST_MI) == "1.234"          // cut down (within the half-metre allowance)
+                && formatDistance(1609.344 * 1.2345, DIST_MI) == "1.234"          // cut down, never rounded up
                 && formatDistance(1608.0, DIST_MI) == "0.999"
                 && formatDistance(160934.4, DIST_MI) == "100.00"                  // two decimals from 100 miles
                 && formatDistance(1609.344 * 123.456, DIST_MI) == "123.45"
