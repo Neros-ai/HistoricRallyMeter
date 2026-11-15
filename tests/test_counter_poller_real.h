@@ -35,6 +35,39 @@ public:
             return true;
         });
 
+        suite->addTest("100 rejected reads in a row latch the counter fault; a tap clears it", []() {
+            CounterPoller poller;
+            MockI2CCounter c1(1, 0x70), c2(1, 0x71);
+            c1.setRegisterValue(0x07, 100);
+            c2.setRegisterValue(0x07, 100);
+            ASSERT_TRUE(poller.poll(&c1, &c2, 0x07));
+            c1.setRegisterValue(0x07, 5);                // a chip reset: every read is backwards
+            for (int i = 0; i < 99; i++) { sleepPastInterval(); poller.poll(&c1, &c2, 0x07); }
+            ASSERT_FALSE(poller.counterFault());         // 99: not yet
+            sleepPastInterval(); poller.poll(&c1, &c2, 0x07);
+            ASSERT_TRUE(poller.counterFault());          // 100
+            c1.setRegisterValue(0x07, 200);              // a good read does not clear it
+            sleepPastInterval(); poller.poll(&c1, &c2, 0x07);
+            ASSERT_TRUE(poller.counterFault());
+            poller.clearCounterFault();                  // the tap
+            ASSERT_FALSE(poller.counterFault());
+            return true;
+        });
+
+        suite->addTest("a single glitch never raises the counter fault", []() {
+            CounterPoller poller;
+            MockI2CCounter c1(1, 0x70), c2(1, 0x71);
+            c1.setRegisterValue(0x07, 100);
+            c2.setRegisterValue(0x07, 100);
+            ASSERT_TRUE(poller.poll(&c1, &c2, 0x07));
+            c1.setRegisterValue(0x07, 5);
+            sleepPastInterval(); poller.poll(&c1, &c2, 0x07);
+            c1.setRegisterValue(0x07, 110);
+            for (int i = 0; i < 5; i++) { sleepPastInterval(); poller.poll(&c1, &c2, 0x07); }
+            ASSERT_FALSE(poller.counterFault());
+            return true;
+        });
+
         suite->addTest("Backwards read is rejected (last good substituted)", []() {
             CounterPoller poller;
             MockI2CCounter c1(1, 0x70), c2(1, 0x71);

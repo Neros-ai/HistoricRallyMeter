@@ -304,6 +304,8 @@ std::string buildTelemetryJson(AppData* data) {
        << ",\"box_dialog\":" << openDialogJson()
        // The driver's T- countdown and Early Departure caption, as the box draws them (item 9).
        << ",\"autostart_cd\":" << autostartCdJson(data)
+       // The box's warning words, sent as it shows them; empty when clear (a tap clears it).
+       << ",\"counter_fault\":\"" << (data->poller && data->poller->counterFault() ? "counter fault" : "") << "\""
        << ",\"surrey_cd\":" << ((isSurrey(st) && data->home && data->home->surreyRunning)
               ? std::string("{\"m\":\"") + jsonEscape(data->home->cdMetres) + "\",\"min\":\"" + jsonEscape(data->home->cdTime) + "\"}"
               : std::string("null"))

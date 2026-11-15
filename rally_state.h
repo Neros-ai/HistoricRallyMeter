@@ -169,9 +169,6 @@ public:
     static constexpr int MAX_MEMORY_SLOTS = 99;
     MemorySlot memory_slots[MAX_MEMORY_SLOTS];
     
-    // Alarm: co-pilot sets distance alarm that rings a doorbell
-    int alarm_distance_km = 0;          // 0 = no alarm active
-    int64_t alarm_target_mm = 0;        // absolute target, mm from the Total zero
 
     // Beep Assist: operator-entered waypoints that sound a short beep as they
     // are reached, so the co-pilot's eyes can stay on the roadbook instead of
@@ -214,9 +211,6 @@ public:
     int time_taken_stage = 0;
     // Surrey: rally ms of the finish press, 0 = none. Saved, so a restart knows it was made.
     int64_t surrey_finish_at_ms = 0;
-    // Surrey: the time taken the stage got when its roadbook distance ran out (ms), -1 = it did
-    // not end on distance. Kept so prev can take a late finish press back to it.
-    int64_t surrey_distance_end_ms = -1;
     // Surrey: the time taken (and its stage) that was on Home when this stage started, so prev
     // reopening a pressed finish puts it back. -1 / 0 = none.
     int64_t prev_time_taken_ms = -1;
@@ -264,6 +258,9 @@ public:
     uint64_t odometer_start_cntr1 = 0;
     uint64_t odometer_start_cntr2 = 0;
     long odometer_adjust_mm = 0;
+    // Saved: the four start readings (Total, Trip, segment, navi) hold real counts. 0/0 is a real
+    // reading (box switched on standing), so it must not mean "never set" at a later start-up.
+    bool start_readings_recorded = false;
     bool odometer_recorded = true;      // false for a config written before it existed; not persisted
     // When the running italian sector actually started (rally ms, floored to the
     // minute): the co's in-time is this plus the sector duration.

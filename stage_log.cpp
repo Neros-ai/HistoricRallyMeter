@@ -109,11 +109,6 @@ bool StageLog::resume() {
     return true;
 }
 
-void StageLog::amendTimeTaken(const std::string& time_taken) {
-    if (running || closed_path.empty() || time_taken.empty()) return;
-    rewriteWithoutTimeTaken(closed_path, time_taken);
-}
-
 std::string logKind(const std::string& name) {
     return name.compare(0, 5, "stage") == 0 ? "stage" : "sensor";
 }

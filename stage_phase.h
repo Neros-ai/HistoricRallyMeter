@@ -26,6 +26,16 @@ bool goKeyAborts(const RallyState& s);
 // otherwise it is live while a row follows, or while a press ends a surrey stage or an italian
 // sector.
 bool nextKeyEnabled(const RallyState& s);
+// A stage can only be started by a timed start if it has at least one full row (a distance and a speed).
+bool stageHasFullRow(const std::vector<Segment>& segs);
+
+// Small yes/no decisions kept here so they can be unit tested (audit 2026-11-15).
+bool earlyDepartureArmed(const RallyState& s);                 // an early-departure countdown is armed
+bool timedStartNeedsRecall(const RallyState& s);               // armed for a stage other than the loaded one
+bool timedStartMayFire(const RallyState& s);                   // armed stage is the loaded one and has a full row
+bool timedStartDiesWithStage(const RallyState& s, bool all);   // clearing a stage (or all) cancels a timed start
+int64_t timedStartTarget(int64_t target_ms, int64_t now_ms);   // a time earlier than now means tomorrow
+bool nextMinuteAllowed(const RallyState& s);                   // not in italian
 
 // The prev key: live while there is a step to take back -- a speed change (greek, surrey), a tube
 // or point press (italian), or a surrey finish press. The box and the phone both ask this.

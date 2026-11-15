@@ -50,3 +50,29 @@ bool dropMissedAutoStart(RallyState& s, int64_t now_rally_ms, int64_t epoch_ms) 
     s.last_pc_error = RallyState::PcError();
     return true;
 }
+
+bool stageHasFullRow(const std::vector<Segment>& segs) {
+    for (const auto& g : segs)
+        if (g.distance_m > 0.0 && g.target_speed_kph > 0.0) return true;
+    return false;
+}
+
+bool earlyDepartureArmed(const RallyState& s) {
+    return s.auto_start_rally_time_s != 0 && s.auto_start_early_departure;
+}
+bool timedStartNeedsRecall(const RallyState& s) {
+    return s.auto_slot > 0 && s.auto_slot != s.last_memory_slot;
+}
+bool timedStartMayFire(const RallyState& s) {
+    return !timedStartNeedsRecall(s) && stageHasFullRow(s.segments);
+}
+bool timedStartDiesWithStage(const RallyState& s, bool all) {
+    if (s.auto_start_rally_time_s == 0 || s.auto_start_early_departure) return false;
+    return all || s.auto_slot == s.last_memory_slot;
+}
+int64_t timedStartTarget(int64_t target_ms, int64_t now_ms) {
+    return target_ms <= now_ms ? target_ms + 24LL * 3600 * 1000 : target_ms;
+}
+bool nextMinuteAllowed(const RallyState& s) {
+    return s.rally_type != 2;
+}

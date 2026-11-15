@@ -56,6 +56,9 @@ bool CounterPoller::poll(ICounter* cntr1, ICounter* cntr2, uint8_t reg) {
                 // Substitute last known good value for any bad counter
                 if (bad1) val1 = last_good_cntr1;
                 if (bad2) val2 = last_good_cntr2;
+                if (++rejected_run >= FAULT_REJECTS) fault_latched = true;
+            } else {
+                rejected_run = 0;
             }
         }
         
@@ -126,6 +129,7 @@ bool CounterPoller::poll(ICounter* cntr1, ICounter* cntr2, uint8_t reg) {
         last_poll_time_ms = ms;
         return true;
     } catch (...) {
+        if (++rejected_run >= FAULT_REJECTS) fault_latched = true;
         return false;
     }
 }

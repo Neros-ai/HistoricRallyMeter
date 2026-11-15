@@ -859,7 +859,21 @@
       applySetState(msg);
       renderStagePanel(msg);
       renderUpload(msg);
+      renderCounterFault(msg);
     }
+  }
+
+  // The box's counter-fault warning, centre screen, in the box's own words; a tap clears it on both.
+  function renderCounterFault(msg) {
+    let el = $('counter-fault');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'counter-fault';
+      el.addEventListener('click', () => send({ type: 'counter_fault_clear' }));
+      document.body.appendChild(el);
+    }
+    el.textContent = msg.counter_fault || '';
+    el.classList.toggle('hidden', !msg.counter_fault);
   }
 
   function setConn(text, ok) {

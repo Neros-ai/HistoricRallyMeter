@@ -26,11 +26,6 @@ public:
     // time_taken (surrey): written as a last "time taken,<text>" line when not empty.
     void stop(const std::string& time_taken = "");
 
-    // A finish press after the stage ended on distance (surrey): the "time taken" line of the
-    // log just closed is replaced with the press's figure. Does nothing while a log is running,
-    // when none has been closed since the app started, or when time_taken is empty.
-    void amendTimeTaken(const std::string& time_taken);
-
     // prev reopened a stage whose finish had been pressed (surrey): the log just closed is
     // carried on in the same file, without the "time taken" line the taken-back press wrote, so
     // the stage stays in one file that ends with the real finish only. False (and nothing
@@ -52,7 +47,7 @@ private:
 
     bool running = false;
     std::string file_path;
-    std::string closed_path;   // the last log stopped, for amendTimeTaken
+    std::string closed_path;   // the last log stopped, for resume
     std::vector<std::string> buffer;
 };
 

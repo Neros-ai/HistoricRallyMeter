@@ -9,6 +9,7 @@
 #include "counter_poller.h"
 #include "tone_generator.h"
 #include "callbacks.h"
+#include "ui_copilot.h"
 #include "stage_phase.h"
 #include "simple_tone.h"
 #include "arrow_tone.h"
@@ -820,6 +821,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
 }
 
 void updateDriverDisplay(AppData* data) {
+    updateCounterFaultWidgets(data);
     auto current_poll = data->poller->getMostRecent();
     // Speed is measured on the raw count so it stays positive in reverse.
     auto current_raw_poll = data->poller->getMostRecentRaw();
@@ -1504,6 +1506,8 @@ GtkWidget* createDriverWindow(AppData* data) {
     data->countdownContainer = countdownStack;
 
     gtk_overlay_add_overlay(GTK_OVERLAY(data->countdownOverlay), countdownStack);
+    data->faultDriver = makeCounterFaultWidget(data);
+    gtk_overlay_add_overlay(GTK_OVERLAY(data->countdownOverlay), data->faultDriver);
     gtk_widget_show_all(countdownStack);
     gtk_widget_hide(countdownStack);
     

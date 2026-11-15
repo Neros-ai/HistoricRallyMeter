@@ -395,23 +395,12 @@ int main(int argc, char* argv[]) {
             ConfigFile::save(state);
         }
 
-        if (state.total_start_cntr1 == 0 && state.total_start_cntr2 == 0) {
-            state.total_start_cntr1 = counter1->readRegister(REGISTER);
-            state.total_start_cntr2 = counter2->readRegister(REGISTER);
+        // 0/0 is a real start reading (switched on standing), so this runs once only: see
+        // recordStartReadingsIfNew.
+        if (recordStartReadingsIfNew(state, counter1->readRegister(REGISTER), counter2->readRegister(REGISTER))) {
+            ConfigFile::save(state);
         }
-        if (state.trip_start_cntr1 == 0 && state.trip_start_cntr2 == 0) {
-            state.trip_start_cntr1 = counter1->readRegister(REGISTER);
-            state.trip_start_cntr2 = counter2->readRegister(REGISTER);
-        }
-        if (state.segment_start_cntr1 == 0 && state.segment_start_cntr2 == 0) {
-            state.segment_start_cntr1 = counter1->readRegister(REGISTER);
-            state.segment_start_cntr2 = counter2->readRegister(REGISTER);
-        }
-        if (state.odometer_start_cntr1 == 0 && state.odometer_start_cntr2 == 0) {   // fresh box: navi starts here too
-            state.odometer_start_cntr1 = counter1->readRegister(REGISTER);
-            state.odometer_start_cntr2 = counter2->readRegister(REGISTER);
-        }
-        
+
         // Create application data
         std::cerr << "[DEBUG] Step 6: Creating AppData..." << std::endl;
         AppData app_data;

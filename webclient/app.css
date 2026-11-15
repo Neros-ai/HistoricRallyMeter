@@ -1284,3 +1284,8 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .box-notice { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); z-index: 50; max-width: 90vw;
   background: #000; color: #fff; border: 3px solid #fff; padding: 0.8rem 1.2rem; font-size: 1.1rem; text-align: center; }
 .box-notice.hidden { display: none; }
+
+/* counter fault: red, centre screen, tap to clear */
+#counter-fault { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000;
+  background: #C00000; color: #FFFFFF; font-size: 2rem; font-weight: bold; padding: 0.6em 1.4em; border-radius: 0.3em; }
+#counter-fault.hidden { display: none; }

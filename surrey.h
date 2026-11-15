@@ -64,7 +64,6 @@ bool applySurreyFinish(RallyState& s, int64_t now_ms);
 bool undoSurreyFinish(RallyState& s, double navi_m, double last_to_m);
 
 // Where greek ends a stage on distance (D4): in surrey, take time taken then unless a press did.
-void surreyDistanceEnd(RallyState& s, int64_t now_ms);
 
 // Key sensitivity (pure): `next` is live as the finish on the last row of a running surrey stage.
 bool surreyFinishAvailable(const RallyState& s);

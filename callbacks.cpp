@@ -640,7 +640,7 @@ void zeroDistanceBaselines(AppData* data) {
     // copy of its assignments did not. Between them the two helpers set
     // exactly what this function set before -- Total, Trip and segment
     // counters, both corrections cleared, segment_start_adjust taken after
-    // the clear -- so the only behavioural change is the alarm.
+    // the clear.
     rebaseTotalDistance(*data->state, current_poll.cntr1, current_poll.cntr2);
     rebaseTripDistance(*data->state, current_poll.cntr1, current_poll.cntr2);
     // The zero above records the trip that was showing. A new Greek stage
@@ -707,6 +707,13 @@ void adoptRoadbookIfIdle(AppData* data) {
 void endStageAsIdle(AppData* data) {
     data->state->segment_current_number = -1;
     data->state->stage_complete = true;
+}
+
+// An early departure adopted the new stage at the press but left the clock on the previous
+// stage's zero, so any way of replacing or cancelling it must end the stage first, as the clear
+// key does. The caller then changes the arming itself.
+void endEarlyDepartureIfArmed(AppData* data) {
+    if (earlyDepartureArmed(*data->state)) endStageAsIdle(data);
 }
 
 void adoptRoadbookAsStage(AppData* data) {
@@ -798,6 +805,13 @@ void applyAutoStartArming(AppData* data, const AutoStartArming& arming) {
     notifyWebState(data);
 }
 
+// A new stage over a running one never shows "finished" on a tick, so the log would carry on in
+// the old file under the old stage number. Closing it here lets the tick open a fresh file.
+static void closeStageLogForNewStage(AppData* data) {
+    if (data->stageLog && data->stageLog->isRunning())
+        data->stageLog->stop(surreyLogTimeTaken(*data->state));
+}
+
 void performAutoStart(AppData* data) {
     const uint64_t armed_time_s = data->state->auto_start_rally_time_s;
     if (data->state->auto_start_early_departure) {
@@ -818,6 +832,19 @@ void performAutoStart(AppData* data) {
         notifyWebState(data);
         return;
     }
+    closeStageLogForNewStage(data);   // not for an early departure: its log began at the key press
+    // The start belongs to the stage it was armed for (auto_slot), whatever has been loaded since.
+    if (timedStartNeedsRecall(*data->state)) {
+        releaseKeypadTarget(data);   // a half-typed value must not land in the stage being loaded
+        recallMemorySlot(data, data->state->auto_slot);
+    }
+    // Only a stage with at least one full row fires; otherwise the start is dropped and the box
+    // stays idle (never the wrong stage, never an empty roadbook zeroing Total and Trip).
+    if (!timedStartMayFire(*data->state)) {
+        fprintf(stderr, "[INFO] Autostart dropped: its stage could not be loaded or has no full row\n");
+        applyAutoStartArming(data, autoStartDisarmed());
+        return;
+    }
     // Ordinary autostart: distance and clock both zero at the appointed time.
     // An autostart is the clock, not a press: no reaction offset. The armed moment goes in with
     // it, so the one save performStageGo makes already reads "auto" for a restart mid-stage.
@@ -825,6 +852,7 @@ void performAutoStart(AppData* data) {
 }
 
 void performStageGo(AppData* data, bool press, uint64_t auto_armed_time_s) {
+    closeStageLogForNewStage(data);
     // RB-SET-12: read the speed first -- zeroTimeBaselines resets the smoothed speed.
     const double start_speed_mps = reactionSpeedNow(data);
     // The moment of the press is the stage's start time, shown on Home like an
@@ -873,6 +901,7 @@ static const int RESPONSE_AUTO_START = 99;
 static const int RESPONSE_AUTO_START_NEXT_MINUTE = 98;
 
 void performAbortStage(AppData* data) {
+    closeStageLogForNewStage(data);
     // Any programmed autostart is cancelled, of either kind, inside a stage
     // or out of one (owner's ruling): ABORT STAGE means nothing is going to
     // start by itself.
@@ -1246,12 +1275,7 @@ void on_next_press(GtkWidget* widget, gpointer user_data) {
     if (!nextKeyEnabled(*data->state)) return;
     // Surrey: next on the last row is the finish landmark.
     // RB-SET-12: the finishing press is at a point; taken back by the reaction offset.
-    const bool ended_on_distance = data->state->stage_complete;
     if (applySurreyFinish(*data->state, pressTimeMs(getRallyTime_ms(*data->state), data->state->reaction_offset_ms))) {
-        // The stage had already ended on distance and its log was closed with that time: the
-        // press is the real finish, so the log's time taken is made to match it.
-        if (ended_on_distance && data->stageLog)
-            data->stageLog->amendTimeTaken(surreyLogTimeTaken(*data->state));
         ConfigFile::save(*data->state);
         notifyWebState(data);
         return;
@@ -1337,15 +1361,9 @@ static bool undoSurreyFinishFromMemory(AppData* data) {
 void on_prev_press(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     if (undoSurreyFinishFromMemory(data)) {   // surrey: prev takes a pressed finish back
-        if (data->stageLog) {
-            if (data->state->stage_complete) {
-                // A late press taken back: the stage stays ended on the time its distance gave
-                // it, and the closed log says so again.
-                data->stageLog->amendTimeTaken(surreyLogTimeTaken(*data->state));
-            } else if (data->state->stage_logging) {
-                // The stage runs on: its log carries on in the same file.
-                data->stageLog->resume();
-            }
+        if (data->stageLog && data->state->stage_logging) {
+            // The stage runs on: its log carries on in the same file.
+            data->stageLog->resume();
         }
         ConfigFile::save(*data->state);
         notifyWebState(data);
@@ -1398,7 +1416,6 @@ gboolean update_display(gpointer user_data) {
         if (sectorEndsOnDistance(*data->state) &&
             stageDistanceComplete(data->state->stage_segments, stage_mm)) {
             data->state->stage_complete = true;
-            surreyDistanceEnd(*data->state, getRallyTime_ms(*data->state));   // surrey: time taken
             ConfigFile::save(*data->state);
             // The phone decides from the state message whether its Reset
             // Total asks about a running stage, so it must hear this end too.
@@ -1443,7 +1460,7 @@ gboolean update_display(gpointer user_data) {
     }
 
     // Check for auto-advance segments
-    if (data->state->segment_current_number >= 0 && 
+    if (data->state->segment_current_number >= 0 && !data->state->stage_complete &&
         data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
         // The speed changes when the car reaches the row's end measured from the stage start (typed metres summed
         // in mm), the same position Total and the countdown count from. Several rows can fall due in one tick.
@@ -1883,33 +1900,6 @@ void on_set_sensor_both(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     updateCalibrationDisplay(data);
 }
 
-void on_alarm_set(GtkWidget* widget, gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
-    int km = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "km"));
-    
-    auto current_poll = data->poller->getMostRecent();
-    int64_t total_counts = calculateDistanceCounts(*data->state,
-        current_poll.cntr1, current_poll.cntr2,
-        data->state->total_start_cntr1, data->state->total_start_cntr2);
-    
-    data->state->alarm_distance_km = km;
-    data->state->alarm_target_mm = countsToMm(total_counts, data->state->calibration)
-                                   + static_cast<int64_t>(km) * 1000000;
-    data->alarmSoundStartTime = 0;
-    
-    ConfigFile::save(*data->state);
-}
-
-void on_alarm_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
-    data->state->alarm_distance_km = 0;
-    data->state->alarm_target_mm = 0;
-    data->alarmSoundStartTime = 0;
-    system("pkill -f 'aplay alarm.wav' 2>/dev/null");
-    gtk_label_set_text(data->alarmCountdownLabel, "");
-    ConfigFile::save(*data->state);
-}
-
 void on_show_menu(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     releaseKeypadTarget(data);  // flush any typed value before the page changes
@@ -2111,19 +2101,11 @@ void on_autostart_set(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     target_tm.tm_sec = sec;
     
     int64_t target_ms = static_cast<int64_t>(mktime(&target_tm)) * 1000;
-    int64_t diff_ms = target_ms - rally_ms;
-    
-    if (diff_ms <= 0) {
-        gtk_entry_set_text(data->autoStartTimeEntry, "Error: time in past");
-        return;
-    }
-    if (diff_ms > 3 * 3600 * 1000) {
-        gtk_entry_set_text(data->autoStartTimeEntry, "Error: >3 hours");
-        return;
-    }
+    target_ms = timedStartTarget(target_ms, rally_ms);   // a time earlier than now means tomorrow
     
     // Supersedes an on-the-minute autostart if one is armed, kind and all --
     // this one arms nothing and zeroes nothing until it fires.
+    endEarlyDepartureIfArmed(data);
     applyAutoStartArming(data, autoStartArming(target_ms, getAutoStartEpochMs(), false));
     updateAutoStartDisplay(data);
 }
