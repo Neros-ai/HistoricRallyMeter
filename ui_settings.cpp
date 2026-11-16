@@ -94,9 +94,11 @@ void apply(AppData* d, Setting id, int idx) {
     // Beep Assist is on when either mode is: there is no separate master.
     s.beep_assist_enabled = s.beep_navigation_mode || s.beep_timing_mode;
     // The two that rewrite the rules or the stages are saved at once; the other toggles once
-    // the keys settle (config_saver.h).
-    if (id == RALLY_TYPE || id == DISTANCE_UNITS) saveConfig(d);
-    else saveConfigSoon(d);
+    // the keys settle (config_saver.h). The phone is told either way: it shows these settings,
+    // and the texts it is sent in the box's own words (the Segments rows, the add distance key)
+    // follow the distance unit.
+    if (id == RALLY_TYPE || id == DISTANCE_UNITS) saveAndNotify(d);
+    else saveSoonAndNotify(d);
 }
 
 // Every two-key selector built, so the page can follow changes made from the phone.

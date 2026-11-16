@@ -176,7 +176,7 @@ void applyHeadings(AppData* d) {
     if (u->addKey && u->addEntry && u->addHintUnit != d->state->distance_unit) {
         u->addHintUnit = d->state->distance_unit;
         gtk_button_set_label(GTK_BUTTON(u->addKey),
-                             (std::string("add distance\n") + distUnitKeyText(d->state->distance_unit)).c_str());
+                             addDistanceKeyText(d->state->distance_unit).c_str());
         GtkWidget* lbl = gtk_bin_get_child(GTK_BIN(u->addKey));
         if (GTK_IS_LABEL(lbl)) gtk_label_set_justify(GTK_LABEL(lbl), GTK_JUSTIFY_CENTER);
         gtk_entry_set_placeholder_text(GTK_ENTRY(u->addEntry), distAddExample(d->state->distance_unit).c_str());

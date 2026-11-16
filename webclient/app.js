@@ -182,6 +182,17 @@
            Math.floor(d.getUTCMilliseconds() / 100);
   }
 
+  // A Time page figure ("16:37:33.1", "+4:25:40.2") into its two parts, as the box draws it: the
+  // whole seconds in .val and the tenth, with its point, in .tenth. The words are the box's own.
+  function setTenths(el, text) {
+    const dot = text.lastIndexOf('.');
+    const whole = dot < 0 ? text : text.slice(0, dot);
+    const tenth = dot < 0 ? '' : text.slice(dot);
+    const v = el.querySelector('.val'), t = el.querySelector('.tenth');
+    if (v.textContent !== whole) v.textContent = whole;
+    if (t.textContent !== tenth) t.textContent = tenth;
+  }
+
   // The box's own live answers, from the telemetry frame (the state message only
   // arrives when something is saved, so it can lag a press).
   const stageRunning = () => !!(lastTelemetry && lastTelemetry.stage_running !== undefined
@@ -376,16 +387,16 @@
     if (document.activeElement !== sp && msg.stage_no >= 1) sp.value = String(msg.stage_no);
 
     // Time tab
-    $('t-rally').textContent = msg.time_rally || '';   // the box's own text
+    setTenths($('t-rally'), msg.time_rally || '');   // the box's own text
     // The start-at-next-minute key rolls over with the clock, as the box's does (same rally time, same minute).
     if ($('flag-minute-time')) {
       $('flag-minute-time').textContent = msg.next_minute || '';
     }
-    $('t-computer').textContent = msg.time_computer || '';
-    $('t-offset').textContent = msg.time_offset || '';
+    setTenths($('t-computer'), msg.time_computer || '');
+    setTenths($('t-offset'), msg.time_offset || '');
     $('t-date').textContent = msg.date_text || '';
     const phoneEl = $('t-phone');
-    phoneEl.textContent = clockText(Date.now() - 0);   // this phone's clock, in the box's zone
+    setTenths(phoneEl, clockText(Date.now() - 0));   // this phone's clock, in the box's zone
     $('btn-computer-phone').disabled = !msg.phone_known;
     // A time typed on the box shows in the phone's field too (item 47), unless the phone's own field is being typed in.
     // Only when the box's text CHANGES, so a time the phone is part-way through typing is never wiped by an unchanged blank.
@@ -482,6 +493,17 @@
       lastTelemetry.distance_km = distUnit === 1 || distUnit === 3;
       lastTelemetry.distance_unit = distUnit;
       applyTelemetry(lastTelemetry);
+    }
+    if (typeof state.add_key_text === 'string' && $('btn-add-seg')) {   // the box's own words, two lines
+      const key = $('btn-add-seg');
+      if (key.dataset.text !== state.add_key_text) {
+        key.dataset.text = state.add_key_text;
+        key.replaceChildren();
+        state.add_key_text.split('\n').forEach((line, i) => {
+          if (i) key.appendChild(document.createElement('br'));
+          key.appendChild(document.createTextNode(line));
+        });
+      }
     }
     if ($('phone-lead')) $('phone-lead').textContent = (Number(state.phone_beep_lead_ms) || 0) + ' ms';
     if ($('reaction-offset')) {   // read-only: set on the box

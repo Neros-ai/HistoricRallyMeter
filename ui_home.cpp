@@ -891,7 +891,7 @@ void updateHomeDisplay(AppData* data) {
         if (!is_armed) {
             auto_time.clear();
             if (start_s >= 0) {
-                char b[16];
+                char b[32];
                 snprintf(b, sizeof(b), "%02ld:%02ld:%02ld", start_s / 3600, (start_s / 60) % 60, start_s % 60);
                 auto_time = b;
             }

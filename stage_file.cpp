@@ -470,7 +470,7 @@ std::string uploadStateJson(const std::string& id, const RallyState& s, const St
               << ",\"start_s\":" << st.slot.start_time_s
               << ",\"replaces\":" << (replaces ? "true" : "false");
             // The side panel as the box's Segments page writes it, in the file's units.
-            char startb[16] = "";
+            char startb[32] = "";
             if (st.slot.start_time_s >= 0)
                 snprintf(startb, sizeof(startb), "%02ld:%02ld:%02ld", st.slot.start_time_s / 3600,
                          (st.slot.start_time_s / 60) % 60, st.slot.start_time_s % 60);

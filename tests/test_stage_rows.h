@@ -93,6 +93,9 @@ public:
             return distUnitKeyText(DIST_KM) == "km 0.00" && distUnitKeyText(DIST_KM3) == "km 0.000"
                 && distUnitKeyText(DIST_M) == "m" && distUnitKeyText(DIST_MI2) == "mi 0.00"
                 && distUnitKeyText(DIST_MI) == "mi 0.000"
+                && addDistanceKeyText(DIST_KM) == "add distance\nkm 0.00" && addDistanceKeyText(DIST_KM3) == "add distance\nkm 0.000"
+                && addDistanceKeyText(DIST_M) == "add distance\nm" && addDistanceKeyText(DIST_MI2) == "add distance\nmi 0.00"
+                && addDistanceKeyText(DIST_MI) == "add distance\nmi 0.000"
                 && distAddExample(DIST_KM) == "1.00;1.50;2.30" && distAddExample(DIST_KM3) == "1.000;1.500;2.300"
                 && distAddExample(DIST_M) == "1000;1500;2300" && distAddExample(DIST_MI2) == "1.00;1.50;2.30"
                 && distAddExample(DIST_MI) == "1.000;1.500;2.300";
