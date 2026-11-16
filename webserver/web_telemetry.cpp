@@ -370,7 +370,7 @@ std::string buildStateJson(AppData* data) {
            << "\",\"start_dist_text\":\"" << jsonEscape(startDistanceText(slot.start_distance_m, data->state->distance_unit))
            << "\",\"start_time\":\"";
         if (slot.start_time_s >= 0) {
-            char b[16];
+            char b[32];
             snprintf(b, sizeof(b), "%02ld:%02ld:%02ld", slot.start_time_s / 3600,
                      (slot.start_time_s / 60) % 60, slot.start_time_s % 60);
             ss << b;
@@ -416,6 +416,7 @@ std::string buildStateJson(AppData* data) {
        << ",\"force_single\":" << (data->state->force_single_display ? "true" : "false")
        << ",\"distance_km\":" << (distIsKm(data->state->distance_unit) ? "true" : "false")
        << ",\"distance_unit\":" << data->state->distance_unit
+       << ",\"add_key_text\":\"" << jsonEscape(addDistanceKeyText(data->state->distance_unit)) << "\""
        << ",\"rally_type\":" << data->state->rally_type
        << ",\"measure_ab_bc\":" << (data->state->measure_ab_bc ? "true" : "false")
        << ",\"calibration_pulses\":" << displayPulsesPerKm(data->state->typed_pulses_per_km, data->state->calibration)

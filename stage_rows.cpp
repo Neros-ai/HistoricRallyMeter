@@ -273,6 +273,8 @@ std::string distUnitKeyText(int unit) {
     }
 }
 
+std::string addDistanceKeyText(int unit) { return "add distance\n" + distUnitKeyText(unit); }
+
 std::string distAddExample(int unit) {
     if (unit == DIST_M) return "1000;1500;2300";
     return (unit == DIST_KM || unit == DIST_MI2) ? "1.00;1.50;2.30" : "1.000;1.500;2.300";

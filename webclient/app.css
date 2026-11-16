@@ -253,8 +253,10 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 #btn-add-seg {
   display: block;
   width: 100%;
-  padding: 1.05rem;
+  padding: 0.6rem 1.05rem;
   margin-top: 0.75rem;
+  line-height: 1.3;
+  text-align: center;
   font-size: 1.1rem;
   font-weight: bold;
   background: #222;
@@ -428,6 +430,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .trow .tl { color: #0ff; }
 .trow .big { font-size: 2.2rem; font-family: monospace; }
 .big-input { font-size: 2rem; font-family: monospace; background: #111; color: #fff; border: 1px solid #666; padding: 0.2rem 0.4rem; }
+.trow .sizer { display: none; }   /* landscape Date / Time only */
 .pair { display: flex; gap: 0.5rem; }
 .pair .key { flex: 1; }
 .crow { margin: 0.7rem 0; font-size: 1.05rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; color: #0ff; }
@@ -855,11 +858,51 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
   #view-seg #seg-table input.spd { min-height: 0; padding: 0.1rem 0.15rem; width: 4.6rem; }   /* room for 32.75 in the iPhone's wider digits */
   #view-seg #seg-table button.del { font-size: 1rem; padding: 0 0.15rem; }
 
-  #view-time { height: calc(100dvh - 1.7rem); overflow: auto; }
-  #view-time .trow { grid-template-columns: 14rem minmax(8rem, 1fr) 18rem; align-items: center; border: 0; padding: 0.15rem 0; }
+  /* Date / Time is the box's page (ui_datetime.cpp) to scale: --u is one pixel of the box's
+     1280x400 screen. A row is title 250 | time 360 | key 260 with 12 between, 66 tall, rows 12
+     apart: 894 x 378 in all. The scale is the larger of two fits -- beside the menu key at the
+     full height, or the full width with the last row clear above the menu key -- so nothing
+     scrolls and nothing sits under the menu key. */
+  #view-time {
+    --u: max(min(calc((100vw - 8.6rem) / 894), calc((100dvh - 2.7rem) / 378)),
+             min(calc((100vw - 1rem) / 894), calc((100dvh - 5.9rem) / 378)));
+    height: calc(100dvh - 2.1rem); overflow: auto; padding: 0.3rem 0.5rem 0;   /* 2.1rem: the header line */
+  }
+  #view-time .trow {
+    grid-template-columns: calc(var(--u) * 250) calc(var(--u) * 360) calc(var(--u) * 260);
+    column-gap: calc(var(--u) * 12); row-gap: 0; align-items: center;
+    height: calc(var(--u) * 66); margin: 0 0 calc(var(--u) * 12); padding: 0; border: 0;
+  }
+  #view-time .trow:last-child { margin-bottom: 0; }
   #view-time .trow > .tl,
   #view-time .trow > :nth-child(2),
   #view-time .trow > :nth-child(n+3) { grid-column: auto; grid-row: auto; justify-self: stretch; }
+  #view-time .trow > .tl, #view-time .trow > :nth-child(2), #view-time #t-date { text-align: left; }
+  /* Titles on one line, as the box's (only "Offset to / computer" is two). */
+  #view-time .trow > .tl { font-size: calc(var(--u) * 24); line-height: 1.15; white-space: nowrap; }
+  #view-time .tl br.p { display: none; }
+  /* The times: bold, starting at the left of their column; the tenth at three quarters. */
+  #view-time .trow .big { font-size: calc(var(--u) * 56); line-height: 1; white-space: nowrap; }
+  #view-time .trow .big .tenth { font-size: 0.75em; }
+  /* The offset's whole seconds end where the clocks' hh:mm:ss ends; its tenth sits under theirs. */
+  #view-time #t-offset .hms { display: inline-grid; }
+  #view-time #t-offset .sizer { display: block; visibility: hidden; grid-area: 1 / 1; }
+  #view-time #t-offset .val { grid-area: 1 / 1; justify-self: end; }
+  /* The entry fills the time column, in the times' own size, so it starts where they start. */
+  #view-time .trow > input.big-input {
+    width: 100%; height: calc(var(--u) * 66); min-height: 0; padding: 0;   /* no inset: its digits under the times' */
+    font-size: calc(var(--u) * 56); font-weight: bold; color: #0ff; text-align: left;
+  }
+  /* Keys 60 tall in the 66 row, clear of the times by the column gap; -0.1 at the left of the
+     key column and +0.1 at its right edge. */
+  #view-time .trow .key {
+    height: calc(var(--u) * 60); min-height: 0; padding: 0 0.2rem;
+    font-size: calc(var(--u) * 22); line-height: 1.1;
+  }
+  #view-time .pair { justify-content: space-between; gap: 0; }
+  #view-time .pair .key { flex: 0 0 calc(var(--u) * 100); }
+  /* The date starts under the keys' left edge. */
+  #view-time #t-date { font-size: calc(var(--u) * 24); white-space: nowrap; }
 
   #view-cal { height: calc(100dvh - 1.7rem); overflow: auto; }
   #view-cal .crow { flex-wrap: nowrap; margin: 0.35rem 0; }
@@ -872,14 +915,9 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
   #view-cal #cal-rpm { font-size: 2rem; }
   #view-cal .ins { font-size: 0.9rem; line-height: 1.25; margin: 0.2rem 0; }
   #view-cal .crow input { flex: 0 0 auto; }
-  /* Item 44: Date/Time fits the landscape height without scrolling to the last line. */
-  #view-time .trow { margin-bottom: 0.15rem; padding: 0; gap: 0.1rem; }
-  #view-time .trow .big { font-size: 1.9rem; line-height: 1.1; }
-  #view-time .trow > .tl { font-size: 1.05rem; line-height: 1.1; }
-  #view-time .trow .key { min-height: 2.4rem; font-size: 0.95rem; padding-top: 0.1rem; padding-bottom: 0.1rem; }
   /* Room under the last line, so everything scrolls clear of the fixed menu key (3.1rem tall
-     with its gap). */
-  #view-set, #view-time, #view-cal { padding-bottom: 4rem; }
+     with its gap). Date / Time needs none: it is sized to fit (above). */
+  #view-set, #view-cal { padding-bottom: 4rem; }
 
   #view-set {
     display: grid; grid-template-columns: 1fr 1fr; column-gap: 1.5rem; align-content: start;

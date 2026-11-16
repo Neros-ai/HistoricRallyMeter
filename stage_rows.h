@@ -139,6 +139,7 @@ bool reinterpretStageForUnit(std::vector<Segment>& segs, double& first_from_m, l
 // (up to 100.000) when the unit shows 3 decimals, so a digit can still be added in front (owner, 2026-11-15).
 int distEntryMaxChars(int unit);
 // The unit as the add-distance key shows it (second line) and a grey example in that unit (owner, 2026-11-15).
+std::string addDistanceKeyText(int unit);     // the add distance key: "add distance\n" + the unit line, box and phone alike
 std::string distUnitKeyText(int unit);       // "km 0.00", "km 0.000", "m", "mi 0.00", "mi 0.000"
 std::string distAddExample(int unit);        // "1.00;1.50;2.30", "1000;1500;2300", ...
 // nearest: round to the nearest figure instead of cutting down -- for a programmed figure held in whole metres

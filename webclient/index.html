@@ -163,17 +163,20 @@
 
   <!-- TIME: the box's Date / Time page -->
   <main id="view-time" class="view hidden">
-    <section class="trow"><span class="tl">Rally<br>time</span><strong id="t-rally" class="big">--:--:--.-</strong>
+    <!-- br.p: the titles break in portrait only; in landscape they are one line, as on the box.
+         Each time is its whole seconds (.val) and its tenth (.tenth), which landscape draws smaller. -->
+    <section class="trow"><span class="tl">Rally <br class="p">time</span><strong id="t-rally" class="big"><span class="hms"><span class="val">--:--:--</span></span><span class="tenth">.-</span></strong>
       <span class="pair"><button id="trim-minus" type="button" class="key">&minus;0.1</button>
       <button id="trim-plus" type="button" class="key">+0.1</button></span></section>
-    <section class="trow"><span class="tl">Computer<br>time</span><strong id="t-computer" class="big cyan">--:--:--.-</strong>
+    <section class="trow"><span class="tl">Computer <br class="p">time</span><strong id="t-computer" class="big cyan"><span class="hms"><span class="val">--:--:--</span></span><span class="tenth">.-</span></strong>
       <button id="btn-rally-computer" type="button" class="key">set rally to<br>computer time</button></section>
-    <section class="trow"><span class="tl">Phone<br>time</span><strong id="t-phone" class="big">--:--:--.-</strong>
+    <section class="trow"><span class="tl">Phone <br class="p">time</span><strong id="t-phone" class="big"><span class="hms"><span class="val">--:--:--</span></span><span class="tenth">.-</span></strong>
       <button id="btn-computer-phone" type="button" class="key">set computer to<br>phone time</button></section>
-    <section class="trow"><span class="tl">Enter rally<br>time</span>
+    <section class="trow"><span class="tl">Enter rally <br class="p">time</span>
       <input id="t-enter" type="text" inputmode="numeric" placeholder="hh:mm:ss" class="big-input">
       <button id="btn-rally-entered" type="button" class="key">set rally to<br>entered time</button></section>
-    <section class="trow"><span class="tl">Offset to<br><span class="w">computer</span></span><span><strong id="t-offset" class="big">+0.0</strong></span>
+    <!-- .sizer (landscape only) is as wide as a clock's hh:mm:ss, so the offset's seconds end where theirs do. -->
+    <section class="trow"><span class="tl">Offset to<br><span class="w">computer</span></span><span><strong id="t-offset" class="big"><span class="hms"><span class="sizer">00:00:00</span><span class="val">+0</span></span><span class="tenth">.0</span></strong></span>
       <span id="t-date" class="dim"></span></section>
   </main>
 
