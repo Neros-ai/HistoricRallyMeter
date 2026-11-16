@@ -56,6 +56,10 @@ void on_save_calibration(GtkWidget* widget, gpointer user_data);
 // Reset calibration to an operator-entered pulses/km value, replacing the
 // stock "reset to 1m per pulse" with one that works for any device.
 void on_reset_calibration_pulses(GtkWidget* widget, gpointer user_data);
+// The calibration rules behind those two keys, for the phone to call as well: a measured distance as typed, or a
+// pulses-per-km figure. Each returns false, changing nothing, when the figure is refused.
+bool applyCalibrationDistance(AppData* data, const char* dist_str);
+bool applyCalibrationPulses(AppData* data, double pulses_per_km);
 // Rally-clock trim buttons. Direction (+1 / -1 tenths) is read from the
 // button's "trim-steps" data, so both buttons share one handler pair.
 // These act and save on their own -- they are deliberately outside
@@ -69,31 +73,19 @@ void updateCalibrationDisplay(AppData* data);
 void updateSensorModeLabel(AppData* data);
 void updateDateTimeDisplay(AppData* data);
 gboolean update_display(gpointer user_data);
+// The co-pilot half of the tick (beeps decided and sounded), then the co-pilot window drawn.
+void tickCopilotAndDraw(AppData* data);
 void on_keypad_digit(GtkWidget* widget, gpointer user_data);
 void on_keypad_clear(GtkWidget* widget, gpointer user_data);
 void on_keypad_backspace(GtkWidget* widget, gpointer user_data);
 gboolean on_entry_focus(GtkWidget* widget, GdkEvent* event, gpointer user_data);
-// Focus handler for the Beep Assist waypoint view, mirroring on_entry_focus.
-gboolean on_textview_focus(GtkWidget* widget, GdkEvent* event, gpointer user_data);
 // RB-CAL-06: the calibration screen's Prop RPM pulses-per-turn box.
 void on_prop_pulses_changed(GtkWidget* widget, gpointer user_data);
 
-// How long the waypoint list must sit unedited before it is parsed and
-// saved. Long enough that a multi-digit number is never committed
-// half-typed, short enough that leaving the screen straight after typing
-// still catches it (releaseKeypadTarget flushes it anyway).
-constexpr unsigned BEEP_WAYPOINT_COMMIT_MS = 800;
-
-// Beep Assist controls on the stage-setup screen.
-void on_beep_waypoints_changed(GtkTextBuffer* buffer, gpointer user_data);
-// Parse and persist the waypoint list now, cancelling nothing. Called by the
-// debounce timeout and by releaseKeypadTarget when leaving the screen.
-void commitBeepWaypoints(AppData* data);
-// Rewrites the waypoint box from state (after a memory recall).
-void refreshBeepWaypointView(AppData* data);
-// Clear the keypad's target and flush any pending waypoint edit. Called on
-// every screen switch -- the keypad target is shared process-wide.
+// Clear the keypad's target. Called on every screen switch -- the keypad
+// target is shared process-wide.
 void releaseKeypadTarget(AppData* data);
+// Beep Assist control on the stage-setup screen.
 void on_beep_advance_changed(GtkWidget* widget, gpointer user_data);
 void on_adj_driver_zero(GtkWidget* widget, gpointer user_data);
 void on_set_sensor_1(GtkWidget* widget, gpointer user_data);
@@ -127,13 +119,44 @@ void startStageAtNextMinute(AppData* data);
 std::string nextMinuteCaption(AppData* data);
 // Helpers the Segments page shares with the dialogs in this file.
 void notifyWebStateNow(AppData* data);
+// Saving the config (config_saver.h). The snapshot is always taken on this thread at the call;
+// only the write + fsync happen on the saver's own thread, so the 10 ms loop never waits for the card.
+//  saveConfig: a rally-critical change; written at once.
+//  saveConfigSoon: a high-frequency, non-critical change (trim repeat, a field typed a key at a time,
+//    a settings toggle); one write once the changes stop (SaveSchedule::QUIET_MS), at most
+//    SaveSchedule::MAX_DELAY_MS after the first.
+//  saveConfigAndWait: as saveConfig, returning only once it is on the card (something outside the
+//    config depends on the save having landed first, e.g. clearing the counters' power-loss flags).
+void saveConfig(AppData* data);
+void saveConfigSoon(AppData* data);
+void saveConfigAndWait(AppData* data);
+// Save the config, then tell the phone: the pair that follows a change the phone shows.
+// The phone is told at once in both; only the write differs.
+void saveAndNotify(AppData* data);
+void saveSoonAndNotify(AppData* data);
+// The 50 ms timer that writes a deferred save once it is due.
+gboolean configSavePump(gpointer user_data);
 void flashNotice(GtkWidget* widget, const std::string& text);   // self-closing message
+// gtk_label_set_text, skipped when the label already shows exactly that plain text. GTK 3 does not
+// short-circuit an unchanged text itself: every set rebuilds the layout and queues a resize of the
+// window. Plain-text labels only: a label in markup or underline mode is always set.
+void setLabelText(GtkLabel* label, const char* text);
+inline void setLabelText(GtkLabel* label, const std::string& text) { setLabelText(label, text.c_str()); }
 bool confirmYesNo(GtkWidget* widget, const std::string& title, const std::string& text);
 // Rally milliseconds of today's `tod_s` seconds-after-midnight (may be in the past).
 int64_t autoStartTargetForTimeOfDay(AppData* data, long tod_s);
 // Load memory slot 1-5 as the stage (what a Recall key does). No-op for an
 // empty or out-of-range slot.
 void recallMemorySlot(AppData* data, int slot_1_based);
+// Stage n: a programmed one is recalled, an empty number is selected blank, ready to be programmed.
+void loadStageNumber(AppData* data, int n);
+// Both beep lists back to their first entry, bookmarks to be rebuilt from the car's position.
+void resetBeepCursors(AppData* data);
+// The navi key's Set (metres) or reset: moves navi, rebuilds the beep bookmarks and saves. False, with nothing
+// changed, when the distance is refused (negative).
+bool applyNaviSet(AppData* data, bool reset, double metres);
+// The current tone cleared and the speaker set silent (the phone follows currentTone).
+void silenceTone(AppData* data);
 // ABORT STAGE, from the Stage Go dialog: no stage running, the driver's
 // needle at zero, Total and Trip left as they read, and any armed autostart
 // cancelled, of either kind.

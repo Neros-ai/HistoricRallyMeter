@@ -6,6 +6,7 @@
 #include "../calculations.h"
 #include "../config_file.h"
 #include "../rally_state.h"
+#include "../surrey.h"
 #include <cstdio>
 #include <fstream>
 
@@ -60,7 +61,7 @@ public:
             RallyState s;
             ConfigFile::load(s, path);
             std::remove(path);
-            return s.rally_type == 0 && !s.distance_unit && !s.measure_ab_bc;
+            return isGreek(s) && !s.distance_unit && !s.measure_ab_bc;
         });
 
         suite->addTest("miles survives a round trip; a file from before miles still reads km or metres", []() {
@@ -90,12 +91,12 @@ public:
         suite->addTest("rally type, distance units and measure type survive a round trip", []() {
             const char* path = "test_settings_rally.json";
             RallyState a;
-            a.rally_type = 2; a.distance_unit = true; a.measure_ab_bc = true;
+            a.rally_type = RALLY_ITALIAN; a.distance_unit = true; a.measure_ab_bc = true;
             ConfigFile::save(a, path);
             RallyState b;
             ConfigFile::load(b, path);
             std::remove(path);
-            return b.rally_type == 2 && b.distance_unit && b.measure_ab_bc;
+            return isItalian(b) && b.distance_unit && b.measure_ab_bc;
         });
 
         suite->addTest("an unknown rally type in a file falls back to greek", []() {
@@ -104,29 +105,29 @@ public:
             RallyState s;
             ConfigFile::load(s, path);
             std::remove(path);
-            return s.rally_type == 0;
+            return isGreek(s);
         });
 
         suite->addTest("choosing a rally type leaves distance units, kph / mph and measure type alone", []() {
             RallyState s;
             s.distance_unit = false; s.units = true; s.measure_ab_bc = true;
-            applyRallyTypeDefaults(s, 2);
-            const bool italian_ok = s.rally_type == 2 && !s.distance_unit && s.units && s.measure_ab_bc;
+            applyRallyTypeDefaults(s, RALLY_ITALIAN);
+            const bool italian_ok = isItalian(s) && !s.distance_unit && s.units && s.measure_ab_bc;
             s.distance_unit = true; s.measure_ab_bc = false;
-            applyRallyTypeDefaults(s, 0);
-            return italian_ok && s.rally_type == 0 && s.distance_unit && s.units && !s.measure_ab_bc;
+            applyRallyTypeDefaults(s, RALLY_GREEK);
+            return italian_ok && isGreek(s) && s.distance_unit && s.units && !s.measure_ab_bc;
         });
 
         suite->addTest("choosing surrey leaves the units and measure type as they were (RB-NAV-43)", []() {
             RallyState s;
             s.distance_unit = true; s.measure_ab_bc = true;
-            applyRallyTypeDefaults(s, 1);
-            return s.rally_type == 1 && s.distance_unit && s.measure_ab_bc;
+            applyRallyTypeDefaults(s, RALLY_SURREY);
+            return isSurrey(s) && s.distance_unit && s.measure_ab_bc;
         });
 
         suite->addTest("a fresh state starts with greek defaults", []() {
             RallyState s;
-            return s.rally_type == 0 && !s.distance_unit && !s.measure_ab_bc;
+            return isGreek(s) && !s.distance_unit && !s.measure_ab_bc;
         });
 
         // RB-DRV-13
@@ -203,17 +204,17 @@ public:
 
         suite->addTest("beep settings locked in italian", []() {
             RallyState s;
-            s.rally_type = 2; const bool it = greekBeepSettingsLocked(s);
-            s.rally_type = 0; const bool gr = greekBeepSettingsLocked(s);
-            s.rally_type = 1; const bool su = greekBeepSettingsLocked(s);
+            s.rally_type = RALLY_ITALIAN; const bool it = greekBeepSettingsLocked(s);
+            s.rally_type = RALLY_GREEK; const bool gr = greekBeepSettingsLocked(s);
+            s.rally_type = RALLY_SURREY; const bool su = greekBeepSettingsLocked(s);
             return it && !gr && !su;
         });
 
         suite->addTest("switching to italian keeps the beep choices", []() {
             RallyState s;
             s.beep_navigation_mode = true;
-            applyRallyTypeDefaults(s, 2);
-            applyRallyTypeDefaults(s, 0);
+            applyRallyTypeDefaults(s, RALLY_ITALIAN);
+            applyRallyTypeDefaults(s, RALLY_GREEK);
             return s.beep_navigation_mode;
         });
 

@@ -1,6 +1,7 @@
 #include "sector.h"
 #include "calculations.h"
 #include "stage_rows.h"
+#include "surrey.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -155,7 +156,7 @@ int64_t italianStageStartMs(int64_t press_ms) {
 }
 
 void markSectorStart(RallyState& s) {
-    if (s.rally_type != 2) return;
+    if (!isItalian(s)) return;
     if (!stageIsSector(s.segments) && !stageIsSector(s.stage_segments)) return;
     s.sector_start_ms = italianStageStartMs(s.total_start_time_ms);
     s.total_start_time_ms = sectorClockZeroMs(s);   // the second of the departure press
@@ -193,7 +194,7 @@ double endOfRowM(const std::vector<Segment>& segs, long i) {
 bool applySectorNext(RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms) {
     const std::vector<Segment>& segs = s.stage_segments;
     const long cur = s.segment_current_number;
-    if (s.rally_type != 2 || !stageIsSector(segs) || cur < 0 || cur + 1 >= static_cast<long>(segs.size())) return false;
+    if (!isItalian(s) || !stageIsSector(segs) || cur < 0 || cur + 1 >= static_cast<long>(segs.size())) return false;
 
     const int64_t raw_mm = countsToMm(calculateDistanceCounts(s, c1, c2, s.total_start_cntr1, s.total_start_cntr2), s.calibration);
     const double here_m = (raw_mm + static_cast<int64_t>(s.total_distance_adjust_mm)) / 1000.0;
@@ -239,23 +240,19 @@ bool applySectorNext(RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms) {
     }
 
     s.segment_current_number = cur + 1;
-    s.segment_start_cntr1 = c1;
-    s.segment_start_cntr2 = c2;
-    s.segment_start_adjust_mm = s.total_distance_adjust_mm;
-    s.segment_start_time_ms = now_ms;
-    rebaseTripToSegment(s, c1, c2);
+    startSegmentHere(s, c1, c2, now_ms);
     u.after_total_adjust_mm = s.total_distance_adjust_mm;
     u.after_trip_adjust_mm = s.trip_distance_adjust_mm;
     return true;
 }
 
 bool sectorEndsOnDistance(const RallyState& s) {
-    if (s.rally_type == 1) return false;   // surrey ends only on the finish press (next on the last row) or an abort
-    return !(s.rally_type == 2 && stageIsSector(s.stage_segments));
+    if (isSurrey(s)) return false;   // surrey ends only on the finish press (next on the last row) or an abort
+    return !(isItalian(s) && stageIsSector(s.stage_segments));
 }
 
 bool sectorFinishAvailable(const RallyState& s) {
-    return s.rally_type == 2 && stageIsSector(s.stage_segments) && !s.stage_complete &&
+    return isItalian(s) && stageIsSector(s.stage_segments) && !s.stage_complete &&
            s.segment_current_number >= 0 &&
            s.segment_current_number == static_cast<long>(s.stage_segments.size()) - 1;
 }
@@ -270,7 +267,7 @@ bool applySectorFinish(RallyState& s) {
 
 bool undoSectorTube(RallyState& s) {
     RallyState::SectorUndo& u = s.sector_undo;
-    if (s.rally_type != 2 || !sectorUndoAvailable(s)) return false;
+    if (!isItalian(s) || !sectorUndoAvailable(s)) return false;
     // A -10 or set made after the next is kept: only what the next itself changed goes back.
     const long total_since_mm = s.total_distance_adjust_mm - u.after_total_adjust_mm;
     const long trip_since_mm = s.trip_distance_adjust_mm - u.after_trip_adjust_mm;
@@ -329,7 +326,7 @@ double sectorSecondsToLine(const RallyState& s, int64_t now_ms, bool* valid) {
 double pcCountdownSeconds(const RallyState& s, int64_t now_ms, bool* valid) {
     *valid = false;
     const long cur = s.segment_current_number;
-    if (s.rally_type != 2 || s.stage_complete
+    if (!isItalian(s) || s.stage_complete
         || cur < 0 || cur >= static_cast<long>(s.stage_segments.size())) return 0.0;
     const int type = s.stage_segments[static_cast<size_t>(cur)].type;
     if (type == SEG_PC) {
@@ -343,7 +340,7 @@ double pcCountdownSeconds(const RallyState& s, int64_t now_ms, bool* valid) {
 double rowMetresToLine(const RallyState& s, double stage_m, bool* valid) {
     *valid = false;
     const long cur = s.segment_current_number;
-    if (s.rally_type != 2 || s.stage_complete
+    if (!isItalian(s) || s.stage_complete
         || cur < 0 || cur >= static_cast<long>(s.stage_segments.size())) return 0.0;
     const int type = s.stage_segments[static_cast<size_t>(cur)].type;
     if (type == SEG_PC || type == SEG_LEG) return 0.0;
@@ -397,7 +394,7 @@ void adjustOdometerMm(RallyState& s, long delta_mm, uint64_t c1, uint64_t c2) {
 }
 
 void markSectorOdometer(RallyState& s, uint64_t c1, uint64_t c2) {
-    if (s.rally_type == 0) return;   // italian and surrey keep navi total through a stage start
+    if (isGreek(s)) return;   // italian and surrey keep navi total through a stage start
     s.sector_start_odometer_mm = static_cast<long>(odometerMm(s, c1, c2));
 }
 
@@ -407,6 +404,14 @@ void resetOdometerKeepingPosition(RallyState& s, uint64_t c1, uint64_t c2) {
     s.odometer_start_cntr2 = c2;
     s.odometer_adjust_mm = 0;
     s.sector_start_odometer_mm = -position_mm;
+}
+
+bool applyNaviSetOrReset(RallyState& s, uint64_t c1, uint64_t c2, bool reset, double metres) {
+    if (reset) {
+        resetOdometerKeepingPosition(s, c1, c2);
+        return true;
+    }
+    return setOdometerMetres(s, c1, c2, metres);
 }
 
 double sectorPositionM(const RallyState& s, uint64_t c1, uint64_t c2) {
@@ -446,7 +451,7 @@ double italianNeedleSeconds(const RallyState& s, uint64_t c1, uint64_t c2, int64
 
 double gaugeAheadSeconds(const RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms,
                          int64_t stage_mm) {
-    if (s.rally_type == 2 && stageIsSector(s.stage_segments)) {
+    if (isItalian(s) && stageIsSector(s.stage_segments)) {
         bool valid = false;
         const double secs = italianNeedleSeconds(s, c1, c2, now_ms, &valid);
         return valid ? secs : 0.0;
@@ -467,7 +472,7 @@ const char* readoutKeyName(int rally_type, int row) {
                                        {"total", "trip", "stage", "next\nspeed", "prev\nspeed"},
                                        {"sector\ntotal", "sub", "navi", "next\nsubstage", "prev\nsubstage"} };
     if (row < 0 || row > 4) return "";
-    return names[rally_type == 2 ? 2 : (rally_type == 1 ? 1 : 0)][row];
+    return names[rally_type == RALLY_ITALIAN ? RALLY_ITALIAN : (rally_type == RALLY_SURREY ? RALLY_SURREY : RALLY_GREEK)][row];
 }
 
 bool sectorPreviewWanted(const RallyState& s) {
@@ -499,12 +504,12 @@ double subAverageKph(const RallyState& s, uint64_t c1, uint64_t c2, int64_t now_
 const char* const SECTOR_TOTAL_RESET_NOTICE = "Use set or next during a sector";
 
 bool sectorTotalResetBlocked(const RallyState& s) {
-    return s.rally_type == 2 && stageIsSector(s.stage_segments) && !s.stage_complete &&
+    return isItalian(s) && stageIsSector(s.stage_segments) && !s.stage_complete &&
            s.segment_current_number >= 0 && s.auto_start_rally_time_s == 0;
 }
 
 bool subResetInStage(const RallyState& s) {
-    if (s.rally_type != 2 || s.stage_complete || !stageIsSector(s.stage_segments)) return false;
+    if (!isItalian(s) || s.stage_complete || !stageIsSector(s.stage_segments)) return false;
     const long cur = s.segment_current_number;
     if (cur < 0 || cur >= static_cast<long>(s.stage_segments.size())) return false;
     const int t = s.stage_segments[cur].type;
@@ -583,7 +588,7 @@ void jsonRow(std::ostringstream& o, const char* prefix, const Segment& row, doub
 
 std::string sectorCardJson(const RallyState& live, int64_t now_ms, long stage_m,
                            uint64_t c1, uint64_t c2) {
-    if (live.rally_type != 2) return "null";
+    if (!isItalian(live)) return "null";
     SectorPanel p = sectorPanel(live, now_ms, stage_m);
     RallyState preview;
     const RallyState* st = &live;
@@ -687,12 +692,12 @@ std::string sectorDistText(double metres, int unit) {
 
 std::string sectorSpeedText(double kph, bool mph) {
     char b[24];
-    snprintf(b, sizeof(b), "%.2f", mph ? kph * 0.621371 : kph);
+    snprintf(b, sizeof(b), "%.2f", mph ? kphToMph(kph) : kph);
     return b;
 }
 
 int sectorSpeedWhole(int kph, bool mph) {
-    return mph ? static_cast<int>(std::lround(kph * 0.621371)) : kph;
+    return mph ? static_cast<int>(std::lround(kphToMph(kph))) : kph;
 }
 // The same text without the tenths (the whole seconds of sectorSecondsText).
 std::string sectorSecondsWholeText(double s) {

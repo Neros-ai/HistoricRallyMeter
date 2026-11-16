@@ -74,5 +74,5 @@ int64_t timedStartTarget(int64_t target_ms, int64_t now_ms) {
     return target_ms <= now_ms ? target_ms + 24LL * 3600 * 1000 : target_ms;
 }
 bool nextMinuteAllowed(const RallyState& s) {
-    return s.rally_type != 2;
+    return !isItalian(s);
 }

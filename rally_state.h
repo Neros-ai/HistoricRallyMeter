@@ -6,6 +6,13 @@
 #include <vector>
 #include "rally_types.h"
 
+// The rally types, as stored in RallyState::rally_type. These numbers are also the
+// "rally_type" value in the config JSON, the phone protocol and stage files, so they
+// must never change. isGreek / isSurrey / isItalian (surrey.h) test a state for each.
+constexpr int RALLY_GREEK = 0;
+constexpr int RALLY_SURREY = 1;
+constexpr int RALLY_ITALIAN = 2;
+
 class RallyState {
 public:
     bool units = false;  // false = KPH, true = MPH
@@ -203,8 +210,8 @@ public:
     int phone_beep_lead_ms = 100;
 
     // Nero2.1 Settings > System (RB-SET-09).
-    // Rally type: 0 greek (today), 1 surrey, 2 italian.
-    int rally_type = 0;
+    // Rally type: RALLY_GREEK (today), RALLY_SURREY or RALLY_ITALIAN.
+    int rally_type = RALLY_GREEK;
     // Surrey (RB-NAV-43): the last stage, start press to finish press (ms); -1 none.
     int64_t time_taken_ms = -1;
     // Surrey: the stage number that result belongs to (0 none), so loading another stage keeps the name.

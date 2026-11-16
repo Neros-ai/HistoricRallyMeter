@@ -6,6 +6,7 @@
 // value is the correct "nothing latched yet" starting point).
 struct SimpleToneState {
     double lastCommittedSeconds = 0.0;
+    int heldRung = 0;   // pitch rung currently held (1..15); 0 = none/silent
 };
 
 struct SimpleToneResult {
@@ -29,15 +30,19 @@ constexpr int SIMPLE_TONE_SUSTAIN_MS = 3600000;  // 1 hour
 // or once past the stage's last segment (stageDistanceMeters/pastStageEnd,
 // computed by the caller exactly as the existing tone block already does).
 //
-// Within the zone, the module maintains one latched value,
-// state.lastCommittedSeconds. Each call, if the new secondsAheadBehind
-// differs from the latch by more than 0.2s, the latch moves to the new
-// value; otherwise it is left untouched. All output (silence vs. tone,
-// direction, and pitch) is decided from the LATCH, not the raw input -- so
-// small jitter around a boundary (the +/-0.2s quiet band, or the +/-30s
-// giving-up point) does not chatter the tone on and off; only a genuine
-// >0.2s move does. This is what makes the tone "constant": once latched,
-// nothing changes until the error has moved a clear amount.
+// Within the zone, the module keeps a latched value,
+// state.lastCommittedSeconds, which moves to the new secondsAheadBehind only
+// when that differs from it by more than 0.2s. The latch decides the side
+// (ahead/behind, so the wave) and the +/-30s giving-up point, so jitter there
+// does not chatter the tone.
+//
+// The PITCH is not taken from the latch. It steps on the live error, one step
+// per 0.2s (state.heldRung, the rule shared with tone type 1: tone_rung.h): a
+// growing error takes its step the moment it reaches the 0.2s line (0.2, 0.4,
+// 0.6 ... 3.0), and a shrinking error keeps its step until it is 0.1s below
+// the line. The pitch is the ramp below, sampled at the held step's line, so
+// it only ever takes 15 values per side. Going silent for any reason, or the
+// error changing side, forgets the held step.
 //
 // Behind schedule (negative latch) is a TRIANGLE wave rising from
 // 1800 Hz (approaching 0) toward 3500 Hz (at -3s); ahead of schedule

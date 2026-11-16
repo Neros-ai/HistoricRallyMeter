@@ -60,7 +60,7 @@ static void formatGaugeDigital(char* buf, size_t bufsize, double seconds, int sc
 // page) and in the wide 1280x400 layout. The dial draws these same strings.
 static void computeDriverShown(AppData* data) {
     AppData::DriverShown& sh = data->driverShown;
-    const double seconds = data->aheadBehindSeconds;
+    const double seconds = data->tick.aheadBehindSeconds;
     sh.maxSeconds = gaugeEffectiveMaxSeconds(seconds, data->state->gauge_range_s);
     // Hysteretic: a reading sitting on 10.0 or 30.0 must not flicker the band.
     sh.zone = gaugeZoneHysteretic(seconds, data->gaugeZoneShown);
@@ -69,8 +69,8 @@ static void computeDriverShown(AppData* data) {
     formatGaugeDigital(digital, sizeof(digital), seconds, sh.zone);
     sh.digital = digital;
 
-    const int page = data->driverPage;
-    const DriverTrialView& v = data->driverTrial;
+    const int page = data->tick.driverPage;
+    const DriverTrialView& v = data->tick.driverTrial;
     const bool italianFig = (page == AppData::DP_ITALIAN_TRIAL || page == AppData::DP_ITALIAN_NAVI);
     const bool mph = data->state->units;   // italian follows the setting too
     sh.speed = italianFig ? data->driverTrialSpeedText : data->driverSpeedText;
@@ -78,26 +78,26 @@ static void computeDriverShown(AppData* data) {
     if (italianFig) sh.target = data->driverTrialTargetText;
     else if (page == AppData::DP_GREEK_STAGE || !data->driverCompactMode) sh.target = data->driverTargetText;
     else {
-        if (data->driverStartSpeedKph >= 0) {   // the last minute: the stage speed, as a start on the minute shows it
-            sh.target = driverSpeedText(data->driverStartSpeedKph * (data->state->units ? 0.621371 : 1.0),
+        if (data->tick.driverStartSpeedKph >= 0) {   // the last minute: the stage speed, as a start on the minute shows it
+            sh.target = driverSpeedText(data->tick.driverStartSpeedKph * (data->state->units ? MILES_PER_KM : 1.0),
                                         data->state->rally_type);
         } else {
             sh.targetCap = mph ? "Arrival (mph)" : "Arrival (kph)";
-            sh.target = arrivalSpeedText(data->driverArrivalKph, mph);
+            sh.target = arrivalSpeedText(data->tick.driverArrivalKph, mph);
         }
     }
     // Averages at 2 dp from the unrounded figures, in the units chosen in Settings (italian too).
     auto avgText = [&](double x) { return averageSpeedText(x); };
     sh.totalAvg = (page == AppData::DP_ITALIAN_TRIAL)
-        ? (v.avgValid ? trialSpeedText(data->state->units ? v.avgKph * 0.621371 : v.avgKph) : std::string("--.--"))
-        : avgText(data->driverTotalAvg);
+        ? (v.avgValid ? trialSpeedText(data->state->units ? kphToMph(v.avgKph) : v.avgKph) : std::string("--.--"))
+        : avgText(data->tick.driverTotalAvg);
     if (page == AppData::DP_ITALIAN_TRIAL) {
         sh.tripAvg.clear();   // a pc / pm has no trip row
     } else if (page == AppData::DP_GREEK_STAGE) {   // the substage's own average, to match the time error
-        const double sp = data->state->units ? data->driverSubAvgKph * 0.621371 : data->driverSubAvgKph;
-        sh.tripAvg = data->driverSubAvgValid ? averageSpeedText(sp) : std::string("--.--");
+        const double sp = data->state->units ? kphToMph(data->tick.driverSubAvgKph) : data->tick.driverSubAvgKph;
+        sh.tripAvg = data->tick.driverSubAvgValid ? averageSpeedText(sp) : std::string("--.--");
     } else {
-        sh.tripAvg = avgText(data->driverTripAvg);
+        sh.tripAvg = avgText(data->tick.driverTripAvg);
     }
     // Total and Trip distances: a pc / pm shows the sector's distance in the Total row.
     // An early departure counting down: distance already counts but no stage time has run, so
@@ -106,8 +106,8 @@ static void computeDriverShown(AppData* data) {
         sh.totalAvg = "--.--";
         sh.tripAvg = "--.--";
     }
-    sh.totalDist = formatDistance(page == AppData::DP_ITALIAN_TRIAL ? v.sectorTotalM : data->driverTotalM, data->state->distance_unit);
-    sh.tripDist = formatDistance(data->driverTripM, data->state->distance_unit);
+    sh.totalDist = formatDistance(page == AppData::DP_ITALIAN_TRIAL ? v.sectorTotalM : data->tick.driverTotalM, data->state->distance_unit);
+    sh.tripDist = formatDistance(data->tick.driverTripM, data->state->distance_unit);
 }
 
 // Draw the rally gauge (GaugePilot RallyMaster style) with auto-scaling
@@ -142,7 +142,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // Every quantity below is a pure function of this one reading,
     // recomputed fresh every frame -- there is no discrete "scale" to
     // debounce or switch between any more.
-    double seconds = data->aheadBehindSeconds;
+    double seconds = data->tick.aheadBehindSeconds;
     // Scale and band as worked out on the last update (computeDriverShown), the same the phone gets.
     double max_val = data->driverShown.maxSeconds;
     int zone = data->driverShown.zone;
@@ -276,7 +276,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     snprintf(digital, sizeof(digital), "%s", data->driverShown.digital.c_str());
     // RB-DRV-19: no needle and an empty error box outside a timed stretch (italian navi rows, between stages).
     const bool hideNeedle = data->driverCompactMode &&
-        (data->driverPage == AppData::DP_ITALIAN_NAVI || data->driverPage == AppData::DP_GREEK_IDLE);
+        (data->tick.driverPage == AppData::DP_ITALIAN_NAVI || data->tick.driverPage == AppData::DP_GREEK_IDLE);
     if (hideNeedle) digital[0] = '\0';
 
     // Needle: a constant-width bar rather than a tapered triangle, so its
@@ -343,7 +343,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             box_height = L.boxHeight;   // Nero2.0: 64 px at 50 px digits
             double box_center_y = L.boxY + L.boxHeight / 2.0;
             box_y = box_center_y - box_height / 2.0;
-            if (data->driverPage != AppData::DP_CLASSIC) {
+            if (data->tick.driverPage != AppData::DP_CLASSIC) {
                 // RB-DRV-18/19: the logo box, this box and the right-hand box form one row,
                 // tops level, edges touching (16 px wider than before). The row was 80 px,
                 // which started 8 px above the hub. A pinned needle is a 10 px bar through
@@ -370,7 +370,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         // The outline is centred on the path, so it spills half its width outside the rectangle.
         // In the compact strip (RB-DRV-19) the box must be exactly as tall as its neighbours, so the
         // stroke is drawn inside the rectangle instead.
-        const double inset = (data->driverCompactMode && data->driverPage != AppData::DP_CLASSIC) ? border / 2.0 : 0.0;
+        const double inset = (data->driverCompactMode && data->tick.driverPage != AppData::DP_CLASSIC) ? border / 2.0 : 0.0;
         cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
         cairo_rectangle(cr, box_x, box_y, box_width, box_height);
         cairo_fill(cr);
@@ -427,9 +427,9 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         const double f_tick  = 0.80;  // segment-end tick, 20% from the tip
         // RB-DRV-18: inside an italian pc / pm the chevrons wait at the start and slide to
         // the end tick over the last 5 s to the line, arriving as the countdown reads 0.00.
-        const bool trialArrow = data->driverTrial.active;
-        double progress = trialArrow ? data->driverTrial.arrowProgress
-                                     : (data->inSegment ? data->segmentProgress : 0.0);
+        const bool trialArrow = data->tick.driverTrial.active;
+        double progress = trialArrow ? data->tick.driverTrial.arrowProgress
+                                     : (data->tick.inSegment ? data->tick.segmentProgress : 0.0);
         if (progress < 0.0) progress = 0.0;
         if (progress > 1.0) progress = 1.0;
         // The tip's outline reaches 3 px past the apex, so stop the apex that far short: the tip then
@@ -443,7 +443,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         double spacing_f = spacing_px / needle_length;
 
         // Segment-end tick: 48px perpendicular line, only while within a segment.
-        if (trialArrow || data->inSegment) {   // pc / pm: the end tick is there from the start, the chevrons arrive in the last 5 s
+        if (trialArrow || data->tick.inSegment) {   // pc / pm: the end tick is there from the start, the chevrons arrive in the last 5 s
             double tx = centerX + f_tick * needle_length * dir_x;
             double ty = centerY + f_tick * needle_length * dir_y;
             cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
@@ -565,8 +565,8 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         // Greek between stages -- share one set of sizes and positions. Everything is placed from
         // the error box's rectangle. Mockups: tools/layout-preview/nero2/driver-*.html.
         {
-            const int page = data->driverPage;
-            const DriverTrialView& v = data->driverTrial;
+            const int page = data->tick.driverPage;
+            const DriverTrialView& v = data->tick.driverTrial;
             const double fs = L.fscale;
             const bool italianFig = (page == AppData::DP_ITALIAN_TRIAL || page == AppData::DP_ITALIAN_NAVI);
             const bool mph = data->state->units;
@@ -693,7 +693,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                 } else {
                     cairo_set_source_rgb(cr, 0.0, 1.0, 1.0);
                     cairo_move_to(cr, rx, y1 - 4.0 * fs);
-                    cairo_show_text(cr, data->state->rally_type == 2 ? "sub" : "Trip");
+                    cairo_show_text(cr, isItalian(*data->state) ? "sub" : "Trip");
                     cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
                     cairo_move_to(cr, rx, (y1 + y2) / 2.0 + 2.0 * fs);
                     cairo_show_text(cr, distUnit);
@@ -710,7 +710,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                     if (v.isPc) { bg[0] = 0.867; bg[1] = 0.0; bg[2] = 0.0; fgc = 1.0; icon = 1; }
                     else        { bg[0] = 1.0; bg[1] = 0.867; bg[2] = 0.0; fgc = 0.0; icon = 2; }
                 } else if (page == AppData::DP_GREEK_STAGE) {
-                    tag = "S" + std::to_string(data->driverStageNo);
+                    tag = "S" + std::to_string(data->tick.driverStageNo);
                     bg[0] = 0.867; bg[1] = 0.0; bg[2] = 0.0; fgc = 1.0; icon = 1;
                 } else {
                     tag = "navi";
@@ -756,7 +756,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             // Right-hand box: the pc / pm countdown (green, -.- until 5 s, then 5.0 -> 0.0) or the navi minutes ahead /
             // behind (green ahead, red behind). None in the Greek pages.
             if (page == AppData::DP_ITALIAN_TRIAL
-                || (page == AppData::DP_ITALIAN_NAVI && data->driverMinutesValid)) {
+                || (page == AppData::DP_ITALIAN_NAVI && data->tick.driverMinutesValid)) {
                 const double w = 160.0 * fs, h = abBoxH;
                 const double x0 = abBoxX + abBoxW, y0 = abBoxY;
                 std::string txt;
@@ -764,8 +764,8 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                 if (page == AppData::DP_ITALIAN_TRIAL) {
                     txt = countdownBoxText(v.toLineS);
                 } else {
-                    ahead = !data->driverMinutesBehind;   // red on the true sign, as the co-pilot box
-                    txt = (data->driverMinutes > 0 ? "+" : "") + std::to_string(data->driverMinutes);
+                    ahead = !data->tick.driverMinutesBehind;   // red on the true sign, as the co-pilot box
+                    txt = (data->tick.driverMinutes > 0 ? "+" : "") + std::to_string(data->tick.driverMinutes);
                 }
                 if (ahead) cairo_set_source_rgb(cr, 0.0, 0.667, 0.0);   // green (#0a0)
                 else       cairo_set_source_rgb(cr, 0.867, 0.067, 0.067);
@@ -820,21 +820,14 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     return FALSE;
 }
 
+// Draws what the tick decided (data->tick, rally_tick.h): labels, the gauge redraw and the
+// autostart countdown overlay. Nothing is decided here -- update_display runs tickDrive first,
+// and starts or drops an autostart itself after this returns.
 void updateDriverDisplay(AppData* data) {
     updateCounterFaultWidgets(data);
-    auto current_poll = data->poller->getMostRecent();
-    // Speed is measured on the raw count so it stays positive in reverse.
-    auto current_raw_poll = data->poller->getMostRecentRaw();
-    auto tenth_poll = data->poller->get10th();
-    auto current_time_ms = getRallyTime_ms(*data->state);
+    const TickDecision& t = data->tick;
+    const int64_t current_time_ms = t.nowMs;
 
-    // How long an armed autostart still has to run. Computed once here
-    // because two things downstream need it: the T- overlay near the end of
-    // this function, and the time-error box, which holds at zero while an
-    // "on the minute" autostart counts down (see autoStartHoldsTimeError).
-    const int64_t autoStartDiff_ms = autoStartRemaining_ms(data);
-    const bool holdTimeErrorAtZero = autoStartHoldActive(data);
-    
     // Switch to compact layout (values drawn inside the gauge) when the
     // window is closer to 4:3 (e.g. 800x480) than wide-and-shallow 1280x400.
     // In single-display mode the gauge is embedded in the co-pilot window and
@@ -852,120 +845,43 @@ void updateDriverDisplay(AppData* data) {
             }
         }
     }
-    
-    // Current speed (from rolling average, then EMA-smoothed for display)
-    double current_speed = calculateCurrentSpeed(*data->state, current_raw_poll, tenth_poll);
-    if (current_speed < 0) {
-        data->smoothedSpeed = -1.0;
-    } else if (data->smoothedSpeed < 0) {
-        data->smoothedSpeed = current_speed;
-    } else {
-        constexpr double alpha = 0.02;
-        data->smoothedSpeed = alpha * current_speed + (1.0 - alpha) * data->smoothedSpeed;
-    }
+
+    // Current speed (the tick's EMA-smoothed figure)
     std::stringstream ss;
-    if (data->smoothedSpeed < 0) {
+    if (t.smoothedSpeed < 0) {
         ss << "--.-";
     } else {
-        ss << std::fixed << std::setprecision(1) << data->smoothedSpeed;
+        ss << std::fixed << std::setprecision(1) << t.smoothedSpeed;
     }
     data->driverSpeedText = ss.str();
-    gtk_label_set_text(data->currentSpeedLabel, data->driverSpeedText.c_str());
-    
-    // Trip average speed
-    int64_t trip_count_diff = calculateDistanceCounts(*data->state,
-        current_poll.cntr1, current_poll.cntr2,
-        data->state->trip_start_cntr1, data->state->trip_start_cntr2);
-    double trip_speed = calculateAverageSpeed(*data->state,
-        data->state->trip_start_time_ms, current_time_ms, trip_count_diff,
-        data->state->trip_distance_adjust_mm);
-    trip_speed = averageSpeedForDisplay(trip_speed, holdTimeErrorAtZero);
-    data->driverTripAvg = trip_speed;
-    const bool earlyCountdown = stagePhase(*data->state) == StagePhase::EarlyCountdown;
-    gtk_label_set_text(data->tripSpeedLabel, earlyCountdown ? "--.--" : averageSpeedText(trip_speed).c_str());   // 2 dp
-    
-    // Total average speed
-    int64_t total_count_diff = calculateDistanceCounts(*data->state,
-        current_poll.cntr1, current_poll.cntr2,
-        data->state->total_start_cntr1, data->state->total_start_cntr2);
-    double total_speed = calculateAverageSpeed(*data->state,
-        data->state->total_start_time_ms, current_time_ms, total_count_diff,
-        data->state->total_distance_adjust_mm);
-    total_speed = averageSpeedForDisplay(total_speed, holdTimeErrorAtZero);
-    data->driverTotalAvg = total_speed;
-    gtk_label_set_text(data->totalSpeedLabel, earlyCountdown ? "--.--" : averageSpeedText(total_speed).c_str());   // 2 dp
+    setLabelText(data->currentSpeedLabel, data->driverSpeedText.c_str());
 
-    // Total/Trip distance, reusing the count differences just computed for
-    // the average speeds above -- no additional counter reads. Applies the
-    // same manual correction the co-pilot applies (RB-NAV-03), from the
-    // start: if the two panels ever disagreed about distance travelled, even
-    // briefly, that would be worse than not having the correction at all.
-    long total_dist_m = adjustedDistanceMetersMm(
-        countsToMm(total_count_diff, data->state->calibration),
-        data->state->total_distance_adjust_mm);
+    // Trip and Total average speeds
+    const bool earlyCountdown = t.earlyCountdown;
+    setLabelText(data->tripSpeedLabel, earlyCountdown ? "--.--" : averageSpeedText(t.driverTripAvg).c_str());   // 2 dp
+    setLabelText(data->totalSpeedLabel, earlyCountdown ? "--.--" : averageSpeedText(t.driverTotalAvg).c_str());   // 2 dp
+
+    // Total/Trip distance, with the same manual correction the co-pilot applies (RB-NAV-03).
     const int dist_km = data->state->distance_unit;
-    const char* total_unit = distUnitName(dist_km);
-    std::string total_dist_str = formatDistance(static_cast<double>(total_dist_m), dist_km);
-    data->driverTotalDistText = total_dist_str;
-    data->driverTotalUnitText = total_unit;
+    data->driverTotalDistText = formatDistance(static_cast<double>(t.totalDistM), dist_km);
+    data->driverTotalUnitText = distUnitName(dist_km);
+    data->driverTripDistText = formatDistance(static_cast<double>(t.tripDistM), dist_km);
+    data->driverTripUnitText = distUnitName(dist_km);
 
-    long trip_dist_m = adjustedDistanceMetersMm(
-        countsToMm(trip_count_diff, data->state->calibration),
-        data->state->trip_distance_adjust_mm);
-    const char* trip_unit = distUnitName(dist_km);
-    std::string trip_dist_str = formatDistance(static_cast<double>(trip_dist_m), dist_km);
-    data->driverTripDistText = trip_dist_str;
-    data->driverTripUnitText = trip_unit;
-    // Surrey: Total is the roadbook's running distance, as on the co-pilot page.
-    data->driverTotalM = isSurrey(*data->state)
-        ? static_cast<double>(surreyNaviMetres(*data->state, current_poll.cntr1, current_poll.cntr2))
-        : static_cast<double>(total_dist_m);
-    data->driverTripM  = static_cast<double>(trip_dist_m);
-    data->driverStageNo = data->state->last_memory_slot;
-    // Stage arrival: the speed to reach the loaded stage's start with a minute spare (as Home).
-    data->driverArrivalKph = -1;
-    data->driverStartSpeedKph = -1;
-    {
-        const int slot = data->state->last_memory_slot;
-        // Distance to the start belongs to greek and surrey only; an italian sector has none.
-        if (data->state->rally_type != 2 && slot >= 1 && slot <= RallyState::MAX_MEMORY_SLOTS) {
-            const long start_s = data->state->memory_slots[slot - 1].start_time_s;
-            const long start_dist = data->state->memory_slots[slot - 1].start_distance_m;
-            if (start_s >= 0) {
-                time_t tt = current_time_ms / 1000;
-                struct tm* lt = localtime(&tt);
-                if (lt) {
-                    const long tod = lt->tm_hour * 3600L + lt->tm_min * 60L + lt->tm_sec;
-                    // Distance still to go to the start line (Total as shown); past it, nothing.
-                    StageArrival arr = stageArrival(
-                        static_cast<double>(metresToStageStart(*data->state, current_poll.cntr1, current_poll.cntr2, start_dist)),
-                        (start_s - tod) / 60.0);
-                    if (arr.valid) data->driverArrivalKph = arr.speed_kph;
-                    const double mins_to_start = (start_s - tod) / 60.0;
-                    // The coming stage is the loaded roadbook (a start adopts it), not the last stage driven.
-                    if (mins_to_start > 0.0 && mins_to_start <= 1.0 && !data->state->segments.empty())
-                        data->driverStartSpeedKph = data->state->segments[0].target_speed_kph;
-                }
-            }
-        }
-    }
-
-    if (data->state->segment_current_number < 0) data->runSegIndex = -2;   // no stage: the next one starts a new run
     // Target speed and ahead/behind. A finished stage is no longer on the gauge: the display
     // goes to the navigation page (no needle, no tone) as it does after an abort, in every rally
     // type. A surrey stage reopened by prev comes back here.
-    if (data->state->segment_current_number >= 0 && !data->state->stage_complete &&
-        data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
+    if (t.stageOnGauge) {
         const Segment& seg = data->state->stage_segments[data->state->segment_current_number];
         double target_kph = seg.target_speed_kph;
         if (data->state->units) {
-            target_kph = target_kph * 0.621371;  // Convert to MPH
+            target_kph = kphToMph(target_kph);  // Convert to MPH
         }
         ss.str("");
         ss << driverSpeedText(target_kph, data->state->rally_type);   // 2 dp in italian
         data->driverTargetText = ss.str();
-        gtk_label_set_text(data->targetSpeedLabel, ss.str().c_str());
-        gtk_label_set_text(data->gaugeTargetLabel, ss.str().c_str());
+        setLabelText(data->targetSpeedLabel, ss.str().c_str());
+        setLabelText(data->gaugeTargetLabel, ss.str().c_str());
         // The coming change, in the same units as the value above it.
         double next_kph = 0.0;
         if (data->nextTargetSpeedLabel) {
@@ -973,125 +889,24 @@ void updateDriverDisplay(AppData* data) {
                 // "> " marks it as the speed being moved TO, so it cannot be
                 // misread as a second current value.
                 std::stringstream ns;
-                ns << "> " << driverSpeedText(data->state->units ? next_kph / 1.60934 : next_kph, data->state->rally_type);
-                gtk_label_set_text(data->nextTargetSpeedLabel, ns.str().c_str());
+                ns << "> " << driverSpeedText(data->state->units ? kphToMph(next_kph) : next_kph, data->state->rally_type);
+                setLabelText(data->nextTargetSpeedLabel, ns.str().c_str());
             } else {
-                gtk_label_set_text(data->nextTargetSpeedLabel, "");
+                setLabelText(data->nextTargetSpeedLabel, "");
             }
         }
-        
-        // Ahead/behind - calculated from stage start accounting for all segment speeds
-        // Corrected, not raw: a wrong turn knocked off with -10 has to move
-        // the time error too, or the gauge keeps crediting distance the crew
-        // just told the box they had not driven.
-        const int64_t stage_now_mm = stagePositionMm(*data->state, current_poll.cntr1, current_poll.cntr2);
-        // Italian: the pc / pm error inside one, at rest (tone silent) on navi / ct / co subs.
-        double seconds = gaugeAheadSeconds(*data->state, current_poll.cntr1, current_poll.cntr2,
-                                           current_time_ms, stage_now_mm);
-        // Nothing to be ahead or behind of until the clock zeroes at the
-        // minute. Held before the value is stored, so the gauge needle, the
-        // chevrons and the tone all sit at rest too rather than tracking a
-        // stage that is not running yet.
-        if (holdTimeErrorAtZero) seconds = 0.0;
-        
-        // Store for gauge
-        data->aheadBehindSeconds = seconds;
+
+        const double seconds = t.aheadBehindSeconds;
 
         // RB-DRV-18: inside an italian pc / pm the compact gauge shows its own layout
-        // (sector total, pc / pm average, logo, 5 s countdown), every figure in km and km/h.
-        if (holdTimeErrorAtZero) {
-            data->driverTrial = DriverTrialView{};
-        } else {
-            data->driverTrial = driverTrialView(*data->state, current_poll.cntr1, current_poll.cntr2,
-                                                current_time_ms);
-        }
-        {
-            const RallyState& st = *data->state;
-            const bool italian = st.rally_type == 2 && stageIsSector(st.stage_segments);
-            data->driverPage = data->driverTrial.active ? AppData::DP_ITALIAN_TRIAL
-                              : (italian ? AppData::DP_ITALIAN_NAVI : AppData::DP_GREEK_STAGE);
-            if (data->driverPage == AppData::DP_ITALIAN_NAVI) {
-                data->driverRowS = rowSeconds(seg);
-                bool v_ok = false;
-                const double ahead = sectorAheadSeconds(st, current_poll.cntr1, current_poll.cntr2,
-                                                        current_time_ms, &v_ok);
-                data->driverMinutesValid = v_ok;
-                const long m = minutesInHand(ahead);
-                data->driverMinutes = ahead >= 0.0 ? m : -m;
-                data->driverMinutesBehind = ahead < 0.0;
-            }
-        }
-        if (data->driverTrial.active || data->driverPage == AppData::DP_ITALIAN_NAVI) {
+        // (sector total, pc / pm average, logo, 5 s countdown).
+        if (t.driverTrial.active || t.driverPage == AppData::DP_ITALIAN_NAVI) {
             data->driverTrialTargetText = trialSpeedText(
-                data->state->units ? seg.target_speed_kph * 0.621371 : seg.target_speed_kph);
-            const double shownSpeed = data->smoothedSpeed;   // already in the chosen units (mph when set)
+                data->state->units ? kphToMph(seg.target_speed_kph) : seg.target_speed_kph);
+            const double shownSpeed = t.smoothedSpeed;   // already in the chosen units (mph when set)
             data->driverTrialSpeedText = shownSpeed < 0.0 ? "--.--" : trialSpeedText(shownSpeed);
         }
 
-        // Fraction of the current segment driven, for the needle's scale chevrons
-        // and segment-end tick. "In segment" while between the segment start and end.
-        {
-            // Driven in this row: the stage position minus where the row starts (stage start, typed metres summed).
-            const int64_t seg_driven_mm = stage_now_mm - segmentStartStageMm(data->state->stage_segments,
-                                                                               data->state->segment_current_number);
-            {   // average speed over the run being driven: from the box where the speed last changed.
-                // The run's start is taken when the segment changes: kept through a box that carries
-                // the speed on, restarted at a speed change, the first box, or any step back.
-                const long cur_seg = data->state->segment_current_number;
-                if (cur_seg != data->runSegIndex) {
-                    const bool carried = cur_seg == data->runSegIndex + 1 && cur_seg > 0 &&
-                        !data->state->stage_segments[static_cast<size_t>(cur_seg)].changesSpeed;
-                    if (!carried) {
-                        data->runStartCntr1 = data->state->segment_start_cntr1;
-                        data->runStartCntr2 = data->state->segment_start_cntr2;
-                        data->runStartMs = data->state->segment_start_time_ms;
-                        data->runStartAdjustMm = data->state->segment_start_adjust_mm;
-                    }
-                    data->runSegIndex = cur_seg;
-                }
-                // The original average function, fed the run's own start.
-                const int64_t run_counts = calculateDistanceCounts(*data->state, current_poll.cntr1, current_poll.cntr2,
-                                                                   data->runStartCntr1, data->runStartCntr2);
-                const double avg = calculateAverageSpeed(*data->state, data->runStartMs, current_time_ms,
-                                                         run_counts, data->state->total_distance_adjust_mm - data->runStartAdjustMm);
-                data->driverSubAvgValid = (current_time_ms - data->runStartMs > 500 && avg > 0.0);
-                data->driverSubAvgKph = data->driverSubAvgValid ? (data->state->units ? avg / 0.621371 : avg) : 0.0;
-            }
-            const double seg_total = seg.distance_m * 1000.0;   // millimetres
-            const double seg_driven = static_cast<double>(seg_driven_mm);
-            if (seg_total > 0.0) {
-                double frac = seg_driven / seg_total;
-                if (frac < 0.0) frac = 0.0;
-                if (frac > 1.0) frac = 1.0;
-                data->segmentProgress = frac;
-                data->inSegment = (seg_driven >= 0 && seg_driven <= seg_total);
-            } else {
-                data->segmentProgress = 0.0;
-                data->inSegment = false;
-            }
-            if (data->state->rally_type != 2) {
-                // Greek and Surrey: the chevron works on TIME, the only thing known for sure. It walks the
-                // scheduled row the stage clock is in, from its scheduled start to its scheduled end.
-                bool in_row = false;
-                const double stage_s = (current_time_ms - data->state->total_start_time_ms) / 1000.0;
-                data->segmentProgress = scheduledRowProgress(data->state->stage_segments, stage_s, &in_row);
-                data->inSegment = in_row;
-            }
-            if (data->driverPage == AppData::DP_ITALIAN_NAVI) {
-                // Italian navi row: the chevron follows the countdown seconds, as in a pc / pm -- waits at the
-                // start, reaches the end tick over the last 5 s, on the bar as the countdown reads 0.
-                bool sec_ok = false;
-                const double to_line = sectorSecondsToLine(*data->state, current_time_ms, &sec_ok);
-                if (sec_ok) {
-                    data->segmentProgress = finalWindowProgress(to_line);
-                    data->inSegment = true;
-                } else {
-                    data->segmentProgress = 0.0;
-                    data->inSegment = false;
-                }
-            }
-        }
-        
         // Format as mm:ss.s (not hh:mm:ss.ss)
         ss.str("");
         if (seconds >= 0) {
@@ -1106,25 +921,10 @@ void updateDriverDisplay(AppData* data) {
         int secs = total_sec % 60;
         ss << std::setfill('0') << std::setw(2) << mins << ":"
            << std::setw(2) << secs << "." << tenths;
-        gtk_label_set_text(data->aheadBehindLabel, ss.str().c_str());
-        
-        // Speed adjustment arrows (always driven by the arrow-based
-        // calculation, regardless of tone mode -- the visual indicator is
-        // unaffected by the tone types) and the ahead/behind tone
-        // (driven by whichever algorithm the type for the current side selects).
-        double stage_dist_m = static_cast<double>(stage_now_mm) / 1000.0;
-        // Italian: the tone runs from the moment a pc (its trial running) or a pm starts, not 250 m into the sector.
-        if (data->state->rally_type == 2 && stage_dist_m < 250.0 &&
-            (seg.type == SEG_PM || (seg.type == SEG_PC && data->state->trial_start_m >= 0.0)))
-            stage_dist_m = 250.0;
-        bool past_stage_end = stageDistanceComplete(data->state->stage_segments,
-            stagePositionMm(*data->state, current_poll.cntr1, current_poll.cntr2));
+        setLabelText(data->aheadBehindLabel, ss.str().c_str());
 
-        ArrowToneResult arrow = computeArrowBasedTone(
-            data->arrowToneState,
-            seconds, seg.target_speed_kph,
-            data->state->units, stage_dist_m, past_stage_end);
-
+        // Speed adjustment arrows (always the arrow-based calculation, whatever the tone type).
+        const ArrowToneResult& arrow = t.arrow;
         if (arrow.num_arrows > 0) {
             ss.str("");
             const char* color = arrow.increase_speed ? "#00CC00" : "#EE0000";
@@ -1134,141 +934,157 @@ void updateDriverDisplay(AppData* data) {
             ss << "</span>";
             gtk_label_set_markup(data->speedAdjustArrowsLabel, ss.str().c_str());
         } else {
-            gtk_label_set_text(data->speedAdjustArrowsLabel, "");
+            setLabelText(data->speedAdjustArrowsLabel, "");
         }
 
-        // One decision for the box's speaker and the phone (RB-WEB-02).
-        data->currentTone = decideToneCadence(
-            data->state->tone_enabled,
-            simpleToneForError(seconds, data->state->tone_type_behind, data->state->tone_type_ahead),
-            arrow,
-            data->simpleToneState, seconds, stage_dist_m, past_stage_end);
-        if (data->toneGen) {
-            const ToneCadence& t = data->currentTone;
-            data->toneGen->setCadence(t.tone_ms, t.silence_ms, t.freq_hz,
-                t.square ? ToneWaveform::Square
-                         : t.triangle ? ToneWaveform::Triangle : ToneWaveform::Sine);
-        }
-
-        // Redraw gauge
-        gtk_widget_queue_draw(data->rallyGaugeDrawingArea);
-        if (data->copilotGaugeArea)
-            gtk_widget_queue_draw(data->copilotGaugeArea);
+        // The gauge is redrawn at the end of the tick, when anything it shows has changed
+        // (queueGaugeRedrawIfChanged).
     } else {
         data->driverTargetText = "--.-";
-        gtk_label_set_text(data->targetSpeedLabel, "--.-");
-        gtk_label_set_text(data->gaugeTargetLabel, "--.-");
-        if (data->nextTargetSpeedLabel) gtk_label_set_text(data->nextTargetSpeedLabel, "");
-        gtk_label_set_text(data->aheadBehindLabel, "--:--.--");
-        gtk_label_set_text(data->speedAdjustArrowsLabel, "");
-        data->currentTone = ToneCadence{};
-        if (data->toneGen) data->toneGen->setCadence(0, 0);
-        data->aheadBehindSeconds = 0.0;
-        data->segmentProgress = 0.0;
-        data->inSegment = false;
-        data->driverTrial = DriverTrialView{};
-        data->driverPage = AppData::DP_GREEK_IDLE;
-        if (data->rallyGaugeDrawingArea) {
-            gtk_widget_queue_draw(data->rallyGaugeDrawingArea);
-        }
-        if (data->copilotGaugeArea) {
-            gtk_widget_queue_draw(data->copilotGaugeArea);
-        }
+        setLabelText(data->targetSpeedLabel, "--.-");
+        setLabelText(data->gaugeTargetLabel, "--.-");
+        if (data->nextTargetSpeedLabel) setLabelText(data->nextTargetSpeedLabel, "");
+        setLabelText(data->aheadBehindLabel, "--:--.--");
+        setLabelText(data->speedAdjustArrowsLabel, "");
     }
-    
+
     // Next segment info
-    if (data->state->segment_current_number >= 0 && 
+    const double current_speed = t.currentSpeed;
+    if (data->state->segment_current_number >= 0 &&
         data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size()) - 1) {
         // Left in the row: its end from the stage start minus where the car is.
+        // The position tickDrive took from the same poll and state (nothing moves them in between).
         double remaining_m = static_cast<double>(stageRowEndMm(data->state->stage_segments, data->state->segment_current_number)
-                                                 - stagePositionMm(*data->state, current_poll.cntr1, current_poll.cntr2)) / 1000.0;
-        
+                                                 - t.stagePositionMm) / 1000.0;
+
         const Segment& next_seg = data->state->stage_segments[data->state->segment_current_number + 1];
         double next_target = next_seg.target_speed_kph;
         if (data->state->units) {
-            next_target = next_target * 0.621371;
+            next_target = kphToMph(next_target);
         }
-        
+
         if (current_speed > 0 && current_speed != -1) {
             double speed_m_per_s = current_speed;
             if (data->state->units) {
-                speed_m_per_s = speed_m_per_s * 1.60934;
+                speed_m_per_s = mphToKph(speed_m_per_s);
             }
             speed_m_per_s = speed_m_per_s / 3.6;
             double eta_seconds = remaining_m / speed_m_per_s;
-            
+
             if (eta_seconds < 0) {
                 ss.str("");
                 ss << "Over by " << formatDuration(static_cast<int64_t>(-eta_seconds * 1000));
-                gtk_label_set_text(data->nextSegLabel, ss.str().c_str());
+                setLabelText(data->nextSegLabel, ss.str().c_str());
             } else {
                 ss.str("");
-                ss << "next: " << std::fixed << std::setprecision(2) << next_target 
+                ss << "next: " << std::fixed << std::setprecision(2) << next_target
                    << " in " << static_cast<long>(remaining_m) << " m  ETA " << formatDuration(static_cast<int64_t>(eta_seconds * 1000));
-                gtk_label_set_text(data->nextSegLabel, ss.str().c_str());
+                setLabelText(data->nextSegLabel, ss.str().c_str());
             }
         } else {
             ss.str("");
-            ss << "next: " << std::fixed << std::setprecision(2) << next_target 
+            ss << "next: " << std::fixed << std::setprecision(2) << next_target
                << " in " << static_cast<long>(remaining_m) << " m  ETA --:--:--";
-            gtk_label_set_text(data->nextSegLabel, ss.str().c_str());
+            setLabelText(data->nextSegLabel, ss.str().c_str());
         }
     } else {
-        gtk_label_set_text(data->nextSegLabel, "");
+        setLabelText(data->nextSegLabel, "");
     }
-    
+
     // FPS counter and CPU temp (refreshed once per second)
     data->updateCount++;
     if (current_time_ms - data->lastUpdateCountTime_ms >= 1000) {
         ss.str("");
         ss << "fps: " << data->updateCount;
-        gtk_label_set_text(data->updatesPerSecLabel, ss.str().c_str());
-        gtk_label_set_text(data->cpuTempLabel, readCpuTemp().c_str());
-        if (data->settingsFpsLabel) gtk_label_set_text(data->settingsFpsLabel, gtk_label_get_text(data->updatesPerSecLabel));
-        if (data->settingsCpuLabel) gtk_label_set_text(data->settingsCpuLabel, gtk_label_get_text(data->cpuTempLabel));
+        setLabelText(data->updatesPerSecLabel, ss.str().c_str());
+        setLabelText(data->cpuTempLabel, readCpuTemp().c_str());
+        if (data->settingsFpsLabel) setLabelText(data->settingsFpsLabel, gtk_label_get_text(data->updatesPerSecLabel));
+        if (data->settingsCpuLabel) setLabelText(data->settingsCpuLabel, gtk_label_get_text(data->cpuTempLabel));
         data->updateCount = 0;
         data->lastUpdateCountTime_ms = current_time_ms;
     }
-    
-    // Auto-start countdown overlay
-    if (data->state->auto_start_rally_time_s > 0 && !data->autoStartTriggered) {
-        const int64_t diff_ms = autoStartDiff_ms;
 
-        if (autoStartCountdownVisible(data->state->auto_start_early_departure, diff_ms)) {
-            gtk_label_set_text(data->countdownLabel, autoStartCountdownText(diff_ms).c_str());
-            // Which kind of autostart is pending, so the crew can see at a
-            // glance whether rolling before the minute is going to count.
-            // One word to a line: on one line the caption is wider than the
-            // countdown box above it and ran across the Distance and Total
-            // figures either side of it.
-            gtk_label_set_text(data->earlyDepartureLabel, earlyDepartureCaption(data->state->auto_start_early_departure).c_str());
-            if (data->countdownContainer) gtk_widget_show(data->countdownContainer);
-        } else if (diff_ms > 0) {
-            // Armed, but not yet inside the popup window: the clock runs, no popup.
-            if (data->countdownContainer) gtk_widget_hide(data->countdownContainer);
-        } else if (diff_ms <= 0 && diff_ms > -AUTO_START_TRIGGER_WINDOW_MS) {
-            if (data->countdownContainer) gtk_widget_hide(data->countdownContainer);
-            data->autoStartTriggered = true;
-            // Branches internally on auto_start_early_departure: an early
-            // departure zeroed its distance when it was armed, so only the
-            // clock starts here.
-            performAutoStart(data);
-        } else {
-            // The armed time has gone by without firing (the rally clock was set forward past it,
-            // or the display stalled through the trigger window). As at startup: dropped, idle as
-            // after an abort, never a late start -- the crew press stage go.
-            if (data->countdownContainer) gtk_widget_hide(data->countdownContainer);
-            fprintf(stderr, "[INFO] Autostart time passed without firing: dropped\n");
-            performAbortStage(data);
-        }
-    } else {
+    // Auto-start countdown overlay
+    if (t.autoStart == AutoStartTick::CountdownShown) {
+        setLabelText(data->countdownLabel, autoStartCountdownText(t.autoStartRemainingMs).c_str());
+        // Which kind of autostart is pending, so the crew can see at a
+        // glance whether rolling before the minute is going to count.
+        // One word to a line: on one line the caption is wider than the
+        // countdown box above it and ran across the Distance and Total
+        // figures either side of it.
+        setLabelText(data->earlyDepartureLabel, earlyDepartureCaption(data->state->auto_start_early_departure).c_str());
+        if (data->countdownContainer) gtk_widget_show(data->countdownContainer);
+    } else if (t.autoStart == AutoStartTick::NotPending) {
         // No autostart pending at all: the whole block goes, Early Departure
         // line included.
         if (data->countdownContainer && gtk_widget_get_visible(data->countdownContainer)) {
             gtk_widget_hide(data->countdownContainer);
         }
+    } else {
+        // Armed but outside the popup window, firing on this tick, or dropped: no popup.
+        if (data->countdownContainer) gtk_widget_hide(data->countdownContainer);
     }
-    // Last: every label and figure above is now current.
+}
+
+// Everything on_gauge_draw reads (gauge_redraw.h), as it stands now.
+static GaugeDrawInputs gaugeDrawInputs(AppData* data) {
+    GaugeDrawInputs in;
+    if (data->rallyGaugeDrawingArea) {
+        in.driverW = gtk_widget_get_allocated_width(data->rallyGaugeDrawingArea);
+        in.driverH = gtk_widget_get_allocated_height(data->rallyGaugeDrawingArea);
+    }
+    if (data->copilotGaugeArea) {
+        in.copilotW = gtk_widget_get_allocated_width(data->copilotGaugeArea);
+        in.copilotH = gtk_widget_get_allocated_height(data->copilotGaugeArea);
+    }
+    in.compact = data->driverCompactMode;
+    in.embedded = data->singleDisplayMode;
+    const TickDecision& t = data->tick;
+    in.aheadBehindSeconds = t.aheadBehindSeconds;
+    in.driverPage = t.driverPage;
+    in.inSegment = t.inSegment;
+    in.segmentProgress = t.segmentProgress;
+    in.trialActive = t.driverTrial.active;
+    in.trialArrowProgress = t.driverTrial.arrowProgress;
+    in.trialToLineS = t.driverTrial.toLineS;
+    in.trialTag = t.driverTrial.tag;
+    in.trialIsPc = t.driverTrial.isPc;
+    in.driverStageNo = t.driverStageNo;
+    in.driverMinutesValid = t.driverMinutesValid;
+    in.driverMinutesBehind = t.driverMinutesBehind;
+    in.driverMinutes = t.driverMinutes;
+    const AppData::DriverShown& sh = data->driverShown;
+    in.speed = sh.speed;
+    in.target = sh.target;
+    in.targetCap = sh.targetCap;
+    in.totalAvg = sh.totalAvg;
+    in.tripAvg = sh.tripAvg;
+    in.digital = sh.digital;
+    in.totalDist = sh.totalDist;
+    in.tripDist = sh.tripDist;
+    in.zone = sh.zone;
+    in.maxSeconds = sh.maxSeconds;
+    in.gaugeRangeS = data->state->gauge_range_s;
+    in.unitsMph = data->state->units;
+    in.distanceUnit = data->state->distance_unit;
+    in.italian = isItalian(*data->state);
+    if (data->updatesPerSecLabel) in.fpsText = gtk_label_get_text(data->updatesPerSecLabel);
+    if (data->cpuTempLabel) in.cpuText = gtk_label_get_text(data->cpuTempLabel);
+    return in;
+}
+
+void queueGaugeRedrawIfChanged(AppData* data) {
+    GaugeDrawInputs now = gaugeDrawInputs(data);
+    if (!gaugeNeedsRedraw(now, data->gaugeDrawn, data->gaugeDrawnValid)) return;
+    if (data->rallyGaugeDrawingArea) gtk_widget_queue_draw(data->rallyGaugeDrawingArea);
+    if (data->copilotGaugeArea) gtk_widget_queue_draw(data->copilotGaugeArea);
+    data->gaugeDrawn = std::move(now);
+    data->gaugeDrawnValid = true;
+}
+
+// Every figure the driver page shows, as text, for the dial and the phone. Run by the tick
+// after it has acted on the autostart, as it always was (last: every figure is then current).
+void updateDriverShown(AppData* data) {
     computeDriverShown(data);
 }
 

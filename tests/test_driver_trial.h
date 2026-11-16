@@ -20,7 +20,7 @@ class TestDriverTrial {
         RallyState s;
         s.calibration = 1000000;
         s.counters = true;
-        s.rally_type = 2;
+        s.rally_type = RALLY_ITALIAN;
         s.segments = segs;
         applySectorRules(s.segments, 10800);
         s.stage_segments = s.segments;
@@ -98,7 +98,7 @@ public:
         });
 
         suite->addTest("not active: greek, navi row, no tube clock (power loss), stage over", []() {
-            RallyState g = inPc1(); g.rally_type = 0;
+            RallyState g = inPc1(); g.rally_type = RALLY_GREEK;
             RallyState n = inPc1(); n.segment_current_number = 0;
             RallyState p = inPc1(); p.trial_start_m = -1.0;
             RallyState d = inPc1(); d.stage_complete = true;

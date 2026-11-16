@@ -138,8 +138,7 @@ GtkWidget* labelCell(const char* text) {
 void onRallyToComputer(GtkWidget*, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
     d->state->rallyTimeOffset_ms = 0;
-    ConfigFile::save(*d->state);
-    notifyWebStateNow(d);
+    saveAndNotify(d);
 }
 
 // Today's date (rally clock) at the entered time of day: the rally clock then
@@ -181,8 +180,7 @@ bool setComputerClockToPhone(AppData* d, std::string* error) {
         return false;
     }
     d->state->rallyTimeOffset_ms += before - systemNowMs();
-    ConfigFile::save(*d->state);
-    notifyWebStateNow(d);
+    saveAndNotify(d);
     return true;
 }
 
@@ -192,8 +190,7 @@ void setRallyToEntered(AppData* d, long tod_s) {
     // autoStartTargetForTimeOfDay gives that time of day in the rally clock's
     // own frame, on its current date; the offset is that less the computer's now.
     d->state->rallyTimeOffset_ms = autoStartTargetForTimeOfDay(d, tod_s) - systemNowMs();
-    ConfigFile::save(*d->state);
-    notifyWebStateNow(d);
+    saveAndNotify(d);
 }
 
 GtkWidget* createDateTimeScreen(AppData* d) {

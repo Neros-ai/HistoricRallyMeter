@@ -136,9 +136,9 @@ public:
 
         suite->addTest("next-minute is refused in italian only", []() {
             RallyState s;
-            s.rally_type = 0; ASSERT_TRUE(nextMinuteAllowed(s));
-            s.rally_type = 1; ASSERT_TRUE(nextMinuteAllowed(s));
-            s.rally_type = 2; ASSERT_FALSE(nextMinuteAllowed(s));
+            s.rally_type = RALLY_GREEK; ASSERT_TRUE(nextMinuteAllowed(s));
+            s.rally_type = RALLY_SURREY; ASSERT_TRUE(nextMinuteAllowed(s));
+            s.rally_type = RALLY_ITALIAN; ASSERT_FALSE(nextMinuteAllowed(s));
             return true;
         });
 

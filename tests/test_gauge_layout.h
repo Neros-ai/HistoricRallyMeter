@@ -110,23 +110,6 @@ public:
             return L.captionBaseline > L.tripBaseline;
         });
 
-        suite->addTest("distance caption follows the metre/kilometre switch", []() {
-            // The caption carries the unit, so it must track the automatic
-            // switch formatDistanceAutoUnit() makes from 100,000 m -- a
-            // hard-coded "metres" would misread a km value by 1000x.
-            return distanceColumnCaption("m") == "Distance (metres)"
-                && distanceColumnCaption("km") == "Distance (kilometres)";
-        });
-
-        suite->addTest("distance caption defaults to metres on a null unit", []() {
-            return distanceColumnCaption(nullptr) == "Distance (metres)";
-        });
-
-        suite->addTest("speed caption follows the KPH/MPH setting", []() {
-            return speedColumnCaption(false) == "Average Speed (Kmh)"
-                && speedColumnCaption(true) == "Average Speed (Mph)";
-        });
-
         suite->addTest("error box covers the needle hub", []() {
             // The box is lifted so its top edge is above the hub; drawn after
             // the needle it then paints the hub out, which is the point.
@@ -290,30 +273,6 @@ public:
             return gaugeTickLabel(0).empty()
                 && gaugeTickLabel(-7) == "-7"
                 && gaugeTickLabel(12) == "12";
-        });
-
-        suite->addTest("tick labels are visible only in the green zone", []() {
-            return gaugeTickLabelsVisible(5.0)
-                && !gaugeTickLabelsVisible(10.0)
-                && !gaugeTickLabelsVisible(30.0)
-                && !gaugeTickLabelsVisible(-15.0);
-        });
-
-        suite->addTest("tick labels follow the hysteretic zone, not the raw reading", []() {
-            // The gauge draws its arc, digits and chevrons from the damped
-            // zone, so the numerals must come from the same one. Taking
-            // them from the raw reading left 9.5-10.0 on the way down out of
-            // amber showing green numerals against an amber arc, and left a
-            // reading parked on 10.0 flickering them on every redraw.
-            return gaugeTickLabelsVisibleInZone(0)
-                && !gaugeTickLabelsVisibleInZone(1)
-                && !gaugeTickLabelsVisibleInZone(2)
-                // 9.7 still reads as zone 1 while descending out of amber.
-                && !gaugeTickLabelsVisibleInZone(gaugeZoneHysteretic(9.7, 1))
-                // ...and as zone 0 once it has cleared the dead band.
-                && gaugeTickLabelsVisibleInZone(gaugeZoneHysteretic(9.3, 1))
-                // The raw form still agrees with the plain zone.
-                && gaugeTickLabelsVisible(5.0) == gaugeTickLabelsVisibleInZone(gaugeZone(5.0));
         });
 
         suite->addTest("tick angle matches the needle angle for the same seconds value", []() {

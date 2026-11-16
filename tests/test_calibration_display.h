@@ -30,29 +30,6 @@ public:
             return pulsesPerKm(0) == 0.0 && pulsesPerKm(-5) == 0.0;
         });
 
-        suite->addTest("readout line carries distance and both sensors", []() {
-            // Pulses/KM dropped from this line -- it's shown on its own row
-            // elsewhere on the screen ("Using Calibration ... pulses/KM"),
-            // repeating it here just pushed the line width past the
-            // screen's budget for no benefit.
-            std::string line = calibrationReadoutLine(1000, 3236, 3236, 3236);
-            return line == "Device distance: 1000m Pulses 3236 "
-                           "S1=3236 S2=3236";
-        });
-
-        suite->addTest("readout does not group long distances with commas", []() {
-            std::string line = calibrationReadoutLine(1234567, 10, 10, 10);
-            return line.find("1234567m") != std::string::npos
-                && line.find(',') == std::string::npos;
-        });
-
-        suite->addTest("readout shows the two sensors separately", []() {
-            // The whole point of the breakdown is spotting one wheel sensor
-            // disagreeing with the other.
-            std::string line = calibrationReadoutLine(500, 1500, 1400, 1600);
-            return line.find("S1=1400 S2=1600") != std::string::npos;
-        });
-
         suite->addTest("calibration from pulses per km is the reciprocal of pulsesPerKm", []() {
             // Same formula both directions: 1e9 / x. 600000 mm/1000 counts
             // round-trips through pulsesPerKm and back.

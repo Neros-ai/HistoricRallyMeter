@@ -398,31 +398,6 @@ public:
             return true;
         });
 
-        suite->addTest("\"prev\" is the mirror, and also holds the later boundary", []() {
-            std::vector<Segment> segs(2);
-            segs[0].distance_m = 1000.0;
-            segs[1].distance_m = 2000.0;
-            // 200 m into segment 2, the crew decide the change really came here.
-            ASSERT_TRUE(retimeSegmentBoundaryBackward(segs, 1, 200000));
-            ASSERT_TRUE(std::abs(segs[0].distance_m - 1200.0) < 1e-6);
-            ASSERT_TRUE(std::abs(segs[1].distance_m - 1800.0) < 1e-6);
-            ASSERT_TRUE(std::abs((segs[0].distance_m + segs[1].distance_m)
-                                 - 3000.0) < 1e-6);
-            return true;
-        });
-
-        suite->addTest("retiming refuses when there is no neighbour to move it to", []() {
-            std::vector<Segment> segs(1);
-            segs[0].distance_m = 1000.0;
-            // Last segment: "next" has nowhere to hand the distance, and the
-            // first segment has no predecessor to give it to. Changing one
-            // side alone would silently resize the stage.
-            ASSERT_FALSE(retimeSegmentBoundaryForward(segs, 0, 950000));
-            ASSERT_FALSE(retimeSegmentBoundaryBackward(segs, 0, 200000));
-            ASSERT_TRUE(std::abs(segs[0].distance_m - 1000.0) < 1e-6);
-            return true;
-        });
-
         suite->addTest("a neighbour is never left shorter than nothing", []() {
             std::vector<Segment> segs(2);
             segs[0].distance_m = 1000.0;

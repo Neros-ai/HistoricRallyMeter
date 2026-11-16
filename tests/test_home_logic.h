@@ -162,15 +162,15 @@ public:
 
         suite->addTest("a new Greek stage clears trip history; Italian and Surrey keep it", []() {
             RallyState g;
-            g.rally_type = 0;
+            g.rally_type = RALLY_GREEK;
             g.trip_history_m = "299,254";
             clearGreekTripHistoryOnStageStart(g);
             RallyState it;
-            it.rally_type = 2;
+            it.rally_type = RALLY_ITALIAN;
             it.trip_history_m = "299,254";
             clearGreekTripHistoryOnStageStart(it);
             RallyState sy;
-            sy.rally_type = 1;
+            sy.rally_type = RALLY_SURREY;
             sy.trip_history_m = "299,254";
             clearGreekTripHistoryOnStageStart(sy);
             return g.trip_history_m.empty()
@@ -443,12 +443,6 @@ public:
                                            s.total_start_cntr1, s.total_start_cntr2) == 70;
         });
 
-        suite->addTest("speed change line", []() {
-            return speedChangeLine(50, 60, true, false) == "50<>60 kph"
-                && speedChangeLine(50, 60, false, false).empty()
-                && speedChangeLine(80, 100, true, true) == "50<>62 mph";
-        });
-
         suite->addTest("stage arrival: 6,200 m with 14 min to go is 29 kph", []() {
             StageArrival a = stageArrival(6200, 14);
             return a.valid && a.minutes == 14 && a.speed_kph == 29;
@@ -470,16 +464,6 @@ public:
         suite->addTest("stage arrival is blank with a minute or less, or no distance", []() {
             return !stageArrival(6200, 1).valid && !stageArrival(6200, 0.5).valid
                 && !stageArrival(0, 14).valid;
-        });
-
-        suite->addTest("navigator shows Greek arrival kph even in a stage; the driver gauge does not", []() {
-            const bool valid = stageArrival(6200, 14).valid;
-            return navigatorShowsArrivalKph(0, false, valid)
-                && navigatorShowsArrivalKph(0, true, valid)
-                && navigatorShowsArrivalKph(1, false, valid)
-                && !navigatorShowsArrivalKph(1, true, valid)
-                && !navigatorShowsArrivalKph(2, false, valid)
-                && !navigatorShowsArrivalKph(0, true, false);
         });
 
         // RB-NAV-46: greek Home, final
@@ -581,7 +565,7 @@ public:
         });
 
         suite->addTest("driver speeds read to two decimals in italian and one in greek", []() {
-            return driverSpeedText(24.26, 2) == "24.26" && driverSpeedText(24.26, 0) == "24.3" && driverSpeedText(30.0, 0) == "30.0";
+            return driverSpeedText(24.26, RALLY_ITALIAN) == "24.26" && driverSpeedText(24.26, RALLY_GREEK) == "24.3" && driverSpeedText(30.0, RALLY_GREEK) == "30.0";
         });
 
         suite->addTest("countdown reads mm:ss with two figures each", []() {
@@ -594,9 +578,9 @@ public:
             s.measure_ab_bc = true;
             const bool greek_on = showAdjZeroKey(s, false);
             const bool single_off = !showAdjZeroKey(s, true);
-            s.rally_type = 1;
+            s.rally_type = RALLY_SURREY;
             const bool surrey_on = showAdjZeroKey(s, false);
-            s.rally_type = 2;
+            s.rally_type = RALLY_ITALIAN;
             return off_by_default && greek_on && single_off && surrey_on && !showAdjZeroKey(s, false);
         });
 

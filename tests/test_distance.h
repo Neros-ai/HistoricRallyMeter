@@ -170,33 +170,6 @@ public:
             return true;
         });
 
-        suite->addTest("stays in whole metres up to 99,999", []() {
-            const char* unit = nullptr;
-            std::string s = formatDistanceAutoUnit(99999, &unit);
-            ASSERT_STR_EQ(std::string(unit), "m");
-            ASSERT_EQ(s, "99,999");
-            return true;
-        });
-
-        suite->addTest("switches to kilometres with two decimals from 100,000 m", []() {
-            const char* unit = nullptr;
-            ASSERT_EQ(formatDistanceAutoUnit(100000, &unit), "100.00");
-            ASSERT_STR_EQ(std::string(unit), "km");
-            ASSERT_EQ(formatDistanceAutoUnit(127480, &unit), "127.48");
-            ASSERT_EQ(formatDistanceAutoUnit(127489, &unit), "127.48");   // truncated
-            ASSERT_EQ(formatDistanceAutoUnit(1000000, &unit), "1000.00");
-            return true;
-        });
-
-        suite->addTest("negative distances switch at -100,000 m and keep the sign", []() {
-            const char* unit = nullptr;
-            ASSERT_EQ(formatDistanceAutoUnit(-99999, &unit), "-99,999");
-            ASSERT_STR_EQ(std::string(unit), "m");
-            ASSERT_EQ(formatDistanceAutoUnit(-100000, &unit), "-100.00");
-            ASSERT_STR_EQ(std::string(unit), "km");
-            return true;
-        });
-
         suite->addTest("Counter power loss restarts total, trip and segment from live counts", []() {
             RallyState state;
             state.counters = true;

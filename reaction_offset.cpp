@@ -1,5 +1,7 @@
 #include "reaction_offset.h"
 #include "sector.h"
+#include "stage_rows.h"
+#include "surrey.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -7,6 +9,10 @@
 
 int clampReactionOffsetMs(long ms) {
     return static_cast<int>(std::max<long>(-REACTION_OFFSET_MAX_MS, std::min<long>(REACTION_OFFSET_MAX_MS, ms)));
+}
+
+int clampPhoneLeadMs(long ms) {
+    return static_cast<int>(std::max<long>(0, std::min<long>(PHONE_LEAD_MAX_MS, ms)));
 }
 
 int64_t pressTimeMs(int64_t press_ms, int offset_ms) { return press_ms - offset_ms; }
@@ -22,13 +28,13 @@ int64_t pressBackMm(double speed_mps, int offset_ms) {
 
 double reactionSpeedMps(double displayed_speed, bool mph) {
     if (displayed_speed < 0.0) return 0.0;
-    return displayed_speed * (mph ? 1.609344 : 1.0) / 3.6;
+    return displayed_speed * (mph ? KM_PER_MILE : 1.0) / 3.6;
 }
 
 void applyStartPressOffset(RallyState& s, double speed_mps) {
     const int off = s.reaction_offset_ms;
     if (off == 0 || speed_mps * 3.6 < REACTION_FLYING_MIN_KPH - 1e-9) return;   // standing start: untouched
-    if (s.rally_type == 2) {   // distance is pinned to the card; only the tube clock moves
+    if (isItalian(s)) {   // distance is pinned to the card; only the tube clock moves
         if (stageIsSector(s.stage_segments) && s.trial_start_m == 0.0)
             s.trial_start_ms = pressTimeMs(s.trial_start_ms, off);
         return;
@@ -39,7 +45,7 @@ void applyStartPressOffset(RallyState& s, double speed_mps) {
     const long back = static_cast<long>(pressBackMm(speed_mps, off));
     s.total_distance_adjust_mm += back;
     s.trip_distance_adjust_mm += back;   // Trip and Total agree at a flying start
-    if (s.rally_type == 1) s.sector_start_odometer_mm -= back;   // surrey: navi total at the real point
+    if (isSurrey(s)) s.sector_start_odometer_mm -= back;   // surrey: navi total at the real point
 }
 
 void applyNextBaselineOffset(RallyState& s, double speed_mps) {

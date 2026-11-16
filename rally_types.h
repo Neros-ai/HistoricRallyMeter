@@ -13,6 +13,8 @@
 #include "arrow_tone.h"
 #include "tone_cadence.h"
 #include "driver_trial.h"
+#include "rally_tick.h"
+#include "gauge_redraw.h"
 
 // Forward declarations
 class ICounter;
@@ -23,6 +25,7 @@ class ToneGenerator;
 class RallyWebServer;
 class DebugLog;
 class StageLog;
+class ConfigSaver;
 struct HomeUi;  // Nero2.0 Home page widgets and texts (ui_home.h)
 
 // Segment structure (high precision)
@@ -58,6 +61,8 @@ struct AppData {
     uint8_t register_addr;
     RallyState* state;
     CounterPoller* poller;
+    // Every config save while the app runs goes through this (config_saver.h, callbacks.h saveConfig*).
+    ConfigSaver* saver = nullptr;
     
     // Driver window
     GtkWidget* driverWindow;
@@ -85,55 +90,32 @@ struct AppData {
     
     // Rally gauge
     GtkWidget* rallyGaugeDrawingArea;
-    double aheadBehindSeconds = 0.0;
-    double smoothedSpeed = -1.0;      // EMA-filtered current speed for display
-    double segmentProgress = 0.0;     // fraction (0..1) of the current segment driven
-    bool inSegment = false;           // true while within the current segment's distance
-    // RB-DRV-18: inside an italian pc / pm the compact gauge draws this layout instead.
-    DriverTrialView driverTrial;
+    // What the 10 ms tick decided (rally_tick.h): ahead/behind, the driver page, the tone, the
+    // Stage arrival, this tick's beeps ... The displays and the phone telemetry draw / send
+    // these; `tickMem` is what the tick carries from one run to the next.
+    TickDecision tick;
+    TickMemory tickMem;
     std::string driverTrialTargetText;   // km/h, 2 dp
     std::string driverTrialSpeedText;    // km/h, 2 dp
     // The greek / surrey speed and target as the driver page writes them (the labels and the
     // phone both take these; nothing reads the text back off a label).
     std::string driverSpeedText = "--.-", driverTargetText = "--.-";
-    // Trip and Total averages in the box's units, unrounded (the driver page writes them at 2 dp).
-    double driverTripAvg = 0.0, driverTotalAvg = 0.0;
     // What the driver page last drew, word for word, so the phone shows the same (never recomputes).
     struct DriverShown {
         std::string speed, target, targetCap, totalAvg, tripAvg, digital, totalDist, tripDist;
         int zone = 0;
         double maxSeconds = 3.0;
     } driverShown;
+    // What the gauge showed when it was last queued for a redraw (ui_driver.cpp queueGaugeRedrawIfChanged).
+    GaugeDrawInputs gaugeDrawn;
+    bool gaugeDrawnValid = false;
     // RB-DRV-19: which compact page the driver gauge draws (one set of sizes and positions).
-    static constexpr int DP_CLASSIC = 0, DP_ITALIAN_TRIAL = 1, DP_ITALIAN_NAVI = 2,
-                         DP_GREEK_STAGE = 3, DP_GREEK_IDLE = 4;
-    int driverPage = DP_GREEK_IDLE;
-    double driverTotalM = 0.0, driverTripM = 0.0;   // distances with their corrections, metres
+    // (tick.driverPage; the same numbers as DRIVER_PAGE_* in rally_tick.h / driver_trial.h.)
+    static constexpr int DP_CLASSIC = DRIVER_PAGE_CLASSIC, DP_ITALIAN_TRIAL = DRIVER_PAGE_ITALIAN_TRIAL,
+                         DP_ITALIAN_NAVI = DRIVER_PAGE_ITALIAN_NAVI, DP_GREEK_STAGE = DRIVER_PAGE_GREEK_STAGE,
+                         DP_GREEK_IDLE = DRIVER_PAGE_GREEK_IDLE;
     GtkLabel* calDistUnitLabel = nullptr;     // calibration page: "m" or "mi" beside the two distances
     GtkLabel* calActualUnitLabel = nullptr;
-    double driverStartSpeedKph = -1; // final minute before the loaded stage starts: its first target speed (kph), -1 = none
-    int driverArrivalKph = -1;      // speed to reach the next stage with a minute spare (kph), -1 = none
-    long driverStageNo = 0;         // the loaded stage, 1-99
-    // Greek stage page: the average speed over the run being driven -- from the box where the
-    // speed last changed, through any boxes that carry it on. kph, valid once 0.5 s and > 0 m in.
-    // runSegIndex / runStart*: where that run began (set by the display tick; runtime only).
-    long runSegIndex = -2;
-    uint64_t runStartCntr1 = 0, runStartCntr2 = 0;
-    int64_t runStartMs = 0;
-    long runStartAdjustMm = 0;
-    double driverSubAvgKph = 0.0;
-    bool driverSubAvgValid = false;
-    double driverRowS = 0.0;        // italian navi row: its duration at its target speed
-    bool driverMinutesValid = false;
-    bool driverMinutesBehind = false;   // italian navi: truly behind schedule, even when the rounded minutes read 0 (red)
-    long driverMinutes = 0;         // italian navi: minutes ahead (+) / behind (-)
-
-    // Runtime latch for the alternative time-error-only tone
-    // (simple_tone.h). Deliberately not persisted -- restarting the app
-    // with a fresh latch is correct, matching aheadBehindSeconds above.
-    SimpleToneState simpleToneState;
-    ArrowToneState arrowToneState;
-
     // Compact (800x480-style) driver layout: values drawn inside the gauge
     GtkWidget* driverSpeedsBox = nullptr;  // left pane, hidden in compact mode
     bool driverCompactMode = false;
@@ -229,49 +211,10 @@ struct AppData {
     GtkCheckButton* autoNextCheck;
     GtkWidget* numericKeypad;      // Numeric keypad container
     GtkEntry* activeEntry;         // Currently focused entry for keypad input
-    // Keypad target when the focused widget is a multi-line view rather than
-    // a single-line entry (the Beep Assist waypoint list). At most one of
-    // activeEntry / activeBuffer is ever non-null, so a keypress cannot land
-    // in two places.
-    GtkTextBuffer* activeBuffer = nullptr;
     GtkWidget* memoryRecallBtns[5] = {};  // Recall buttons for memory slots
 
-    // Beep Assist runtime cursors: index of the next waypoint not yet beeped,
-    // one per mode. Separate cursors so navigation and timing can each fire
-    // independently for the same waypoint -- a shared cursor meant whichever
-    // condition tripped first silently consumed the OTHER mode's beep for
-    // that waypoint too (e.g. a navigation lead-in tripping before the
-    // scheduled time meant the timing beep never fired at all).
-    // Deliberately not persisted -- on restart they are re-derived from the
-    // distance already travelled, so a power blip mid-stage does not replay
-    // every waypoint the car has already passed.
-    size_t beepNextNavIndex = 0;
-    size_t beepNextTimingIndex = 0;
-    // Set whenever the cursors no longer describe where the car is: at
-    // startup, on an edit to the waypoint list, and when Beep Assist or one
-    // of its modes is switched on. They are re-derived on the next display
-    // tick rather than on the spot, because the counter has not necessarily
-    // been polled yet at window-construction time -- deriving from an
-    // unpolled counter yields a negative travelled distance, a cursor of 0,
-    // and a replay of every waypoint already behind the car.
-    bool beepCursorsStale = true;
-    // Press-warning beeps (italian): the row being counted, the pc's tube time when
-    // it has one, and the last seconds-to-line reading, so each mark is heard once.
-    long pcBeepRow = -1;
-    int64_t pcBeepTrialMs = -1;
-    double pcBeepPrevS = 0.0;
-    // next pressed within 2 s of zero: the zero beep for the row just left is still owed -- for the box's speaker and
-    // the phone separately, as each fires its marks early by its own lead and may already have sounded it.
-    bool pcZeroBeepPendingBox = false;
-    bool pcZeroBeepPendingPhone = false;
-    // 100 m beep on a non-pc row: the row, and the last metres-to-go reading.
-    long distBeepRow = -1;
-    double distBeepPrevM = 0.0;
-    // Debounce for waypoint-list edits: the buffer's "changed" signal fires
-    // per keystroke, and committing on each one both saved the whole config
-    // to the SD card per character and could beep on a half-typed number.
-    guint beepWaypointCommitTimer = 0;
-    GtkTextBuffer* beepWaypointBuffer = nullptr;
+    // Beep Assist bookmarks and the italian press-warning beep state are in tickMem (rally_tick.h):
+    // runtime only, re-derived from the distance already travelled after a restart.
     GtkEntry* beepAdvanceMetresEntry = nullptr;
     GtkEntry* beepAdvanceSecondsEntry = nullptr;
 
@@ -336,13 +279,11 @@ struct AppData {
     // used to reach the box via the label's parent, which no longer reaches
     // far enough now there is a second row.
     GtkWidget* countdownContainer = nullptr;
-    bool autoStartTriggered = false;
     
     // Tone generator for speed adjustment alerts
     ToneGenerator* toneGen = nullptr;
-    // RB-WEB-02: the cadence toneGen was last set to, kept so the phone's
+    // RB-WEB-02: the cadence toneGen was last set to is tick.currentTone, so the phone's
     // telemetry can play the same ahead/behind tone.
-    ToneCadence currentTone;
     // The last Beep Assist beep to fire, for the phone (RB-WEB-06). Runtime
     // only: seq 0 at every app start, so a phone connecting before the first
     // waypoint has nothing to replay.

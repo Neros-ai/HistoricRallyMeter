@@ -59,15 +59,15 @@ static std::string jsonOneLine(const char* s) {
 // The compact driver page the box is drawing, so the phone gauge can follow it.
 // Distances and averages stay out of the dial; the phone footer draws those.
 std::string driverGaugeJson(AppData* data) {
-    const int page = data->driverPage;
-    const DriverTrialView& v = data->driverTrial;
+    const int page = data->tick.driverPage;
+    const DriverTrialView& v = data->tick.driverTrial;
     std::string tag = "navi";
     int icon = 0;
     if (page == AppData::DP_ITALIAN_TRIAL) {
         tag = v.tag;
         icon = v.isPc ? 1 : 2;
     } else if (page == AppData::DP_GREEK_STAGE) {
-        tag = "S" + std::to_string(data->driverStageNo);
+        tag = "S" + std::to_string(data->tick.driverStageNo);
         icon = 1;
     }
     const bool needle = page != AppData::DP_ITALIAN_NAVI && page != AppData::DP_GREEK_IDLE;
@@ -98,17 +98,20 @@ std::string driverGaugeJson(AppData* data) {
     if (page == AppData::DP_ITALIAN_TRIAL) {
         o << ",\"box\":\"" << countdownBoxText(v.toLineS) << "\""
           << ",\"sector_m\":" << [&] { char sb[32]; snprintf(sb, sizeof(sb), "%.3f", v.sectorTotalM); return std::string(sb); }()   // unrounded, so the phone rounds as the box does
-          << ",\"avg\":\"" << (v.avgValid ? trialSpeedText(data->state->units ? v.avgKph * 0.621371 : v.avgKph) : std::string("--.--")) << "\"";
+          << ",\"avg\":\"" << (v.avgValid ? trialSpeedText(data->state->units ? kphToMph(v.avgKph) : v.avgKph) : std::string("--.--")) << "\"";
     } else if (page == AppData::DP_ITALIAN_NAVI) {
-        if (data->driverMinutesValid)
-            o << ",\"min\":" << data->driverMinutes << ",\"behind\":" << (data->driverMinutesBehind ? "true" : "false");
-        const double shown = data->tripSpeedLabel
-            ? std::atof(gtk_label_get_text(data->tripSpeedLabel)) : 0.0;
+        if (data->tick.driverMinutesValid)
+            o << ",\"min\":" << data->tick.driverMinutes << ",\"behind\":" << (data->tick.driverMinutesBehind ? "true" : "false");
+        // The driver's Trip average as its label shows it (updateDriverDisplay: "%.2f" of
+        // tick.driverTripAvg, or "--.--" in an early countdown), without reading the label back:
+        // trialSpeedText is the same "%.2f", so it gives the label's text, and "--.--" was always
+        // sent as 0 (atof). The tick is not recomputed between the label and this message.
+        const double shown = data->tick.earlyCountdown ? 0.0 : data->tick.driverTripAvg;
         o << ",\"avg\":\"" << trialSpeedText(shown) << "\"";
     } else if (page == AppData::DP_GREEK_STAGE) {
         char sb[24];
-        if (data->driverSubAvgValid) {
-            const double sp = data->state->units ? data->driverSubAvgKph * 0.621371 : data->driverSubAvgKph;
+        if (data->tick.driverSubAvgValid) {
+            const double sp = data->state->units ? kphToMph(data->tick.driverSubAvgKph) : data->tick.driverSubAvgKph;
             snprintf(sb, sizeof(sb), "%.1f", sp);
         } else {
             snprintf(sb, sizeof(sb), "--.-");
@@ -123,8 +126,8 @@ std::string driverGaugeJson(AppData* data) {
         if (page == AppData::DP_ITALIAN_TRIAL) {
             prog = v.arrowProgress;
             tick = true;
-        } else if (data->inSegment) {
-            prog = data->segmentProgress;
+        } else if (data->tick.inSegment) {
+            prog = data->tick.segmentProgress;
             tick = true;
         }
         if (prog < 0.0) prog = 0.0;
@@ -142,7 +145,7 @@ std::string driverGaugeJson(AppData* data) {
 // never disagree.
 // The driver's T- countdown and its Early Departure caption, null when the box shows none (item 9).
 static std::string autostartCdJson(AppData* data) {
-    if (!(data->state->auto_start_rally_time_s > 0 && !data->autoStartTriggered)) return "null";
+    if (!(data->state->auto_start_rally_time_s > 0 && !data->tickMem.autoStartTriggered)) return "null";
     const int64_t diff_ms = autoStartRemaining_ms(data);
     if (!autoStartCountdownVisible(data->state->auto_start_early_departure, diff_ms)) return "null";
     return std::string("{\"text\":\"") + jsonEscape(autoStartCountdownText(diff_ms)) + "\",\"early\":\""
@@ -176,21 +179,9 @@ std::string buildTelemetryJson(AppData* data) {
     auto raw_poll = data->poller->getMostRecentRaw();
     int64_t current_time_ms = getRallyTime_ms(*data->state);
 
-    const bool hold_at_zero = autoStartHoldActive(data);
-
-    double ahead_behind_s = 0.0;
-    // A finished stage is off the gauge (ui_driver.cpp), so it has no figure here either.
-    if (data->state->segment_current_number >= 0 && !data->state->stage_complete &&
-        data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
-        // The driver gauge's own figure (italian: the pc / pm error, at rest elsewhere).
-        ahead_behind_s = gaugeAheadSeconds(*data->state, current_poll.cntr1, current_poll.cntr2,
-            current_time_ms, stagePositionMm(*data->state, current_poll.cntr1, current_poll.cntr2));
-        // The same hold the driver display applies (ui_driver.cpp). Held here
-        // too, or the phone would show the previous stage's error climbing at
-        // the line while the driver's gauge sits at rest -- two screens
-        // disagreeing about whether the crew are on time.
-        if (hold_at_zero) ahead_behind_s = 0.0;
-    }
+    // The driver gauge's own figure, as the tick decided it (rally_tick.h): at rest with no stage
+    // on the gauge and while an on-the-minute autostart counts down (italian: the pc / pm error).
+    const double ahead_behind_s = data->tick.aheadBehindSeconds;
 
     NextPrevState np = computeNextPrevState(data);
     std::string rally_clock = formatTime(current_time_ms);
@@ -222,42 +213,29 @@ std::string buildTelemetryJson(AppData* data) {
         np.sector_finish ? "true" : "false",
         data->state->units ? "mph" : "kph",
         data->state->rally_type,
-        toneCadenceJson(data->currentTone).c_str(),
+        toneCadenceJson(data->tick.currentTone).c_str(),
         beepEventJson(data->lastBeep).c_str());
 
     // Nero2.0: what the Navi, Time and Set tabs show.
     long next_m = 0;
     bool has_next_m = false;
     const RallyState& st = *data->state;
+    // Italian only (the row countdown and the sector panel): one reading, one state, one position.
+    const int64_t italian_stage_mm = isItalian(st) ? stagePositionMm(st, current_poll.cntr1, current_poll.cntr2) : 0;
     if (st.segment_current_number >= 0 &&
         st.segment_current_number < static_cast<long>(st.stage_segments.size())) {
         has_next_m = true;
         // Same countdown as the box: greek and surrey count to the next speed change from the stage start,
         // italian counts the row's own distance.
-        if (st.rally_type != 2) {
+        if (!isItalian(st)) {
             next_m = countdownMetres(st.stage_segments, st.segment_current_number,
                                      totalShownMetres(st, current_poll.cntr1, current_poll.cntr2));
         } else {
-            next_m = rowCountdownMetres(st.stage_segments, st.segment_current_number,
-                                        stagePositionMm(st, current_poll.cntr1, current_poll.cntr2));
+            next_m = rowCountdownMetres(st.stage_segments, st.segment_current_number, italian_stage_mm);
         }
     }
-    // Stage arrival
-    long start_s = -1, start_dist = 0;
-    if (st.last_memory_slot >= 1 && st.last_memory_slot <= RallyState::MAX_MEMORY_SLOTS) {
-        start_s = st.memory_slots[st.last_memory_slot - 1].start_time_s;
-        start_dist = st.memory_slots[st.last_memory_slot - 1].start_distance_m;
-    }
-    StageArrival arr;
-    if (start_s >= 0) {
-        time_t t = current_time_ms / 1000;
-        struct tm* lt = localtime(&t);
-        if (lt) {
-            long tod = lt->tm_hour * 3600L + lt->tm_min * 60L + lt->tm_sec;
-            arr = stageArrival(static_cast<double>(metresToStageStart(st, current_poll.cntr1, current_poll.cntr2, start_dist)),
-                               (start_s - tod) / 60.0);   // distance still to go, as the box
-        }
-    }
+    // Stage arrival: the tick's one figure, the same one Home draws (stage_panel.arr), in every rally type.
+    const StageArrivalNow& arr = data->tick.arrival;
     const int64_t sys_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
     // The box's zone, so the phone shows the box's clock time whatever its own zone.
@@ -280,8 +258,8 @@ std::string buildTelemetryJson(AppData* data) {
     // RB-WEB-21: italian count down as the box prints it (same sectorPanel, same text).
     std::string itCount = "null";
     std::string sectorJson = "null";
-    if (st.rally_type == 2) {
-        const long stage_m = stagePositionMm(st, current_poll.cntr1, current_poll.cntr2) / 1000;
+    if (isItalian(st)) {
+        const long stage_m = italian_stage_mm / 1000;
         const SectorPanel sp = sectorPanel(st, current_time_ms, stage_m);
         if (sp.running) {
             itCount = "{\"km\":\"" + sectorCountdownKmText(sp, st.distance_unit) + "\",\"past\":" + (sp.metresPast > 0 ? "true" : "false") +
@@ -293,7 +271,7 @@ std::string buildTelemetryJson(AppData* data) {
     std::ostringstream ex;
     ex << ",\"gauge_range\":" << data->state->gauge_range_s
        << ",\"reverse\":" << (data->poller->reverse() ? "true" : "false")
-       << ",\"navi_m\":" << ((isSurrey(st) || st.rally_type == 2) ? std::to_string(surreyNaviMetres(st, current_poll.cntr1, current_poll.cntr2)) : std::string("null"))
+       << ",\"navi_m\":" << ((isSurrey(st) || isItalian(st)) ? std::to_string(surreyNaviMetres(st, current_poll.cntr1, current_poll.cntr2)) : std::string("null"))
        << ",\"surrey\":" << (isSurrey(st) ? "true" : "false")
        << ",\"stage_panel\":" << stagePanelJson(data)
        << ",\"auto_time_past\":" << ((data->home && data->home->autoTimePast) ? "true" : "false")
@@ -331,7 +309,7 @@ std::string buildTelemetryJson(AppData* data) {
        << ",\"date_text\":\"" << rallyDateText(current_time_ms) << "\""
        << ",\"next_minute\":\"" << nextMinuteCaption(data) << "\""
        // The Navi zero question's two figures, as the box's dialog prints them.
-       << ",\"zero_by\":\"" << [&] { char z[24]; snprintf(z, sizeof(z), "%.2f", data->aheadBehindSeconds); return std::string(z); }() << "\""
+       << ",\"zero_by\":\"" << [&] { char z[24]; snprintf(z, sizeof(z), "%.2f", data->tick.aheadBehindSeconds); return std::string(z); }() << "\""
        << ",\"zero_now\":\"" << [&] { char z[24]; snprintf(z, sizeof(z), "%.2f", st.ahead_behind_zero_offset_ms / 1000.0); return std::string(z); }() << "\""
        // What is typed in the box's own Enter rally time field, so the phone's field follows it (item 47).
        << ",\"dt_enter\":\"" << jsonEscape(data->timeEntry ? gtk_entry_get_text(data->timeEntry) : "") << "\""

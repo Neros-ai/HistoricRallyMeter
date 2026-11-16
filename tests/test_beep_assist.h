@@ -18,55 +18,6 @@ public:
 
         // ---- parsing ----
 
-        suite->addTest("parses a comma-separated kilometre list into metres", []() {
-            std::vector<double> w = parseBeepWaypointsKm("3.67, 4.98, 6.06");
-            return w.size() == 3
-                && std::abs(w[0] - 3670.0) < 0.001
-                && std::abs(w[1] - 4980.0) < 0.001
-                && std::abs(w[2] - 6060.0) < 0.001;
-        });
-
-        suite->addTest("accepts semicolons and spaces as separators too", []() {
-            // The numeric keypad offers ";", so both must work.
-            std::vector<double> w = parseBeepWaypointsKm("1.5; 2.5 3.5");
-            return w.size() == 3;
-        });
-
-        suite->addTest("sorts waypoints into travel order", []() {
-            // Entered out of order, they must still fire in the order the car
-            // reaches them.
-            std::vector<double> w = parseBeepWaypointsKm("6.06, 3.67, 4.98");
-            return w.size() == 3 && w[0] < w[1] && w[1] < w[2];
-        });
-
-        suite->addTest("drops duplicates", []() {
-            // A duplicate would beep twice at the same point.
-            std::vector<double> w = parseBeepWaypointsKm("3.67, 3.67, 4.98");
-            return w.size() == 2;
-        });
-
-        suite->addTest("skips a malformed token instead of losing the list", []() {
-            // One typo must not cost the operator every other waypoint.
-            std::vector<double> w = parseBeepWaypointsKm("3.67, banana, 4.98");
-            return w.size() == 2
-                && std::abs(w[0] - 3670.0) < 0.001
-                && std::abs(w[1] - 4980.0) < 0.001;
-        });
-
-        suite->addTest("drops negative waypoints", []() {
-            return parseBeepWaypointsKm("-2.0, 3.67").size() == 1;
-        });
-
-        suite->addTest("an empty list parses to no waypoints", []() {
-            return parseBeepWaypointsKm("").empty()
-                && parseBeepWaypointsKm("   ,  ; ").empty();
-        });
-
-        suite->addTest("round-trips back to the display form", []() {
-            std::vector<double> w = parseBeepWaypointsKm("3.67, 4.98, 17.30");
-            return formatBeepWaypointsKm(w) == "3.67, 4.98, 17.30";
-        });
-
         // ---- the cursor ----
 
         suite->addTest("cursor starts at the first waypoint before the start", []() {

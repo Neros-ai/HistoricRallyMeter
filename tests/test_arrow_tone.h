@@ -4,6 +4,7 @@
 #include "test_framework.h"
 #include "../arrow_tone.h"
 
+#include <algorithm>
 #include <cmath>
 
 // Tests for the existing speed/arrow-based ahead/behind tone, extracted
@@ -250,6 +251,137 @@ public:
             ArrowToneState st14;
             ArrowToneResult r = computeArrowBasedTone(st14, -2.0, TARGET_100KPH, true, 1000.0, false);
             return r.num_arrows == 2;
+        });
+
+
+        // Beat-gap rungs: each 0.2 s step of the live error has its own rung,
+        // taken on the line going up, released 0.1 s below the line going down.
+        const int LADDER[ARROW_TONE_STEPS] = {
+            1000, 700, 500, 360, 260, 220, 190, 165, 145, 130, 118, 106, 94, 82, 70 };
+        auto tick = [](ArrowToneState& st, double e) {
+            return computeArrowBasedTone(st, e, 100.0, false, 1000.0, false);
+        };
+
+        suite->addTest("growing error: every rung heard in order, on its line, none skipped", [LADDER, tick]() {
+            for (int ph = 0; ph < 200; ph++) {
+                double start = ph * 0.0005 / 200.0 + (ph == 0 ? 0.00063 : ph == 1 ? 0.0025 : 0.0);
+                ArrowToneState st;
+                int expectRung = 1;          // next rung we expect to hear
+                for (double e = start; e <= 3.2; e += 0.0005) {
+                    ArrowToneResult r = tick(st, e);
+                    if (e < 0.2) { ASSERT_FALSE(r.tone_active); continue; }
+                    ASSERT_TRUE(r.tone_active);
+                    int line = std::min(15, static_cast<int>(std::floor(e / 0.2 + 1e-9)));
+                    // Always the live error's own rung: never stale, never skipped.
+                    ASSERT_EQ(r.silence_ms, LADDER[line - 1]);
+                    if (line == expectRung) expectRung++;
+                    ASSERT_TRUE(line <= expectRung);
+                }
+                ASSERT_EQ(expectRung, 16);
+            }
+            return true;
+        });
+
+        suite->addTest("growing error on the behind side: same gaps, 560 Hz", [LADDER, tick]() {
+            ArrowToneState st;
+            int seen = 0;
+            for (double e = 0.0; e <= 3.2; e += 0.0005) {
+                ArrowToneResult r = tick(st, -e);
+                if (e < 0.2) { ASSERT_FALSE(r.tone_active); continue; }
+                int line = std::min(15, static_cast<int>(std::floor(e / 0.2 + 1e-9)));
+                ASSERT_EQ(r.silence_ms, LADDER[line - 1]);
+                ASSERT_NEAR(r.freq_hz, ARROW_TONE_BEHIND_HZ, 1e-9);
+                if (line > seen) { ASSERT_EQ(line, seen + 1); seen = line; }
+            }
+            ASSERT_EQ(seen, 15);
+            return true;
+        });
+
+        suite->addTest("shrinking error: each rung held until 0.1 s below its line, then the next down", [LADDER, tick]() {
+            ArrowToneState st;
+            tick(st, 3.2);
+            int rung = 15;
+            for (double e = 3.2; e >= 0.0; e -= 0.0005) {
+                ArrowToneResult r = tick(st, e);
+                if (e < 0.2) { ASSERT_FALSE(r.tone_active); continue; }
+                // Drop to rung-1 only once e < 0.2*rung - 0.1 (small float slack).
+                while (rung > 1 && e < 0.2 * rung - 0.1 - 1e-9) rung--;
+                ASSERT_TRUE(r.tone_active);
+                ASSERT_EQ(r.silence_ms, LADDER[rung - 1]);
+            }
+            ASSERT_EQ(rung, 1);
+            return true;
+        });
+
+        suite->addTest("sitting on a rung line does not flutter", [tick]() {
+            ArrowToneState st;
+            for (double e = 0.0; e < 0.41; e += 0.01) tick(st, e);
+            for (int i = 0; i < 500; i++) {
+                double e = 0.40 + ((i % 3) - 1) * 0.05;        // 0.35, 0.40, 0.45
+                ASSERT_EQ(tick(st, e).silence_ms, 700);
+            }
+            ArrowToneState st2;
+            for (double e = 0.0; e <= 0.55; e += 0.01) tick(st2, e);
+            for (double e = 0.55; e >= 0.40; e -= 0.01) tick(st2, e);
+            for (int i = 0; i < 500; i++) {
+                double e = 0.40 + ((i % 3) - 1) * 0.05;
+                ASSERT_EQ(tick(st2, e).silence_ms, 700);
+            }
+            return true;
+        });
+
+        suite->addTest("a jump lands on the live rung at once", [tick]() {
+            ArrowToneState st;
+            ASSERT_EQ(tick(st, 0.9).silence_ms, 360);
+            ASSERT_EQ(tick(st, 0.25).silence_ms, 1000);
+            return true;
+        });
+
+        suite->addTest("ahead to behind in one tick takes the new side's rung", [tick]() {
+            ArrowToneState st;
+            ArrowToneResult a = tick(st, 0.5);
+            ASSERT_EQ(a.silence_ms, 700);
+            ASSERT_NEAR(a.freq_hz, ARROW_TONE_AHEAD_HZ, 1e-9);
+            ArrowToneResult b = tick(st, -0.5);
+            ASSERT_EQ(b.silence_ms, 700);
+            ASSERT_NEAR(b.freq_hz, ARROW_TONE_BEHIND_HZ, 1e-9);
+            // From a high rung across to a low one: no carried-over rung.
+            ArrowToneState s2;
+            tick(s2, 2.0);
+            ASSERT_EQ(tick(s2, -0.45).silence_ms, 700);
+            return true;
+        });
+
+        suite->addTest("going silent clears the held rung", []() {
+            auto fresh = [](ArrowToneState& st) {
+                computeArrowBasedTone(st, 1.1, 100.0, false, 1000.0, false);   // rung 5 held
+                ASSERT_EQ(st.heldRung, 5);
+                return true;
+            };
+            auto reenter = [](ArrowToneState& st) {
+                return computeArrowBasedTone(st, 0.21, 100.0, false, 1000.0, false);
+            };
+            ArrowToneState a; ASSERT_TRUE(fresh(a));
+            computeArrowBasedTone(a, 0.1, 100.0, false, 1000.0, false);
+            ASSERT_EQ(a.heldRung, 0);
+            ASSERT_EQ(reenter(a).silence_ms, 1000);
+            ArrowToneState b; ASSERT_TRUE(fresh(b));
+            computeArrowBasedTone(b, 1.1, 0.0, false, 1000.0, false);          // no target speed
+            ASSERT_EQ(b.heldRung, 0);
+            ASSERT_EQ(reenter(b).silence_ms, 1000);
+            ArrowToneState c; ASSERT_TRUE(fresh(c));
+            computeArrowBasedTone(c, 1.1, 100.0, false, 100.0, false);         // under 250 m
+            ASSERT_EQ(c.heldRung, 0);
+            ASSERT_EQ(reenter(c).silence_ms, 1000);
+            ArrowToneState d; ASSERT_TRUE(fresh(d));
+            computeArrowBasedTone(d, 1.1, 100.0, false, 1000.0, true);         // past the end
+            ASSERT_EQ(d.heldRung, 0);
+            ASSERT_EQ(reenter(d).silence_ms, 1000);
+            ArrowToneState e; ASSERT_TRUE(fresh(e));
+            computeArrowBasedTone(e, 31.0, 100.0, false, 1000.0, false);       // beyond 30 s
+            ASSERT_EQ(e.heldRung, 0);
+            ASSERT_EQ(reenter(e).silence_ms, 1000);
+            return true;
         });
 
         return suite;

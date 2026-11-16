@@ -151,7 +151,7 @@ gboolean onDraw(GtkWidget* w, cairo_t* cr, gpointer user_data) {
         break;
     case HISTORY: {
         cyan(cr);
-        drawText(cr, h->labelMode == 2 ? "Sub history" : "Trip history", width / 2.0, 20, 20, CENTRE);
+        drawText(cr, h->labelMode == RALLY_ITALIAN ? "Sub history" : "Trip history", width / 2.0, 20, 20, CENTRE);
         white(cr);
         // Figures right-aligned inside a block sized for "99,999" (6 x 24 px),
         // and that block centred in the column.
@@ -397,8 +397,6 @@ void onScheduledStart(GtkWidget* w, gpointer user_data) {
     if (!stageEditSetAutostart(data, true, &err)) flashNotice(w, err);
 }
 
-void loadStageNumber(AppData* data, int n);
-
 // One stage in a direction, blanks included (RB-NAV-64: as the Segments page's - / +); no wrap.
 // A blank number is selected empty, ready to be programmed, as Choose Stage does.
 void stepStage(AppData* data, int dir) {
@@ -417,18 +415,6 @@ void onStageMinus(GtkWidget* w, gpointer d) {
 }
 void onStagePlus(GtkWidget* w, gpointer d) {
     if (confirmStageChange(w, static_cast<AppData*>(d))) stepStage(static_cast<AppData*>(d), +1);
-}
-
-// Load stage n: a programmed stage is recalled; an empty number is selected
-// empty, ready to be programmed.
-void loadStageNumber(AppData* data, int n) {
-    if (!validStageNumber(n)) return;
-    if (!data->state->memory_slots[n - 1].empty()) {
-        recallMemorySlot(data, n);
-    } else {
-        stageEditSelect(data, n);   // guarded: does nothing while a stage is live
-        refreshSegmentList(data);
-    }
 }
 
 // A tap on the stage number opens Choose Stage (the set key's popup).
@@ -477,7 +463,7 @@ void setReverse(AppData* data, bool on) {
     // a restart after reversing still lines up.
     data->state->reverse_shift1 = data->poller->virtualShift1();
     data->state->reverse_shift2 = data->poller->virtualShift2();
-    ConfigFile::save(*data->state);
+    saveConfig(data);
     updateWhoop(data);
 }
 
@@ -745,7 +731,7 @@ GtkWidget* createHomeScreen(AppData* data) {
 // history and the stage panel, and the next-minute and auto keys are blanked.
 static void updateItalianHome(AppData* data) {
     HomeUi* h = data->home;
-    const bool it = data->state->rally_type == 2;
+    const bool it = isItalian(*data->state);
     if (it != h->italian) { h->italian = it; if (h->figureArea[2]) markDirty(h->figureArea[2]); }
     if (h->stack && gtk_stack_get_child_by_name(GTK_STACK(h->stack), "italian")) {
         const char* shown = gtk_stack_get_visible_child_name(GTK_STACK(h->stack));
@@ -775,7 +761,7 @@ static void updateItalianHome(AppData* data) {
             if (GTK_IS_LABEL(lbl)) gtk_label_set_justify(GTK_LABEL(lbl), GTK_JUSTIFY_CENTER);
             GtkStyleContext* c = gtk_widget_get_style_context(h->leftKeys[i]);
             if (it && i == 0) gtk_style_context_add_class(c, "key-18"); else gtk_style_context_remove_class(c, "key-18");
-            if (i == 2) { if (it || data->state->rally_type == 1) gtk_style_context_remove_class(c, "key-21"); else gtk_style_context_add_class(c, "key-21"); }
+            if (i == 2) { if (it || isSurrey(*data->state)) gtk_style_context_remove_class(c, "key-21"); else gtk_style_context_add_class(c, "key-21"); }
         }
         if (data->nextPrevBtn) {
             gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), readoutKeyName(data->state->rally_type, 3));
@@ -797,7 +783,7 @@ static void updateItalianHome(AppData* data) {
         // Surrey keeps a time-taken foot under Trip history, so its area is taller.
         if (h->historyArea) {
             const int rows = tripHistoryRows(*data->state);
-            const bool sur = data->state->rally_type == 1;
+            const bool sur = isSurrey(*data->state);
             gtk_widget_set_size_request(h->historyArea, HIST_W,
                                         24 + (sur ? SURREY_HISTORY_PITCH : 46) * rows + (sur ? SURREY_TIME_TAKEN_H : 0));
         }
@@ -879,10 +865,9 @@ void updateHomeDisplay(AppData* data) {
             gtk_button_set_label(GTK_BUTTON(h->stageNoBtn), no.c_str());
         }
 
-        long start_s = -1, start_dist = 0;
+        long start_s = -1;
         if (slot >= 1 && slot <= RallyState::MAX_MEMORY_SLOTS) {
             start_s = data->state->memory_slots[slot - 1].start_time_s;
-            start_dist = data->state->memory_slots[slot - 1].start_distance_m;
         }
         std::string armed = formatAutoStartStatus(data->state->auto_start_rally_time_s,
                                                   data->state->auto_start_early_departure,
@@ -925,7 +910,7 @@ void updateHomeDisplay(AppData* data) {
             double cum_m = 0.0;
             for (long i = 0; i < static_cast<long>(segs.size()); i++) {
                 if (i == 0 || segs[i].changesSpeed)
-                    changes.push_back({i, segs[i].target_speed_kph * (data->state->units ? 0.621371 : 1.0), cum_m});
+                    changes.push_back({i, segs[i].target_speed_kph * (data->state->units ? MILES_PER_KM : 1.0), cum_m});
                 cum_m += segs[i].distance_m;
             }
         }
@@ -951,27 +936,13 @@ void updateHomeDisplay(AppData* data) {
         // out of date: it is crossed out like the word "auto".
         bool time_past = false;
         if (!is_armed && start_s >= 0) {
-            time_t tt = now_ms / 1000;
-            struct tm* lt0 = localtime(&tt);
-            if (lt0) time_past = start_s < lt0->tm_hour * 3600L + lt0->tm_min * 60L + lt0->tm_sec;
+            long tod0 = 0;
+            if (timeOfDaySeconds(now_ms, &tod0)) time_past = start_s < tod0;
         }
 
-        // Stage arrival: minutes until the loaded memory's start time.
-        StageArrival arr;
-        if (start_s >= 0) {
-            time_t t = now_ms / 1000;
-            struct tm* lt = localtime(&t);
-            if (lt) {
-                long tod = lt->tm_hour * 3600L + lt->tm_min * 60L + lt->tm_sec;
-                // Distance still to go to the start line (Total as shown); past it, nothing.
-                long to_go_m = start_dist;   // no counters yet: the whole distance, as before
-                if (data->poller) {
-                    const CounterPoll arrPoll = data->poller->getMostRecent();
-                    to_go_m = metresToStageStart(*data->state, arrPoll.cntr1, arrPoll.cntr2, start_dist);
-                }
-                arr = stageArrival(static_cast<double>(to_go_m), (start_s - tod) / 60.0);
-            }
-        }
+        // Stage arrival: minutes until the loaded memory's start time, and the speed to be there a
+        // minute early. The tick's one figure (rally_tick.h); Home shows it in every rally type.
+        const StageArrivalNow& arr = data->tick.arrival;
 
         bool changed = (data->state->units != h->unitsMph) || (data->state->distance_unit != h->distanceKm)
                     || (word_auto != h->autoArmed) || (auto_time != h->autoTime)
@@ -1008,7 +979,7 @@ void updateHomeDisplay(AppData* data) {
         if (dst != src) { dst = src; markDirty(area); }
     };
     // The three figures are written once per cycle: italian's km figures come from updateItalianHome below.
-    if (data->state->rally_type != 2) {
+    if (!isItalian(*data->state)) {
         if (!isSurrey(*data->state)) mirror(h->figure[0], gtk_label_get_text(data->totalDistLabel), h->figureArea[0]);   // surrey: below
         mirror(h->figure[1], gtk_label_get_text(data->tripDistLabel), h->figureArea[1]);
         // "---.---" (no segment) is wider than the 88 px figure column.
@@ -1022,7 +993,7 @@ void updateHomeDisplay(AppData* data) {
     // mm:ss to the next speed change, driving at the segments' speeds.
     std::string line;
     const RallyState& st = *data->state;
-    if (st.rally_type == 0 && st.segment_current_number >= 0 &&
+    if (isGreek(st) && st.segment_current_number >= 0 &&
         st.segment_current_number < static_cast<long>(st.stage_segments.size()) && data->poller) {
         const CounterPoll poll = data->poller->getMostRecent();
         // Left in the row: the row's end from the stage start minus where the car is.
@@ -1089,7 +1060,7 @@ void updateHomeDisplay(AppData* data) {
 void toggleHomeFreeze(AppData* data) {
     if (!data->poller) return;
     applyFreeze(*data->state, *data->poller, !data->state->freeze_on);
-    ConfigFile::save(*data->state);
+    saveConfig(data);
     if (data->home) setLit(data->home->freezeBtn, data->state->freeze_on);
     updateWhoop(data);
     notifyWebStateNow(data);

@@ -133,6 +133,10 @@ void markSectorOdometer(RallyState& s, uint64_t c1, uint64_t c2);
 // Zero navi total here, keeping the car's roadbook position (the readout below) where it was.
 void resetOdometerKeepingPosition(RallyState& s, uint64_t c1, uint64_t c2);
 
+// The navi key's two actions in one place: `reset` zeroes navi keeping the roadbook position (metres unused);
+// otherwise navi is made to read `metres`. False, with nothing changed, when that distance is negative.
+bool applyNaviSetOrReset(RallyState& s, uint64_t c1, uint64_t c2, bool reset, double metres);
+
 // The car's roadbook position: sector total (Total with its corrections), metres.
 double sectorPositionM(const RallyState& s, uint64_t c1, uint64_t c2);
 // Seconds ahead (+) or behind (-) the sector schedule: the schedule's elapsed time at the car's

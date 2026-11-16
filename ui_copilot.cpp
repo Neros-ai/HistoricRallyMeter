@@ -176,7 +176,7 @@ static constexpr int BEEP_ASSIST_TIMING_DURATION_MS = 250;
 static constexpr int BEEP_ASSIST_NAV_GAP_MS = 150;
 
 // Plays and reports one beep -- shared by the independent navigation and
-// timing checks in updateCopilotDisplay() so a tick where both are due
+// timing checks in tickCopilot() so a tick where both are due
 // fires both, back to back, rather than one silently eating the other's
 // beep for the same waypoint.
 // Louder than the button-click beep, which keeps ToneGenerator's 0.20
@@ -266,14 +266,56 @@ void updateCounterFaultWidgets(AppData* data) {
     if (data->faultDriver) gtk_widget_set_visible(data->faultDriver, fault);
 }
 
+// A press-warning mark (italian): the navigation double beep at 5 s, a single beep at 4, 3, 2
+// and 1, and a shorter beep on 0. sound: the box's speaker. announce: the phone is told (it
+// sounds the beep on receipt).
+static void playMark(AppData* data, PcBeep beep, bool sound, bool announce) {
+    const bool five = beep == PcBeep::Five;
+    const int duration_ms = five ? BEEP_ASSIST_NAV_DURATION_MS
+        : beep == PcBeep::Zero ? PC_BEEP_ZERO_MS : PC_BEEP_TICK_MS;
+    const double freq_hz = five ? BEEP_ASSIST_NAV_FREQ_HZ : PC_BEEP_FREQ_HZ;
+    if (announce) {
+        data->lastBeep.seq++;          // the phone sounds it too
+        data->lastBeep.freq_hz = freq_hz;
+        data->lastBeep.duration_ms = duration_ms;
+        data->lastBeep.amplitude = BEEP_ASSIST_AMP;
+        data->lastBeep.triangle = false;
+        data->lastBeep.twice = five;
+        data->lastBeep.gap_ms = five ? BEEP_ASSIST_NAV_GAP_MS : 0;
+    }
+    if (!sound || !data->toneGen) return;
+    const ToneWaveform wave = five ? BEEP_ASSIST_NAV_WAVE : ToneWaveform::Sine;
+    data->toneGen->playBeep(freq_hz, wave, duration_ms, BEEP_ASSIST_AMP);
+    if (five) {
+        // Same second beep as navigation mode. A timer, not a sleep:
+        // this runs on the GTK thread.
+        g_timeout_add(BEEP_ASSIST_NAV_GAP_MS, [](gpointer d) -> gboolean {
+            static_cast<AppData*>(d)->toneGen->playBeep(
+                BEEP_ASSIST_NAV_FREQ_HZ, BEEP_ASSIST_NAV_WAVE,
+                BEEP_ASSIST_NAV_DURATION_MS, BEEP_ASSIST_AMP);
+            return G_SOURCE_REMOVE;
+        }, data);
+    }
+}
+
+// Sounds the beeps the tick decided (data->tick.beeps, rally_tick.h), in the order it decided them.
+void playTickBeeps(AppData* data) {
+    for (const TickBeep& b : data->tick.beeps) {
+        if (b.kind == TickBeep::Mark) playMark(data, static_cast<PcBeep>(b.mark), b.sound, b.announce);
+        else fireBeepAssist(data, b.waypoint_m, b.travelled_m, b.kind == TickBeep::AssistNavigation);
+    }
+}
+
+// Draws the co-pilot window. The beeps are decided by tickCopilot (rally_tick.h) and sounded by
+// playTickBeeps just before this, at the rally time this draws with (tick.copilotNowMs).
 void updateCopilotDisplay(AppData* data) {
     updateCounterFaultWidgets(data);
     auto current_poll = data->poller->getMostRecent();
-    auto current_time_ms = getRallyTime_ms(*data->state);
+    const int64_t current_time_ms = data->tick.copilotNowMs;
     
     // Rally clock
     std::string rally_time = formatTime(current_time_ms);
-    gtk_label_set_text(data->copilotRallyClockLabel, rally_time.c_str());
+    setLabelText(data->copilotRallyClockLabel, rally_time.c_str());
 
     // Re-assert the window's fixed size every tick: GTK grows a window to
     // fit its widest-ever content but never shrinks it back down, so a
@@ -285,153 +327,11 @@ void updateCopilotDisplay(AppData* data) {
         gtk_window_resize(GTK_WINDOW(data->copilotWindow), 1280, 400);
     }
 
-    // Alarm check runs regardless of which screen is visible
+    // Total distance, whichever screen is visible
     int64_t total_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
         data->state->total_start_cntr1, data->state->total_start_cntr2);
 
-    // Beep Assist. Checked here rather than on the stage-setup screen so the
-    // beeps keep coming while the operator is on any screen at all. Greek only:
-    // italian has no navigation beeps (owner 2026-10-30), only the pc countdown below.
-    if (data->state->rally_type != 2 &&
-        data->state->beep_assist_enabled && !data->state->beep_waypoints_m.empty()) {
-        // The corrected Total, not the raw counter: both readouts apply
-        // total_distance_adjust_mm (RB-NAV-03), and a waypoint is a roadbook
-        // distance the operator compares against what the display shows. On
-        // the raw value a +40 m correction made a waypoint entered as 12.00
-        // fire when the display read 12.04.
-        double travelled_m = static_cast<double>(adjustedDistanceMetersMm(
-            countsToMm(total_count_diff, data->state->calibration),
-            data->state->total_distance_adjust_mm));
-        travelled_m = beepDistanceM(*data->state, current_poll.cntr1, current_poll.cntr2, travelled_m);   // surrey: navi
-        bool stage_active = data->state->segment_current_number >= 0;
-        double elapsed_stage_s = (current_time_ms - data->state->total_start_time_ms) / 1000.0;
-
-        // Re-derive the cursors whenever they have been marked stale: at
-        // startup, after an edit to the list, and when Beep Assist or one of
-        // its modes is switched on. Done here rather than at the point the
-        // flag is set because this is the first place the counter is known to
-        // have been polled -- deriving at window-construction time read a
-        // counter that had never been polled, giving a negative travelled
-        // distance and replaying every waypoint already behind the car.
-        if (data->beepCursorsStale) {
-            data->beepNextNavIndex = beepCursorFor(data->state->beep_waypoints_m, travelled_m);
-            // Timing mode is ordered by scheduled time, not distance: a car
-            // running ahead of schedule has reached waypoints whose roadbook
-            // time has not arrived, and a distance-derived cursor would step
-            // past them and drop their beeps.
-            data->beepNextTimingIndex = stage_active
-                ? beepTimingCursorFor(data->state->beep_waypoints_m, elapsed_stage_s,
-                                      data->state->stage_segments, data->state->beep_advance_s)
-                : 0;
-            data->beepCursorsStale = false;
-        }
-
-        // Navigation and timing are independent warnings, each checked
-        // against its own cursor. A single shared cursor (the old design)
-        // let whichever condition tripped first silently consume the OTHER
-        // mode's beep for that same waypoint -- e.g. a navigation lead-in
-        // (advance_m) tripping ahead of the scheduled time meant the timing
-        // beep for that waypoint never fired at all, even though the two
-        // are meant to be separate warnings that can both be due.
-        long nav_due = dueBeepWaypoint(data->state->beep_waypoints_m, data->beepNextNavIndex,
-                                       travelled_m,
-                                       data->state->beep_navigation_mode, data->state->beep_advance_m,
-                                       false, 0.0,
-                                       stage_active, elapsed_stage_s, data->state->stage_segments);
-        if (nav_due >= 0) {
-            fireBeepAssist(data, data->state->beep_waypoints_m[static_cast<size_t>(nav_due)],
-                           travelled_m, /*navigation=*/true);
-            data->beepNextNavIndex = static_cast<size_t>(nav_due) + 1;
-        }
-
-        long timing_due = dueBeepWaypoint(data->state->beep_waypoints_m, data->beepNextTimingIndex,
-                                          travelled_m,
-                                          false, 0.0,
-                                          data->state->beep_timing_mode, data->state->beep_advance_s,
-                                          stage_active, elapsed_stage_s, data->state->stage_segments);
-        if (timing_due >= 0) {
-            fireBeepAssist(data, data->state->beep_waypoints_m[static_cast<size_t>(timing_due)],
-                           travelled_m, /*navigation=*/false);
-            data->beepNextTimingIndex = static_cast<size_t>(timing_due) + 1;
-        }
-    }
-
-    // Press warning (italian). A pc uses its own tube clock; a navi row uses the
-    // sector clock, to warn that next is due. The navigation double
-    // beep at 5 s, a single beep at 4, 3, 2 and 1, and a shorter beep on 0.
-    // A new row starts from its present reading, so marks already gone are skipped.
-    // sound: the box's speaker. announce: the phone is told (it sounds the beep on receipt).
-    auto playMark = [data](PcBeep beep, bool sound, bool announce) {
-        const bool five = beep == PcBeep::Five;
-        const int duration_ms = five ? BEEP_ASSIST_NAV_DURATION_MS
-            : beep == PcBeep::Zero ? PC_BEEP_ZERO_MS : PC_BEEP_TICK_MS;
-        const double freq_hz = five ? BEEP_ASSIST_NAV_FREQ_HZ : PC_BEEP_FREQ_HZ;
-        if (announce) {
-            data->lastBeep.seq++;          // the phone sounds it too
-            data->lastBeep.freq_hz = freq_hz;
-            data->lastBeep.duration_ms = duration_ms;
-            data->lastBeep.amplitude = BEEP_ASSIST_AMP;
-            data->lastBeep.triangle = false;
-            data->lastBeep.twice = five;
-            data->lastBeep.gap_ms = five ? BEEP_ASSIST_NAV_GAP_MS : 0;
-        }
-        if (!sound || !data->toneGen) return;
-        const ToneWaveform wave = five ? BEEP_ASSIST_NAV_WAVE : ToneWaveform::Sine;
-        data->toneGen->playBeep(freq_hz, wave, duration_ms, BEEP_ASSIST_AMP);
-        if (five) {
-            // Same second beep as navigation mode. A timer, not a sleep:
-            // this runs on the GTK thread.
-            g_timeout_add(BEEP_ASSIST_NAV_GAP_MS, [](gpointer d) -> gboolean {
-                static_cast<AppData*>(d)->toneGen->playBeep(
-                    BEEP_ASSIST_NAV_FREQ_HZ, BEEP_ASSIST_NAV_WAVE,
-                    BEEP_ASSIST_NAV_DURATION_MS, BEEP_ASSIST_AMP);
-                return G_SOURCE_REMOVE;
-            }, data);
-        }
-    };
-    {
-        // next pressed within 2 s of the zero: the zero beep for the row just left, on each device that has not had it
-        if (data->pcZeroBeepPendingBox) { data->pcZeroBeepPendingBox = false; playMark(PcBeep::Zero, true, false); }
-        if (data->pcZeroBeepPendingPhone) { data->pcZeroBeepPendingPhone = false; playMark(PcBeep::Zero, false, true); }
-        bool pc_ok = false;
-        const double pc_s = data->state->rally_type == 2
-            ? pcCountdownSeconds(*data->state, current_time_ms, &pc_ok) : 0.0;
-        const long row = data->state->segment_current_number;
-        if (!pc_ok) {
-            data->pcBeepRow = -1;
-        } else if (data->pcBeepRow != row || data->pcBeepTrialMs != data->state->trial_start_ms) {
-            data->pcBeepRow = row;
-            data->pcBeepTrialMs = data->state->trial_start_ms;
-            data->pcBeepPrevS = pc_s + 1e-6;   // a row starting exactly on a mark still hears it
-        } else {
-            // The box's speaker and the phone each get their own lead, so each is heard on the second.
-            const PcBeep beep = pcCountdownBeep(data->pcBeepPrevS - PC_BEEP_LEAD_S, pc_s - PC_BEEP_LEAD_S);
-            const double phone_lead_s = data->state->phone_beep_lead_ms / 1000.0;
-            const PcBeep phone_beep = pcCountdownBeep(data->pcBeepPrevS - phone_lead_s, pc_s - phone_lead_s);
-            data->pcBeepPrevS = pc_s;
-            if (beep != PcBeep::None) playMark(beep, true, false);
-            if (phone_beep != PcBeep::None) playMark(phone_beep, false, true);
-        }
-
-        // 100 m before the end of every row that is not a pc: one single beep.
-        bool dist_ok = false;
-        const double left_m = rowMetresToLine(
-            *data->state,
-            sectorPositionM(*data->state, current_poll.cntr1, current_poll.cntr2),
-            &dist_ok);
-        if (!dist_ok) {
-            data->distBeepRow = -1;
-        } else if (data->distBeepRow != row) {
-            data->distBeepRow = row;
-            data->distBeepPrevM = left_m + 1e-3;   // already inside 100 m: stay silent
-        } else {
-            if (hundredMetreBeep(data->distBeepPrevM, left_m)) playMark(PcBeep::Tick, true, true);
-            data->distBeepPrevM = left_m;
-        }
-    }
-
-    
     // Check which screen is visible
     GtkWidget* visible_child = gtk_stack_get_visible_child(data->copilotStack);
     
@@ -456,10 +356,10 @@ void updateCopilotDisplay(AppData* data) {
     const int dist_km = data->state->distance_unit;
     const char* total_unit = distUnitName(dist_km);
     std::string total_str = formatDistance(static_cast<double>(total_m), dist_km);
-    gtk_label_set_text(data->totalDistLabel, total_str.c_str());
-    gtk_label_set_text(data->totalUnitLabel, total_unit);
+    setLabelText(data->totalDistLabel, total_str.c_str());
+    setLabelText(data->totalUnitLabel, total_unit);
 
-    gtk_label_set_text(data->totalTimeLabel, formatElapsedInterval(total_secs).c_str());
+    setLabelText(data->totalTimeLabel, formatElapsedInterval(total_secs).c_str());
     
     // Trip distance
     int64_t trip_count_diff = calculateDistanceCounts(*data->state,
@@ -474,10 +374,10 @@ void updateCopilotDisplay(AppData* data) {
     
     const char* trip_unit = distUnitName(dist_km);
     std::string trip_str = formatDistance(static_cast<double>(trip_m), dist_km);
-    gtk_label_set_text(data->tripDistLabel, trip_str.c_str());
-    gtk_label_set_text(data->tripUnitLabel, trip_unit);
+    setLabelText(data->tripDistLabel, trip_str.c_str());
+    setLabelText(data->tripUnitLabel, trip_unit);
 
-    gtk_label_set_text(data->tripTimeLabel, formatElapsedInterval(trip_secs).c_str());
+    setLabelText(data->tripTimeLabel, formatElapsedInterval(trip_secs).c_str());
     
     // Read-only stage panel. Built from `segments` -- the roadbook as set,
     // which is what "what is loaded" means -- not from the running stage's
@@ -518,7 +418,7 @@ void updateCopilotDisplay(AppData* data) {
         data->state->segment_current_number < static_cast<long>(data->state->stage_segments.size())) {
         // The countdown runs to the next speed change, on through rows that
         // carry the speed on (Nero2.0 ditto rows); italian counts each row.
-        const bool greek_like = data->state->rally_type != 2;
+        const bool greek_like = !isItalian(*data->state);
         long remaining_m;
         if (greek_like) {   // row end from the stage start minus Total as shown: the two always sum to the roadbook figure
             remaining_m = countdownMetres(data->state->stage_segments, data->state->segment_current_number,
@@ -529,8 +429,8 @@ void updateCopilotDisplay(AppData* data) {
         }
         const char* next_unit = distUnitName(dist_km);
         std::string next_str = formatDistance(static_cast<double>(remaining_m), dist_km);
-        gtk_label_set_text(data->nextDistLabel, next_str.c_str());
-        gtk_label_set_text(data->nextUnitLabel, next_unit);
+        setLabelText(data->nextDistLabel, next_str.c_str());
+        setLabelText(data->nextUnitLabel, next_unit);
         
         long next_seg_idx = greek_like
             ? nextChangeIndex(data->state->stage_segments, data->state->segment_current_number)
@@ -542,9 +442,9 @@ void updateCopilotDisplay(AppData* data) {
         // targetSpeedLabel -- showing "40 mph" for a 40 km/h segment would be
         // wrong by a safety-relevant margin, not just a labelling nicety.
         if (data->state->units) {
-            next_display_speed *= 0.621371;
+            next_display_speed = kphToMph(next_display_speed);
         }
-        gtk_label_set_text(data->nextSpeedLabel,
+        setLabelText(data->nextSpeedLabel,
             segmentSpeedTransition(next_display_speed, has_next, data->state->units).c_str());
 
         // Live at any point in the segment: next while one follows, prev
@@ -552,15 +452,15 @@ void updateCopilotDisplay(AppData* data) {
         gtk_widget_set_sensitive(data->nextPrevBtn, nextKeyEnabled(*data->state));
         gtk_widget_set_sensitive(data->prevBtn, prevKeyEnabled(*data->state, current_poll.cntr1, current_poll.cntr2));
     } else if (data->state->stage_segments.empty()) {
-        gtk_label_set_text(data->nextDistLabel, "---.---");
-        gtk_label_set_text(data->nextUnitLabel, "m");
-        gtk_label_set_text(data->nextSpeedLabel, "---");
+        setLabelText(data->nextDistLabel, "---.---");
+        setLabelText(data->nextUnitLabel, "m");
+        setLabelText(data->nextSpeedLabel, "---");
         gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
         gtk_widget_set_sensitive(data->prevBtn, FALSE);
     } else {
-        gtk_label_set_text(data->nextDistLabel, "---.---");
-        gtk_label_set_text(data->nextUnitLabel, "m");
-        gtk_label_set_text(data->nextSpeedLabel, segmentSpeedTransition(0.0, false, false).c_str());
+        setLabelText(data->nextDistLabel, "---.---");
+        setLabelText(data->nextUnitLabel, "m");
+        setLabelText(data->nextSpeedLabel, segmentSpeedTransition(0.0, false, false).c_str());
         gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
         gtk_widget_set_sensitive(data->prevBtn, FALSE);
     }
@@ -632,274 +532,6 @@ GtkWidget* createEmbeddedGauge(AppData* data) {
 
 
     return gaugeOverlay;
-}
-
-GtkWidget* createTwinMasterScreen(AppData* data) {
-    GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_container_set_border_width(GTK_CONTAINER(screen), 5);
-    
-    // Main area: two columns (left 70%, right 30%)
-    GtkWidget* mainArea = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_pack_start(GTK_BOX(screen), mainArea, TRUE, TRUE, 0);
-    
-    // ── LEFT PANEL (70%): segment info, total, trip ──
-    // Single-display mode: cede width to the embedded gauge panel
-    GtkWidget* leftPanel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_widget_set_size_request(leftPanel, data->singleDisplayMode ? -1 : 870, -1);
-    gtk_box_pack_start(GTK_BOX(mainArea), leftPanel, TRUE, TRUE, 0);
-    
-    // Grid layout for Total/Trip/Next: columns = heading | value | unit | reset/arrow | time/speed
-    GtkWidget* distGrid = gtk_grid_new();
-    gtk_grid_set_column_spacing(GTK_GRID(distGrid), 8);
-    gtk_grid_set_row_spacing(GTK_GRID(distGrid), 2);
-    gtk_box_pack_start(GTK_BOX(leftPanel), distGrid, FALSE, FALSE, 0);
-
-    
-    // Row 0: Total distance — heading "Total" is itself the reset button
-    GtkWidget* totalHeadingBtn = gtk_button_new_with_label("Total");
-    gtk_style_context_add_class(gtk_widget_get_style_context(totalHeadingBtn), "dist-heading");
-    gtk_widget_set_valign(totalHeadingBtn, GTK_ALIGN_CENTER);
-    g_signal_connect(totalHeadingBtn, "clicked", G_CALLBACK(on_total_reset), data);
-    gtk_grid_attach(GTK_GRID(distGrid), totalHeadingBtn, 0, 0, 1, 1);
-    
-    data->totalDistLabel = GTK_LABEL(gtk_label_new("0"));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalDistLabel)), "dist-value");
-    gtk_label_set_xalign(data->totalDistLabel, 1.0);
-    // Fixed at exactly 7 chars ("999,999", the widest 6-digit value) so the
-    // rest of the row can never shift right, no matter how large the
-    // underlying distance grows -- min and max both pinned, with ellipsis
-    // at the front as the last resort if a value ever exceeds 6 digits.
-    gtk_label_set_width_chars(data->totalDistLabel, 7);
-    gtk_label_set_max_width_chars(data->totalDistLabel, 7);
-    gtk_label_set_ellipsize(data->totalDistLabel, PANGO_ELLIPSIZE_START);
-    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->totalDistLabel), 1, 0, 1, 1);
-    
-    data->totalUnitLabel = GTK_LABEL(gtk_label_new("m"));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalUnitLabel)), "dist-unit");
-    gtk_widget_set_valign(GTK_WIDGET(data->totalUnitLabel), GTK_ALIGN_END);
-    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->totalUnitLabel), 2, 0, 1, 1);
-    
-    // Col 3: Total time. Right-aligned in a fixed-width column rather than
-    // space-padded, so the column holds whichever monospace font the platform
-    // resolves -- Noto Sans Mono on the box, DejaVu in the sandbox.
-    data->totalTimeLabel = GTK_LABEL(gtk_label_new("0:00"));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalTimeLabel)), "time-label");
-    gtk_label_set_xalign(data->totalTimeLabel, 1.0);
-    // Narrower in single-display mode, where every pixel this column takes is
-    // a pixel off the embedded gauge beside it.
-    gtk_widget_set_size_request(GTK_WIDGET(data->totalTimeLabel),
-                                data->singleDisplayMode ? 70 : 90, -1);
-    gtk_widget_set_valign(GTK_WIDGET(data->totalTimeLabel), GTK_ALIGN_CENTER);
-    gtk_widget_set_margin_start(GTK_WIDGET(data->totalTimeLabel),
-                                data->singleDisplayMode ? 4 : 10);
-    // Shown in both modes: the elapsed time is the figure the crew reconcile
-    // against the roadbook, and a one-screen box has nowhere else to show it.
-    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->totalTimeLabel), 3, 0, 1, 1);
-
-    // Cols 4-6, Total row only: manual distance correction. Wheel slip or a
-    // re-measured route leaves the odometer a known amount out; without this
-    // the only remedy is a full reset, which throws the elapsed time away
-    // too. -10/+10 adjust both Total and Trip (on_distance_adjust handles
-    // that internally); "set" only ever resolves Total. There is no second
-    // row of buttons on Trip -- these three cover both readouts.
-    // In single-display mode they stack vertically in a single column instead
-    // of running across three: the panel is narrow there, but the buttons
-    // cannot simply be dropped -- without them a one-screen box has no way at
-    // all to correct a known distance error short of a full reset, which
-    // throws the elapsed time away with it.
-    {
-        struct { const char* label; int delta_m; } controls[] = {
-            { "-10", -10 }, { "set", 0 }, { "+10", 10 },
-        };
-        GtkWidget* adjustColumn = nullptr;
-        if (data->singleDisplayMode) {
-            // Half a button's height between them: the buttons are the same
-            // size as the two-screen version's, and stacked in a column a
-            // fat-finger press has nothing but the next button either side
-            // of it unless they are spaced apart.
-            adjustColumn = gtk_box_new(GTK_ORIENTATION_VERTICAL, 22);
-            gtk_widget_set_valign(adjustColumn, GTK_ALIGN_CENTER);
-            gtk_widget_set_margin_start(adjustColumn, 8);
-            // Spans the Total, Trip and next rows, so the column sits beside
-            // the readouts rather than stretching the Total row to its height.
-            gtk_grid_attach(GTK_GRID(distGrid), adjustColumn, 4, 0, 1, 3);
-        }
-        for (int c = 0; c < 3; c++) {
-            GtkWidget* btn = gtk_button_new_with_label(controls[c].label);
-            gtk_style_context_add_class(gtk_widget_get_style_context(btn), "adjust-button");
-            gtk_widget_set_valign(btn, GTK_ALIGN_CENTER);
-            if (controls[c].delta_m == 0) {
-                g_signal_connect(btn, "clicked", G_CALLBACK(on_distance_set), data);
-            } else {
-                g_object_set_data(G_OBJECT(btn), "delta_m", GINT_TO_POINTER(controls[c].delta_m));
-                g_signal_connect(btn, "clicked", G_CALLBACK(on_distance_adjust), data);
-            }
-            if (adjustColumn) {
-                gtk_box_pack_start(GTK_BOX(adjustColumn), btn, FALSE, FALSE, 0);
-            } else {
-                if (c == 0) gtk_widget_set_margin_start(btn, 15);
-                gtk_grid_attach(GTK_GRID(distGrid), btn, 4 + c, 0, 1, 1);
-            }
-        }
-    }
-
-    // Row 1: Trip distance — heading "Trip" is itself the reset button
-    GtkWidget* tripHeadingBtn = gtk_button_new_with_label("Trip");
-    gtk_style_context_add_class(gtk_widget_get_style_context(tripHeadingBtn), "dist-heading");
-    gtk_widget_set_valign(tripHeadingBtn, GTK_ALIGN_CENTER);
-    g_signal_connect(tripHeadingBtn, "clicked", G_CALLBACK(on_trip_reset), data);
-    // Read-only stage panel, in the block the distance-adjust buttons leave
-    // empty: columns 4-6, rows 1-2. Shows what is loaded and when it starts
-    // -- the crew previously had to open Stage Go or the segments screen to
-    // see either, and the Stage Go dialog is a confirmation, not somewhere
-    // to browse from.
-    // Suppressed in single-display mode with the rest of columns 3-6: the
-    // left panel is deliberately narrowed there to leave room for the
-    // embedded gauge, and this is the widest thing in the block.
-    data->stageStatusLabel = data->singleDisplayMode
-        ? nullptr : GTK_LABEL(gtk_label_new(""));
-    if (data->stageStatusLabel) {
-    gtk_style_context_add_class(
-        gtk_widget_get_style_context(GTK_WIDGET(data->stageStatusLabel)), "stage-status");
-    gtk_label_set_xalign(data->stageStatusLabel, 0.0);
-    gtk_label_set_yalign(data->stageStatusLabel, 0.0);
-    gtk_widget_set_valign(GTK_WIDGET(data->stageStatusLabel), GTK_ALIGN_START);
-    gtk_widget_set_margin_top(GTK_WIDGET(data->stageStatusLabel), 6);
-    gtk_widget_set_margin_start(GTK_WIDGET(data->stageStatusLabel), 14);
-    // Spans a third, otherwise-empty grid row: a table taller than the two
-    // rows beside it then grows downward into the blank area rather than
-    // stretching Trip and next apart to make room.
-    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->stageStatusLabel), 4, 1, 3, 3);
-    }
-
-    gtk_grid_attach(GTK_GRID(distGrid), tripHeadingBtn, 0, 1, 1, 1);
-    
-    data->tripDistLabel = GTK_LABEL(gtk_label_new("0"));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripDistLabel)), "dist-value");
-    gtk_label_set_xalign(data->tripDistLabel, 1.0);
-    gtk_label_set_width_chars(data->tripDistLabel, 7);
-    gtk_label_set_max_width_chars(data->tripDistLabel, 7);
-    gtk_label_set_ellipsize(data->tripDistLabel, PANGO_ELLIPSIZE_START);
-    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->tripDistLabel), 1, 1, 1, 1);
-    
-    data->tripUnitLabel = GTK_LABEL(gtk_label_new("m"));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripUnitLabel)), "dist-unit");
-    gtk_widget_set_valign(GTK_WIDGET(data->tripUnitLabel), GTK_ALIGN_END);
-    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->tripUnitLabel), 2, 1, 1, 1);
-    
-    // Col 3: Trip time. Right-aligned in a fixed-width column rather than
-    // space-padded, so the column holds whichever monospace font the platform
-    // resolves -- Noto Sans Mono on the box, DejaVu in the sandbox.
-    data->tripTimeLabel = GTK_LABEL(gtk_label_new("0:00"));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripTimeLabel)), "time-label");
-    gtk_label_set_xalign(data->tripTimeLabel, 1.0);
-    gtk_widget_set_size_request(GTK_WIDGET(data->tripTimeLabel),
-                                data->singleDisplayMode ? 70 : 90, -1);
-    gtk_widget_set_valign(GTK_WIDGET(data->tripTimeLabel), GTK_ALIGN_CENTER);
-    gtk_widget_set_margin_start(GTK_WIDGET(data->tripTimeLabel),
-                                data->singleDisplayMode ? 4 : 10);
-    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->tripTimeLabel), 3, 1, 1, 1);
-    
-    // Row 2: Next segment — heading is the next button. Row 3, beneath it:
-    // prev. Two buttons, live at any point in a segment (owner's ruling,
-    // 2026-09-14), where one shared button used to switch between them
-    // inside 500 m windows. See tools/layout-preview/navigator-next-prev.html.
-    data->nextPrevBtn = gtk_button_new_with_label("next");
-    gtk_style_context_add_class(gtk_widget_get_style_context(data->nextPrevBtn), "dist-heading");
-    gtk_widget_set_valign(data->nextPrevBtn, GTK_ALIGN_CENTER);
-    gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
-    g_signal_connect(data->nextPrevBtn, "clicked", G_CALLBACK(on_next_press), data);
-    gtk_grid_attach(GTK_GRID(distGrid), data->nextPrevBtn, 0, 2, 1, 1);
-
-    data->prevBtn = gtk_button_new_with_label("prev");
-    gtk_style_context_add_class(gtk_widget_get_style_context(data->prevBtn), "dist-heading");
-    gtk_widget_set_valign(data->prevBtn, GTK_ALIGN_CENTER);
-    gtk_widget_set_margin_top(data->prevBtn, 6);
-    gtk_widget_set_sensitive(data->prevBtn, FALSE);
-    g_signal_connect(data->prevBtn, "clicked", G_CALLBACK(on_prev_press), data);
-    gtk_grid_attach(GTK_GRID(distGrid), data->prevBtn, 0, 3, 1, 1);
-    
-    data->nextDistLabel = GTK_LABEL(gtk_label_new("---.---"));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->nextDistLabel)), "dist-value");
-    gtk_label_set_xalign(data->nextDistLabel, 1.0);
-    gtk_label_set_width_chars(data->nextDistLabel, 7);
-    gtk_label_set_max_width_chars(data->nextDistLabel, 7);
-    gtk_label_set_ellipsize(data->nextDistLabel, PANGO_ELLIPSIZE_START);
-    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->nextDistLabel), 1, 2, 1, 1);
-    
-    data->nextUnitLabel = GTK_LABEL(gtk_label_new("m"));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->nextUnitLabel)), "dist-unit");
-    gtk_widget_set_valign(GTK_WIDGET(data->nextUnitLabel), GTK_ALIGN_END);
-    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->nextUnitLabel), 2, 2, 1, 1);
-    
-    // Col 3: Next segment speed
-    data->nextSpeedLabel = GTK_LABEL(gtk_label_new("---"));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->nextSpeedLabel)), "time-label");
-    gtk_label_set_xalign(data->nextSpeedLabel, 0.0);
-    gtk_widget_set_size_request(GTK_WIDGET(data->nextSpeedLabel), 90, -1);
-    gtk_widget_set_valign(GTK_WIDGET(data->nextSpeedLabel), GTK_ALIGN_CENTER);
-    gtk_widget_set_margin_start(GTK_WIDGET(data->nextSpeedLabel), 10);
-    if (!data->singleDisplayMode)  // hidden in single-display mode for a bigger gauge
-        gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->nextSpeedLabel), 3, 2, 1, 1);
-    
-    // ── RIGHT PANEL (30%) ──
-    // Normal: clock.
-    // Single-display mode: embedded compact driver gauge instead (the rally
-    // clock is drawn inside the gauge).
-    GtkWidget* rightPanel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    // Single-display mode: wider panel (times/next-speed column is hidden) so
-    // the gauge can grow until it is height-limited. The gauge area's hexpand
-    // propagates to this panel, so it must fill its slot or it gets centred
-    // with dead space either side.
-    gtk_widget_set_size_request(rightPanel, data->singleDisplayMode ? 500 : 360, -1);
-    gtk_box_pack_start(GTK_BOX(mainArea), rightPanel, FALSE, data->singleDisplayMode ? TRUE : FALSE, 0);
-
-    if (data->singleDisplayMode) {
-        gtk_box_pack_start(GTK_BOX(rightPanel), createEmbeddedGauge(data), TRUE, TRUE, 0);
-
-    } else {
-    // Top row: rally clock
-    GtkWidget* topRightRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_pack_start(GTK_BOX(rightPanel), topRightRow, FALSE, FALSE, 0);
-
-    gtk_label_set_width_chars(data->copilotRallyClockLabel, 8);
-    gtk_label_set_xalign(data->copilotRallyClockLabel, 1.0);
-    gtk_box_pack_end(GTK_BOX(topRightRow), GTK_WIDGET(data->copilotRallyClockLabel), FALSE, FALSE, 0);
-    
-    }
-    
-    // ── BOTTOM ROW: Navigation buttons (20% taller) ──
-    GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
-    gtk_widget_set_margin_start(buttonBox, 5);
-    gtk_widget_set_margin_end(buttonBox, 5);
-    gtk_box_pack_end(GTK_BOX(screen), buttonBox, FALSE, FALSE, 0);
-    
-    GtkWidget* stageGoBtn = gtk_button_new_with_label("stage go");
-    GtkWidget* segmentsBtn = gtk_button_new_with_label("segments");
-    data->adjZeroBtn = gtk_button_new_with_label("driver Zero (0.00)");
-    GtkWidget* calBtn = gtk_button_new_with_label("calibration");
-    GtkWidget* datetimeBtn = gtk_button_new_with_label("date/time");
-
-    GtkWidget* navBtns[] = {stageGoBtn, segmentsBtn, data->adjZeroBtn, calBtn, datetimeBtn};
-    for (auto* btn : navBtns) {
-        gtk_style_context_add_class(gtk_widget_get_style_context(btn), "nav-button");
-        gtk_widget_set_size_request(btn, -1, 43);
-        gtk_box_pack_start(GTK_BOX(buttonBox), btn, TRUE, TRUE, 0);
-    }
-
-    g_signal_connect(stageGoBtn, "clicked", G_CALLBACK(on_stage_go), data);
-    g_signal_connect(segmentsBtn, "clicked", G_CALLBACK(on_show_segments), data);
-    g_signal_connect(data->adjZeroBtn, "clicked", G_CALLBACK(on_adj_driver_zero), data);
-    g_signal_connect(calBtn, "clicked", G_CALLBACK(on_show_calibration), data);
-    g_signal_connect(datetimeBtn, "clicked", G_CALLBACK(on_show_datetime), data);
-
-    // Nero2.0 menu key. Home keeps its old nav bar until its own re-layout, so
-    // the key takes the bar's 43 px height rather than the full 70 px.
-    GtkWidget* menuKey = createMenuKey(data);
-    gtk_widget_set_size_request(menuKey, nero::MENU_KEY_W, 43);
-    gtk_box_pack_end(GTK_BOX(buttonBox), menuKey, FALSE, FALSE, 0);
-
-    return screen;
 }
 
 // Create Auto Start Setup screen

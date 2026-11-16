@@ -1,5 +1,6 @@
 #include "simple_tone.h"
 #include <cmath>
+#include "tone_rung.h"
 
 namespace {
 constexpr double QUIET_BAND_S = 0.2;
@@ -43,6 +44,7 @@ SimpleToneResult updateSimpleTone(SimpleToneState& state,
     bool in_zone = (stageDistanceMeters >= MIN_STAGE_DISTANCE_M) && !pastStageEnd;
     if (!in_zone) {
         state.lastCommittedSeconds = 0.0;
+        state.heldRung = 0;
         return {false, 0.0, false};
     }
 
@@ -57,18 +59,29 @@ SimpleToneResult updateSimpleTone(SimpleToneState& state,
     // where it happened to land decided whether 0.20 sounded.
     if (std::abs(secondsAheadBehind) < QUIET_BAND_S) {
         state.lastCommittedSeconds = secondsAheadBehind;  // keeps the pitch armed
+        state.heldRung = 0;
         return {false, 0.0, false};
     }
 
+    // Ahead <-> behind without passing through silence: forget the held step.
+    if ((secondsAheadBehind < 0.0) != (state.lastCommittedSeconds < 0.0)) {
+        state.heldRung = 0;
+    }
     if (std::abs(secondsAheadBehind - state.lastCommittedSeconds) > UPDATE_THRESHOLD_S) {
         state.lastCommittedSeconds = secondsAheadBehind;
     }
 
     if (std::abs(state.lastCommittedSeconds) > MAX_ERROR_S) {
+        state.heldRung = 0;
         return {false, 0.0, false};
     }
 
-    double freq = rampFrequency(state.lastCommittedSeconds);
+    // The pitch: the ramp at the held step's line (0.2 s per step, 15 steps --
+    // the ramp tops out at RAMP_END_S = 3.0 s, which is step 15), on the
+    // latch's side. Steps follow the LIVE error; see simple_tone.h.
+    state.heldRung = toneHeldRung(state.heldRung, std::abs(secondsAheadBehind));
+    const double line = TONE_RUNG_STEP_S * state.heldRung;
+    double freq = rampFrequency(state.lastCommittedSeconds < 0.0 ? -line : line);
     bool triangle = (state.lastCommittedSeconds < 0.0);
     return {true, freq, triangle};
 }

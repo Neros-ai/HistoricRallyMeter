@@ -2,6 +2,7 @@
 #include "calculations.h"
 #include "stage_rows.h"
 #include "sector.h"
+#include "surrey.h"
 
 bool validStageNumber(int n) { return n >= 1 && n <= RallyState::MAX_MEMORY_SLOTS; }
 
@@ -44,7 +45,7 @@ bool changeDistanceUnit(RallyState& s, int new_unit) {
     }
     // Italian: a pc's speed is its distance over its duration, and the navi speed comes from the sector duration, so
     // both follow the new distances -- the same row rules every stage edit applies (stageEditCommit).
-    if (s.rally_type == 2) {
+    if (isItalian(s)) {
         for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
             RallyState::MemorySlot& slot = s.memory_slots[i];
             if (stageIsSector(slot.segments)) applySectorRules(slot.segments, slot.sector_duration_s);

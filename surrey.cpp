@@ -4,8 +4,16 @@
 #include "sector.h"
 #include <cstdio>
 
+bool isGreek(const RallyState& s) {
+    return s.rally_type == RALLY_GREEK;
+}
+
 bool isSurrey(const RallyState& s) {
-    return s.rally_type == 1;
+    return s.rally_type == RALLY_SURREY;
+}
+
+bool isItalian(const RallyState& s) {
+    return s.rally_type == RALLY_ITALIAN;
 }
 
 long surreyNaviMetres(const RallyState& s, uint64_t c1, uint64_t c2) {

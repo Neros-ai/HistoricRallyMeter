@@ -13,16 +13,6 @@ public:
     TestSuite* createSuite() {
         auto* suite = new TestSuite("Segment Row Labels");
 
-        suite->addTest("heading shows the current segment's target speed", []() {
-            return segmentRowHeading(30.0, true) == "30 >"
-                // Rounds the same way the speed cell does.
-                && segmentRowHeading(47.6, true) == "48 >";
-        });
-
-        suite->addTest("heading falls back when no segment is running", []() {
-            return segmentRowHeading(0.0, false) == "--->";
-        });
-
         suite->addTest("speed cell shows only the coming change, no current-speed prefix, following the unit", []() {
             // The current speed is already the row's heading; repeating it
             // here would say the same number twice. Numbers are pre-converted

@@ -1,5 +1,6 @@
 #include "driver_trial.h"
 #include "sector.h"
+#include "surrey.h"
 #include <algorithm>
 #include <cstdio>
 
@@ -32,7 +33,7 @@ std::string trialKmText(double metres) {
 DriverTrialView driverTrialView(const RallyState& s, uint64_t c1, uint64_t c2, int64_t now_ms) {
     DriverTrialView v;
     const long cur = s.segment_current_number;
-    if (s.rally_type != 2 || s.stage_complete || !stageIsSector(s.stage_segments)) return v;
+    if (!isItalian(s) || s.stage_complete || !stageIsSector(s.stage_segments)) return v;
     if (cur < 0 || cur >= static_cast<long>(s.stage_segments.size())) return v;
     const Segment& row = s.stage_segments[static_cast<size_t>(cur)];
     if (row.type != SEG_PC && row.type != SEG_PM) return v;

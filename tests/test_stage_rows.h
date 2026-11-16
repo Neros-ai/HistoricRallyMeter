@@ -27,6 +27,14 @@ public:
         auto* suite = new TestSuite("Stage Rows (RB-SEG-08)");
 
         // Owner, 2026-11-15: in greek and surrey a new speed change defaults to automatic (first row has none).
+        suite->addTest("mile conversions use the exact international mile", []() {
+            if (METRES_PER_MILE != 1609.344 || std::fabs(KM_PER_MILE - 1.609344) > 1e-12) return false;
+            if (std::fabs(kphToMph(1.609344) - 1.0) > 1e-12 || std::fabs(mphToKph(1.0) - 1.609344) > 1e-12) return false;
+            if (std::fabs(kphToMph(mphToKph(37.5)) - 37.5) > 1e-9) return false;   // round trip
+            // 100 km/h is 62.1371192... mph; the old 0.621371 constant gave 62.1371 (3e-7 low)
+            return std::fabs(kphToMph(100.0) - 62.13711922) < 1e-6 && std::fabs(MILES_PER_KM * KM_PER_MILE - 1.0) < 1e-15;
+        });
+
         suite->addTest("a row made a speed change defaults to automatic, and can be unticked", []() {
             std::vector<Segment> v;
             appendStageDistances(v, 0, {1000, 1500, 2300});
@@ -140,10 +148,10 @@ public:
             Segment seg;
             StageRow row;
             row.kph = 32.7533; row.chg = true;
-            const SegRowText g = segRowText(seg, row, 0, 0, DIST_KM3, false);
-            const SegRowText m = segRowText(seg, row, 0, 1, DIST_MI, true);
+            const SegRowText g = segRowText(seg, row, 0, RALLY_GREEK, DIST_KM3, false);
+            const SegRowText m = segRowText(seg, row, 0, RALLY_SURREY, DIST_MI, true);
             row.kph = 36; row.chg = true;
-            const SegRowText whole = segRowText(seg, row, 0, 0, DIST_KM3, false);
+            const SegRowText whole = segRowText(seg, row, 0, RALLY_GREEK, DIST_KM3, false);
             return g.kph == "32.75" && m.kph == "20.35" && whole.kph == "36";
         });
 
@@ -447,8 +455,8 @@ public:
             segs[0].distance_m = 380; segs[0].target_speed_kph = 32.75;
             segs[1].distance_m = 17230 - 380; segs[1].target_speed_kph = 32.75; segs[1].changesSpeed = false;   // ditto
             std::vector<StageRow> rows = buildStageRows(segs, 1, 0);
-            SegRowText a = segRowText(segs[0], rows[0], 0, 0, false);
-            SegRowText b = segRowText(segs[1], rows[1], 1, 0, false);
+            SegRowText a = segRowText(segs[0], rows[0], 0, RALLY_GREEK, false);
+            SegRowText b = segRowText(segs[1], rows[1], 1, RALLY_GREEK, false);
             return a.num == "1" && a.from == "0" && a.to == "380" && a.dist == "380"
                 && a.kph == "32.75" && a.dur == formatHMmSs(rows[0].time_s) && a.tot == formatHMmSs(rows[0].total_s)
                 && b.to == "17,230" && b.dist == "16,850" && b.kph == "\"" && b.ref.empty()
@@ -462,9 +470,9 @@ public:
             segs[1].target_speed_kph = 20.9032;
             segs[2].type = SEG_PM; segs[2].distance_m = 500; segs[2].ref = 2; segs[2].target_speed_kph = 30;
             std::vector<StageRow> rows = buildStageRows(segs, 1, 0);
-            SegRowText n = segRowText(segs[0], rows[0], 0, 2, true);
-            SegRowText p = segRowText(segs[1], rows[1], 1, 2, true);
-            SegRowText m = segRowText(segs[2], rows[2], 2, 2, true);
+            SegRowText n = segRowText(segs[0], rows[0], 0, RALLY_ITALIAN, true);
+            SegRowText p = segRowText(segs[1], rows[1], 1, RALLY_ITALIAN, true);
+            SegRowText m = segRowText(segs[2], rows[2], 2, RALLY_ITALIAN, true);
             return n.num == "1" && n.ref.empty() && n.kph == "32.75" && n.dur == formatHMmSs(rows[0].time_s)
                 && p.num == "2" && p.ref == "1" && p.kph == "20.90" && p.dur == "0:31"
                 && p.from == "0.38" && p.to == "0.56" && p.dist == "0.18"
@@ -476,9 +484,9 @@ public:
             segs[0].distance_m = 380; segs[0].target_speed_kph = 64.37376;   // 40 mph typed
             segs[1].type = SEG_PM; segs[1].distance_m = 500; segs[1].ref = 2; segs[1].target_speed_kph = 50;
             std::vector<StageRow> rows = buildStageRows(segs, 1, 0);
-            SegRowText g = segRowText(segs[0], rows[0], 0, 0, false, true);
-            SegRowText g2 = segRowText(segs[0], rows[0], 0, 0, false, false);
-            SegRowText it = segRowText(segs[1], rows[1], 1, 2, true, true);
+            SegRowText g = segRowText(segs[0], rows[0], 0, RALLY_GREEK, false, true);
+            SegRowText g2 = segRowText(segs[0], rows[0], 0, RALLY_GREEK, false, false);
+            SegRowText it = segRowText(segs[1], rows[1], 1, RALLY_ITALIAN, true, true);
             return g.kph == "40" && g2.kph == "64.37"   /* two decimals at most (owner, 2026-11-15) */ && it.kph == "31.07";
         });
 
@@ -567,10 +575,10 @@ public:
             insertStageDistances(segs, 0.0, pr.accepted, DIST_MI);
             std::vector<StageRow> rows = buildStageRows(segs, 1, 0);
             if (rows.size() != 4) return false;
-            const SegRowText a = segRowText(segs[0], rows[0], 0, 0, DIST_MI);
-            const SegRowText b = segRowText(segs[1], rows[1], 1, 0, DIST_MI);
-            const SegRowText c = segRowText(segs[2], rows[2], 2, 0, DIST_MI);
-            const SegRowText d = segRowText(segs[3], rows[3], 3, 0, DIST_MI);
+            const SegRowText a = segRowText(segs[0], rows[0], 0, RALLY_GREEK, DIST_MI);
+            const SegRowText b = segRowText(segs[1], rows[1], 1, RALLY_GREEK, DIST_MI);
+            const SegRowText c = segRowText(segs[2], rows[2], 2, RALLY_GREEK, DIST_MI);
+            const SegRowText d = segRowText(segs[3], rows[3], 3, RALLY_GREEK, DIST_MI);
             return a.to == "0.250" && b.to == "1.234" && c.to == "2.500" && d.to == "10.001"
                 && a.dist == "0.250" && b.dist == "0.984" && c.dist == "1.266" && d.dist == "7.501"
                 && startDistanceText(27000, DIST_MI) == "16.777 mi" && startDistanceText(27000, DIST_KM) == "27.00 km";
