@@ -820,9 +820,10 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     return FALSE;
 }
 
-// Draws what the tick decided (data->tick, rally_tick.h): labels, the gauge redraw and the
-// autostart countdown overlay. Nothing is decided here -- update_display runs tickDrive first,
-// and starts or drops an autostart itself after this returns.
+// Draws what the tick decided (data->tick, rally_tick.h): the labels and the autostart
+// countdown overlay. Nothing is decided here -- update_display runs tickDrive first, and
+// starts or drops an autostart itself after this returns. The gauge is not queued here: the
+// tick does that last, and only when something it shows has changed (queueGaugeRedrawIfChanged).
 void updateDriverDisplay(AppData* data) {
     updateCounterFaultWidgets(data);
     const TickDecision& t = data->tick;

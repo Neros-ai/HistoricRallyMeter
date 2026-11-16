@@ -390,8 +390,9 @@ static void applyDialogStyle(GtkWidget* dialog) {
 
 static int askQuestion(GtkWidget* widget, const std::string& title, const std::string& text,
                        const std::vector<QuestionButton>& buttons, const QuestionLayout& layout) {
+    // No buttons here (they are added below): the second nullptr closes the empty button list.
     GtkWidget* dialog = gtk_dialog_new_with_buttons(
-        title.c_str(), GTK_WINDOW(gtk_widget_get_toplevel(widget)), GTK_DIALOG_MODAL, nullptr);
+        title.c_str(), GTK_WINDOW(gtk_widget_get_toplevel(widget)), GTK_DIALOG_MODAL, nullptr, nullptr);
     for (const QuestionButton& b : buttons) {
         GtkWidget* btn = gtk_dialog_add_button(GTK_DIALOG(dialog), b.label, b.response);
         if (b.margin_start) gtk_widget_set_margin_start(btn, b.margin_start);
@@ -514,7 +515,7 @@ static void runKeypadDialog(GtkWidget* widget, AppData* data, const KeypadDialog
     // below instead of in the standard bottom action area, which on the box's
     // 400px-tall panel pushes the buttons off the bottom of the physical screen.
     GtkWidget* dialog = gtk_dialog_new_with_buttons(
-        spec.title, GTK_WINDOW(gtk_widget_get_toplevel(widget)), GTK_DIALOG_MODAL, nullptr);
+        spec.title, GTK_WINDOW(gtk_widget_get_toplevel(widget)), GTK_DIALOG_MODAL, nullptr, nullptr);
     GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     gtk_container_set_border_width(GTK_CONTAINER(content), 10);
 
