@@ -248,7 +248,7 @@ void onRemember(GtkWidget*, gpointer p) {
         d->state->bluetooth_audio_autoconnect = false;
         setStatus(d, "No Bluetooth speaker is playing: nothing remembered");
     }
-    ConfigFile::save(*d->state);
+    saveConfigSoon(d);   // a settings choice (config_saver.h)
     showRememberedBluetooth(d);
     refreshAudioKeys(d);
 }
@@ -257,7 +257,7 @@ void onBtConnect(GtkWidget*, gpointer p) {
     AppData* d = static_cast<AppData*>(p);
     if (!bluetoothAddressOk(d->state->bluetooth_audio_address)) return;
     d->state->bluetooth_audio_autoconnect = true;
-    ConfigFile::save(*d->state);
+    saveConfigSoon(d);   // a settings choice (config_saver.h)
     spawnBluetoothConnect(d->state->bluetooth_audio_address, true);
     setStatus(d, "Connecting remembered speaker");
 }
@@ -267,7 +267,7 @@ void onBtDisconnect(GtkWidget*, gpointer p) {
     const std::string& address = d->state->bluetooth_audio_address;
     if (!bluetoothAddressOk(address)) return;
     d->state->bluetooth_audio_autoconnect = false;
-    ConfigFile::save(*d->state);
+    saveConfigSoon(d);   // a settings choice (config_saver.h)
     std::string script =
         "bluetoothctl disconnect '" + address + "' >/dev/null 2>&1; "
         "bluetoothctl untrust '" + address + "' >/dev/null 2>&1; "
@@ -331,7 +331,7 @@ std::string shellQuote(const std::string& s) {
 // install's own update script (on a Rallybox install it pulls the box branch
 // and rebuilds), then close. The crew restart the app when it has finished.
 void doUpdate(AppData* d) {
-    ConfigFile::save(*d->state);
+    saveConfigAndWait(d);
 
     const std::string dir = appDirectory();
     const std::string script = "cd " + shellQuote(dir) +
@@ -512,7 +512,7 @@ void phoneBtConnect(AppData* d) {
     const std::string& address = d->state->bluetooth_audio_address;
     if (!speakerAddressOk(address)) { phoneNote(d, "No speaker remembered"); return; }
     d->state->bluetooth_audio_autoconnect = true;
-    ConfigFile::save(*d->state);
+    saveConfigSoon(d);   // a settings choice (config_saver.h)
     spawnConnect(address);
     phoneNote(d, "Connecting remembered speaker");
 }
@@ -522,7 +522,7 @@ void phoneBtDisconnect(AppData* d) {
     const std::string& address = d->state->bluetooth_audio_address;
     if (!speakerAddressOk(address)) { phoneNote(d, "No speaker remembered"); return; }
     d->state->bluetooth_audio_autoconnect = false;
-    ConfigFile::save(*d->state);
+    saveConfigSoon(d);   // a settings choice (config_saver.h)
     const std::string script =
         "bluetoothctl disconnect '" + address + "' >/dev/null 2>&1; "
         "bluetoothctl untrust '" + address + "' >/dev/null 2>&1; "

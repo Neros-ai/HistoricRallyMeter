@@ -16,19 +16,37 @@ public:
     TestSuite* createSuite() {
         auto* suite = new TestSuite("Surrey Tests");
 
+        suite->addTest("isGreek / isSurrey / isItalian each match exactly one rally type", []() {
+            RallyState s;
+            if (s.rally_type != RALLY_GREEK) return false;   // greek is the default
+            const int types[3] = {RALLY_GREEK, RALLY_SURREY, RALLY_ITALIAN};
+            for (int t = 0; t < 3; ++t) {
+                s.rally_type = types[t];
+                const int matches = (isGreek(s) ? 1 : 0) + (isSurrey(s) ? 1 : 0) + (isItalian(s) ? 1 : 0);
+                if (matches != 1) return false;
+            }
+            s.rally_type = RALLY_ITALIAN;
+            return isItalian(s) && !isGreek(s) && !isSurrey(s);
+        });
+
+        suite->addTest("the rally type numbers are the stored and wire values", []() {
+            // These are written to the config, sent to the phone and read from stage files: never renumber.
+            return RALLY_GREEK == 0 && RALLY_SURREY == 1 && RALLY_ITALIAN == 2;
+        });
+
         suite->addTest("rally type surrey round-trips", []() {
             const char* path = "test_surrey_type.json";
-            RallyState a; a.rally_type = 1;
+            RallyState a; a.rally_type = RALLY_SURREY;
             ConfigFile::save(a, path);
             RallyState b;
             ConfigFile::load(b, path);
             std::remove(path);
-            return b.rally_type == 1 && isSurrey(b) && !isSurrey(RallyState());
+            return b.rally_type == RALLY_SURREY && isSurrey(b) && !isSurrey(RallyState());
         });
 
         suite->addTest("distance to the stage start is measured on the Total each type shows", []() {
             RallyState g;
-            RallyState s; s.rally_type = 1;
+            RallyState s; s.rally_type = RALLY_SURREY;
             s.calibration = g.calibration = 1000000;
             setOdometerMetres(s, 0, 0, 26800.0);   // surrey's Total: the roadbook figure
             s.total_distance_adjust_mm = 350000;   // its stage distance is something else
@@ -40,7 +58,7 @@ public:
         });
 
         suite->addTest("surrey set: pins the roadbook Total, and a live stage moves by the same amount", []() {
-            RallyState s; s.rally_type = 1; s.calibration = 1000000;
+            RallyState s; s.rally_type = RALLY_SURREY; s.calibration = 1000000;
             Segment a; a.distance_m = 1000; a.target_speed_kph = 40;
             s.stage_segments = {a};
             setOdometerMetres(s, 0, 0, 22960.0);
@@ -52,12 +70,12 @@ public:
             s.segment_current_number = 0; s.stage_complete = false; s.total_distance_adjust_mm = 300000;
             const bool live_ok = surreySetTotal(s, 0, 0, 23040.0) && surreyNaviMetres(s, 0, 0) == 23040
                               && s.total_distance_adjust_mm == 340000;
-            RallyState g = s; g.rally_type = 0;
+            RallyState g = s; g.rally_type = RALLY_GREEK;
             return idle_ok && live_ok && !surreySetTotal(s, 0, 0, -1.0) && !surreySetTotal(g, 0, 0, 100.0);
         });
 
         suite->addTest("surrey: the Total reset is blocked while a stage is live, not outside one", []() {
-            RallyState s; s.rally_type = 1;
+            RallyState s; s.rally_type = RALLY_SURREY;
             Segment a; a.distance_m = 1000; a.target_speed_kph = 40;
             s.stage_segments = {a};
             s.segment_current_number = 0; s.stage_complete = false;
@@ -66,7 +84,7 @@ public:
             RallyState idle = s; idle.segment_current_number = -1; idle.stage_complete = true;
             RallyState early = idle; early.auto_start_rally_time_s = 1000; early.auto_start_early_departure = true;
             RallyState timed = idle; timed.auto_start_rally_time_s = 1000;
-            RallyState greek = s; greek.rally_type = 0;
+            RallyState greek = s; greek.rally_type = RALLY_GREEK;
             return running && !surreyTotalResetBlocked(done) && !surreyTotalResetBlocked(idle)
                 && surreyTotalResetBlocked(early) && !surreyTotalResetBlocked(timed)
                 && !surreyTotalResetBlocked(greek);
@@ -75,8 +93,8 @@ public:
         suite->addTest("choosing surrey does not change units or measure type", []() {
             RallyState s;
             s.distance_unit = true; s.measure_ab_bc = true;
-            applyRallyTypeDefaults(s, 1);
-            return s.rally_type == 1 && s.distance_unit && s.measure_ab_bc;
+            applyRallyTypeDefaults(s, RALLY_SURREY);
+            return isSurrey(s) && s.distance_unit && s.measure_ab_bc;
         });
 
         suite->addTest("time taken round-trips; an old config gives -1", []() {
@@ -100,7 +118,7 @@ public:
         suite->addTest("a finish press survives a restart: it is not offered again", []() {
             const char* path = "test_surrey_finish_saved.json";
             RallyState a;
-            a.rally_type = 1;
+            a.rally_type = RALLY_SURREY;
             a.last_memory_slot = 1;
             a.stage_segments.resize(1);
             a.segment_current_number = 0;
@@ -109,7 +127,7 @@ public:
             if (!applySurreyFinish(a, 561600)) return false;
             ConfigFile::save(a, path);
             RallyState b;
-            b.rally_type = 1;
+            b.rally_type = RALLY_SURREY;
             ConfigFile::load(b, path);
             std::remove(path);
             // What a restart restores of the finished stage, as main does from the saved file.
@@ -123,7 +141,7 @@ public:
         });
 
         suite->addTest("stage start leaves navi total", []() {
-            RallyState s; s.rally_type = 1; s.calibration = 1000000;
+            RallyState s; s.rally_type = RALLY_SURREY; s.calibration = 1000000;
             s.odometer_start_cntr1 = s.odometer_start_cntr2 = 0;
             s.total_start_cntr1 = s.total_start_cntr2 = 9231;
             markSectorOdometer(s, 9231, 9231);
@@ -132,7 +150,7 @@ public:
         });
 
         suite->addTest("set navi moves navi only", []() {
-            RallyState s; s.rally_type = 1; s.calibration = 1000000;
+            RallyState s; s.rally_type = RALLY_SURREY; s.calibration = 1000000;
             s.total_start_cntr1 = s.total_start_cntr2 = 22982;
             s.total_distance_adjust_mm = 7000;
             const bool ok = setOdometerMetres(s, 24040, 24040, 24024);
@@ -141,7 +159,7 @@ public:
         });
 
         suite->addTest("greek set in surrey moves total only", []() {
-            RallyState s; s.rally_type = 1; s.calibration = 1000000;
+            RallyState s; s.rally_type = RALLY_SURREY; s.calibration = 1000000;
             s.odometer_adjust_mm = 550;
             s.total_start_cntr1 = s.total_start_cntr2 = 1000;
             // applyDistanceSet's arithmetic: solve total's correction for the wanted figure.
@@ -152,15 +170,15 @@ public:
         });
 
         suite->addTest("surrey readout keys", []() {
-            return std::string(readoutKeyName(1, 0)) == "total" && std::string(readoutKeyName(1, 1)) == "trip"
-                && std::string(readoutKeyName(1, 2)) == "stage"
-                && std::string(readoutKeyName(1, 3)) == "next\nspeed" && std::string(readoutKeyName(1, 4)) == "prev\nspeed"
-                && std::string(readoutKeyName(0, 2)) == "countdown"
-                && std::string(readoutKeyName(2, 2)) == "navi";
+            return std::string(readoutKeyName(RALLY_SURREY, 0)) == "total" && std::string(readoutKeyName(RALLY_SURREY, 1)) == "trip"
+                && std::string(readoutKeyName(RALLY_SURREY, 2)) == "stage"
+                && std::string(readoutKeyName(RALLY_SURREY, 3)) == "next\nspeed" && std::string(readoutKeyName(RALLY_SURREY, 4)) == "prev\nspeed"
+                && std::string(readoutKeyName(RALLY_GREEK, 2)) == "countdown"
+                && std::string(readoutKeyName(RALLY_ITALIAN, 2)) == "navi";
         });
 
         suite->addTest("surrey trip history is 4", []() {
-            RallyState a; a.rally_type = 1;
+            RallyState a; a.rally_type = RALLY_SURREY;
             RallyState b;
             return tripHistoryRows(a) == 4 && tripHistoryRows(b) == 4;
         });
@@ -203,7 +221,7 @@ public:
         });
 
         suite->addTest("total zeroed at the start: no fit", [ss2]() {
-            RallyState s; s.rally_type = 1; s.calibration = 1000000;
+            RallyState s; s.rally_type = RALLY_SURREY; s.calibration = 1000000;
             s.stage_segments = ss2();
             RallyState::MemorySlot slot; slot.first_from_m = 22307.0; slot.segments = ss2();
             s.sector_start_odometer_mm = 0;
@@ -217,7 +235,7 @@ public:
         });
 
         suite->addTest("memory slot untouched", [ss2]() {
-            RallyState s; s.rally_type = 1; s.calibration = 1000000;
+            RallyState s; s.rally_type = RALLY_SURREY; s.calibration = 1000000;
             s.segments = ss2(); s.stage_segments = ss2();
             s.time_taken_ms = 5000; s.time_taken_stage = 2; s.surrey_finish_at_ms = 7;
             RallyState::MemorySlot slot; slot.first_from_m = 22307.0; slot.segments = ss2();
@@ -230,7 +248,7 @@ public:
 
         // Task 4: next at the finish landmark, prev to undo (D3, D4).
         auto runningAt = [seg](std::vector<Segment> st, long cur) {
-            RallyState s; s.rally_type = 1; s.calibration = 1000000;
+            RallyState s; s.rally_type = RALLY_SURREY; s.calibration = 1000000;
             s.stage_segments = st; s.segment_current_number = cur; s.stage_complete = false;
             s.total_start_time_ms = 0;
             return s;
@@ -283,7 +301,7 @@ public:
         });
         suite->addTest("the previous time taken survives a restart, and an old file with the removed distance-end key loads", []() {
             const char* path = "test_surrey_late_saved.json";
-            RallyState a; a.rally_type = 1;
+            RallyState a; a.rally_type = RALLY_SURREY;
             a.prev_time_taken_ms = 229200; a.prev_time_taken_stage = 2;
             ConfigFile::save(a, path);
             RallyState b; ConfigFile::load(b, path);
@@ -294,14 +312,14 @@ public:
                 && old.prev_time_taken_ms == -1 && old.prev_time_taken_stage == 0;
         });
         suite->addTest("greek ignores the surrey finish", [runningAt, ss1]() {
-            RallyState s = runningAt(ss1(), 0); s.rally_type = 0;
+            RallyState s = runningAt(ss1(), 0); s.rally_type = RALLY_GREEK;
             const bool a = applySurreyFinish(s, 1000);
             s.stage_complete = true; s.surrey_finish_at_ms = 5;
             return !a && !undoSurreyFinish(s, 0.0, 100.0) && s.time_taken_ms == -1;
         });
         suite->addTest("key helpers: finish live on the last row only", [runningAt, ss1, ss2]() {
             RallyState a = runningAt(ss1(), 0), b = runningAt(ss2(), 0), c = runningAt(ss1(), 0);
-            RallyState g = runningAt(ss1(), 0); g.rally_type = 0;
+            RallyState g = runningAt(ss1(), 0); g.rally_type = RALLY_GREEK;
             c.stage_complete = true;
             RallyState d = runningAt(ss1(), 0); d.surrey_finish_at_ms = 5;
             return surreyFinishAvailable(a) && !surreyFinishAvailable(b) && !surreyFinishAvailable(g)
@@ -313,7 +331,7 @@ public:
             applySurreyFinish(s, 1000);
             const bool ok = surreyUndoAvailable(s, 99.0, 100.0) && !surreyUndoAvailable(s, 100.0, 100.0)
                 && !surreyUndoAvailable(s, 101.0, 100.0);
-            RallyState g = s; g.rally_type = 0;
+            RallyState g = s; g.rally_type = RALLY_GREEK;
             RallyState z = s; z.surrey_finish_at_ms = 0;
             return !none && ok && !surreyUndoAvailable(g, 99.0, 100.0) && !surreyUndoAvailable(z, 99.0, 100.0);
         });
@@ -347,7 +365,7 @@ public:
             const bool ended = surreyLogTimeTaken(s) == "9:20.6";
             RallyState aborted = s; aborted.segment_current_number = -1;
             RallyState other = s; other.last_memory_slot = 2;
-            RallyState g = s; g.rally_type = 0;
+            RallyState g = s; g.rally_type = RALLY_GREEK;
             RallyState running = runningAt(ss1(), 0); running.last_memory_slot = 1; running.time_taken_ms = 5; running.time_taken_stage = 1;
             return ended && surreyLogTimeTaken(aborted) == "" && surreyLogTimeTaken(other) == ""
                 && surreyLogTimeTaken(g) == "" && surreyLogTimeTaken(running) == "";
@@ -364,13 +382,13 @@ public:
         });
 
         suite->addTest("surrey beeps measure from navi total", []() {
-            RallyState s; s.rally_type = 1; s.calibration = 1000000;
+            RallyState s; s.rally_type = RALLY_SURREY; s.calibration = 1000000;
             setOdometerMetres(s, 0, 0, 11060.0);
-            RallyState g = s; g.rally_type = 0;
+            RallyState g = s; g.rally_type = RALLY_GREEK;
             return beepDistanceM(s, 0, 0, 1837.0) == 11060.0 && beepDistanceM(g, 0, 0, 1837.0) == 1837.0;
         });
         suite->addTest("surrey beeps count from the start box (waypoints are stage distances)", []() {
-            RallyState s; s.rally_type = 1; s.calibration = 1000000;
+            RallyState s; s.rally_type = RALLY_SURREY; s.calibration = 1000000;
             s.last_memory_slot = 1; s.memory_slots[0].first_from_m = 9148.0;
             setOdometerMetres(s, 0, 0, 11060.0);
             return beepDistanceM(s, 0, 0, 1837.0) == 11060.0 - 9148.0;

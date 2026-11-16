@@ -11,6 +11,7 @@
 #include "sector_edit.h"
 #include "stage_rows.h"
 #include "stage_file.h"
+#include "surrey.h"
 #include <fstream>
 #include <cmath>
 #include <cstdio>
@@ -92,12 +93,12 @@ static gboolean drawModeBadge(GtkWidget* w, cairo_t* cr, gpointer user_data) {
     };
     cairo_save(cr);
     switch (data->state->rally_type) {
-    case 2:   // Italy: green, white, red
+    case RALLY_ITALIAN:   // Italy: green, white, red
         rect(0, 0, W / 3, H, 0x00 / 255.0, 0x92 / 255.0, 0x46 / 255.0);
         rect(W / 3, 0, W / 3, H, 1, 1, 1);
         rect(2 * W / 3, 0, W - 2 * W / 3, H, 0xce / 255.0, 0x2b / 255.0, 0x37 / 255.0);
         break;
-    case 1: {   // Union Jack, drawn on a 60 x 30 grid
+    case RALLY_SURREY: {   // Union Jack, drawn on a 60 x 30 grid
         cairo_scale(cr, W / 60.0, H / 30.0);
         rect(0, 0, 60, 30, 0x01 / 255.0, 0x21 / 255.0, 0x69 / 255.0);
         cairo_move_to(cr, 0, 0); cairo_line_to(cr, 60, 30);
@@ -165,7 +166,7 @@ void markCurrentRow(AppData* d, bool scroll);
 // Column headings follow the rally type: greek box | chg | auto, italian row | type | ref.
 void applyHeadings(AppData* d) {
     SegUi* u = ui(d);
-    const bool it = d->state->rally_type == 2;
+    const bool it = isItalian(*d->state);
     gtk_label_set_text(GTK_LABEL(u->headLbl[0]), it ? "sub" : "box");
     gtk_label_set_text(GTK_LABEL(u->headLbl[1]), it ? "type" : "chg");
     gtk_label_set_text(GTK_LABEL(u->headLbl[2]), it ? "ref" : "auto");
@@ -204,11 +205,11 @@ void updateRowText(AppData* d) {
         // One text source for the box and the phone (segRowText, stage_rows.cpp).
         const SegRowText t = segRowText(d->state->segments[i], r, i, d->state->rally_type, d->state->distance_unit, d->state->units);
         setText(w.num, t.num);
-        if (d->state->rally_type == 2) setText(w.ref, t.ref);
+        if (isItalian(*d->state)) setText(w.ref, t.ref);
         setText(w.from, t.from);
         setText(w.to, t.to);
         setText(w.dist, t.dist);
-        if (d->state->rally_type == 2 || r.chg) setText(w.kph, t.kph);   // greek no-change rows keep their ditto label
+        if (isItalian(*d->state) || r.chg) setText(w.kph, t.kph);   // greek no-change rows keep their ditto label
         setText(w.time, t.dur);
         setText(w.total, t.tot);
     }
@@ -398,7 +399,7 @@ void rebuildNow(AppData* d) {
         };
 
         w.grid = grid;
-        if (d->state->rally_type == 2) {
+        if (isItalian(*d->state)) {
             // Italian row (segments-shared.html): row | type tag | ref | from | to | dist | KPH | dur | elapsed | del.
             // pc: the card time is typed (dur) and the speed worked out; pm: the speed is typed; the rest are worked out.
             const Segment& sg = d->state->segments[i];
@@ -495,7 +496,7 @@ void loadFields(AppData* d) {
     }
     gtk_entry_set_text(GTK_ENTRY(u->distEntry), startDistanceText(slot.start_distance_m, d->state->distance_unit).c_str());
     // Greek shows the distance at start and the Autostart tick; italian shows the sector duration instead.
-    const bool it = d->state->rally_type == 2;
+    const bool it = isItalian(*d->state);
     for (GtkWidget* w : {u->distCaption, u->distEntry, u->autoRow}) gtk_widget_set_visible(w, !it);
     for (GtkWidget* w : {u->durCaption, u->durEntry, u->avgLabel}) gtk_widget_set_visible(w, it);
     if (it) {
@@ -629,8 +630,8 @@ void segmentsCommitImpl(AppData* d, bool quiet) {
             // that would nudge the stored km/h (50 -> 31.07 mph -> 50.0023).
             const bool mph = d->state->units;
             const bool untouched = mph && row < d->state->segments.size()
-                && std::fabs(v - d->state->segments[row].target_speed_kph * 0.621371) < 0.005;
-            if (!untouched) stageEditSetSpeed(d, row, mph ? v / 0.621371 : v);
+                && std::fabs(v - d->state->segments[row].target_speed_kph * MILES_PER_KM) < 0.005;
+            if (!untouched) stageEditSetSpeed(d, row, mph ? mphToKph(v) : v);
         }
     } else if (!strcmp(kind, "ref")) {
         long n = parseMetres(text);

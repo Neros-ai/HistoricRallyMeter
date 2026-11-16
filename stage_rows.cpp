@@ -313,16 +313,16 @@ SegRowText segRowText(const Segment& seg, const StageRow& row, size_t index, int
     t.dist = formatDistance(row.dist_m, km);
     t.tot = formatHMmSs(row.total_s);
     char b[24];
-    if (rally_type == 2) {
+    if (rally_type == RALLY_ITALIAN) {
         t.num = std::to_string(index + 1);
         t.ref = (seg.type == SEG_NAVI || seg.type == SEG_LEG) ? "" : std::to_string(seg.ref);
-        snprintf(b, sizeof(b), "%.2f", mph ? seg.target_speed_kph * 0.621371 : seg.target_speed_kph);
+        snprintf(b, sizeof(b), "%.2f", mph ? kphToMph(seg.target_speed_kph) : seg.target_speed_kph);
         t.kph = seg.target_speed_kph > 0 ? b : "";
         t.dur = seg.type == SEG_PC ? formatMmSs(seg.pc_duration_s) : formatHMmSs(row.time_s);
         return t;
     }
     t.num = std::to_string(row.number);
-    snprintf(b, sizeof(b), "%g", std::round((mph ? row.kph * 0.621371 : row.kph) * 100.0) / 100.0);   // two decimals at most: a calculated speed is kept in full, shown to 2
+    snprintf(b, sizeof(b), "%g", std::round((mph ? kphToMph(row.kph) : row.kph) * 100.0) / 100.0);   // two decimals at most: a calculated speed is kept in full, shown to 2
     t.kph = row.chg ? (row.kph > 0 ? b : "") : "\"";   // ditto: no speed change on this row
     t.dur = formatHMmSs(row.time_s);
     return t;
@@ -333,7 +333,7 @@ std::string sectorAverageText(const std::vector<Segment>& segs, long sector_dura
     for (const Segment& sg : segs) m += sg.distance_m;
     if (sector_duration_s <= 0 || m <= 0.0) return "";
     char ab[32];
-    snprintf(ab, sizeof(ab), "Average %.2f", m / 1000.0 / (sector_duration_s / 3600.0) * (mph ? 0.621371 : 1.0));
+    snprintf(ab, sizeof(ab), "Average %.2f", m / 1000.0 / (sector_duration_s / 3600.0) * (mph ? MILES_PER_KM : 1.0));
     return ab;
 }
 

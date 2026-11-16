@@ -95,7 +95,7 @@ public:
 
         suite->addTest("next cannot finish a one-row surrey stage during the countdown", []() {
             RallyState s = running(1, 0);
-            s.rally_type = 1;
+            s.rally_type = RALLY_SURREY;
             ASSERT_TRUE(surreyFinishAvailable(s));
             ASSERT_TRUE(nextKeyEnabled(s));                     // running: the finish press
             s.auto_start_rally_time_s = 1000;
@@ -149,7 +149,7 @@ public:
 
         suite->addTest("prev is live after an italian tube press, for box and phone alike", []() {
             RallyState s = running(3, 0);
-            s.rally_type = 2;
+            s.rally_type = RALLY_ITALIAN;
             for (Segment& g : s.stage_segments) g.type = SEG_NAVI;
             ASSERT_FALSE(prevKeyEnabled(s, 0, 0));              // nothing pressed yet
             ASSERT_TRUE(applySectorNext(s, 1000, 1000, 60000));

@@ -2,6 +2,7 @@
 #include "calculations.h"
 #include "sector.h"
 #include "stage_rows.h"
+#include "surrey.h"
 #include <cctype>
 #include <cstdio>
 #include <cstring>
@@ -77,9 +78,9 @@ int typeFromLabel(const std::string& name) {
 }
 
 const char* modeName(int mode) {
-    if (mode == 2) return "italian";
-    if (mode == 1) return "surrey";
-    if (mode == 0) return "greek";
+    if (mode == RALLY_ITALIAN) return "italian";
+    if (mode == RALLY_SURREY) return "surrey";
+    if (mode == RALLY_GREEK) return "greek";
     return "";
 }
 
@@ -113,9 +114,9 @@ StageFileStage buildStage(const RawStage& raw, bool commaDecimal, const std::vec
             st.errors.push_back("stage " + std::to_string(st.stage) + " is in the file twice");
 
     const std::string mode = lower(raw.mode);
-    if (mode == "greek") st.mode = 0;
-    else if (mode == "surrey") st.mode = 1;
-    else if (mode == "italian") st.mode = 2;
+    if (mode == "greek") st.mode = RALLY_GREEK;
+    else if (mode == "surrey") st.mode = RALLY_SURREY;
+    else if (mode == "italian") st.mode = RALLY_ITALIAN;
     else st.errors.push_back(raw.mode.empty() ? "mode is missing" : "unknown mode");
 
     const std::string unitsWord = lower(raw.units);
@@ -197,7 +198,7 @@ StageFileStage buildStage(const RawStage& raw, bool commaDecimal, const std::vec
         seg.autoNext = false;
         seg.changesSpeed = true;
 
-        if (st.mode == 2) {
+        if (st.mode == RALLY_ITALIAN) {
             const int ty = typeFromLabel(fieldAt(row, iType));
             if (ty < 0) st.errors.push_back(where + ": unknown type");
             else seg.type = ty;
@@ -227,7 +228,7 @@ StageFileStage buildStage(const RawStage& raw, bool commaDecimal, const std::vec
             if (haveKph && ty != SEG_PM) seg.target_speed_kph = kph;
             if (iBox >= 0 && !fieldAt(row, iBox).empty()) st.warnings.push_back(where + ": box is ignored");
             if (iAuto >= 0 && !fieldAt(row, iAuto).empty()) st.warnings.push_back(where + ": auto is ignored");
-        } else if (st.mode == 0 || st.mode == 1) {
+        } else if (st.mode == RALLY_GREEK || st.mode == RALLY_SURREY) {
             const std::string kphText = fieldAt(row, iKph);
             if (kphText.empty()) {
                 if (r == 0) st.errors.push_back(where + ": needs a speed");
@@ -258,7 +259,7 @@ StageFileStage buildStage(const RawStage& raw, bool commaDecimal, const std::vec
                 if (!st.slot.segments.empty()) st.slot.segments.back().autoNext = true;
             }
             else if (!autoText.empty() && autoText != "n") st.warnings.push_back(where + ": auto is ignored");
-            if (st.mode == 1 && r > 0 && seg.changesSpeed && autoText != "y")
+            if (st.mode == RALLY_SURREY && r > 0 && seg.changesSpeed && autoText != "y")
                 st.warnings.push_back(where + ": surrey speed change is not automatic");
             if (iType >= 0 && !fieldAt(row, iType).empty()) st.warnings.push_back(where + ": type is ignored");
             if (iRef >= 0 && !fieldAt(row, iRef).empty()) st.warnings.push_back(where + ": ref is ignored");
@@ -268,8 +269,8 @@ StageFileStage buildStage(const RawStage& raw, bool commaDecimal, const std::vec
         prevTo = toM;
     }
 
-    if (st.mode == 0 || st.mode == 1) carrySpeeds(st.slot.segments);
-    if (st.mode == 2 && st.errors.empty()) applySectorRules(st.slot.segments, st.slot.sector_duration_s);
+    if (st.mode == RALLY_GREEK || st.mode == RALLY_SURREY) carrySpeeds(st.slot.segments);
+    if (st.mode == RALLY_ITALIAN && st.errors.empty()) applySectorRules(st.slot.segments, st.slot.sector_duration_s);
     st.slot.beep_waypoints_m = deriveWaypoints(st.slot.segments);
     st.slot.waypoints_recorded = true;
     return st;
@@ -364,8 +365,8 @@ StageFile parseStageFile(const std::string& textIn) {
 }
 
 bool stageFileFitsMode(int mode, int rally_type) {
-    if (mode == 2) return rally_type == 2;
-    if (mode == 0 || mode == 1) return rally_type != 2;
+    if (mode == RALLY_ITALIAN) return rally_type == RALLY_ITALIAN;
+    if (mode == RALLY_GREEK || mode == RALLY_SURREY) return rally_type != RALLY_ITALIAN;
     return false;
 }
 
@@ -374,7 +375,7 @@ std::string uploadRefusal(const RallyState& s, const StageFile& f) {
     if (!f.errors.empty()) return f.errors.front();
     for (const auto& st : f.stages) {
         if (st.mode >= 0 && !stageFileFitsMode(st.mode, s.rally_type)) {
-            if (s.rally_type == 2) return "this file is not italian";
+            if (isItalian(s)) return "this file is not italian";
             return "this file is italian and the box is not";
         }
     }
@@ -494,7 +495,7 @@ std::string uploadStateJson(const std::string& id, const RallyState& s, const St
                 const StageRow& row = rows[i];
                 const Segment& seg = st.slot.segments[i];
                 // The Segments page's text for the row; distances in the file's own units.
-                const SegRowText t = segRowText(seg, row, i, st.mode == 2 ? 2 : 0, st.unit);
+                const SegRowText t = segRowText(seg, row, i, st.mode == RALLY_ITALIAN ? RALLY_ITALIAN : RALLY_GREEK, st.unit);
                 o << "{\"type\":\"" << typeLabel(seg.type) << "\",\"num\":\"" << jsonEscape(t.num)
                   << "\",\"ref\":\"" << jsonEscape(t.ref)
                   << "\",\"from\":\"" << jsonEscape(uploadDistanceText(row.from_m, st.unit))

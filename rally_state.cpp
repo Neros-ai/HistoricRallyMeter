@@ -11,11 +11,11 @@ RallyState::RallyState() {
 }
 
 bool greekBeepSettingsLocked(const RallyState& s) {
-    return s.rally_type == 2;
+    return s.rally_type == RALLY_ITALIAN;
 }
 
 void applyRallyTypeDefaults(RallyState& s, int type) {
     // The rally type changes the rules only. Distance units, kph / mph and the measure type are
     // the crew's own choices (Settings) and are left exactly as they are.
-    if (type == 0 || type == 1 || type == 2) s.rally_type = type;
+    if (type == RALLY_GREEK || type == RALLY_SURREY || type == RALLY_ITALIAN) s.rally_type = type;
 }

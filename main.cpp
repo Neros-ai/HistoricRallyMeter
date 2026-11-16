@@ -34,6 +34,7 @@
 #include "tone_generator.h"
 #include "debug_log.h"
 #include "stage_log.h"
+#include "config_saver.h"
 
 // Structure to hold connector info from DRM
 struct DrmConnector {
@@ -275,7 +276,7 @@ static gboolean on_window_close_save(G_GNUC_UNUSED GtkWidget* widget, G_GNUC_UNU
               << "size: " << data->state->driver_window_width << "x" << data->state->driver_window_height
               << " monitor: " << data->state->driver_window_monitor << std::endl;
 
-    ConfigFile::save(*data->state);
+    saveConfigAndWait(data);
 
     gtk_main_quit();
     return TRUE;
@@ -401,9 +402,18 @@ int main(int argc, char* argv[]) {
             ConfigFile::save(state);
         }
 
+        // From here every save goes through the saver: snapshots taken on this thread, written
+        // (atomic replace + fsync) on its own thread in the order taken. The startup saves above
+        // ran synchronously before it existed, so only one writer ever owns the file at a time.
+        // Declared after state (it reads it) and flushed on every way out: after gtk_main, and by
+        // its destructor when an exception unwinds past it.
+        ConfigSaver saver([&state] { return ConfigFile::serialise(state); },
+                          [](const std::string& bytes) { return ConfigFile::writeAtomic(bytes); });
+
         // Create application data
         std::cerr << "[DEBUG] Step 6: Creating AppData..." << std::endl;
         AppData app_data;
+        app_data.saver = &saver;
         app_data.counter1 = counter1.get();
         app_data.counter2 = counter2.get();
         app_data.register_addr = REGISTER;
@@ -687,6 +697,8 @@ int main(int argc, char* argv[]) {
         // Set up timer (10ms = 100Hz)
         std::cerr << "[DEBUG] Step 12: Setting up 10ms timer and entering gtk_main..." << std::endl;
         g_timeout_add(10, update_display, &app_data);
+        // A deferred config save is written once it is due (config_saver.h).
+        g_timeout_add(50, configSavePump, &app_data);
 
         // SIGTERM/SIGINT (systemctl stop, pkill, Ctrl-C) end gtk_main
         // normally so the debug log tail is written and servers stop cleanly.
@@ -695,6 +707,9 @@ int main(int argc, char* argv[]) {
         
         gtk_main();
         std::cerr << "[DEBUG] gtk_main returned normally" << std::endl;
+        // Every way out of gtk_main (exit key, window close, update, SIGTERM/SIGINT) lands here:
+        // anything deferred is written now, and nothing is left on the writer.
+        saver.flush();
         
         if (app_data.toneGen) {
             app_data.toneGen->stop();

@@ -53,3 +53,6 @@ test_debug_logs/
 /core
 /rally_config.bak-*
 /*.png
+
+# Compiler-generated header dependency files
+*.d

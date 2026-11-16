@@ -110,7 +110,12 @@ std::string formatHMmSs(double seconds);
 // (0,000 is not offered in miles.) A three-decimal figure drops to two decimals from 100 km or
 // 100 miles, which is all the big figures hold. A bool still works: false metres, true km.
 enum : int { DIST_M = 0, DIST_KM = 1, DIST_MI = 2, DIST_KM3 = 3, DIST_MI2 = 4 };
-constexpr double METRES_PER_MILE = 1609.344;
+constexpr double METRES_PER_MILE = 1609.344;   // the international mile, exact
+constexpr double KM_PER_MILE = METRES_PER_MILE / 1000.0;
+constexpr double MILES_PER_KM = 1.0 / KM_PER_MILE;
+// Speeds: the same exact mile as the distances, so a speed and a distance in miles never disagree.
+inline double kphToMph(double kph) { return kph * MILES_PER_KM; }
+inline double mphToKph(double mph) { return mph * KM_PER_MILE; }
 // A typed mile figure as metres: kept to the nearest 1/1000 mile (owner, 2026-11-15), so 1.234 is exactly 1.234.
 inline double milesToMetres(double miles) { return std::round(miles * 1000.0) / 1000.0 * METRES_PER_MILE; }
 inline bool distIsMiles(int unit) { return unit == DIST_MI || unit == DIST_MI2; }

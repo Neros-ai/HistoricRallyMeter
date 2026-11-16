@@ -85,11 +85,11 @@ public:
 
         suite->addTest("italian file does not fit a greek box", []() {
             RallyState s;
-            s.rally_type = 0;
+            s.rally_type = RALLY_GREEK;
             const StageFile f = parseStageFile("stage,1\nmode,italian\nunits,m\ntype,to\nnavi,10\n");
             const std::string why = uploadRefusal(s, f);
-            return stageFileFitsMode(2, 0) == false && stageFileFitsMode(1, 0)
-                && stageFileFitsMode(0, 2) == false && why.find("italian") != std::string::npos;
+            return stageFileFitsMode(RALLY_ITALIAN, RALLY_GREEK) == false && stageFileFitsMode(RALLY_SURREY, RALLY_GREEK)
+                && stageFileFitsMode(RALLY_GREEK, RALLY_ITALIAN) == false && why.find("italian") != std::string::npos;
         });
 
         suite->addTest("overwrite question names the stages", []() {

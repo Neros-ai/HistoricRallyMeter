@@ -4,6 +4,7 @@
 #include "calculations.h"
 #include "sector.h"
 #include "config_file.h"
+#include "callbacks.h"
 #include <sstream>
 #include <cstdlib>
 #include <iostream>
@@ -87,9 +88,9 @@ static void recoverFromSimulatedPowerLoss(AppData* data) {
     }
     if (handleCounterPowerLoss(*data->counter1, *data->counter2, REGISTER,
             *data->state, getRallyTime_ms(*data->state),
-            [](const RallyState& s) { ConfigFile::save(s); })) {
+            [data](const RallyState&) { saveConfigAndWait(data); })) {
         zeroOdometer(*data->state, data->state->total_start_cntr1, data->state->total_start_cntr2);
-        ConfigFile::save(*data->state);   // the loss save ran before this zeroing
+        saveConfig(data);   // the loss save ran before this zeroing
     }
 }
 

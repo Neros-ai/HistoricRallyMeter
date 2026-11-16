@@ -1,5 +1,6 @@
 #include "home_calc.h"
 #include "calculations.h"
+#include "surrey.h"
 #include <cmath>
 #include <cstdio>
 
@@ -75,7 +76,7 @@ std::string formatClockMmSs(double seconds) {
 
 std::string driverSpeedText(double speed, int rally_type) {
     char buf[32];
-    snprintf(buf, sizeof(buf), rally_type == 2 ? "%.2f" : "%.1f", speed);
+    snprintf(buf, sizeof(buf), rally_type == RALLY_ITALIAN ? "%.2f" : "%.1f", speed);
     return buf;
 }
 
@@ -92,5 +93,5 @@ double homeStartTimeFont(double wordWidth, double timeWidthAt26, double columnW)
 }
 
 bool showAdjZeroKey(const RallyState& s, bool single_display) {
-    return s.measure_ab_bc && s.rally_type != 2 && !single_display;   // greek and surrey
+    return s.measure_ab_bc && !isItalian(s) && !single_display;   // greek and surrey
 }

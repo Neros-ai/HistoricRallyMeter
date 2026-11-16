@@ -15,6 +15,10 @@ const int REACTION_OFFSET_MAX_MS = 300;
 // Clamp a stored or typed figure to -300..+300.
 int clampReactionOffsetMs(long ms);
 
+// Phone sound lead (how early the phone is told a countdown beep), clamped to 0..400 ms.
+const int PHONE_LEAD_MAX_MS = 400;
+int clampPhoneLeadMs(long ms);
+
 // The figure as Settings writes it: "+0.25 s", "-0.10 s", "0.00 s" (box and phone alike).
 std::string reactionText(int ms);
 

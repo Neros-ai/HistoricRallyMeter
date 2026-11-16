@@ -21,7 +21,6 @@
 #include "test_calibration_display.h"
 #include "test_stage_summary.h"
 #include "test_gauge_layout.h"
-#include "test_segment_entry_parsing.h"
 #include "test_simple_tone.h"
 #include "test_arrow_tone.h"
 #include "test_total_reset.h"
@@ -41,9 +40,14 @@
 #include "test_stage_file.h"
 #include "test_stage_phase.h"
 #include "test_start_readings.h"
+#include "test_state_helpers.h"
+#include "test_rally_tick.h"
+#include "test_config_saver.h"
+#include "test_gauge_redraw.h"
 
 int main() {
     TestRunner runner;
+    TestStateHelpers stateHelpersTests;
 
     // Create test suites
     TestConfigFile configTests;
@@ -65,7 +69,6 @@ int main() {
     TestCalibrationDisplay calDisplayTests;
     TestStageSummary stageSummaryTests;
     TestGaugeLayout gaugeLayoutTests;
-    TestSegmentEntryParsing segmentEntryParsingTests;
     TestSimpleTone simpleToneTests;
     TestArrowTone arrowToneTests;
     TestTotalReset totalResetTests;
@@ -85,6 +88,9 @@ int main() {
     TestStageFile stageFileTests;
     TestStagePhase stagePhaseTests;
     TestStartReadings startReadingsTests;
+    TestRallyTick rallyTickTests;
+    TestConfigSaver configSaverTests;
+    TestGaugeRedraw gaugeRedrawTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -106,7 +112,6 @@ int main() {
     runner.addSuite(calDisplayTests.createSuite());
     runner.addSuite(stageSummaryTests.createSuite());
     runner.addSuite(gaugeLayoutTests.createSuite());
-    runner.addSuite(segmentEntryParsingTests.createSuite());
     runner.addSuite(simpleToneTests.createSuite());
     runner.addSuite(arrowToneTests.createSuite());
     runner.addSuite(totalResetTests.createSuite());
@@ -126,6 +131,10 @@ int main() {
     runner.addSuite(stageFileTests.createSuite());
     runner.addSuite(stagePhaseTests.createSuite());
     runner.addSuite(startReadingsTests.createSuite());
+    runner.addSuite(stateHelpersTests.createSuite());
+    runner.addSuite(rallyTickTests.createSuite());
+    runner.addSuite(configSaverTests.createSuite());
+    runner.addSuite(gaugeRedrawTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();

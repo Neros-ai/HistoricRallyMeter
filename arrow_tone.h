@@ -2,6 +2,7 @@
 #define ARROW_TONE_H
 
 #include <cstdint>
+#include "tone_rung.h"
 
 // The existing ahead/behind tone: converts the raw time-error seconds into
 // the speed change needed to close the gap over the next 500m (using the
@@ -24,7 +25,7 @@
 // "nothing latched yet" start.
 struct ArrowToneState {
     double lastCommittedSeconds = 0.0;
-
+    int heldRung = 0;   // beat-gap rung currently held (1..15); 0 = none/silent
 };
 
 // The error has to move this far before the tone's decision follows it. Same
@@ -46,16 +47,23 @@ constexpr double ARROW_TONE_SOUND_THRESHOLD_S = 0.2;
 constexpr double ARROW_TONE_ARROW_FLOOR_S = 0.1;
 
 // Type 1 tone: a short square-wave tick whose gap shrinks as the error grows,
-// one step per 0.2 s of error (the same step the latch moves in, and type 2's).
+// one step per 0.2 s of error (the same step as type 2's).
 // The gap is the silence between ticks; the pitch says which way to go.
 constexpr int    ARROW_TONE_TICK_MS = 50;
 constexpr double ARROW_TONE_BEHIND_HZ = 560.0;   // behind schedule: speed up
 constexpr double ARROW_TONE_AHEAD_HZ  = 440.0;   // ahead of schedule: slow down
-constexpr double ARROW_TONE_STEP_S = 0.2;
-constexpr int    ARROW_TONE_STEPS = 15;          // 0.2 s .. 3.0 s; beyond 3 s the last gap holds
+// The stepping rule itself (0.2 s lines, 0.1 s hold, 15 rungs) is shared with
+// type 2: see tone_rung.h.
+constexpr double ARROW_TONE_STEP_S = TONE_RUNG_STEP_S;
+constexpr double ARROW_TONE_HOLD_MARGIN_S = TONE_RUNG_HOLD_MARGIN_S;
+constexpr int    ARROW_TONE_STEPS = TONE_RUNG_COUNT;   // 0.2 s .. 3.0 s; beyond 3 s the last gap holds
 
 // The silence between ticks for an error of this size (either sign), in ms.
 int arrowToneGapMs(double errorSeconds);
+
+// The rung (1..15) for an error of this size, and the gap of a rung.
+int arrowToneRung(double errorSeconds);
+int arrowToneGapForRung(int rung);
 
 struct ArrowToneResult {
     int num_arrows;         // 0-3; 0 = no correction needed or gated off
@@ -69,9 +77,11 @@ struct ArrowToneResult {
 // The ARROWS follow secondsAheadBehind directly, as they always have -- the
 // on-screen indicator is unchanged by this.
 //
-// The TONE is decided from a latched copy instead (state.lastCommittedSeconds,
-// moved only when the error shifts by more than
-// ARROW_TONE_UPDATE_THRESHOLD_S). Every gate below is a hard edge on a figure
+// The TONE's pitch and 30 s edge are decided from a latched copy
+// (state.lastCommittedSeconds, moved only when the error shifts by more than
+// ARROW_TONE_UPDATE_THRESHOLD_S). The beat gap is not: it steps up exactly on
+// each 0.2 s line as the error grows, and steps back down only once the error
+// is 0.1 s below the line (state.heldRung). Every gate below is a hard edge on a figure
 // that is recomputed every 10ms: the 0.1s floor, the 30s ceiling, and the
 // 3/10 kph steps that pick the cadence. An error parked on any of them
 // alternated on every tick, so the tone chattered -- loudest when the crew are

@@ -32,7 +32,7 @@ class TestReactionOffset {
     // An italian sector (navi 380 m, pc1 180 m in 31 s, pc2 60 m in 10 s, navi) running in row 0.
     static RallyState sector(int offset_ms) {
         RallyState s;
-        s.calibration = 1000000; s.counters = true; s.rally_type = 2;
+        s.calibration = 1000000; s.counters = true; s.rally_type = RALLY_ITALIAN;
         s.reaction_offset_ms = offset_ms;
         s.segments = { row(SEG_NAVI, 380, 0, 0, 30.0), row(SEG_PC, 180, 31, 1), row(SEG_PC, 60, 10, 2),
                        row(SEG_NAVI, 5000, 0, 0, 30.0) };
@@ -61,7 +61,7 @@ public:
         });
 
         suite->addTest("flying start: Trip and Total take the same distance back", []() {
-            RallyState s; s.rally_type = 0; s.reaction_offset_ms = 100;
+            RallyState s; s.rally_type = RALLY_GREEK; s.reaction_offset_ms = 100;
             applyStartPressOffset(s, 10.0);
             return s.total_distance_adjust_mm == 1000 && s.trip_distance_adjust_mm == 1000;
         });
@@ -76,7 +76,7 @@ public:
             RallyState s = sector(80);
             s.trial_start_ms = 41440000; s.trial_start_m = -1.0;
             applyStartPressOffset(s, 10.0);
-            RallyState g = started(2, 80, 41440000);
+            RallyState g = started(RALLY_ITALIAN, 80, 41440000);
             Segment leg; leg.distance_m = 1000; g.stage_segments = {leg};
             g.trial_start_ms = 41440000; g.trial_start_m = 0.0;
             applyStartPressOffset(g, 10.0);
@@ -85,7 +85,7 @@ public:
 
         suite->addTest("offset zero changes nothing", []() {
             bool ok = true;
-            for (int type : {0, 1, 2}) {
+            for (int type : {RALLY_GREEK, RALLY_SURREY, RALLY_ITALIAN}) {
                 RallyState s = started(type, 0, 5000000);
                 s.trial_start_ms = 5000000; s.trial_start_m = 0.0;
                 applyStartPressOffset(s, 10.0);
@@ -112,7 +112,7 @@ public:
 
         suite->addTest("greek next: the second boundary lands at the real point", []() {
             // 10 m/s, +100 ms (1 m back). Real points: P1 at 999 m, P2 at 1999 m -> segment 1 is 1000 m.
-            RallyState s = started(0, 100, 0);
+            RallyState s = started(RALLY_GREEK, 100, 0);
             const double v = 10.0;
             // press 1 at 1000 m driven
             int64_t d1 = boundaryMmAtPress(
@@ -131,7 +131,7 @@ public:
 
         suite->addTest("surrey start at a waypoint", []() {
             // +100 ms at 50 kph: stage distance baseline 1.39 m back, stage clock 100 ms earlier.
-            RallyState s = started(1, 100, 8000000);
+            RallyState s = started(RALLY_SURREY, 100, 8000000);
             s.sector_start_odometer_mm = 5000000;
             applyStartPressOffset(s, reactionSpeedMps(50.0, false));
             return s.total_start_time_ms == 7999900 && s.segment_start_time_ms == 7999900 &&
@@ -139,18 +139,18 @@ public:
         });
 
         suite->addTest("greek start now as a flying start", []() {
-            RallyState s = started(0, 100, 8000000);
+            RallyState s = started(RALLY_GREEK, 100, 8000000);
             applyStartPressOffset(s, 10.0);
             return s.total_start_time_ms == 7999900 && s.total_distance_adjust_mm == 1000 &&
                    s.sector_start_odometer_mm == 0;
         });
 
         suite->addTest("a standing start is untouched; 5 kph and over counts as moving", []() {
-            RallyState a = started(0, 100, 8000000);
+            RallyState a = started(RALLY_GREEK, 100, 8000000);
             applyStartPressOffset(a, reactionSpeedMps(4.9, false));
-            RallyState z = started(0, 100, 8000000);
+            RallyState z = started(RALLY_GREEK, 100, 8000000);
             applyStartPressOffset(z, reactionSpeedMps(-1.0, false));   // no reading
-            RallyState b = started(0, 100, 8000000);
+            RallyState b = started(RALLY_GREEK, 100, 8000000);
             applyStartPressOffset(b, reactionSpeedMps(5.0, false));
             return a.total_start_time_ms == 8000000 && a.total_distance_adjust_mm == 0 &&
                    z.total_start_time_ms == 8000000 && z.total_distance_adjust_mm == 0 &&
@@ -158,7 +158,7 @@ public:
         });
 
         suite->addTest("surrey time taken is unchanged", []() {
-            RallyState a = started(1, 0, 1000000), b = started(1, 100, 1000000);
+            RallyState a = started(RALLY_SURREY, 0, 1000000), b = started(RALLY_SURREY, 100, 1000000);
             for (RallyState* s : {&a, &b}) {
                 Segment g; g.distance_m = 1000; g.target_speed_kph = 36;
                 s->stage_segments = {g};

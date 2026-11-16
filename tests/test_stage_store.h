@@ -62,7 +62,7 @@ public:
 
         suite->addTest("italian: km to miles re-works a pc's speed from its new distance", []() {
             RallyState s;
-            s.rally_type = 2;
+            s.rally_type = RALLY_ITALIAN;
             s.distance_unit = DIST_KM;
             Segment pc; pc.type = SEG_PC; pc.ref = 1; pc.distance_m = 560.0; pc.pc_duration_s = 31.0;
             pc.target_speed_kph = 560.0 / 31.0 * 3.6;

@@ -30,7 +30,7 @@ class TestSector {
         RallyState s;
         s.calibration = 1000000;
         s.counters = true;
-        s.rally_type = 2;
+        s.rally_type = RALLY_ITALIAN;
         s.segments = mugello();
         applySectorRules(s.segments, sector_s);
         s.stage_segments = s.segments;
@@ -141,11 +141,11 @@ public:
         });
 
         suite->addTest("the italian next and its undo are gated on the rally type as well as the stage", []() {
-            RallyState g = running(); g.rally_type = 0;
+            RallyState g = running(); g.rally_type = RALLY_GREEK;
             const bool refused = !applySectorNext(g, 385, 385, 70000) && g.segment_current_number == 0;
             RallyState s = running();
             applySectorNext(s, 385, 385, 70000);
-            RallyState u = s; u.rally_type = 0;
+            RallyState u = s; u.rally_type = RALLY_GREEK;
             const bool undoRefused = !undoSectorTube(u) && u.segment_current_number == 1;
             return refused && undoRefused && undoSectorTube(s);
         });
@@ -320,7 +320,7 @@ public:
 
         suite->addTest("+10 and -10 move navi too, in every rally type, and -10 cannot take it below zero", []() {
             bool ok = true;
-            for (int type = 0; type <= 2; ++type) {
+            for (int type = RALLY_GREEK; type <= RALLY_ITALIAN; ++type) {
                 RallyState s = running();
                 s.rally_type = type;
                 zeroOdometer(s, 1000, 1000);
@@ -544,7 +544,7 @@ public:
             const bool it = s.total_start_time_ms == (11 * 3600L + 30 * 60 + 40) * 1000L
                 && s.sector_start_ms == (11 * 3600L + 30 * 60 + 40) * 1000L;
             RallyState g = running();
-            g.rally_type = 0;
+            g.rally_type = RALLY_GREEK;
             g.total_start_time_ms = 40000;
             markSectorStart(g);
             return it && g.total_start_time_ms == 40000;
@@ -582,7 +582,7 @@ public:
             const bool pc = subResetInStage(s);
             s.stage_complete = true;
             const bool idle = !subResetInStage(s);
-            RallyState g = running(); g.rally_type = 0; g.segment_current_number = 1;
+            RallyState g = running(); g.rally_type = RALLY_GREEK; g.segment_current_number = 1;
             return navi && pc && idle && !subResetInStage(g);
         });
 
@@ -700,7 +700,7 @@ public:
             s.stage_segments[0].type = SEG_CT;                 // a stamp check has no countdown
             bool ct_ok = true;
             pcCountdownSeconds(s, 1000, &ct_ok);
-            s.rally_type = 0;
+            s.rally_type = RALLY_GREEK;
             bool greek = true;
             pcCountdownSeconds(s, 1000, &greek);
             return in_pc && navi_ok && line_ok && std::fabs(navi - line) < 0.01 && !ct_ok && !greek;
@@ -720,7 +720,7 @@ public:
             s.stage_segments[4].type = SEG_PM;
             bool pm = false;
             rowMetresToLine(s, 0.0, &pm);
-            s.rally_type = 0;
+            s.rally_type = RALLY_GREEK;
             bool greek = true;
             rowMetresToLine(s, 0.0, &greek);
             return ok && std::fabs(navi - 100.0) < 0.01 && !pc && ct && pm && !greek
@@ -729,12 +729,12 @@ public:
         });
 
         suite->addTest("readout keys: italian reads sector total / sub / navi, greek unchanged", []() {
-            return std::string(readoutKeyName(2, 1)) == "sub" && std::string(readoutKeyName(2, 0)) == "sector\ntotal"
-                && std::string(readoutKeyName(2, 2)) == "navi" && std::string(readoutKeyName(0, 1)) == "trip"
-                && std::string(readoutKeyName(0, 0)) == "total" && std::string(readoutKeyName(0, 2)) == "countdown"
-                && std::string(readoutKeyName(0, 3)) == "next\nspeed" && std::string(readoutKeyName(1, 3)) == "next\nspeed"
-                && std::string(readoutKeyName(2, 3)) == "next\nsubstage"
-                && std::string(readoutKeyName(0, 4)) == "prev\nspeed" && std::string(readoutKeyName(2, 4)) == "prev\nsubstage";
+            return std::string(readoutKeyName(RALLY_ITALIAN, 1)) == "sub" && std::string(readoutKeyName(RALLY_ITALIAN, 0)) == "sector\ntotal"
+                && std::string(readoutKeyName(RALLY_ITALIAN, 2)) == "navi" && std::string(readoutKeyName(RALLY_GREEK, 1)) == "trip"
+                && std::string(readoutKeyName(RALLY_GREEK, 0)) == "total" && std::string(readoutKeyName(RALLY_GREEK, 2)) == "countdown"
+                && std::string(readoutKeyName(RALLY_GREEK, 3)) == "next\nspeed" && std::string(readoutKeyName(RALLY_SURREY, 3)) == "next\nspeed"
+                && std::string(readoutKeyName(RALLY_ITALIAN, 3)) == "next\nsubstage"
+                && std::string(readoutKeyName(RALLY_GREEK, 4)) == "prev\nspeed" && std::string(readoutKeyName(RALLY_ITALIAN, 4)) == "prev\nsubstage";
         });
 
         suite->addTest("idle preview only for a sector, never for a greek stage in italian mode", []() {
@@ -765,7 +765,7 @@ public:
             bool tok = false;
             const double tr = trialAheadSeconds(s, 470, 470, 85500, &tok);
             const bool pc = std::fabs(gaugeAheadSeconds(s, 470, 470, 85500, stageMm(s, 470)) - tr) < 0.001;
-            RallyState g = running(); g.rally_type = 0; g.ahead_behind_zero_offset_ms = 5000;
+            RallyState g = running(); g.rally_type = RALLY_GREEK; g.ahead_behind_zero_offset_ms = 5000;
             const double want = calculateAheadBehindFromStageStart(g, 40000, stageMm(g, 300)) + 5.0;
             const bool greek = std::fabs(gaugeAheadSeconds(g, 300, 300, 40000, stageMm(g, 300)) - want) < 0.001;
             return navi && pc && greek;
@@ -858,7 +858,7 @@ public:
             bool ok = !sectorFinishAvailable(s);              // first row
             s.segment_current_number = 5; ok = ok && !sectorFinishAvailable(s);
             s.segment_current_number = 6; ok = ok && sectorFinishAvailable(s);
-            RallyState g = s; g.rally_type = 0; ok = ok && !sectorFinishAvailable(g);
+            RallyState g = s; g.rally_type = RALLY_GREEK; ok = ok && !sectorFinishAvailable(g);
             RallyState d = s; d.stage_complete = true; ok = ok && !sectorFinishAvailable(d);
             RallyState i = s; i.segment_current_number = -1; ok = ok && !sectorFinishAvailable(i);
             return ok && !applySectorFinish(g);
@@ -866,7 +866,7 @@ public:
 
         suite->addTest("RB-NAV-52: a greek stage still ends on distance", []() {
             RallyState s = running();
-            s.rally_type = 0;
+            s.rally_type = RALLY_GREEK;
             s.segment_current_number = 6;
             return sectorEndsOnDistance(s);
         });
@@ -874,14 +874,14 @@ public:
         // Owner, 2026-11-15: a surrey stage ends only on the finish press (next on the last row) or an abort.
         suite->addTest("a surrey stage never ends on distance, even a roadbook with several rows", []() {
             RallyState s = running();
-            s.rally_type = 1;
+            s.rally_type = RALLY_SURREY;
             s.segment_current_number = 6;
             return !sectorEndsOnDistance(s);
         });
 
         suite->addTest("RB-NAV-52: an italian roadbook that is not a sector still ends on distance", []() {
             RallyState s;
-            s.rally_type = 2;
+            s.rally_type = RALLY_ITALIAN;
             Segment a; a.distance_m = 1000; a.target_speed_kph = 36;
             s.stage_segments = {a};
             return sectorEndsOnDistance(s);
@@ -923,7 +923,7 @@ public:
             RallyState later = s; later.segment_current_number = 1;
             RallyState done = s; done.stage_complete = true;
             RallyState idle = s; idle.segment_current_number = -1;
-            RallyState greek = s; greek.rally_type = 0;
+            RallyState greek = s; greek.rally_type = RALLY_GREEK;
             return first_row && sectorTotalResetBlocked(later) && !sectorTotalResetBlocked(done)
                 && !sectorTotalResetBlocked(idle) && !sectorTotalResetBlocked(greek);
         });
@@ -948,7 +948,7 @@ public:
 
         suite->addTest("phone sector card is null off italian and shows the idle preview on italian", []() {
             RallyState g;
-            g.rally_type = 0;
+            g.rally_type = RALLY_GREEK;
             const std::string off = sectorCardJson(g, 0, 0, 0, 0);
             RallyState s = running();
             s.stage_complete = true;

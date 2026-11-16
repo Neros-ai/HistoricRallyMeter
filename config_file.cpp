@@ -11,6 +11,9 @@
 #include <stdexcept>
 #include <cstdio>
 #include <cstdlib>
+#include <cerrno>
+#include <cstring>
+#include <iostream>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -312,7 +315,7 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
         } else if (line.find("\"tone_type_behind\"") != std::string::npos) {
             state.tone_type_behind = static_cast<int>(extractLong(line)) == 2 ? 2 : 1;
         } else if (line.find("\"phone_beep_lead_ms\"") != std::string::npos) {
-            state.phone_beep_lead_ms = static_cast<int>(std::max<long>(0, std::min<long>(400, static_cast<long>(extractLong(line)))));
+            state.phone_beep_lead_ms = clampPhoneLeadMs(static_cast<long>(extractLong(line)));
         } else if (line.find("\"reaction_offset_ms\"") != std::string::npos) {
             state.reaction_offset_ms = clampReactionOffsetMs(static_cast<long>(extractLong(line)));
         } else if (line.find("\"gauge_range_s\"") != std::string::npos) {
@@ -343,7 +346,7 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.trial_start_m = extractDouble(line);
         } else if (line.find("\"rally_type\"") != std::string::npos) {
             const long r = extractLong(line);
-            state.rally_type = (r == 2 || r == 1) ? static_cast<int>(r) : 0;
+            state.rally_type = (r == RALLY_ITALIAN || r == RALLY_SURREY) ? static_cast<int>(r) : RALLY_GREEK;
         } else if (line.find("\"time_taken_stage\"") != std::string::npos) {
             state.time_taken_stage = static_cast<int>(extractLong(line));
         } else if (line.find("\"time_taken_ms\"") != std::string::npos) {
@@ -468,7 +471,7 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
     }
 }
 
-static void writeDoubleArray(std::ofstream& file, const std::string& name,
+static void writeDoubleArray(std::ostream& file, const std::string& name,
                              const std::vector<double>& values, bool trailing_comma) {
     file << "  \"" << name << "\": [\n";
     for (size_t i = 0; i < values.size(); i++) {
@@ -481,7 +484,7 @@ static void writeDoubleArray(std::ofstream& file, const std::string& name,
     file << "\n";
 }
 
-static void writeSegmentArray(std::ofstream& file, const std::string& name,
+static void writeSegmentArray(std::ostream& file, const std::string& name,
                               const std::vector<Segment>& segs, bool trailing_comma, long calibration) {
     file << "  \"" << name << "\": [\n";
     for (size_t i = 0; i < segs.size(); i++) {
@@ -508,13 +511,11 @@ static void writeSegmentArray(std::ofstream& file, const std::string& name,
 }
 
 void ConfigFile::save(const RallyState& state, const std::string& path) {
-    // Write beside the config and rename over it, so a power cut mid-write
-    // leaves either the old file or the new one, never a partial one.
-    const std::string tmp_path = path + ".tmp";
-    std::ofstream file(tmp_path, std::ios::out | std::ios::trunc);
-    if (!file.is_open()) {
-        return;
-    }
+    writeAtomic(serialise(state), path);
+}
+
+std::string ConfigFile::serialise(const RallyState& state) {
+    std::ostringstream file;
     // Every decimal figure is written in full, so a restart reads back exactly what was saved
     // (a speed worked out from a sector duration was rounded to 6 decimals before, RB-DEV-16).
     file << std::defaultfloat << std::setprecision(std::numeric_limits<double>::max_digits10);
@@ -657,11 +658,31 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     }
     
     file << "}\n";
+    return file.str();
+}
+
+// The directory holding a path ("." for a bare filename, "/" for a file in the root).
+static std::string parentDirectory(const std::string& path) {
+    const size_t slash = path.find_last_of('/');
+    if (slash == std::string::npos) return ".";
+    if (slash == 0) return "/";
+    return path.substr(0, slash);
+}
+
+bool ConfigFile::writeAtomic(const std::string& bytes, const std::string& path) {
+    // Write beside the config and rename over it, so a power cut mid-write
+    // leaves either the old file or the new one, never a partial one.
+    const std::string tmp_path = path + ".tmp";
+    std::ofstream file(tmp_path, std::ios::out | std::ios::trunc | std::ios::binary);
+    if (!file.is_open()) {
+        return false;
+    }
+    file.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
     file.flush();
     if (!file.good()) {
         file.close();
         std::remove(tmp_path.c_str());
-        return;
+        return false;
     }
     file.close();
 
@@ -673,5 +694,25 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     }
     if (std::rename(tmp_path.c_str(), path.c_str()) != 0) {
         std::remove(tmp_path.c_str());
+        return false;
     }
+
+    // Push the rename itself to the card: without this, a power cut right after it can bring the
+    // old file back. The new file is already in place, so a failure here is logged, not returned.
+    static bool dir_sync_reported = false;   // once, not on every save
+    const std::string dir = parentDirectory(path);
+    int dfd = open(dir.c_str(), O_RDONLY | O_DIRECTORY);
+    int dir_err = 0;
+    if (dfd < 0) {
+        dir_err = errno;
+    } else {
+        if (fsync(dfd) != 0) dir_err = errno;
+        close(dfd);
+    }
+    if (dir_err != 0 && !dir_sync_reported) {
+        dir_sync_reported = true;
+        std::cerr << "[WARN] Config saved, but the folder " << dir << " could not be synced: "
+                  << std::strerror(dir_err) << std::endl;
+    }
+    return true;
 }

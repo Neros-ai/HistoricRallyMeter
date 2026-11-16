@@ -1,6 +1,9 @@
 #include "calculations.h"
+#include "stage_rows.h"
 #include <algorithm>
+#include <cerrno>
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <ctime>
 #include <chrono>
@@ -189,8 +192,8 @@ double calculateCurrentSpeed(const RallyState& state, const CounterPoll& current
 
     // Convert to KPH or MPH
     if (state.units) {
-        // MPH: mm/s * 3600 / 1,609,340
-        return (speed_mm_per_s * 3600.0) / 1609340.0;
+        // MPH: mm/s * 3600 / mm per mile
+        return (speed_mm_per_s * 3600.0) / (METRES_PER_MILE * 1000.0);
     } else {
         // KPH: mm/s * 3600 / 1,000,000
         return (speed_mm_per_s * 3600.0) / 1000000.0;
@@ -212,7 +215,7 @@ double calculateAverageSpeed(const RallyState& state, int64_t start_time_ms,
     double speed_cm_per_s = (mm_diff / 10.0 * 1000.0) / time_diff_ms;
     
     if (state.units) {
-        return (speed_cm_per_s * 3600.0) / 160934.0;  // MPH
+        return (speed_cm_per_s * 3600.0) / (METRES_PER_MILE * 100.0);  // MPH
     } else {
         return (speed_cm_per_s * 3600.0) / 100000.0;  // KPH
     }
@@ -333,23 +336,6 @@ std::string formatDistanceGrouped(long meters) {
     return result;
 }
 
-std::string formatDistanceAutoUnit(long meters, const char** unit_out) {
-    // Nero2.0: up to 99,999 m a distance reads in whole metres; from 100,000 m
-    // it reads in kilometres to two decimals (127.48), the decimal point alone
-    // telling km from metres on the 88 px figures. Truncated, not rounded, like
-    // the metres figure itself, so the display never reads ahead of the car.
-    if (meters >= 100000 || meters <= -100000) {
-        *unit_out = "km";
-        const long abs_m = meters < 0 ? -meters : meters;
-        const long hundredths = abs_m / 10;
-        char buf[32];
-        snprintf(buf, sizeof(buf), "%s%ld.%02ld", meters < 0 ? "-" : "", hundredths / 100, hundredths % 100);
-        return buf;
-    }
-    *unit_out = "m";
-    return formatDistanceGrouped(meters);
-}
-
 std::string formatElapsedInterval(int64_t total_secs) {
     if (total_secs < 0) total_secs = 0;
     int64_t minutes = total_secs / 60;
@@ -405,21 +391,6 @@ bool retimeSegmentBoundaryForward(std::vector<Segment>& segs, long index,
     return true;
 }
 
-bool retimeSegmentBoundaryBackward(std::vector<Segment>& segs, long index,
-                                   int64_t driven_mm) {
-    if (index <= 0 || index >= static_cast<long>(segs.size())) return false;
-    Segment& prev = segs[index - 1];
-    Segment& cur = segs[index];
-    // The previous segment really ran to here, so it grows by what has been
-    // driven since the boundary -- and this segment loses the same, leaving
-    // its own end where the roadbook has it.
-    const double driven_m = static_cast<double>(driven_mm) / 1000.0;
-    prev.distance_m += driven_m;
-    cur.distance_m -= driven_m;
-    if (cur.distance_m < 0.0) cur.distance_m = 0.0;
-    return true;
-}
-
 bool mergeSegmentBack(std::vector<Segment>& segs, long index) {
     if (index <= 0 || index >= static_cast<long>(segs.size())) return false;
     Segment& prev = segs[index - 1];
@@ -466,6 +437,12 @@ void rebaseSegmentAt(RallyState& state, uint64_t c1, uint64_t c2,
     state.segment_start_cntr1 = c1 >= into ? c1 - into : 0;
     state.segment_start_cntr2 = c2 >= into ? c2 - into : 0;
     state.segment_start_adjust_mm = state.total_distance_adjust_mm;
+}
+
+void startSegmentHere(RallyState& state, uint64_t c1, uint64_t c2, int64_t start_time_ms) {
+    rebaseSegmentAt(state, c1, c2, 0);   // distance baseline at the counters, correction as it stands
+    state.segment_start_time_ms = start_time_ms;
+    rebaseTripToSegment(state, c1, c2);  // Trip starts from the segment's time as well as its position
 }
 
 bool nextAvailable(const RallyState& state) {
@@ -547,13 +524,6 @@ long adjustedDistanceMetersMm(int64_t raw_mm, long adjust_mm) {
 }
 
 
-std::string segmentRowHeading(double current_speed, bool has_current_segment) {
-    if (!has_current_segment) return std::string("--->");
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%.0f >", current_speed);
-    return std::string(buf);
-}
-
 std::string formatOffsetSeconds(long offset_ms) {
     long tenths = (offset_ms >= 0) ? (offset_ms + 50) / 100 : -((-offset_ms + 50) / 100);
     const long total_s = std::labs(tenths) / 10, t = std::labs(tenths) % 10;
@@ -579,12 +549,12 @@ std::string segmentSpeedTransition(double next_speed, bool has_next, bool is_mph
     return std::string(buf);
 }
 
-std::string speedChangeLine(double cur_kph, double next_kph, bool has_next, bool is_mph) {
-    if (!has_next) return "";
-    const double f = is_mph ? 0.621371 : 1.0;
-    char buf[48];
-    snprintf(buf, sizeof(buf), "%.0f<>%.0f %s", cur_kph * f, next_kph * f, is_mph ? "mph" : "kph");
-    return std::string(buf);
+bool timeOfDaySeconds(int64_t time_ms, long* tod_s) {
+    time_t t = time_ms / 1000;
+    struct tm* lt = localtime(&t);
+    if (!lt) return false;
+    *tod_s = lt->tm_hour * 3600L + lt->tm_min * 60L + lt->tm_sec;
+    return true;
 }
 
 StageArrival stageArrival(double start_distance_m, double minutes_to_start) {
@@ -598,50 +568,6 @@ StageArrival stageArrival(double start_distance_m, double minutes_to_start) {
     a.speed_kph = static_cast<int>(std::lround((start_distance_m / 1000.0) /
                                                ((minutes_to_start - 1.0) / 60.0)));
     return a;
-}
-
-std::vector<double> parseBeepWaypointsKm(const std::string& text) {
-    std::vector<double> waypoints;
-
-    // Commas and semicolons both separate: the numeric keypad offers ";",
-    // but a list pasted from a roadbook is usually comma-separated.
-    std::string normalised = text;
-    for (char& c : normalised)
-        if (c == ',' || c == ';' || c == '\n' || c == '\t') c = ' ';
-
-    std::istringstream stream(normalised);
-    std::string token;
-    while (stream >> token) {
-        try {
-            size_t consumed = 0;
-            double km = std::stod(token, &consumed);
-            // Reject trailing junk ("3.67m") and negative distances, but keep
-            // parsing: one bad token must not cost the operator the rest.
-            if (consumed != token.size() || km < 0.0) continue;
-            waypoints.push_back(km * 1000.0);
-        } catch (const std::exception&) {
-            continue;
-        }
-    }
-
-    // Travel order, and no duplicates -- a repeated waypoint would beep twice
-    // at the same point.
-    std::sort(waypoints.begin(), waypoints.end());
-    waypoints.erase(std::unique(waypoints.begin(), waypoints.end(),
-                                [](double a, double b) { return std::abs(a - b) < 0.5; }),
-                    waypoints.end());
-    return waypoints;
-}
-
-std::string formatBeepWaypointsKm(const std::vector<double>& waypoints_m) {
-    std::string out;
-    char buf[32];
-    for (size_t i = 0; i < waypoints_m.size(); i++) {
-        snprintf(buf, sizeof(buf), "%.2f", waypoints_m[i] / 1000.0);
-        if (i > 0) out += ", ";
-        out += buf;
-    }
-    return out;
 }
 
 size_t beepCursorFor(const std::vector<double>& waypoints_m, double travelled_m) {
@@ -768,15 +694,6 @@ double pulsesPerKm(long calibration) {
     return 1e9 / static_cast<double>(calibration);
 }
 
-std::string calibrationReadoutLine(long distance_m, int64_t counts_avg,
-                                   int64_t counts_s1, int64_t counts_s2) {
-    std::stringstream ss;
-    ss << "Device distance: " << distance_m << "m"
-       << " Pulses " << counts_avg
-       << " S1=" << counts_s1 << " S2=" << counts_s2;
-    return ss.str();
-}
-
 long calibrationFromPulsesPerKm(double pulses_per_km) {
     if (pulses_per_km <= 0.0) return 0;
     return static_cast<long>((1e9 / pulses_per_km) + 0.5);
@@ -791,6 +708,60 @@ double propRpmFromCounts(uint64_t cntr_now, uint64_t cntr_then,
 
 bool validPropPulsesPerRev(long pulses_per_rev) {
     return pulses_per_rev >= 1 && pulses_per_rev <= 64;
+}
+
+bool validToneType(int tone_type) {
+    return tone_type == 1 || tone_type == 2;
+}
+
+bool validSegmentRow(const RallyState& state, int row) {
+    return row >= 0 && row < static_cast<int>(state.segments.size());
+}
+
+bool applyMeasuredCalibration(RallyState& state, const char* dist_str,
+                              uint64_t c1, uint64_t c2, uint64_t start1, uint64_t start2) {
+    if (!dist_str || *dist_str == '\0') return false;
+    // The measured distance, in metres -- or in miles when the distance unit is miles, kept to the
+    // millimetre: a mile is 1609.344 m, and whole metres would put 0.02% on the calibration.
+    long long rally_distance_mm = 0;
+    if (distIsMiles(state.distance_unit)) {
+        char* stop = nullptr;
+        const double miles = std::strtod(dist_str, &stop);
+        if (stop && *stop == '\0' && miles > 0.0) rally_distance_mm = std::llround(miles * METRES_PER_MILE * 1000.0);
+    } else {
+        // Whole metres, as typed. A fractional part ("1000.5", which the box keypad and the phone's number
+        // field can both produce) is dropped as it always was; anything else after the digits -- letters,
+        // a second point, a colon -- is refused, as is a figure that is not a number or does not fit.
+        errno = 0;
+        char* stop = nullptr;
+        const long metres = std::strtol(dist_str, &stop, 10);
+        if (stop == dist_str || errno == ERANGE) return false;
+        if (*stop == '.') {
+            ++stop;
+            while (*stop >= '0' && *stop <= '9') ++stop;
+        }
+        while (*stop == ' ' || *stop == '\t') ++stop;
+        if (*stop != '\0') return false;
+        if (metres < 0 || metres > 100000) return false;   // outside 500 m..100 km (also keeps the *1000 in range)
+        rally_distance_mm = metres * 1000LL;
+    }
+    const long rally_distance_m = static_cast<long>(rally_distance_mm / 1000);
+    if (rally_distance_m < 500 || rally_distance_m > 100000) return false;
+
+    const int64_t total_count_diff = calculateDistanceCounts(state, c1, c2, start1, start2);
+    if (total_count_diff <= 0) return false;
+    // new_cal = (input_meters * 1000 * 1000) / total_count_diff
+    state.calibration = (rally_distance_mm * 1000) / total_count_diff;
+    state.typed_pulses_per_km = 0.0;   // a measured figure now
+    return true;
+}
+
+bool applyPulsesPerKmCalibration(RallyState& state, double pulses_per_km) {
+    const long new_calibration = calibrationFromPulsesPerKm(pulses_per_km);
+    if (new_calibration <= 0) return false;   // zero/negative entry -- no-op, not a crash
+    state.calibration = new_calibration;
+    state.typed_pulses_per_km = pulses_per_km;   // shown back as typed
+    return true;
 }
 
 std::string propRpmReading(double rpm) {
@@ -895,15 +866,6 @@ CompactGaugeLayout computeCompactGaugeLayout(double width, double height, bool e
     return L;
 }
 
-std::string distanceColumnCaption(const char* unit) {
-    const bool kilometres = (unit != nullptr) && (std::string(unit) == "km");
-    return std::string("Distance (") + (kilometres ? "kilometres" : "metres") + ")";
-}
-
-std::string speedColumnCaption(bool units_mph) {
-    return units_mph ? "Average Speed (Mph)" : "Average Speed (Kmh)";
-}
-
 NeedleGeometry computeNeedleGeometry(double seconds, double max_seconds, double radius) {
     NeedleGeometry n{};
 
@@ -997,7 +959,7 @@ std::string formatStageStatusTable(const std::vector<Segment>& segs, bool units,
     double cumulative_m = 0.0;
     for (size_t i = 0; i < shown; i++) {
         double kph = segs[i].target_speed_kph;
-        double display_speed = units ? kph * 0.621371 : kph;
+        double display_speed = units ? kphToMph(kph) : kph;
         cumulative_m += segs[i].distance_m;
         char row[96];
         snprintf(row, sizeof(row), "\n%6.2f %10ld %7ld",
@@ -1250,61 +1212,9 @@ bool gaugeTickLabelsVisibleInZone(int zone) {
     return zone == 0;
 }
 
-bool gaugeTickLabelsVisible(double seconds) {
-    return gaugeTickLabelsVisibleInZone(gaugeZone(seconds));
-}
-
 double gaugeTickAngle(int index, double max_val) {
     double frac = static_cast<double>(index) / max_val;
     return M_PI + M_PI / 2 + frac * (M_PI / 2);
-}
-
-std::vector<double> parseSemicolonList(const std::string& input) {
-    std::vector<double> result;
-    std::stringstream stream(input);
-    std::string token;
-    while (std::getline(stream, token, ';')) {
-        if (token.empty()) continue;
-        // A bare std::stod throws on a token the keypad can easily produce
-        // ("." and ";" are both keypad buttons). The throw escapes through a
-        // GTK "clicked" handler -- C code with no C++ handler in the stack --
-        // and terminates the app from a stray keypress mid-rally. Skip the
-        // bad token instead, and reject trailing junk ("1.2.3" silently read
-        // as 1.2 is a wrong segment the operator cannot see). Same contract
-        // as parseBeepWaypointsKm.
-        try {
-            size_t consumed = 0;
-            double value = std::stod(token, &consumed);
-            if (consumed != token.size()) continue;
-            result.push_back(value);
-        } catch (const std::exception&) {
-            continue;
-        }
-    }
-    return result;
-}
-
-bool buildSegmentSpeedDistancePairs(const std::vector<double>& speeds,
-                                     const std::vector<double>& distances,
-                                     std::vector<std::pair<double, double>>& out) {
-    out.clear();
-    if (speeds.empty() || distances.empty()) return false;
-
-    if (speeds.size() == 1) {
-        for (double d : distances) {
-            out.emplace_back(speeds[0], d);
-        }
-        return true;
-    }
-
-    if (speeds.size() != distances.size()) {
-        return false;
-    }
-
-    for (size_t i = 0; i < speeds.size(); i++) {
-        out.emplace_back(speeds[i], distances[i]);
-    }
-    return true;
 }
 
 std::string averageSpeedText(double speed) {
@@ -1316,7 +1226,7 @@ std::string averageSpeedText(double speed) {
 std::string arrivalSpeedText(double kph, bool mph) {
     if (kph < 0) return "--";
     char b[24];
-    snprintf(b, sizeof(b), "%ld", mph ? std::lround(kph * 0.621371) : static_cast<long>(kph));
+    snprintf(b, sizeof(b), "%ld", mph ? std::lround(kphToMph(kph)) : static_cast<long>(kph));
     return b;
 }
 

@@ -1,5 +1,7 @@
 #include "arrow_tone.h"
 #include "calculations.h"
+#include "stage_rows.h"
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -30,7 +32,7 @@ Classified classify(double secondsAheadBehind, double target_kph_raw, bool units
     }
 
     if (unitsMph) {
-        speed_diff = speed_diff * 0.621371;
+        speed_diff = kphToMph(speed_diff);
     }
 
     double abs_diff = std::abs(speed_diff);
@@ -46,17 +48,24 @@ Classified classify(double secondsAheadBehind, double target_kph_raw, bool units
 }
 }  // namespace
 
-int arrowToneGapMs(double errorSeconds) {
+int arrowToneRung(double errorSeconds) {
+    return toneRung(errorSeconds);
+}
+
+int arrowToneGapForRung(int rung) {
     // Fast drop at the small end, where the crew need to tell 0.2 from 0.6 from
     // 1.0 s apart, then a gentle run down to 70 ms at 3 s.
     static const int GAP_MS[ARROW_TONE_STEPS] = {
         1000, 700, 500, 360, 260,     // 0.2 .. 1.0 s
          220, 190, 165, 145, 130,     // 1.2 .. 2.0 s
          118, 106,  94,  82,  70 };   // 2.2 .. 3.0 s
-    int step = static_cast<int>(std::floor(std::abs(errorSeconds) / ARROW_TONE_STEP_S + 1e-9));
-    if (step < 1) step = 1;
-    if (step > ARROW_TONE_STEPS) step = ARROW_TONE_STEPS;
-    return GAP_MS[step - 1];
+    if (rung < 1) rung = 1;
+    if (rung > ARROW_TONE_STEPS) rung = ARROW_TONE_STEPS;
+    return GAP_MS[rung - 1];
+}
+
+int arrowToneGapMs(double errorSeconds) {
+    return arrowToneGapForRung(arrowToneRung(errorSeconds));
 }
 
 ArrowToneResult computeArrowBasedTone(ArrowToneState& state,
@@ -70,6 +79,7 @@ ArrowToneResult computeArrowBasedTone(ArrowToneState& state,
     double target_kph_raw = targetSpeedKph;
     if (target_kph_raw <= 0.0) {
         state.lastCommittedSeconds = 0.0;
+        state.heldRung = 0;
         return result;
     }
 
@@ -83,6 +93,7 @@ ArrowToneResult computeArrowBasedTone(ArrowToneState& state,
         // As the simple tone does: a fresh zone starts with a fresh latch, so
         // a new stage is never judged against the last one's error.
         state.lastCommittedSeconds = 0.0;
+        state.heldRung = 0;
         return result;
     }
 
@@ -90,13 +101,17 @@ ArrowToneResult computeArrowBasedTone(ArrowToneState& state,
     // ARROW_TONE_SOUND_THRESHOLD_S it sounds, below it there is silence. Same
     // point in both directions, no memory of how the error got there.
     //
-    // The latch survives for the CADENCE only: it decides which of the three
-    // rhythms plays, so small wobble cannot shuffle between them. While silent
-    // it simply follows the live error, which keeps it armed with the right
-    // value for the tick the tone starts on.
+    // The latch now only keeps the pitch (ahead/behind) and the 30 s edge
+    // steady; it no longer picks the beat gap. While silent it simply follows
+    // the live error, which keeps it armed for the tick the tone starts on.
     if (std::abs(secondsAheadBehind) < ARROW_TONE_SOUND_THRESHOLD_S) {
         state.lastCommittedSeconds = secondsAheadBehind;
+        state.heldRung = 0;
         return result;
+    }
+    // Ahead <-> behind without passing through silence: forget the held rung.
+    if ((secondsAheadBehind < 0.0) != (state.lastCommittedSeconds < 0.0)) {
+        state.heldRung = 0;
     }
     if (std::abs(secondsAheadBehind - state.lastCommittedSeconds)
             > ARROW_TONE_UPDATE_THRESHOLD_S) {
@@ -104,8 +119,14 @@ ArrowToneResult computeArrowBasedTone(ArrowToneState& state,
     }
     const double committed = state.lastCommittedSeconds;
     if (std::abs(committed) > 30.0) {
+        state.heldRung = 0;
         return result;  // arrows/direction stay valid for the label
     }
+
+    // The beat gap: each 0.2 s step of the LIVE error has its own rung. A
+    // growing error takes its rung the moment it reaches the line; a shrinking
+    // error keeps the rung until it is TONE_RUNG_HOLD_MARGIN_S below the line.
+    state.heldRung = toneHeldRung(state.heldRung, std::abs(secondsAheadBehind));
 
     // The tone follows the error in seconds alone (the arrows keep using the
     // target speed): a square-wave tick, its gap set by the size of the error
@@ -113,6 +134,6 @@ ArrowToneResult computeArrowBasedTone(ArrowToneState& state,
     result.tone_active = true;
     result.freq_hz = (committed < 0.0) ? ARROW_TONE_BEHIND_HZ : ARROW_TONE_AHEAD_HZ;
     result.tone_ms = ARROW_TONE_TICK_MS;
-    result.silence_ms = arrowToneGapMs(committed);
+    result.silence_ms = arrowToneGapForRung(state.heldRung);
     return result;
 }

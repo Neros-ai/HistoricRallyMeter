@@ -294,7 +294,7 @@ void rebaseTripDistance(RallyState& state, uint64_t c1, uint64_t c2);
 std::string pushTripHistory(const std::string& history, long trip_m, size_t max_entries = 6);
 // A new Greek stage starts with an empty Trip history. Italian and Surrey keep theirs.
 inline void clearGreekTripHistoryOnStageStart(RallyState& s) {
-    if (s.rally_type == 0) s.trip_history_m.clear();
+    if (s.rally_type == RALLY_GREEK) s.trip_history_m.clear();
 }
 // Split a comma-separated history into metres, most recent first. Junk skipped.
 std::vector<long> parseTripHistory(const std::string& history);
@@ -360,11 +360,6 @@ int64_t countsToMm(int64_t counts, long calibration);
 // label width/xalign, not string padding.
 std::string formatDistanceGrouped(long meters);
 
-// Format a distance choosing meters or kilometers so the printed magnitude
-// stays bounded (switches to km above +/-999,999 m). Writes "m" or "km"
-// through *unit_out.
-std::string formatDistanceAutoUnit(long meters, const char** unit_out);
-
 // Format an elapsed interval as minutes:seconds, switching to hours:minutes
 // once the minutes need more than four digits, and to "toolong" when even
 // hours will not fit. Emits no padding -- callers align the column with GTK
@@ -402,8 +397,6 @@ long adjustedDistanceMetersMm(int64_t raw_mm, long adjust_mm);
 // (the stage position minus where the segment starts). The row lengths are the typed metres.
 bool retimeSegmentBoundaryForward(std::vector<Segment>& segs, long index,
                                   int64_t driven_mm);
-bool retimeSegmentBoundaryBackward(std::vector<Segment>& segs, long index,
-                                   int64_t driven_mm);
 
 // "prev" (owner's ruling, 2026-09-14): undo a speed change. The previous
 // segment's speed comes back at once and the change point becomes unknown
@@ -435,6 +428,10 @@ long segmentIndexAtStageMm(const std::vector<Segment>& segs, int64_t stage_mm);
 void rebaseSegmentAt(RallyState& state, uint64_t c1, uint64_t c2,
                      int64_t mm_into_segment);
 
+// A segment starts at the counters' current reading and at `start_time_ms`: its distance baseline and correction,
+// its time, and Trip's baselines (rebaseTripToSegment) all move together. What next and the automatic change do.
+void startSegmentHere(RallyState& state, uint64_t c1, uint64_t c2, int64_t start_time_ms);
+
 // Whether the co-pilot's next / prev buttons (and the phone's) are live.
 // next: at any point in a segment (the old 500 m windows are gone) while a
 // segment follows. prev: only in the segment straight after the last speed
@@ -461,14 +458,6 @@ void recordSegmentChange(RallyState& state, long from_index, bool automatic);
 // when prev is not available.
 bool undoSegmentChange(RallyState& state, uint64_t c1, uint64_t c2, int64_t stage_mm);
 
-// Heading for the co-pilot's next-segment row: the current segment's own
-// target speed, with an arrow toward the change ahead. This is the one fact
-// about the current segment the app can state honestly -- there is no
-// reliable segment or stage number to show instead. Falls back to a
-// placeholder when no segment is running. current_speed is already in the
-// active display unit -- this function does not convert.
-std::string segmentRowHeading(double current_speed, bool has_current_segment);
-
 // Speed cell for that row: the speed coming up. Does not repeat the current
 // speed -- that is already the row's heading -- so this answers "and then
 // what", not "from what". Whole numbers -- roadbook speeds are called as
@@ -476,10 +465,9 @@ std::string segmentRowHeading(double current_speed, bool has_current_segment);
 // only selects which unit word follows it.
 std::string segmentSpeedTransition(double next_speed, bool has_next, bool is_mph);
 
-// Home's "50<>60 kph" line: this segment's speed, then the next one's. Empty
-// when there is no next segment. Speeds are given in km/h and shown in mph
-// when is_mph.
-std::string speedChangeLine(double cur_kph, double next_kph, bool has_next, bool is_mph);
+// Seconds since local midnight of a clock time given in milliseconds (the rally clock's time
+// of day). Returns false, leaving *tod_s alone, when the time cannot be broken down.
+bool timeOfDaySeconds(int64_t time_ms, long* tod_s);
 
 // Home's Stage arrival block: minutes until the stage starts, and the speed
 // that gets the car to the line one minute early -- the distance STILL TO GO
@@ -491,16 +479,6 @@ struct StageArrival {
     int speed_kph = 0;
 };
 StageArrival stageArrival(double start_distance_m, double minutes_to_start);
-
-// The navigator draws that speed when it is valid: on the Greek page, and on
-// Surrey between stages. A running Surrey stage puts the countdown in the
-// slot, and the Italian page covers the column.
-inline bool navigatorShowsArrivalKph(int rally_type, bool stage_running, bool arrival_valid) {
-    if (!arrival_valid) return false;
-    if (rally_type == 2) return false;
-    if (rally_type == 1 && stage_running) return false;
-    return true;
-}
 
 // Right edge of the driver "avg / kph" caption. The average figures stay
 // put. When a long figure would cross the caption, the caption moves left.
@@ -515,15 +493,6 @@ inline double captionLeftAfter(double baseLeft, double numberRight, double gap) 
     const double need = numberRight + gap;
     return need > baseLeft ? need : baseLeft;
 }
-
-// Parse an operator-entered Beep Assist waypoint list. Values are kilometres
-// separated by commas, semicolons or whitespace, and are returned as metres
-// in ascending order with duplicates removed. A malformed token is skipped
-// rather than aborting the parse: one typo must not cost the whole list.
-std::vector<double> parseBeepWaypointsKm(const std::string& text);
-
-// Render waypoint metres back to the kilometre display form.
-std::string formatBeepWaypointsKm(const std::vector<double>& waypoints_m);
 
 // Index of the first waypoint not yet reached at the given travelled
 // distance. Used to re-derive the runtime cursor after a restart, so a power
@@ -586,13 +555,6 @@ double pulsesPerKm(long calibration);
 // the calibration. Whole pulses.
 long displayPulsesPerKm(double typed_pulses_per_km, long calibration);
 
-// The calibration screen's readout line: distance covered, the averaged pulse
-// count, and each sensor's own count -- so one wheel sensor disagreeing with
-// the other is visible. Pulses/KM is shown separately, in the "Current
-// Calibration" row.
-std::string calibrationReadoutLine(long distance_m, int64_t counts_avg,
-                                   int64_t counts_s1, int64_t counts_s2);
-
 // The calibration value (millimetres per 1000 counts) that gives an exact
 // pulses/km figure. Identical arithmetic to pulsesPerKm() -- calibration and
 // pulses/km are reciprocals of each other through the same 1e9 constant --
@@ -609,6 +571,17 @@ long calibrationFromPulsesPerKm(double pulses_per_km);
 double propRpmFromCounts(uint64_t cntr_now, uint64_t cntr_then,
                          int64_t elapsed_ms, int pulses_per_rev);
 bool validPropPulsesPerRev(long pulses_per_rev);   // 1..64
+bool validToneType(int tone_type);                 // 1 or 2
+bool validSegmentRow(const RallyState& state, int row);   // an index into the roadbook rows on show
+
+// Calibrate from a measured distance typed as the box shows it (metres, or miles in miles), the car having
+// driven from the start counters to (c1, c2). Sets calibration and clears the typed pulses figure; false, with
+// nothing changed, when the figure is outside 500 m..100 km, no distance has been driven, or the text is not a
+// number (outside miles: whole metres, a ".digits" tail ignored; anything else trailing is refused).
+bool applyMeasuredCalibration(RallyState& state, const char* dist_str,
+                              uint64_t c1, uint64_t c2, uint64_t start1, uint64_t start2);
+// Calibrate from a typed pulses-per-km figure; false, with nothing changed, when it gives no usable calibration.
+bool applyPulsesPerKmCalibration(RallyState& state, double pulses_per_km);
 // Whole rpm, no separator ("1793"), or "---" for no figure.
 std::string propRpmReading(double rpm);
 
@@ -686,15 +659,6 @@ struct CompactGaugeLayout {
 CompactGaugeLayout computeCompactGaugeLayout(double width, double height,
                                              bool embedded = false);
 
-// Caption for the driver gauge's distance column. The caption carries the
-// unit rather than each value repeating it, so it has to follow the
-// automatic m/km switch that formatDistanceAutoUnit() applies to the values.
-std::string distanceColumnCaption(const char* unit);
-
-// Caption for the driver gauge's average-speed column, following the
-// KPH/MPH setting from the date/time screen.
-std::string speedColumnCaption(bool units_mph);
-
 // Geometry of the gauge needle for a given ahead/behind reading. Pure
 // arithmetic so the clamping and angle mapping can be unit-tested without a
 // display. The needle is a constant-width bar the same width as the major
@@ -748,13 +712,6 @@ GaugeArcColor gaugeArcColor(int zone);
 // instead.
 std::string gaugeTickLabel(int index);
 
-// True while tick numerals should be drawn at all: only in the green zone.
-// Past that, the dial has grown past the point where labelling individual
-// second-ticks is useful -- the arc colour is the at-a-glance signal
-// instead, and a numeral next to a pinned needle would claim a precision
-// the needle position no longer carries.
-bool gaugeTickLabelsVisible(double seconds);
-
 // Same decision taken from an already-resolved zone. The gauge draws from
 // the hysteretic zone (see gaugeZoneHysteretic), so it must ask this rather
 // than the raw-reading form above -- otherwise the numerals would still
@@ -774,23 +731,5 @@ bool gaugeTickLabelsVisibleInZone(int zone);
 // i/tick_count of the sweep, i.e. i * (max_val / tick_count) seconds, not
 // i seconds, whenever max_val has a fractional remainder.
 double gaugeTickAngle(int index, double max_val);
-
-// Splits a ';'-separated list of numbers (as typed into the Stage Setup
-// screen's speed/distance entries) into parsed doubles, skipping empty
-// tokens (e.g. from a leading/trailing/doubled ';'). Order preserved.
-std::vector<double> parseSemicolonList(const std::string& input);
-
-// Pairs a parsed speed list with a parsed distance list for on_add_segment()
-// (RB-SEG-03). If speeds has exactly one entry, it is broadcast to every
-// distance (the original, still-supported single-speed/multi-distance use
-// case). If speeds and distances have the same non-zero size, they are
-// paired positionally (speed i with distance i) -- this is the fix: the
-// previous code silently reused only the first parsed speed for every
-// segment when multiple were entered. Any other combination (speeds empty,
-// or counts differ and neither is 1) is rejected: `out` is cleared and
-// false is returned, so the caller adds nothing rather than guessing.
-bool buildSegmentSpeedDistancePairs(const std::vector<double>& speeds,
-                                     const std::vector<double>& distances,
-                                     std::vector<std::pair<double, double>>& out);
 
 #endif // CALCULATIONS_H

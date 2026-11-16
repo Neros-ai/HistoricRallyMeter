@@ -10,7 +10,7 @@
 
 struct StageFileStage {
     int stage = 0;                 // 1-99, 0 when the number was unreadable
-    int mode = -1;                 // 0 greek, 1 surrey, 2 italian; -1 unknown
+    int mode = -1;                 // RALLY_GREEK / RALLY_SURREY / RALLY_ITALIAN; -1 unknown
     bool km = false;               // the file's own units (units,km), so the check reads as the file does
     int unit = 0;                  // the same as a distance unit: 0 metres, 1 km, 2 miles (units,miles)
     RallyState::MemorySlot slot;

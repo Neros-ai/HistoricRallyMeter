@@ -9,6 +9,7 @@
 #include "reaction_offset.h"
 #include "rally_state.h"
 #include "ui_setup.h"
+#include "surrey.h"
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -47,11 +48,11 @@ void apply(AppData* d, Setting id, int idx) {
     switch (id) {
     case BEEP_NAV:
         s.beep_navigation_mode = (idx == 1);
-        if (idx == 1) d->beepCursorsStale = true;   // a mode that was off never advanced its cursor
+        if (idx == 1) d->tickMem.beepCursorsStale = true;   // a mode that was off never advanced its cursor
         break;
     case BEEP_TIMING:
         s.beep_timing_mode = (idx == 1);
-        if (idx == 1) d->beepCursorsStale = true;
+        if (idx == 1) d->tickMem.beepCursorsStale = true;
         break;
     case TONE_ON:     s.tone_enabled = (idx == 1); break;
     case TONE_BEHIND: s.tone_type_behind = idx + 1; break;
@@ -67,7 +68,7 @@ void apply(AppData* d, Setting id, int idx) {
     case RALLY_TYPE:
         if (stageEditLocked(s)) break;   // never switch rules under a live stage (the keys are greyed too)
         // Keys are italian / greek / surrey.
-        applyRallyTypeDefaults(s, idx == 0 ? 2 : idx == 1 ? 0 : 1);
+        applyRallyTypeDefaults(s, idx == 0 ? RALLY_ITALIAN : idx == 1 ? RALLY_GREEK : RALLY_SURREY);
         break;
     case DISTANCE_FORMAT: {   // keys: 0.00 / 0.000 / 0,000 (whole metres: km only, greyed in miles)
         const bool miles = distIsMiles(s.distance_unit);
@@ -83,7 +84,7 @@ void apply(AppData* d, Setting id, int idx) {
         // km/m <-> miles reinterprets the stages (confirmed in onSeg). The beep cursors index the rebuilt waypoints,
         // and an idle Navigation page shows the roadbook it adopted: both are refreshed, as after any stage edit.
         if (changeDistanceUnit(s, distUnitFrom(decimals, miles))) {
-            d->beepCursorsStale = true;
+            d->tickMem.beepCursorsStale = true;
             adoptRoadbookIfIdle(d);
         }
         break;
@@ -92,7 +93,10 @@ void apply(AppData* d, Setting id, int idx) {
     }
     // Beep Assist is on when either mode is: there is no separate master.
     s.beep_assist_enabled = s.beep_navigation_mode || s.beep_timing_mode;
-    ConfigFile::save(s);
+    // The two that rewrite the rules or the stages are saved at once; the other toggles once
+    // the keys settle (config_saver.h).
+    if (id == RALLY_TYPE || id == DISTANCE_UNITS) saveConfig(d);
+    else saveConfigSoon(d);
 }
 
 // Every two-key selector built, so the page can follow changes made from the phone.
@@ -109,7 +113,7 @@ int stateIndex(const RallyState& s, Setting id) {
     case STAGE_LOG:    return s.stage_logging ? 1 : 0;
     case SENSOR_LOG:   return s.debug_logs_enabled ? 1 : 0;
     case GAUGE_RANGE:  return s.gauge_range_s - 1;
-    case RALLY_TYPE:   return s.rally_type == 2 ? 0 : s.rally_type == 1 ? 2 : 1;
+    case RALLY_TYPE:   return isItalian(s) ? 0 : isSurrey(s) ? 2 : 1;
     case DISTANCE_FORMAT: { const int dec = distDecimals(s.distance_unit); return dec == 2 ? 0 : dec == 3 ? 1 : 2; }
     case DISTANCE_UNITS: return distIsMiles(s.distance_unit) ? 1 : 0;
     case MEASURE_TYPE:   return s.measure_ab_bc ? 0 : 1;
@@ -182,8 +186,7 @@ void onReactionStep(GtkWidget* w, gpointer) {
     AppData* d = static_cast<AppData*>(g_object_get_data(G_OBJECT(w), "data"));
     const int step = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w), "step"));
     d->state->reaction_offset_ms = clampReactionOffsetMs(d->state->reaction_offset_ms + step);
-    ConfigFile::save(*d->state);
-    notifyWebStateNow(d);   // the phone shows the offset too
+    saveSoonAndNotify(d);   // the phone shows the offset too; a held key is one write
     if (g_reactionEntry) gtk_entry_set_text(GTK_ENTRY(g_reactionEntry), reactionText(d->state->reaction_offset_ms).c_str());
 }
 
@@ -199,9 +202,8 @@ std::string phoneLeadText(int ms) {
 void onPhoneLeadStep(GtkWidget* w, gpointer) {
     AppData* d = static_cast<AppData*>(g_object_get_data(G_OBJECT(w), "data"));
     const int step = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w), "step"));
-    d->state->phone_beep_lead_ms = std::max(0, std::min(400, d->state->phone_beep_lead_ms + step));
-    ConfigFile::save(*d->state);
-    notifyWebStateNow(d);   // the phone shows it too
+    d->state->phone_beep_lead_ms = clampPhoneLeadMs(d->state->phone_beep_lead_ms + step);
+    saveSoonAndNotify(d);   // the phone shows it too; a held key is one write
     if (g_phoneLeadEntry) gtk_entry_set_text(GTK_ENTRY(g_phoneLeadEntry), phoneLeadText(d->state->phone_beep_lead_ms).c_str());
 }
 

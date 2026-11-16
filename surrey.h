@@ -9,8 +9,12 @@
 #include <vector>
 #include "rally_state.h"
 
-// rally_type 1.
+// rally_type RALLY_GREEK.
+bool isGreek(const RallyState& s);
+// rally_type RALLY_SURREY.
 bool isSurrey(const RallyState& s);
+// rally_type RALLY_ITALIAN.
+bool isItalian(const RallyState& s);
 
 // Surrey's Total as the screens show it (owner 2026-11-12): the roadbook's running distance, which
 // a stage start never zeroes -- the count italian calls navi -- with its `set` correction, whole

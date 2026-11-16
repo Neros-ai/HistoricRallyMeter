@@ -3,6 +3,8 @@
 
 #include "test_framework.h"
 #include "../simple_tone.h"
+#include "../tone_rung.h"
+#include <algorithm>
 #include <cmath>
 
 // Tests for the alternative, time-error-only ahead/behind tone: silent
@@ -78,15 +80,17 @@ public:
 
         suite->addTest("behind pitch is the exact geometric midpoint at 1.5s (t=0.5)", [BEHIND_MIN_HZ, BEHIND_MAX_HZ]() {
             SimpleToneState st;
+            // The pitch is sampled on the 0.2s line (step 7 = 1.4s), not at 1.5s.
             SimpleToneResult r = updateSimpleTone(st, -1.5, 1000.0, false);
-            double expected = BEHIND_MIN_HZ * std::pow(BEHIND_MAX_HZ / BEHIND_MIN_HZ, 0.5);
+            double expected = BEHIND_MIN_HZ * std::pow(BEHIND_MAX_HZ / BEHIND_MIN_HZ, 1.4 / 3.0);
             return r.active == true && std::abs(r.freq_hz - expected) < 0.01;
         });
 
         suite->addTest("ahead pitch is exactly 800*sqrt(2) at 1.5s (t=0.5)", [AHEAD_MIN_HZ]() {
             SimpleToneState st;
+            // The pitch is sampled on the 0.2s line (step 7 = 1.4s), not at 1.5s.
             SimpleToneResult r = updateSimpleTone(st, 1.5, 1000.0, false);
-            double expected = AHEAD_MIN_HZ * std::sqrt(2.0);
+            double expected = AHEAD_MIN_HZ * std::pow(2.0, 1.4 / 3.0);
             return r.active == true && std::abs(r.freq_hz - expected) < 0.01;
         });
 
@@ -176,6 +180,156 @@ public:
             // because a large value was latched before leaving.
             SimpleToneResult r3 = updateSimpleTone(st, 0.15, 1000.0, false);
             return r3.active == false;
+        });
+
+        // ---- Held-step pitch (shared rule with tone type 1, tone_rung.h) ----
+        // Independent reference for the ramp, sampled at step `rung`'s line.
+        auto refHz = [](bool behind, int rung) {
+            const double t = std::min(0.2 * rung, 3.0) / 3.0;
+            return behind ? 1800.0 * std::pow(3500.0 / 1800.0, t)
+                          : 800.0 * std::pow(1600.0 / 800.0, t);
+        };
+        auto tick = [](SimpleToneState& st, double e) {
+            return updateSimpleTone(st, e, 1000.0, false);
+        };
+
+        for (int side = 0; side < 2; side++) {
+            const bool behind = (side == 0);
+            const char* name = behind
+                ? "growing error behind: pitch steps on every 0.2s line, in order, triangle"
+                : "growing error ahead: pitch steps on every 0.2s line, in order, sine";
+            suite->addTest(name, [refHz, tick, behind]() {
+                const double sign = behind ? -1.0 : 1.0;
+                for (int phase = 0; phase < 200; phase++) {
+                    SimpleToneState st;
+                    const double e0 = phase * (0.0005 / 200.0);
+                    int prev = 0;
+                    for (int i = 0; i <= 6800; i++) {
+                        const double e = e0 + i * 0.0005;
+                        SimpleToneResult r = tick(st, sign * e);
+                        if (e < 0.2) { ASSERT_FALSE(r.active); continue; }
+                        int rung = static_cast<int>(std::floor(e / 0.2 + 1e-9));
+                        if (rung > 15) rung = 15;
+                        ASSERT_TRUE(r.active);
+                        ASSERT_NEAR(r.freq_hz, refHz(behind, rung), 1e-6);
+                        ASSERT_EQ(r.triangle_wave, behind);
+                        // Every step heard, none skipped, none repeated across a line.
+                        ASSERT_TRUE(rung == prev || rung == prev + 1 || prev == 0);
+                        prev = rung;
+                    }
+                    ASSERT_EQ(prev, 15);
+                }
+                return true;
+            });
+            suite->addTest(behind ? "shrinking error behind: each step held until 0.1s below its line"
+                                  : "shrinking error ahead: each step held until 0.1s below its line",
+                           [refHz, tick, behind]() {
+                const double sign = behind ? -1.0 : 1.0;
+                SimpleToneState st;
+                tick(st, sign * 3.4);
+                int rung = 15;
+                for (double e = 3.4; e >= 0.0; e -= 0.0005) {
+                    SimpleToneResult r = tick(st, sign * e);
+                    if (e < 0.2) { ASSERT_FALSE(r.active); continue; }
+                    while (rung > 1 && e < 0.2 * rung - 0.1 - 1e-9) rung--;
+                    ASSERT_TRUE(r.active);
+                    ASSERT_NEAR(r.freq_hz, refHz(behind, rung), 1e-6);
+                    ASSERT_EQ(r.triangle_wave, behind);
+                }
+                ASSERT_EQ(rung, 1);
+                return true;
+            });
+        }
+
+        suite->addTest("sitting on a line does not flutter the pitch", [refHz, tick]() {
+            for (double sign : {-1.0, 1.0}) {
+                const bool behind = sign < 0.0;
+                SimpleToneState st;
+                for (double e = 0.0; e < 0.41; e += 0.01) tick(st, sign * e);
+                for (int i = 0; i < 500; i++) {
+                    double e = 0.40 + ((i % 3) - 1) * 0.05;        // 0.35, 0.40, 0.45
+                    ASSERT_NEAR(tick(st, sign * e).freq_hz, refHz(behind, 2), 1e-6);
+                }
+                SimpleToneState st2;
+                for (double e = 0.0; e <= 0.55; e += 0.01) tick(st2, sign * e);
+                for (double e = 0.55; e >= 0.40; e -= 0.01) tick(st2, sign * e);
+                for (int i = 0; i < 500; i++) {
+                    double e = 0.40 + ((i % 3) - 1) * 0.05;
+                    ASSERT_NEAR(tick(st2, sign * e).freq_hz, refHz(behind, 2), 1e-6);
+                }
+            }
+            return true;
+        });
+
+        suite->addTest("a jump lands on the live step at once", [refHz, tick]() {
+            SimpleToneState st;
+            ASSERT_NEAR(tick(st, -0.9).freq_hz, refHz(true, 4), 1e-6);
+            ASSERT_NEAR(tick(st, -0.25).freq_hz, refHz(true, 1), 1e-6);
+            SimpleToneState sa;
+            ASSERT_NEAR(tick(sa, 0.9).freq_hz, refHz(false, 4), 1e-6);
+            ASSERT_NEAR(tick(sa, 0.25).freq_hz, refHz(false, 1), 1e-6);
+            return true;
+        });
+
+        suite->addTest("ahead to behind in one tick takes the new side's pitch and wave", [refHz, tick]() {
+            SimpleToneState st;
+            SimpleToneResult a = tick(st, 0.5);
+            ASSERT_NEAR(a.freq_hz, refHz(false, 2), 1e-6);
+            ASSERT_FALSE(a.triangle_wave);
+            SimpleToneResult b = tick(st, -0.5);
+            ASSERT_NEAR(b.freq_hz, refHz(true, 2), 1e-6);
+            ASSERT_TRUE(b.triangle_wave);
+            // From a high step across to a low one: no carried-over step.
+            SimpleToneState s2;
+            tick(s2, 2.0);
+            ASSERT_NEAR(tick(s2, -0.45).freq_hz, refHz(true, 2), 1e-6);
+            SimpleToneState s3;
+            tick(s3, -2.0);
+            ASSERT_NEAR(tick(s3, 0.45).freq_hz, refHz(false, 2), 1e-6);
+            return true;
+        });
+
+        suite->addTest("going silent by any gate clears the held step", [refHz]() {
+            auto fresh = [](SimpleToneState& st) {
+                updateSimpleTone(st, -1.1, 1000.0, false);   // step 5 held
+                ASSERT_EQ(st.heldRung, 5);
+                return true;
+            };
+            auto reenter = [](SimpleToneState& st) {
+                return updateSimpleTone(st, -0.21, 1000.0, false);
+            };
+            SimpleToneState a; ASSERT_TRUE(fresh(a));
+            updateSimpleTone(a, -0.1, 1000.0, false);                    // quiet band
+            ASSERT_EQ(a.heldRung, 0);
+            ASSERT_NEAR(reenter(a).freq_hz, refHz(true, 1), 1e-6);
+            SimpleToneState c; ASSERT_TRUE(fresh(c));
+            updateSimpleTone(c, -1.1, 100.0, false);                     // under 250 m
+            ASSERT_EQ(c.heldRung, 0);
+            ASSERT_NEAR(reenter(c).freq_hz, refHz(true, 1), 1e-6);
+            SimpleToneState d; ASSERT_TRUE(fresh(d));
+            updateSimpleTone(d, -1.1, 1000.0, true);                     // past the end
+            ASSERT_EQ(d.heldRung, 0);
+            ASSERT_NEAR(reenter(d).freq_hz, refHz(true, 1), 1e-6);
+            SimpleToneState e; ASSERT_TRUE(fresh(e));
+            updateSimpleTone(e, -31.0, 1000.0, false);                   // beyond 30 s
+            ASSERT_EQ(e.heldRung, 0);
+            ASSERT_NEAR(reenter(e).freq_hz, refHz(true, 1), 1e-6);
+            return true;
+        });
+
+        suite->addTest("toneHeldRung: up on the line, held, down 0.1s below, clamped, from none", []() {
+            ASSERT_EQ(toneHeldRung(0, 0.5), 2);        // from none: the live rung
+            ASSERT_EQ(toneHeldRung(2, 0.6), 3);        // up exactly on the line
+            ASSERT_EQ(toneHeldRung(2, 0.59), 2);       // just under it: stays
+            ASSERT_EQ(toneHeldRung(3, 0.55), 3);       // down: held within 0.1 of the line
+            ASSERT_EQ(toneHeldRung(3, 0.51), 3);
+            ASSERT_EQ(toneHeldRung(3, 0.49), 2);       // 0.1 below the 0.6 line: steps down
+            ASSERT_EQ(toneHeldRung(5, 0.25), 1);       // a big drop lands on the live rung
+            ASSERT_EQ(toneHeldRung(1, 0.2), 1);        // bottom rung
+            ASSERT_EQ(toneHeldRung(14, 3.0), 15);      // top
+            ASSERT_EQ(toneHeldRung(15, 30.0), 15);     // clamped
+            ASSERT_EQ(toneHeldRung(0, 99.0), 15);
+            return true;
         });
 
         return suite;

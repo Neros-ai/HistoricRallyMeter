@@ -6,6 +6,7 @@
 #include "sector.h"
 #include "stage_phase.h"
 #include "stage_rows.h"
+#include "surrey.h"
 
 int stageEditSlot(AppData* d) {
     RallyState& s = *d->state;
@@ -35,15 +36,14 @@ void stageEditCommit(AppData* d) {
     RallyState& s = *d->state;
     RallyState::MemorySlot& slot = slotOf(d);
     // Italian: the row rules (every row waits for next, speeds worked out from the card).
-    if (s.rally_type == 2 && stageIsSector(s.segments)) applySectorRules(s.segments, slot.sector_duration_s);
+    if (isItalian(s) && stageIsSector(s.segments)) applySectorRules(s.segments, slot.sector_duration_s);
     s.beep_waypoints_m = deriveWaypoints(s.segments);
     slot.segments = s.segments;
     slot.beep_waypoints_m = s.beep_waypoints_m;
     slot.waypoints_recorded = true;
-    d->beepCursorsStale = true;
+    d->tickMem.beepCursorsStale = true;
     adoptRoadbookIfIdle(d);
-    ConfigFile::save(s);
-    notifyWebStateNow(d);
+    saveAndNotify(d);
 }
 
 void stageEditSelect(AppData* d, int slot_1) {
@@ -54,10 +54,9 @@ void stageEditSelect(AppData* d, int slot_1) {
     RallyState::MemorySlot& slot = s.memory_slots[slot_1 - 1];
     s.segments = slot.segments;
     s.beep_waypoints_m = deriveWaypoints(s.segments);
-    d->beepCursorsStale = true;
+    d->tickMem.beepCursorsStale = true;
     adoptRoadbookIfIdle(d);
-    ConfigFile::save(s);
-    notifyWebStateNow(d);
+    saveAndNotify(d);
 }
 
 int stageEditAddDistances(AppData* d, const std::string& text, std::string* rest, std::string* notice) {
@@ -69,7 +68,7 @@ int stageEditAddDistances(AppData* d, const std::string& text, std::string* rest
     const size_t before = d->state->segments.size();
     std::string note;
     if (!pr.accepted.empty()) {
-        note = d->state->rally_type == 2
+        note = isItalian(*d->state)
             ? insertSectorDistances(d->state->segments, slot.first_from_m, pr.accepted, d->state->distance_unit)
             : insertStageDistances(d->state->segments, slot.first_from_m, pr.accepted, d->state->distance_unit);
         stageEditCommit(d);
@@ -89,7 +88,7 @@ void stageEditSetSpeed(AppData* d, size_t row, double kph) {
 
 void stageEditSetChange(AppData* d, size_t row, bool chg) {
     STAGE_EDIT_GUARD(d, );
-    setRowChange(d->state->segments, row, chg, d->state->rally_type != 2);   // greek and surrey: new speed change defaults to automatic
+    setRowChange(d->state->segments, row, chg, !isItalian(*d->state));   // greek and surrey: new speed change defaults to automatic
     stageEditCommit(d);
 }
 
@@ -141,7 +140,7 @@ void stageEditSetStart(AppData* d, long time_s, long distance_m, std::string* no
     // longer be armed, switch it off) or the box would still fire at the old one.
     const bool armed_here = d->state->auto_start_rally_time_s != 0
                          && !d->state->auto_start_early_departure
-                         && !d->autoStartTriggered
+                         && !d->tickMem.autoStartTriggered
                          && d->state->auto_slot == d->state->last_memory_slot;
     const bool retime = armed_here && new_s != slot.start_time_s;
     slot.start_time_s = new_s;
