@@ -28,6 +28,13 @@ bool unitChangeRescalesStages(int old_unit, int new_unit) {
     return distUnitValid(old_unit) && distUnitValid(new_unit) && distIsMiles(old_unit) != distIsMiles(new_unit);
 }
 
+std::string unitChangeConfirmText(bool to_miles) {
+    const char* km = "a 5.000 km (5000 m) stage";
+    const char* mi = "a 5.000 mile stage";
+    return std::string("Change to ") + (to_miles ? "miles" : "km") + "?\n\nEvery programmed stage keeps its figures and changes unit:\n"
+           + (to_miles ? km : mi) + " becomes " + (to_miles ? mi : km) + ".\nTotal, Trip and the calibration are not changed.";
+}
+
 bool changeDistanceUnit(RallyState& s, int new_unit) {
     const int old_unit = s.distance_unit;
     if (!unitChangeRescalesStages(old_unit, new_unit)) { s.distance_unit = new_unit; return true; }

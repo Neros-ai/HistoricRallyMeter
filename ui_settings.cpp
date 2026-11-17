@@ -142,9 +142,7 @@ void onSeg(GtkWidget* w, gpointer) {
                 // no copy on the phone, held the box until someone at the box pressed OK.
                 flashNotice(w, "A stage is running: the distance unit cannot be changed now.");
             } else {
-                go = confirmYesNo(w, "Change distance unit",
-                    std::string("Change to ") + (to_miles ? "miles" : "km") + "?\n\nEvery programmed stage keeps its figures and changes unit:\n"
-                    "a 5.000 km (5000 m) stage becomes a 5.000 mile stage.\nTotal, Trip and the calibration are not changed.");
+                go = confirmYesNo(w, "Change distance unit", unitChangeConfirmText(to_miles));
             }
             if (!go) { updateSettingsDisplay(c->data); return; }
         }
