@@ -114,6 +114,15 @@ public:
                 && b.memory_slots[98].segments.size() == 1;
         });
 
+        suite->addTest("unit change warning reads the right way round for km and for miles", []() {
+            const std::string to_mi = unitChangeConfirmText(true), to_km = unitChangeConfirmText(false);
+            return to_mi.find("Change to miles?") == 0
+                && to_mi.find("a 5.000 km (5000 m) stage becomes a 5.000 mile stage.") != std::string::npos
+                && to_km.find("Change to km?") == 0
+                && to_km.find("a 5.000 mile stage becomes a 5.000 km (5000 m) stage.") != std::string::npos
+                && to_km.find("km (5000 m) stage becomes a 5.000 mile") == std::string::npos;
+        });
+
         suite->addTest("choose stage: one or two figures are a stage", []() {
             return chosenStageNumber("7") == 7 && chosenStageNumber("07") == 7
                 && chosenStageNumber("42") == 42 && chosenStageNumber("99") == 99;
