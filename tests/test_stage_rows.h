@@ -525,7 +525,7 @@ public:
                 && std::string(distUnitName(DIST_KM3)) == "km" && std::string(distUnitName(DIST_MI2)) == "mi"
                 && parseDistanceExact("12.345", DIST_KM3) == 12345.0
                 && formatDistance(parseDistanceExact("1.23", DIST_MI2), DIST_MI2) == "1.23"
-                && startDistanceText(12345, DIST_KM3) == "12.345 km";
+                && startDistanceText(12345, DIST_KM3) == "12.345";
         });
 
         suite->addTest("changing the distance format or unit never changes programmed figures", []() {
@@ -552,9 +552,9 @@ public:
         // The distance at start is held in whole metres and drawn to the nearest: 1.236 mi is stored as 1989 m, which a
         // cut-down figure would read as 1.235. Left as drawn, the field is untouched.
         suite->addTest("distance at start drawn to the nearest reads back untouched", []() {
-            return startDistanceText(1989, DIST_MI) == "1.236 mi"
-                && distanceFieldUntouched("1.236 mi", 1989, DIST_MI, true)
-                && !distanceFieldUntouched("1.237 mi", 1989, DIST_MI, true);
+            return startDistanceText(1989, DIST_MI) == "1.236"
+                && distanceFieldUntouched("1.236", 1989, DIST_MI, true)
+                && !distanceFieldUntouched("1.237", 1989, DIST_MI, true);
         });
 
         suite->addTest("miles: every thousandth typed reads back as typed, to the millimetre and to the metre", []() {
@@ -584,7 +584,7 @@ public:
             const SegRowText d = segRowText(segs[3], rows[3], 3, RALLY_GREEK, DIST_MI);
             return a.to == "0.250" && b.to == "1.234" && c.to == "2.500" && d.to == "10.001"
                 && a.dist == "0.250" && b.dist == "0.984" && c.dist == "1.266" && d.dist == "7.501"
-                && startDistanceText(27000, DIST_MI) == "16.777 mi" && startDistanceText(27000, DIST_KM) == "27.00 km";
+                && startDistanceText(27000, DIST_MI) == "16.777" && startDistanceText(27000, DIST_KM) == "27.00";
         });
 
         suite->addTest("segments side panel text as the box shows it", []() {
@@ -592,7 +592,7 @@ public:
             segs[0].distance_m = 50000; segs[1].distance_m = 46240;
             return sectorAverageText(segs, 3 * 3600) == "Average 32.08"
                 && sectorAverageText(segs, 0).empty() && sectorAverageText({}, 3600).empty()
-                && startDistanceText(6000, false) == "6,000 m" && startDistanceText(6000, true) == "6.00 km"
+                && startDistanceText(6000, false) == "6,000" && startDistanceText(6000, true) == "6.00"
                 && startDistanceText(0, false).empty();
         });
 

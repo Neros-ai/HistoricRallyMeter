@@ -341,7 +341,7 @@ std::string sectorAverageText(const std::vector<Segment>& segs, long sector_dura
 
 std::string startDistanceText(long start_distance_m, int unit) {
     if (start_distance_m <= 0) return "";
-    return formatDistance(static_cast<double>(start_distance_m), unit, true) + " " + distUnitName(unit);
+    return formatDistance(static_cast<double>(start_distance_m), unit, true);   // the figure alone: no unit in the box (RB-SEG-24)
 }
 
 long parseTimeOfDay(const std::string& text) {

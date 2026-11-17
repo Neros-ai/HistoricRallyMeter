@@ -140,7 +140,7 @@
     </div>
     <section class="start-block">
       <label>Start time <input id="seg-start-time" type="text" inputmode="numeric"></label>
-      <label id="seg-start-dist-label">Distance at start <input id="seg-start-dist" type="text" inputmode="decimal"></label>
+      <label id="seg-start-dist-label">Start Distance <input id="seg-start-dist" type="text" inputmode="decimal"></label>
       <label id="seg-duration-label" style="display:none">Duration <input id="seg-duration" type="text" inputmode="numeric"></label>
       <p id="seg-duration-avg" class="dim" style="display:none"></p>
       <input id="seg-first-n" type="hidden">
@@ -187,15 +187,19 @@
     <section class="crow"><span class="cl">Actual distance:</span><span class="brk"></span>
       <input id="cal-actual" type="number" min="0" step="any" inputmode="decimal"> <span id="cal-actual-unit">m</span>
       <button id="cal-save" type="button" class="key">save<br>calibration</button></section>
-    <section class="crow"><span class="cl">Sensor Count:</span> 1: <b id="cal-c1">0</b> 2: <b id="cal-c2">0</b> Avg: <b id="cal-avg">0</b>
+    <section class="crow"><span class="cl">Sensor Count:</span> 1 <b id="cal-c1">0</b><span class="brk"></span>2 <b id="cal-c2">0</b> Avg <b id="cal-avg">0</b>
       <span class="pair"><button id="cal-s1" type="button" class="key">sensor 1</button>
       <button id="cal-s12" type="button" class="key">sensor 1&amp;2</button></span></section>
     <section class="crow"><span class="cl">Pulses/KM:</span> <b id="cal-pulses">0</b><span class="brk"></span>Reset to
       <input id="cal-reset-n" type="number" min="1" step="1" inputmode="numeric" class="short">
       <button id="cal-reset" type="button" class="key">save pulses</button></section>
     <section class="crow">Prop/Wheel RPM at <input id="cal-prop-n" type="number" min="1" max="64" step="1" class="tiny"> pulses/rev <b id="cal-rpm">---</b> rpm</section>
-    <p class="ins">1. Press zero counters, or skip to step 2 to use the existing counts. 2. Enter actual distance covered.
-      3. Choose sensor 1 or 1&amp;2. 4. Save calibration.</p>
+    <ol class="ins">
+      <li>Press zero counters, or skip to step 2 to use the existing counts.</li>
+      <li>Enter actual distance covered.</li>
+      <li>Choose sensor 1 or 1&amp;2.</li>
+      <li>Save calibration.</li>
+    </ol>
   </main>
 
   <!-- SET: the box's Settings page, plus the log downloads -->
@@ -224,8 +228,11 @@
         <label class="choice"><input type="radio" name="rally-type" value="surrey"> surrey</label></div>
       <div class="beep-row"><span>Speed units</span>
         <label><input type="radio" name="units" value="kph"> kph</label><label><input type="radio" name="units" value="mph"> mph</label></div>
-      <div class="beep-row"><span>Distance units</span>
-        <label class="choice"><input type="radio" name="distance-format" value="2"> 0.00</label><label class="choice"><input type="radio" name="distance-format" value="3"> 0.000</label><label class="choice"><input type="radio" name="distance-format" value="0"> 0,000</label><label class="choice"><input type="radio" name="distance-unit" value="km"> km</label><label class="choice"><input type="radio" name="distance-unit" value="mi"> mi</label></div>
+      <!-- RB-WEB-46: the distance format and the distance unit are two settings, so two rows. -->
+      <div class="beep-row"><span>Distance format</span>
+        <label class="choice"><input type="radio" name="distance-format" value="2"> 0.00</label><label class="choice"><input type="radio" name="distance-format" value="3"> 0.000</label><label class="choice"><input type="radio" name="distance-format" value="0"> 0,000</label></div>
+      <div class="beep-row"><span>Distance unit</span>
+        <label class="choice"><input type="radio" name="distance-unit" value="km"> km</label><label class="choice"><input type="radio" name="distance-unit" value="mi"> mi</label></div>
       <div class="beep-row"><span>Reaction time offset</span>
         <span class="unit"><button id="reaction-minus" type="button" class="key">−</button><span id="reaction-offset">0.00 s</span><button id="reaction-plus" type="button" class="key">+</button></span></div>
       <div class="beep-row"><span>Phone sound lead</span>

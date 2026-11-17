@@ -69,7 +69,7 @@ struct SegUi {
     GtkWidget* fromToHead = nullptr;   // "from -m- to" / "from -km- to"
     int curRow = -1;             // row outlined as the one being driven
     GtkWidget* headLbl[10] = {};     // column headings (greek and italian words differ)
-    GtkWidget* distCaption = nullptr;   // greek: "Distance at start" caption and entry
+    GtkWidget* distCaption = nullptr;   // greek: "Start Distance" caption and entry
     GtkWidget* autoRow = nullptr;       // greek: the Autostart tick row
     GtkWidget* durCaption = nullptr;    // italian: "Duration" caption, entry and the faint average
     GtkWidget* durEntry = nullptr;
@@ -886,7 +886,7 @@ GtkWidget* createStageSetupScreen(AppData* data) {
         *entryOut = e;
     };
     startRow(nullptr, "start_time", &u->timeEntry);
-    startRow("Distance at start", "start_dist", &u->distEntry, &u->distCaption);
+    startRow("Start Distance", "start_dist", &u->distEntry, &u->distCaption);   // RB-SEG-24 (was "Distance at start")
     // Italian: the sector's set duration (h:mm:ss) and, faintly, the average speed it implies.
     startRow("Duration", "sector_dur", &u->durEntry, &u->durCaption);
     u->avgLabel = gtk_label_new("");
@@ -898,7 +898,7 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     GtkWidget* autoRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     u->autoRow = autoRow;
     GtkWidget* al = gtk_label_new("Autostart");
-    addClass(al, "seg-head");   // same 18 px cyan as "Distance at start"
+    addClass(al, "seg-head");   // same 18 px cyan as "Start Distance"
     u->autoCheck = gtk_check_button_new();
     g_signal_connect(u->autoCheck, "toggled", G_CALLBACK(onAutostartToggled), data);
     gtk_box_pack_start(GTK_BOX(autoRow), al, FALSE, FALSE, 0);

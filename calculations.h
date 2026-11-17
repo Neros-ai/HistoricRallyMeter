@@ -580,6 +580,8 @@ bool validSegmentRow(const RallyState& state, int row);   // an index into the r
 // number (outside miles: whole metres, a ".digits" tail ignored; anything else trailing is refused).
 bool applyMeasuredCalibration(RallyState& state, const char* dist_str,
                               uint64_t c1, uint64_t c2, uint64_t start1, uint64_t start2);
+// The Calibration page's sensor line (Pango markup, counts in white): "Sensor Count: 1 n 2 n Avg n" (RB-CAL-12).
+std::string sensorCountMarkup(long long c1, long long c2, long long avg);
 // Calibrate from a typed pulses-per-km figure; false, with nothing changed, when it gives no usable calibration.
 bool applyPulsesPerKmCalibration(RallyState& state, double pulses_per_km);
 // Whole rpm, no separator ("1793"), or "---" for no figure.
