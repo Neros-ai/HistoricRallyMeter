@@ -405,7 +405,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .it-err { display: flex; flex-direction: column; line-height: 1.05; }
 .it-err b { font-weight: bold; }
 .it-co, .it-kph, .it-min, .it-pm { display: flex; flex-direction: column; align-items: center; line-height: 1; }
-.it-foot .cap { color: #ccc; font-size: 0.75rem; }
+.it-foot .cap { color: #ccc; font-size: 0.8125rem; }   /* 13 px: the smallest caption (RB-WEB-44) */
 .it-co .when, .it-kph b, .it-min b, .it-pm b { font-size: 1.55rem; font-weight: bold; }
 .it-pm b { color: #fff; min-width: 2.2rem; text-align: center; padding: 0.12rem 0.35rem; }
 .it-pm b.ahead { background: #1a9933; }
@@ -450,7 +450,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .nr .key.k { flex: 0 0 4.5rem; }
 .nr .key.sq { flex: 0 0 3rem; font-size: 1.6rem; }
 .nr .key.sm { font-size: 0.9rem; line-height: 1.15; }
-.nr .key.col { flex-direction: column; font-size: 0.9rem; line-height: 1; padding-top: 0.2rem; }
+.nr .key.col { flex-direction: column; font-size: 0.9375rem; line-height: 1; padding-top: 0.2rem; }
 .fig-row { margin-bottom: 0.3rem; }
 .fig-row .el { flex: 0 0 5.7rem; display: flex; align-items: center; gap: 0.2rem; font-size: 0.85rem; color: #ccc; white-space: nowrap; font-family: monospace; }
 .fig-row .big { flex: 1; text-align: right; font-size: 2.9rem; font-family: monospace; font-weight: bold; }
@@ -471,7 +471,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 .card tr.now td { color: #0ff; }
 .card.arr { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem; }
 .card.arr .fig { display: grid; grid-template-columns: 1fr 1fr; width: 100%; text-align: center; }
-.card.arr small { display: block; color: #ccc; font-size: 0.75rem; }
+.card.arr small { display: block; color: #ccc; font-size: 0.8125rem; }   /* 13 px (RB-WEB-44) */
 .card.arr b { font-size: 1.8rem; }
 .card.hist { font-family: monospace; }
 
@@ -1068,7 +1068,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
   #view-navi.rally-greek #btn-flag-auto, #view-navi.rally-surrey #btn-flag-auto, #view-navi.rally-italian #btn-flag-auto { grid-row: 5; }
 }
 /* Trip history: the heading in blue (cyan) as on the box, figures white. */
-#trip-history-label { color: #0ff; }
+#trip-history-label { color: #0ff; display: block; margin-bottom: 0.15rem; }   /* its own line, figures under it (RB-WEB-44) */
 @media (orientation: landscape) and (min-width: 700px) {
   /* ...each figure on its own line. */
   #trip-history .th { display: block; text-align: right; }
@@ -1119,7 +1119,7 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 }
 /* Landscape greek: the "countdown" label fits its key (the box draws it at 21 px). */
 @media (orientation: landscape) and (min-width: 700px) {
-  #view-navi.rally-greek #key-navi { font-size: clamp(0.7rem, 2.7vh, 0.95rem); padding: 0; }
+  #view-navi.rally-greek #key-navi { font-size: 0.9375rem; padding: 0; }   /* countdown: 15 px like the other keys (RB-WEB-44) */
 }
 /* Landscape: the speed change table uses the start time's font (bold monospace, same size). */
 @media (orientation: landscape) and (min-width: 700px) {
@@ -1327,3 +1327,56 @@ td input { width: 100%; background: #111; color: #fff; border: 1px solid #666; p
 #counter-fault { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000;
   background: #C00000; color: #FFFFFF; font-size: 2rem; font-weight: bold; padding: 0.6em 1.4em; border-radius: 0.3em; }
 #counter-fault.hidden { display: none; }
+
+/* RB-WEB-44: the countdown key's label is 15 px, the same as the other keys. */
+#btn-countdown { font-size: 0.9375rem; }
+
+/* RB-WEB-45: Segments landscape -- Start time, Duration and Start Distance captions 16 px and their boxes
+   larger (the same in italian and greek); the Autostart row slimmer so the greek column still fits. */
+@media (orientation: landscape) and (min-width: 700px) {
+  #view-seg .start-block { gap: 0.1rem; }
+  #view-seg .start-block label:has(#seg-start-time), #view-seg #seg-duration-label, #view-seg #seg-start-dist-label {
+    font-size: 1rem; gap: 0.05rem; white-space: nowrap;
+  }
+  #view-seg #seg-start-time, #view-seg #seg-duration, #view-seg #seg-start-dist { height: 2.05rem; font-size: 1.25rem; padding: 0 0.35rem; }
+  #view-seg #seg-duration-avg { font-size: 0.95rem; }
+  #view-seg .start-block label.auto-row { font-size: 0.85rem; line-height: 1; min-height: 0; margin: 0; padding: 0; }
+  #view-seg .start-block label.auto-row input { width: 1.15rem; height: 1.15rem; margin: 0; }
+}
+
+/* RB-WEB-46: Settings portrait -- one setting per row, its choices on the same line; off / on keys as in landscape. */
+@media not ((orientation: landscape) and (min-width: 700px)) {
+  #view-set .onoff { display: inline-flex; margin-left: auto; }
+  #view-set .beep-row:has(.onoff) > input[type=checkbox] { display: none; }
+  #view-set .beep-row:has(input[type=radio]), #view-set .beep-row:has(.onoff) { flex-wrap: nowrap; gap: 0.35rem; }
+  #view-set .beep-row:has(input[type=radio]) > span:first-child,
+  #view-set .beep-row:has(.onoff) > label:not(.choice),
+  #view-set .beep-row > label:not(.choice) { flex: 1 1 auto; white-space: nowrap; }
+  #view-set .beep-row label.choice, #view-set .beep-row > label:has(> input[type=radio]) { flex: 0 0 auto; white-space: nowrap; margin-left: 0; }
+}
+/* RB-WEB-46: Settings landscape -- rows a little tighter, labels on one line, and room at the end so the
+   last rows scroll clear of the menu key. */
+@media (orientation: landscape) and (min-width: 700px) {
+  #view-set .beep-row { margin-top: 0.25rem; }
+  #view-set .beep-row label:not(.choice) { flex: 1 1 auto; white-space: nowrap; }
+  #view-set .beep-panel { padding: 0.4rem 0.6rem; margin: 0.4rem 0; }
+  #view-set { padding-bottom: 3.6rem; }
+}
+
+/* RB-WEB-47: Calibration -- the four steps as a numbered list; portrait breaks the sensor line before "2"
+   (the break is hidden in landscape); landscape text and keys as the box: every line one size with the
+   figures in bold white, the keys one column with matching edges, the two sensor keys half width side by side. */
+#view-cal ol.ins { color: #ccc; font-size: 15px; line-height: 1.45; margin: 0.6rem 0 0 1.3rem; padding: 0; }
+@media (orientation: landscape) and (min-width: 700px) {
+  #view-cal ol.ins { columns: 2; column-gap: 1.5rem; font-size: 14px; margin-right: 11rem; }
+  #view-cal .crow { font-size: 21px; min-height: 2.3rem; margin: 0.2rem 0; }
+  #view-cal #cal-dist, #view-cal #cal-rpm, #view-cal .crow b { font-size: 21px; font-weight: 700; line-height: 1.2; }
+  #view-cal .crow input { font-size: 21px; height: 2.1rem; padding: 0 0.3rem; }
+  #view-cal #cal-actual { width: 7rem; }
+  #view-cal .crow input.short { width: 5.5rem; }
+  #view-cal .crow input.tiny { width: 3.2rem; }
+  #view-cal .crow > .key, #view-cal .crow > .pair { flex: 0 0 10rem; width: 10rem; box-sizing: border-box; }
+  #view-cal .crow > .key { font-size: 1rem; min-height: 2.4rem; }
+  #view-cal .crow > .pair { display: flex; gap: 0.3rem; }
+  #view-cal .crow > .pair .key { flex: 1 1 0; width: auto; min-width: 0; padding: 0 0.1rem; font-size: 0.82rem; min-height: 2.4rem; white-space: nowrap; }
+}

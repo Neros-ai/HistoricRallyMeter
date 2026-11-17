@@ -478,7 +478,7 @@ std::string uploadStateJson(const std::string& id, const RallyState& s, const St
               << ",\"start_text\":\"" << startb << "\""
               << ",\"duration_text\":\"" << (st.slot.sector_duration_s > 0 ? formatHMmSs(static_cast<double>(st.slot.sector_duration_s)) : std::string()) << "\""
               << ",\"avg_text\":\"" << jsonEscape(sectorAverageText(st.slot.segments, st.slot.sector_duration_s)) << "\""
-              << ",\"start_dist_text\":\"" << jsonEscape(startDistanceText(st.slot.start_distance_m, st.unit)) << "\""
+              << ",\"start_dist_text\":\"" << jsonEscape(st.slot.start_distance_m > 0 ? startDistanceText(st.slot.start_distance_m, st.unit) + " " + distUnitName(st.unit) : std::string()) << "\""
               << ",\"errors\":[";
             for (size_t i = 0; i < st.errors.size(); i++) {
                 if (i) o << ',';

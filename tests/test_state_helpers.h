@@ -116,6 +116,15 @@ public:
             return true;
         });
 
+        suite->addTest("calibration sensor line: no colons after 1, 2 and Avg (RB-CAL-12)", []() {
+            ASSERT_EQ(sensorCountMarkup(3236, 3238, 3237),
+                      std::string("Sensor Count: 1 <span foreground=\"#FFFFFF\">3236</span>"
+                                  " 2 <span foreground=\"#FFFFFF\">3238</span>"
+                                  " Avg <span foreground=\"#FFFFFF\">3237</span>"));
+            ASSERT_EQ(sensorCountMarkup(-5, 0, -2).find("1 <span foreground=\"#FFFFFF\">-5</span>") != std::string::npos, true);
+            return true;
+        });
+
         suite->addTest("a measured calibration in miles keeps the millimetres", []() {
             RallyState s;
             s.counters = false;

@@ -718,6 +718,15 @@ bool validSegmentRow(const RallyState& state, int row) {
     return row >= 0 && row < static_cast<int>(state.segments.size());
 }
 
+std::string sensorCountMarkup(long long c1, long long c2, long long avg) {
+    char b[200];
+    snprintf(b, sizeof(b),
+             "Sensor Count: 1 <span foreground=\"#FFFFFF\">%lld</span>"
+             " 2 <span foreground=\"#FFFFFF\">%lld</span>"
+             " Avg <span foreground=\"#FFFFFF\">%lld</span>", c1, c2, avg);
+    return b;
+}
+
 bool applyMeasuredCalibration(RallyState& state, const char* dist_str,
                               uint64_t c1, uint64_t c2, uint64_t start1, uint64_t start2) {
     if (!dist_str || *dist_str == '\0') return false;

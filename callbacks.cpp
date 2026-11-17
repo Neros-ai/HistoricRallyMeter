@@ -1634,14 +1634,9 @@ void updateCalibrationDisplay(AppData* data) {
     if (data->calDistUnitLabel) gtk_label_set_text(data->calDistUnitLabel, cal_miles ? "mi" : "m");
     if (data->calActualUnitLabel) gtk_label_set_text(data->calActualUnitLabel, cal_miles ? "mi" : "m");
 
-    char counts[200];
-    snprintf(counts, sizeof(counts),
-             "Sensor Count: 1: <span foreground=\"#FFFFFF\">%lld</span>"
-             " 2: <span foreground=\"#FFFFFF\">%lld</span>"
-             " Avg: <span foreground=\"#FFFFFF\">%lld</span>",
-             static_cast<long long>(cntr1_diff), static_cast<long long>(cntr2_diff),
-             static_cast<long long>(cntr_a));
-    gtk_label_set_markup(data->totalCountCalLabel, counts);
+    gtk_label_set_markup(data->totalCountCalLabel,
+                         sensorCountMarkup(static_cast<long long>(cntr1_diff), static_cast<long long>(cntr2_diff),
+                                           static_cast<long long>(cntr_a)).c_str());
 
     char current[120];
     snprintf(current, sizeof(current),
